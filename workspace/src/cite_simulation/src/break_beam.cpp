@@ -19,11 +19,12 @@
 // sequenced everything with timers, and the reason that failed is the same reason
 // P4 exists.
 //
-// It publishes only the beam's state. Turning that into a typed `DetectionEvent`
-// is `cite_hardware`'s job, in simulation and on physical hardware alike — which
-// is what keeps the interface above the sensor identical on both paths (P2). A
-// plugin that published a ROS message directly would be a second, simulation-only
-// route into the system.
+// It publishes only the beam's state, on the Gazebo transport; the bridge lands
+// it in ROS as a level. Any typed event made from it belongs above the sensor,
+// in simulation and on physical hardware alike — which is what keeps the
+// interface above the sensor identical on both paths (P2). A plugin that
+// published a ROS message directly would be a second, simulation-only route into
+// the system.
 //
 // Detection is geometric rather than contact-based: a beam is broken by anything
 // that crosses it, including something sliding past without touching, and a

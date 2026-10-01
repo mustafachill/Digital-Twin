@@ -48,8 +48,9 @@ Decision 2). **A node serves the mode and only the paired bring-up starts it** �
 `cite_twin/twin_boundary.py` serves `SetMode` and publishes `TwinMode`
 ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)), started by `./scripts/sim --pair`
 and by nothing else ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
-It refuses a zone that declares one side, which `cell_a` does and the paired `cell_b` does not
-([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)). A mode has been set on a
+It refuses a zone that declares one side; the one zone L0 declares, `cell_b`, is paired
+([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)). `./scripts/program` also starts
+it, through the same supervisor. A mode has been set on a
 running boundary by hand, once; **nothing automated brings a pair up**, so the mode set is
 still vocabulary in every run CI takes.
 
@@ -65,11 +66,11 @@ still vocabulary in every run CI takes.
 | **Asset instance** | One occurrence of a component type, with an identity and a pose. |
 | **Zone** | A named region of the facility. Zones partition; they do not nest. |
 | **Skill** | An L3 robot-agnostic capability exposed as a ROS 2 action. The unit of meaningful work. |
-| **Station** | An L4 position in the process topology where work happens. A station has a robot; a robot may serve a station. |
+| **Station** | An L4 position in the process topology where work happens. A station has a robot; a robot may serve a station. L0 still declares `cell_b`'s stations and `program_cycle` reads their frames, but no L4 code is in the main tree since ADR-0069. |
 | **Handoff** | Transfer of ownership of a work-piece between two robots. Exactly one owner at any instant. |
 | **Work-piece** | The thing being processed. Tracked by L4. Its geometry is declared once, in L0, as a type with no instances. |
 | **Through beam / break beam** | The cell's only sensor: an emitter and a receiver across the belt. It reports **occupancy** — that something crossed it — and nothing about where along the beam or how the part is turned. |
-| **Indexed belt** | A belt that stops when the station it feeds is triggered and restarts when that station reports `CompleteHandoff`, so the part stands still to be picked ([ADR-0032](../adr/0032-index-the-belt.md)). Its effective concurrency is 1, whatever buffer the topology declares. |
+| **Indexed belt** | A belt that stops when the station it feeds is triggered and restarts when that station reports `CompleteHandoff`, so the part stands still to be picked ([ADR-0032](../adr/0032-index-the-belt.md), deprecated). Its effective concurrency is 1, whatever buffer the topology declares. Not in the main tree since ADR-0069; it runs in `projects/01`. |
 | **Index stand-off** | How far downstream of a pick point an indexing beam is mounted, so that a part breaking it on its **leading edge** comes to rest centred on that point. Derived from the declared part length, never authored ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)). |
 | **Twin monitor** | The L5 component that continuously measures and publishes divergence. |
 | **Divergence** | Measured difference between predicted (model) and observed (physical) behaviour. Never an estimate — always a published number. |

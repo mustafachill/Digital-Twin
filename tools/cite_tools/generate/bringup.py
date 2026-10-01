@@ -82,7 +82,7 @@ class _ManagerView:
     #: what a pipeline is made of, so the L3 server never restates it.
     cartesian_planner_ids: tuple[str, ...]
     home_rad: tuple[float, ...]
-    #: The arm's named joint poses from L0, in declaration order (ADR-0066).
+    #: The arm's named joint poses, from its program, in program order (ADR-0067).
     poses_rad: tuple[tuple[str, tuple[float, ...]], ...]
     trajectory_action: str | None
     gripper_action: str | None
@@ -216,20 +216,6 @@ class _SensorView:
     frame_id: str
     beam_axis: str
     beam_length_m: float
-
-
-@dataclass(frozen=True)
-class _DetectionView:
-    """Where the zone's one detection server lives, and what it advertises.
-
-    One per zone, not one per arm: a break beam watches a belt, not a robot, and
-    three servers would give the question "did the piece pass beam 2" three
-    answers. It is not an asset, so its namespace is a reserved zone-scope name
-    rather than `ids.namespace`.
-    """
-
-    namespace: str
-    detect_action: str
 
 
 def _planning_group(asset: ResolvedAsset) -> str | None:
@@ -380,15 +366,6 @@ def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
     return ids.interface(asset.zone, asset.id, f"{name}/{action}")
 
 
-#: The zone-scope namespace the one detection server runs in.
-#:
-#: It occupies an asset slot in `/cite/<zone>/<name>` without being an asset,
-#: which is legal and is checked below: an asset of this name would put two
-#: different things on one namespace, and `ids.py` reserves only the
-#: facility-level scopes.
-DETECTION_SCOPE = "detection"
-
-
 def _skills(cell: ResolvedCell, asset: ResolvedAsset) -> _SkillView | None:
     """The action names this arm's skill server advertises, or None.
 
@@ -408,12 +385,12 @@ def _skills(cell: ResolvedCell, asset: ResolvedAsset) -> _SkillView | None:
 
 
 def _sensor_frame(cell: ResolvedCell, asset: ResolvedAsset) -> str:
-    """The TF frame a sensor reports its detections in.
+    """The TF frame a sensor stands at.
 
     Read from the asset's own frames rather than named here. A break beam
     declares exactly one — where the beam is — and taking it from the model is
-    what keeps the frame the detection server resolves against and the frame the
-    static TF table publishes from being the same statement.
+    what keeps the frame the plan names and the frame the static TF table
+    publishes from being the same statement.
     """
     frames = sorted(asset.frames)
     if len(frames) != 1:
@@ -424,23 +401,6 @@ def _sensor_frame(cell: ResolvedCell, asset: ResolvedAsset) -> str:
             "which frame detections are reported in."
         )
     return ids.frame(cell.zone, asset.id, frames[0])
-
-
-def _detection(cell: ResolvedCell) -> _DetectionView | None:
-    """Where the zone's detection server runs, or None when it has no sensors."""
-    if not any(cell.of_category("sensor")):
-        return None
-    colliding = [a.id for a in cell.assets if a.id == DETECTION_SCOPE]
-    if colliding:
-        raise ResolveError(
-            f"zone {cell.zone!r} contains an asset named {DETECTION_SCOPE!r}, which would "
-            f"share a namespace with the zone's detection server at "
-            f"{ids.namespace(cell.zone, DETECTION_SCOPE)}. Rename the asset."
-        )
-    return _DetectionView(
-        namespace=ids.namespace(cell.zone, DETECTION_SCOPE),
-        detect_action=ids.interface(cell.zone, DETECTION_SCOPE, "detect"),
-    )
 
 
 def _home(asset: ResolvedAsset) -> tuple[float, ...]:
@@ -457,19 +417,17 @@ def _home(asset: ResolvedAsset) -> tuple[float, ...]:
 
 
 def _poses(asset: ResolvedAsset) -> tuple[tuple[str, tuple[float, ...]], ...]:
-    """The named joint poses a fixed program moves this arm through (ADR-0066).
+    """The named joint poses this arm's program moves it through (ADR-0067).
 
-    From L0 for the reason `_home` is: which poses a program uses is a decision
-    about this cell, and the angles live once, in the model. The poses of the
-    arm's program, if it runs one, follow: they are read from the program file
-    and never written in L0 (ADR-0067), and `program-pose-name-taken` keeps the
-    two sets of names apart.
+    Read from the program file and never written in L0; an arm with no program
+    has none. The taught poses ADR-0066 declared in L0 beside them were removed
+    by ADR-0069. None of these can be called `home`, which `home_rad` owns,
+    because the reader names every pose itself (`cite_tools.model.blockly.POSE_PREFIX`).
     """
     configuration = asset.instance.configuration
     if configuration is None or configuration.kind != "robot":
         return ()
-    taught = tuple((name, tuple(values)) for name, values in configuration.poses_rad.items())
-    return taught + tuple(blockly.poses(asset.program).items())
+    return tuple(blockly.poses(asset.program).items())
 
 
 def _step(step: blockly.Step) -> str:
@@ -635,10 +593,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             asset=asset.id,
             detection_topic=ids.interface(cell.zone, asset.id, "detection"),
             # The same name the plugin advertises on the Gazebo transport, with
-            # `_level` on the end. The two must differ: `detection_topic` is
-            # already spoken for as the TYPED `DetectionEvent` a station triggers
-            # on, and bridging a raw `std_msgs/Bool` onto it would put the level
-            # and the event on one topic, fighting.
+            # `_level` on the end. The two must differ: the plan states the ROS
+            # name of the raw level separately from the plugin's name, and the
+            # reader refuses a plan that makes them one.
             level_topic=ids.interface(cell.zone, asset.id, "detection_level"),
             frame_id=_sensor_frame(cell, asset),
             beam_axis=asset.instance.configuration.beam_axis,  # type: ignore[union-attr]
@@ -658,7 +615,6 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             conveyors=conveyors,
             grasp_holds=grasp_holds,
             sensors=sensors,
-            detection=_detection(cell),
             programs=_programs(cell),
             workpiece_models=_workpiece_models(cell),
         )

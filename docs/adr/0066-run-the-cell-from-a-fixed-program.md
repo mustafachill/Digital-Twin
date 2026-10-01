@@ -1,6 +1,14 @@
 # ADR-0066: Run the cell from a fixed program; park the event-driven line
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  — the *decision* to park the event-driven line in the main tree is withdrawn: ADR-0069 removes
+  the line, `cell_a` and this record's taught-pose program (`program/cell_b_pick_place.py` and L0's
+  `configuration.poses_rad` field) from the main tree, and the line runs as
+  `projects/01` instead. The twin boundary's belt route this record
+  added **stays**, on the project owner's decision, with no in-tree client. The fixed-program
+  idea itself was already continued by [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md).
+  **Nothing below is rewritten and nothing below binds any longer.** Read ADR-0069 for what does.
+  **[Replaced 2026-10-01, kept for the record:]** *"Proposed"*
 - **Date:** 2026-09-28
 - **Deciders:** Project owner
 - **Related:** [ADR-0032](0032-index-the-belt.md),
@@ -49,7 +57,7 @@ The cell runs from a fixed program, `python3 -m cite_bringup.program`, and `./sc
 runs it on the pair. Concretely:
 
 1. **L0** gains `configuration.poses_rad` on a robot instance, a map of named joint poses. The
-   validator refuses a pose of the wrong length and one named `home`. The `cell_b` picker's four
+   validator refuses a pose of the wrong length and one named `home`. **[Overtaken 2026-10-01 — ADR-0069 removes the field and both validator checks.]** The `cell_b` picker's four
    poses were **taught** by running the existing Pick and Place once in simulation and reading
    the joint states where the arm stood still.
 2. **L3**: `MoveTo.named_configuration` accepts `home` and each L0 pose, on the same
@@ -73,6 +81,8 @@ runs it on the pair. Concretely:
    tested; `continuous_line` stays in CI; `./scripts/demo` and `line:=true` behave as before;
    the tag `event-driven-line-v1` marks the commit before this change; and
    `tools/tests/test_event_driven_line_is_kept.py` fails if a file of it disappears.
+   **[Overtaken 2026-10-01 — ADR-0069 removes the line, the guard and `./scripts/demo` from the
+   main tree; the line runs as `projects/01`.]**
 
 This reverses the "sensor-driven rather than timed" framing the belt plugin's header carried.
 

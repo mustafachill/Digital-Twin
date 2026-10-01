@@ -100,7 +100,9 @@ while `cell_b` is up.
 
 `cell_b` is the system under construction: two sides, both simulated, one of everything on
 each. `cell_a` remains the generated, built, hand-launchable three-arm showcase that
-ADR-0056 made it.
+ADR-0056 made it. **[Overtaken 2026-10-01 — ADR-0069 removed `cell_a` from L0 and the main
+tree; the three-arm cell runs only as `projects/01`. `cell_b` is the
+only zone, and it stays paired.]**
 
 ## Consequences
 
@@ -135,9 +137,13 @@ ADR-0056 made it.
   of its fixtures name `cell_a` and `cell_a` is `single`. Anyone who pairs `cell_a`, or who
   makes either fixture read the default zone, trips it immediately and `./scripts/test`
   fails. That is recorded in `docs/open-work.md` and is not fixed here.
+  **[Overtaken 2026-10-01 — ADR-0069 moved both fixtures onto `cell_b`'s generated paired plan,
+  used as-is, and #62 is closed.]**
 - **The single-side path is the one that must not regress**, because it is what CI drives:
   the three scenarios bring `cell_b` up as the **plant alone**, on a plan that now declares a
   counterpart. That path is verified below rather than assumed.
+  **[Overtaken 2026-10-01 — ADR-0069 removed `pick_and_place` and `continuous_line`; main CI
+  drives `bringup` twice and `program_cycle` on `cell_b`.]**
 
 ### What we will have to revisit
 - **When ADR-0057 clause 4 lands.** A paired scenario in CI is what turns this from a

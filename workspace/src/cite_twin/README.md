@@ -15,10 +15,10 @@ restated here (P1).
   `twin: {sides: pair}` as of 2026-09-18
   ([ADR-0059](../../../docs/adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so
   `twin_boundary.py` **starts on a clean checkout** under `./scripts/sim --zone cell_b --pair`;
-  that run is recorded in ADR-0059 and its figures are not copied here. On `cell_a`, which
-  stays `single`, it still refuses, saying that the zone declares no counterpart. Its launch
-  tests drive it against a plan fabricated in memory from `cell_a`'s generated one — see
-  [`docs/open-work.md`](../../../docs/open-work.md) #62 for why that fabrication is what it is.
+  that run is recorded in ADR-0059 and its figures are not copied here. On a zone that
+  declares `single` it refuses, saying that the zone declares no counterpart. Its paired launch
+  test drives it against `cell_b`'s generated plan as generated; its mixed-far-side launch test
+  against an edited copy of that plan, with one physical and one simulated far side.
 - **The pair supervisor starts it, and nothing else does**
   ([ADR-0057](../../../docs/adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
   `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
@@ -127,7 +127,8 @@ unsatisfiable in a way ADR-0050 did not anticipate, that is a finding to report.
 `tcp_position_error_m`, `tcp_orientation_error_rad`, `cycle_time_deviation_s` and
 `event_timing_deviation_s` carry **NaN** in every sample because **nothing here computes
 them**. The first two need a tool pose per side, which needs one TF buffer per side (ADR-0050
-clause 1c) and forward kinematics; the last two need L4 line state from both sides.
+clause 1c) and forward kinematics; the last two need L4 line state from both sides, and the
+main tree has no L4 since ADR-0069.
 
 They used to be zero, and **that fact lived here and not in the contract** — so the day term
 3 gains an instrument and a sample turns valid, `tcp_position_error_m = 0.0` would have been
@@ -149,13 +150,14 @@ anyone presenting one must label it as one
 
 ## How to run it
 
-It needs a zone that declares a counterpart, which the shipped model does not:
+It needs a zone that declares a counterpart, which `cell_b` does:
 
 ```bash
-./scripts/enter dev ros2 run cite_twin twin_boundary.py
+./scripts/enter dev ros2 run cite_twin twin_boundary.py --zone cell_b
 ```
 
-On a clean checkout that exits 2 with `zone 'cell_a' declares no side named 'counterpart'`.
+On a zone that declares `single` it exits 2 with `zone '<zone>' declares no side named
+'counterpart'`.
 Pairing a zone is an L0 change — `twin: {sides: pair}` on the zone, then
 `./scripts/validate-model --write` and `./scripts/build` — and not something bring-up or this
 package may invent (ADR-0041 Decision 3).

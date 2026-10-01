@@ -80,7 +80,7 @@ CEILING_S = 10.0
 #: The zone every fixture in this file is built from. Its generated plan is read
 #: and copied into a tempdir; nothing here starts a cell, of this zone or any
 #: other.
-ZONE = "cell_a"
+ZONE = "cell_b"
 
 #: The boundary's ceiling here, shorter than the sides' because everything it
 #: covers in this file is a `python3` process that starts in milliseconds. One
@@ -668,7 +668,7 @@ def _paired_plan(tmp_path: Path) -> Plan:
         sides.append(
             {
                 "name": "counterpart",
-                "gz_partition": "cite/cell_a/counterpart",
+                "gz_partition": "cite/cell_b/counterpart",
                 "domain_offset": 1,
             }
         )
@@ -732,33 +732,32 @@ def test_an_untwinned_zone_is_refused_rather_than_given_a_second_side(
     ]
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
-    monkeypatch.setattr(pair, "default_plan_path", lambda zone="cell_a": path)
+    monkeypatch.setattr(pair, "default_plan_path", lambda zone: path)
     # Present, so that the refusal is the one about sides and not the one about
     # a base the deployment did not supply.
     monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
-    assert pair.main(["--zone", "cell_a"]) == 1
+    assert pair.main(["--zone", ZONE]) == 1
     assert "declares 1 side(s)" in capsys.readouterr().err
 
 
 def test_the_pair_takes_the_same_argument_spelling_the_solo_path_does() -> None:
-    """`./scripts/sim --pair line:=true` is the same request as without `--pair`.
+    """`./scripts/sim --pair headless:=true` is the same request as without `--pair`.
 
-    The solo path is `ros2 launch`, so `./scripts/sim --headless line:=true` is
-    what the operator documentation shows. `./scripts/sim` forwards whatever it
-    does not recognise, so the pair path used to answer the documented spelling
-    with an argparse error and a paired line could not be started at all.
+    The solo path is `ros2 launch`, which takes `key:=value`. `./scripts/sim`
+    forwards whatever it does not recognise, so the pair path used to answer
+    that spelling with an argparse error.
     """
     parser = argparse.ArgumentParser()
-    assert pair._flags(["zone:=cell_b", "line:=true"], parser) == [
+    assert pair._flags(["zone:=cell_b", "headless:=true"], parser) == [
         "--zone",
         "cell_b",
-        "--line",
+        "--headless",
     ]
     # False is the default, so it contributes no flag rather than an error.
-    assert pair._flags(["line:=false"], parser) == []
+    assert pair._flags(["headless:=false"], parser) == []
     # And this parser's own spelling still works, unchanged.
-    assert pair._flags(["--line", "--ceiling", "5"], parser) == [
-        "--line",
+    assert pair._flags(["--headless", "--ceiling", "5"], parser) == [
+        "--headless",
         "--ceiling",
         "5",
     ]
@@ -771,7 +770,7 @@ def test_a_launch_argument_a_pair_does_not_take_is_named_rather_than_ignored() -
     with pytest.raises(SystemExit):
         pair._flags(["side:=counterpart"], parser)
     with pytest.raises(SystemExit):
-        pair._flags(["line:=yes"], parser)
+        pair._flags(["headless:=yes"], parser)
 
 
 def test_the_supervisor_needs_a_base_it_did_not_read_from_the_ambient_domain(
@@ -785,7 +784,7 @@ def test_the_supervisor_needs_a_base_it_did_not_read_from_the_ambient_domain(
 def test_a_pair_with_no_zone_named_is_refused_before_anything_starts(capsys) -> None:
     """`--zone` is required and has no default (ADR-0056 decision 4).
 
-    It defaulted to `cell_a` until then, so `./scripts/sim --pair` with no zone
+    It defaulted to a literal zone until then, so `./scripts/sim --pair` with no zone
     started two full simulations of whichever cell that default named — and the
     supervisor starts one readiness witness per side, each of which declares its
     own zone with no default, so the value this argument supplies is the only
@@ -1097,9 +1096,9 @@ def test_a_boundary_announcing_another_zone_is_refused(tmp_path: Path) -> None:
     asked for - and it is the supervisor, which stated the zone, that is
     positioned to notice.
     """
-    announcement = boundary_announcement("cell_b")
-    # Started for `cell_a` - which is what `announces` on the spec records - and
-    # announcing `cell_b`.
+    announcement = boundary_announcement("another_zone")
+    # Started for `ZONE` - which is what `announces` on the spec records - and
+    # announcing a zone that is not it.
     wrong = _fake_boundary(
         tmp_path,
         f"import time\nprint({announcement!r}, flush=True)\ntime.sleep(600)\n",
@@ -1112,7 +1111,7 @@ def test_a_boundary_announcing_another_zone_is_refused(tmp_path: Path) -> None:
         wrong,
     )
     assert code == 1
-    assert "announced readiness as 'cell_b'" in text
+    assert "announced readiness as 'another_zone'" in text
     assert "announced readiness as" in text
     assert "--zone" in text
 
@@ -1321,7 +1320,7 @@ def test_a_side_hears_sigint_when_the_supervisor_inherited_it_ignored(
 ) -> None:
     """A background job starts with SIGINT ignored, and a side must not inherit it.
 
-    `scripts/program` and `scripts/demo` start the supervisor with `&` in a
+    `scripts/program` starts the supervisor with `&` in a
     non-interactive shell, so it begins with SIGINT set to SIG_IGN. Sides started
     before its handler was installed inherited that across `exec`, never heard
     `_stop`'s SIGINT, and every teardown waited out `STOP_GRACE_S` per side.

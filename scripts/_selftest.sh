@@ -863,9 +863,10 @@ CYCLE_FAILURE='<testcase classname="bringup.TestBringup" name="test_a_trajectory
 # The upstream teardown abort this whole split exists for.
 TEARDOWN_UPSTREAM='<testcase classname="bringup.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : parameter_bridge-5 exited with -6&#10;" /></testcase>'
 # A first-party teardown bug wearing the SAME exit code as the upstream one.
-# `line_orchestrator` aborting on UnknownGoalHandleError is a real cancellation
-# defect that this check has already caught once, and it must stay reported.
-TEARDOWN_OURS='<testcase classname="continuous_line.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6&#10;" /></testcase>'
+# A first-party node aborting on UnknownGoalHandleError is a real cancellation
+# defect that this check has already caught once (in the line coordinator that
+# now runs as projects/01), and it must stay reported.
+TEARDOWN_OURS='<testcase classname="program_cycle.TestCleanShutdown" name="test_nothing_of_ours_exited_badly" time="0.001"><failure message="Traceback (most recent call last):&#10;AssertionError: -6 not found in [0, -2] : skill_server-9 exited with -6&#10;" /></testcase>'
 
 junit_report "${JUNIT_TMP}/cycle-failed.xml" "$CYCLE_FAILURE" "$PASSING_CASE"
 junit_report "${JUNIT_TMP}/teardown-upstream.xml" "$PASSING_CASE" "$TEARDOWN_UPSTREAM"
@@ -911,7 +912,7 @@ expect_ok   "a teardown failure is advisory under the advisory policy" \
 expect_fail "a first-party teardown failure gates under the blocking policy" \
             scenario_verdict "${JUNIT_TMP}/teardown-ours.xml" blocking
 expect_eq "a first-party teardown failure is reported with its process named" \
-          "AssertionError: -6 not found in [0, -2] : line_orchestrator-9 exited with -6" \
+          "AssertionError: -6 not found in [0, -2] : skill_server-9 exited with -6" \
           "$(scenario_failed_cases "${JUNIT_TMP}/teardown-ours.xml" | cut -f3)"
 
 # Fail-closed, three ways. Anything unclassifiable must gate rather than pass.
@@ -1041,18 +1042,92 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# ./scripts/sim — the zone is named or the launch does not happen (ADR-0056).
+# ./scripts/sim — a zone is defaulted only when the model leaves one answer.
 #
-# The facility declares two cells and exactly one runs at a time, so `--zone` is
-# required and has no default. A default here would put the choice back exactly
-# where removing it from `default_plan_path` took it from: somewhere nobody made
-# it. These assertions are what stops one being added back for convenience.
+# When the generated plans declare exactly one zone, `--zone` may be left out and
+# that zone comes up; when they declare several, it is required and the script
+# refuses, naming them (ADR-0069 decision 5) — ADR-0056's rule, returning by
+# itself the day a second zone is declared. The rule is `default_zone`, which
+# runs `cite_bringup/zones.py`; it is driven here against synthetic plan sets,
+# because driving `./scripts/sim` with no zone on a one-zone model would START a
+# cell, and a self-test may not.
 #
-# Only the REFUSING paths are driven. `./scripts/sim --zone cell_b` starts a cell
-# — or, on a host with no ROS, a container — and a self-test may not do either.
-# Every case below exits before `require_ros_env`, which is the line that decides
-# where the rest of the script runs.
+# Only the REFUSING paths of `./scripts/sim` itself are driven. Every case below
+# exits before `require_ros_env`, which is the line that decides where the rest
+# of the script runs.
 # -----------------------------------------------------------------------------
+ZONES_TMP="$(mktemp -d)"
+mkdir -p "${ZONES_TMP}/one" "${ZONES_TMP}/two" "${ZONES_TMP}/none"
+printf 'zone: zone_x\n' > "${ZONES_TMP}/one/zone_x_plan.yaml"
+printf 'zone: zone_x\n' > "${ZONES_TMP}/two/zone_x_plan.yaml"
+printf 'zone: zone_y\n' > "${ZONES_TMP}/two/zone_y_plan.yaml"
+zone_refusal() { # zone_refusal <expected substring> <plans-dir>
+    local output
+    output="$(default_zone "$2" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+
+expect_eq   "one declared zone is the default" \
+            "zone_x" "$(default_zone "${ZONES_TMP}/one" 2>/dev/null)"
+expect_fail "two declared zones have no default" \
+            default_zone "${ZONES_TMP}/two"
+expect_ok   "and the refusal says --zone is required" \
+            zone_refusal "--zone is required" "${ZONES_TMP}/two"
+expect_ok   "and names every zone, so the reader can act on it" \
+            zone_refusal "zone_x, zone_y" "${ZONES_TMP}/two"
+expect_eq   "and prints no zone on stdout for a caller to pick up by mistake" \
+            "" "$(default_zone "${ZONES_TMP}/two" 2>/dev/null || true)"
+expect_fail "no declared zone has no default either" \
+            default_zone "${ZONES_TMP}/none"
+expect_ok   "the shipped model's plans have exactly one answer" \
+            default_zone
+
+# A NAMED zone is checked against the same plans. An undeclared one used to
+# start a container, fail inside the launch's plan lookup and exit 0.
+check_refusal() { # check_refusal <expected substring> <zone> <plans-dir>
+    local output
+    output="$(require_declared_zone "$2" "$3" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+expect_ok   "a declared zone passes the check" \
+            require_declared_zone zone_y "${ZONES_TMP}/two"
+expect_fail "an undeclared zone is refused" \
+            require_declared_zone zone_z "${ZONES_TMP}/two"
+expect_ok   "and the refusal names it and every declared zone" \
+            check_refusal "no zone 'zone_z'. Declared: zone_x, zone_y." zone_z "${ZONES_TMP}/two"
+expect_ok   "and says so when there are none at all" \
+            check_refusal "Declared: none" zone_z "${ZONES_TMP}/none"
+expect_ok   "the shipped model declares the zone its default names" \
+            require_declared_zone "$(default_zone)"
+rm -rf "$ZONES_TMP"
+
+# zones.py answers from the source tree only, and refuses from anywhere its
+# source-tree plans are not — which is where an install prefix puts its copy.
+ZONES_COPY="$(mktemp -d)"
+cp "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" "${ZONES_COPY}/zones.py"
+zones_copy_says() { # zones_copy_says <expected substring>
+    local output
+    output="$(python3 "${ZONES_COPY}/zones.py" 2>&1 || true)"
+    grep -qF -- "$1" <<<"$output"
+}
+expect_fail "zones.py refuses to run where it has no source-tree plans beside it" \
+            python3 "${ZONES_COPY}/zones.py"
+expect_ok   "and says it is the copy an install prefix carries" \
+            zones_copy_says "the copy an install prefix carries"
+rm -rf "$ZONES_COPY"
+
+# The two shell entry points that default a zone themselves ask that one
+# function rather than stating a zone; `./scripts/scenario` gets the same
+# answer through `tests/scenarios/_cell.py`, whose guards hold it there. A grep,
+# because the alternative is starting a cell.
+# The pattern is matched literally, so the `$(...)` in it is text and is never
+# expanded; that is what the single quotes are for.
+for entry in sim program; do
+    # shellcheck disable=SC2016
+    expect_ok "./scripts/${entry} defaults its zone through default_zone" \
+              grep -qF 'ZONE="$(default_zone)"' "${REPO_ROOT}/scripts/${entry}"
+done
+
 sim_args() { "${REPO_ROOT}/scripts/sim" "$@"; }
 # Captured and then matched, never piped: `set -o pipefail` is in force here, and
 # a refusal exits non-zero by design, so a pipeline would report the refusal
@@ -1063,13 +1138,6 @@ sim_says() { # sim_says <expected substring> <args...>
     output="$("${REPO_ROOT}/scripts/sim" "$@" 2>&1 || true)"
     grep -qF -- "$expected" <<<"$output"
 }
-
-expect_fail "./scripts/sim with no zone refuses instead of choosing one" \
-            sim_args
-expect_ok   "and the refusal names the flag rather than a plan path" \
-            sim_says "--zone is required"
-expect_ok   "and it names both cells, so the reader can act on it" \
-            sim_says "cell_a"
 
 # `--zone` as the last token. Without the check this leaves ZONE empty and the
 # next refusal fires with a message about a missing flag the caller did type.
@@ -1091,21 +1159,102 @@ expect_fail "./scripts/sim --zone zone:=cell_b refuses too" \
 # below rather than silently competing with the flag"; both halves were false —
 # the case arm consumed it and the last writer won.
 expect_fail "two spellings naming different zones are refused" \
-            sim_args --zone cell_a zone:=cell_b
+            sim_args --zone cell_x zone:=cell_b
 expect_ok   "and the refusal names both spellings and both zones" \
-            sim_says "--zone says 'cell_a' and zone:= says 'cell_b'" --zone cell_a zone:=cell_b
+            sim_says "--zone says 'cell_x' and zone:= says 'cell_b'" --zone cell_x zone:=cell_b
 expect_fail "and it is refused whichever order they come in" \
-            sim_args zone:=cell_b --zone=cell_a
+            sim_args zone:=cell_b --zone=cell_x
+
+# A zone the model does not declare is refused on the host, naming the ones it
+# does, before any container. It used to start one and exit 0.
+expect_fail "./scripts/sim --zone with an undeclared zone refuses" \
+            sim_args --zone zone_nobody_declared --headless
+expect_ok   "and names the zone and the declared ones" \
+            sim_says "the model declares no zone 'zone_nobody_declared'. Declared: $(default_zone)." \
+            --zone zone_nobody_declared --headless
+expect_ok   "whichever spelling named it" \
+            sim_says "zone:= named a zone the model does not declare" zone:=zone_nobody_declared
+
+# An empty zone is refused in every spelling rather than falling back to the
+# default, as ./scripts/scenario and ./scripts/program already refused it.
+expect_fail "./scripts/sim --zone= refuses instead of falling back to the default" \
+            sim_args --zone= --headless
+expect_ok   "and says that an empty zone would have run the default" \
+            sim_says "empty zone name" --zone= --headless
+expect_fail "./scripts/sim zone:= refuses too" \
+            sim_args zone:= --headless
+expect_ok   "with the same diagnosis" \
+            sim_says "zone:= was given an empty zone name" zone:= --headless
+expect_fail "and so does the two-token spelling of an empty zone" \
+            sim_args --zone "" --headless
+
+# ./scripts/program checks a named zone the same way, before it stops this
+# checkout's containers or starts any.
+program_says() { # program_says <expected substring> <args...>
+    local expected="$1"; shift
+    local output
+    output="$("${REPO_ROOT}/scripts/program" "$@" 2>&1 || true)"
+    grep -qF -- "$expected" <<<"$output"
+}
+expect_fail "./scripts/program --zone with an undeclared zone refuses" \
+            "${REPO_ROOT}/scripts/program" --zone zone_nobody_declared --headless
+expect_ok   "and names the zone" \
+            program_says "no zone 'zone_nobody_declared'" --zone zone_nobody_declared --headless
+
+# ./scripts/program stops every side's belt before it stops the pair, on every
+# route out — a normal end, a failure and Ctrl-C all reach `teardown`. A
+# simulated belt stops when its simulator does; a physical one is a drive whose
+# setpoint persists, and StopAll, which used to stop every belt, left with the
+# line (ADR-0069). A grep, because driving it means starting a pair.
+# The pair runs in a process group of its own, so the terminal's Ctrl-C reaches
+# only this script's trap and the order program -> belts -> pair holds. Driven
+# here with ordinary processes standing in for the supervisor; no container.
+GROUP_TMP="$(mktemp -d)"
+group_of() { ps -o pgid= -p "$1" 2>/dev/null | tr -d ' '; }
+start_in_own_group "${GROUP_TMP}/a.log" sleep 30
+own_pid="$STARTED_PID"
+expect_ok   "start_in_own_group puts the job in a process group of its own" \
+            test "$(group_of "$own_pid")" = "$own_pid"
+expect_ok   "which is not the script's group, so the terminal's SIGINT misses it" \
+            test "$(group_of "$own_pid")" != "$(group_of $$)"
+expect_ok   "and stop_own_group ends a job that obeys SIGINT without killing it" \
+            stop_own_group "$own_pid" 5
+expect_fail "and leaves nothing running" kill -0 "$own_pid"
+# A job that ignores SIGINT, with a child of its own: the ceiling has to fire
+# and SIGKILL has to reach the whole group, child included.
+# shellcheck disable=SC2016  # expanded by the inner shell, not this one
+start_in_own_group "${GROUP_TMP}/b.log" \
+    bash -c 'trap "" INT; sleep 30 & echo "$!" > "$0"; wait' "${GROUP_TMP}/child.pid"
+stubborn_pid="$STARTED_PID"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "${GROUP_TMP}/child.pid" ] && break; sleep 0.2; done
+expect_fail "a job that ignores SIGINT is killed at the ceiling, and says so" \
+            stop_own_group "$stubborn_pid" 1
+expect_fail "and the job is gone" kill -0 "$stubborn_pid"
+expect_fail "and so is its child, because SIGKILL went to the group" \
+            kill -0 "$(cat "${GROUP_TMP}/child.pid" 2>/dev/null || echo 0)"
+expect_eq   "and job control is put back as it was" "" "$(case "$-" in *m*) echo on ;; esac)"
+rm -rf "$GROUP_TMP"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/program starts the pair in its own process group" \
+            grep -qF 'start_in_own_group "$PAIR_LOG" "${REPO_ROOT}/scripts/sim"' \
+            "${REPO_ROOT}/scripts/program"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "and stops it with the SIGKILL fallback" \
+            grep -qF 'stop_own_group "$PAIR_PID" "$PAIR_STOP_CEILING_S"' \
+            "${REPO_ROOT}/scripts/program"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/program's teardown commands every side's belt to zero" \
+            grep -qF 'python3 -m cite_bringup.program.belt --zone "$ZONE" --stop' \
+            "${REPO_ROOT}/scripts/program"
 
 # -----------------------------------------------------------------------------
-# ./scripts/scenario — the same two token guards, for the script that HAS a
-# default (ADR-0056 decision 5).
+# ./scripts/scenario — the same two token guards, for the script whose default is
+# read by the scenario itself.
 #
-# `./scripts/scenario --zone` is not `./scripts/sim --zone`: which cell the
-# regression suite drives is a project decision stated once in
-# `tests/scenarios/_cell.py`, so this flag has a default and naming a zone is the
-# override. That is exactly why its failure modes are quieter, and why they are
-# driven here.
+# `./scripts/scenario --zone` exports a selection that `tests/scenarios/_cell.py`
+# reads, falling back to `cite_bringup/zones.py`'s answer when it is empty
+# (ADR-0069 decision 5). So naming a zone is an override, and that is exactly why
+# its failure modes are quieter, and why they are driven here.
 #
 # WHAT CARRIES THE WEIGHT IS THE MESSAGE, not the exit status, and that is
 # measured rather than assumed. Strip the refusals out and every `expect_fail`
@@ -1139,18 +1288,22 @@ expect_fail "./scripts/scenario --zone --teardown-advisory refuses rather than s
             scenario_args bringup --zone --teardown-advisory
 expect_ok   "and quotes the token it was given" \
             scenario_says "was given '--teardown-advisory'" bringup --zone --teardown-advisory
-expect_fail "./scripts/scenario --zone zone:=cell_a refuses too" \
-            scenario_args bringup --zone zone:=cell_a
+expect_fail "./scripts/scenario --zone zone:=cell_x refuses too" \
+            scenario_args bringup --zone zone:=cell_x
 expect_ok   "and quotes that token as well" \
-            scenario_says "was given 'zone:=cell_a'" bringup --zone zone:=cell_a
+            scenario_says "was given 'zone:=cell_x'" bringup --zone zone:=cell_x
 # Already refused before the guards landed, and pinned here so the two spellings
 # of a missing name cannot come apart.
 expect_fail "./scripts/scenario --zone with no name after it refuses" \
             scenario_args bringup --zone
+expect_fail "./scripts/scenario --zone with an undeclared zone refuses on the host" \
+            scenario_args bringup --zone zone_nobody_declared
+expect_ok   "and names the zone" \
+            scenario_says "no zone 'zone_nobody_declared'" bringup --zone zone_nobody_declared
 
-# An empty zone is refused rather than falling back. `_cell.zone()` reads
-# `os.environ.get(SELECTED_BY) or DRIVEN_ZONE`, so an exported empty string comes
-# back as the default: the caller named something and silently got `cell_b`.
+# An empty zone is refused rather than falling back. `_cell.zone()` treats an
+# exported empty string as no selection and returns the default: the caller
+# named something and would silently get the model's only zone.
 expect_fail "./scripts/scenario --zone= refuses instead of falling back to the default" \
             scenario_args bringup --zone=
 expect_ok   "and says that an empty zone would have run the default" \
@@ -1159,74 +1312,6 @@ expect_fail "and the two-token spelling of an empty zone is refused as well" \
             scenario_args bringup --zone ""
 expect_ok   "with the same diagnosis, so the two spellings cannot come apart" \
             scenario_says "empty zone name" bringup --zone ""
-
-# -----------------------------------------------------------------------------
-# ./scripts/demo — the same two token guards a third time, for the script whose
-# default is the MODEL's answer rather than a constant.
-#
-# `./scripts/demo --zone` is neither of the two above. `./scripts/sim --zone`
-# refuses to default (ADR-0056 decision 4) and `./scripts/scenario --zone`
-# defaults to a zone stated once in `tests/scenarios/_cell.py`; this one leaves
-# the answer to `cite_bringup.demo --print-zone`, which reads it off the
-# generated plans. That makes a SILENT fallback harder to notice than either,
-# because the value it falls back to is correct-looking and comes from L0 — so an
-# empty `--zone=` would look like the caller's choice being honoured.
-#
-# Every case below exits inside the parse loop, which runs before the dirty-host
-# check and before `require_ros_env`, so none of them starts a container. That is
-# a property of the refusals: a regression removing one lets that case go on to
-# bring a cell up, which is the price of driving the entry point rather than a
-# function — the same price the two blocks above pay.
-demo_args() { "${REPO_ROOT}/scripts/demo" "$@"; }
-# Captured and then matched, never piped, for the reason `sim_says` gives.
-demo_says() { # demo_says <expected substring> <args...>
-    local expected="$1"; shift
-    local output
-    output="$("${REPO_ROOT}/scripts/demo" "$@" 2>&1 || true)"
-    grep -qF -- "$expected" <<<"$output"
-}
-
-expect_fail "./scripts/demo --zone --headless refuses rather than swallowing the flag" \
-            demo_args --zone --headless
-expect_ok   "and quotes the token it was given" \
-            demo_says "was given '--headless'" --zone --headless
-expect_fail "./scripts/demo --zone zone:=cell_b refuses the launch spelling too" \
-            demo_args --zone zone:=cell_b
-expect_ok   "and quotes that token as well" \
-            demo_says "was given 'zone:=cell_b'" --zone zone:=cell_b
-expect_fail "./scripts/demo --zone with no name after it refuses" \
-            demo_args --zone
-
-# An empty zone is refused rather than falling back to the model's answer. The
-# caller named something; handing them whichever zone is paired would be the
-# `./scripts/scenario --zone=` defect with a better-looking fallback.
-expect_fail "./scripts/demo --zone= refuses instead of falling back to the paired zone" \
-            demo_args --zone=
-expect_ok   "and says that an empty zone would have driven the model's own answer" \
-            demo_says "empty zone name" --zone=
-expect_fail "and the two-token spelling of an empty zone is refused as well" \
-            demo_args --zone ""
-expect_ok   "with the same diagnosis, so the two spellings cannot come apart" \
-            demo_says "empty zone name" --zone ""
-
-# An unknown argument is refused rather than forwarded. `./scripts/sim` forwards
-# what it does not recognise to `ros2 launch`, which is right for a launcher and
-# wrong here: this script starts the pair itself and has nowhere to put one.
-expect_fail "./scripts/demo refuses an argument it does not know" \
-            demo_args --no-such-flag
-expect_ok   "and names the argument rather than printing usage alone" \
-            demo_says "unknown argument '--no-such-flag'" --no-such-flag
-
-# The point of this script is that a person can WATCH it, so the windows are the
-# default and `--headless` is the opt-in, the same way round as `./scripts/sim`.
-# Pinned because the default was flipped to headless for an hour on 2026-09-28,
-# on a wrong diagnosis: a two-window run had starved this host into aborting an
-# arm mid-trajectory, and the cause turned out to be that `gz sim gui` had never
-# had the GPU at all rather than that two windows were too many. A regression
-# that flips it back would produce a demonstration nobody can see, which no other
-# check in this repository would notice.
-expect_ok   "./scripts/demo opens the windows unless --headless is asked for" \
-            grep -qE '^HEADLESS=0$' "${REPO_ROOT}/scripts/demo"
 
 # The GPU selection that made the windows affordable. It is guarded on the
 # NVIDIA vendor library EXISTING in the container, so a host without one falls

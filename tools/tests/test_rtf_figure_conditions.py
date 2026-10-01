@@ -172,7 +172,13 @@ def test_the_figure_is_stated_with_its_condition_in_exactly_one_place() -> None:
 
 def test_the_scenario_ceilings_defer_to_it() -> None:
     """Each scenario's ceilings are wall clock, so each must name where the basis is."""
-    for name in ("bringup.py", "pick_and_place.py", "continuous_line.py"):
+    names = sorted(
+        path.name
+        for path in (REPO_ROOT / "tests" / "scenarios").glob("*.py")
+        if not path.name.startswith("_")
+    )
+    assert names, "no scenario under tests/scenarios, so this would check nothing"
+    for name in names:
         content = _text(REPO_ROOT / "tests" / "scenarios" / name)
         assert content is not None, f"tests/scenarios/{name} is missing"
         assert CANONICAL.name in content or CAMPAIGN in content, (

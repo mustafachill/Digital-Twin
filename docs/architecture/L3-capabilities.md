@@ -1,31 +1,31 @@
 # L3 — Capabilities (skills)
 
-- **Status:** `PARTIAL` — **all six skills below have a server; one of them has never been
-  run against the simulator.**
+- **Status:** `PARTIAL` — **five of the six skills below have a server in the main tree;
+  `Detect` has none there since 2026-10-01.**
   **Built:** `MoveTo`, `Grasp`, `Pick`, `Place` and `Transfer` are action servers in
-  `cite_skills/src/skill_server.cpp`; `Detect` is a server in
-  `cite_skills/src/detection_server.cpp`, kept out of the per-arm node because it commands
-  no motion and belongs to a zone's sensors rather than to one arm.
-  `MoveTo` to the `home` configuration is asserted by `./scripts/scenario bringup`.
-  `Pick` and `Place` complete a cycle on one arm: the pads close on a 50 mm work-piece,
-  stall on it, and friction carries it — see the status block in
-  [CLAUDE.md §2](../../CLAUDE.md) for the current measured pass count, which is not
-  restated here (P1).
-  **`Detect` now runs.** `simulation.launch.py` starts one `detection_server` for the zone
-  alongside one `skill_server` per arm, and bridges every beam's raw level from Gazebo into
-  ROS, so the server has something to read. It turns that level into a typed
-  `DetectionEvent`; [L4](L4-orchestration.md) starts a station on the transition and stops
-  the belt on it ([ADR-0032](../adr/0032-index-the-belt.md)). This is exercised by
-  `./scripts/scenario continuous_line`, which is not a gate — see the status block in
-  [CLAUDE.md §2](../../CLAUDE.md) for what it has and has not shown.
-  **`Transfer` has a server and no caller:** today's L0 topology is conveyor-mediated and
-  [L4](L4-orchestration.md) refuses a direct arm-to-arm edge at plan time
-  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), corrected
-  2026-08-26 — the refusal stands, its stated reason did not).
-  **`./scripts/scenario pick_and_place` is a blocking CI gate** as of `c1e9e03`, run with
-  `--teardown-advisory` so the cycle gates and the post-shutdown check is reported. It is
-  still **not reproducible** — a passing run is evidence about that run, not the next one —
-  and the promotion is retracted by a cycle failure that the machine does not explain.
+  `cite_skills/src/skill_server.cpp`, one per arm, and each arm's server also publishes its
+  `RobotState` latched on `state`.
+  `MoveTo` to the `home` configuration is asserted by `./scripts/scenario bringup`, and
+  `MoveTo` and `Grasp` are what the real robot's program drives
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md);
+  `cite_bringup/program/cell.py` creates action clients for those two and no others), which
+  `./scripts/scenario program_cycle` gates in CI.
+  **`Pick`, `Place` and `Transfer` have servers and no in-tree caller outside tests and the
+  twin boundary's forwarding.** `Pick` and `Place` completed a cycle on one arm in
+  `./scripts/scenario pick_and_place`, a blocking CI gate from `c1e9e03` until that scenario
+  left the main tree with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) on 2026-10-01; **no scenario in main CI exercises them now**, which
+  ADR-0069 lists under "Coverage given up". The figures are a closed record in
+  [CLAUDE.md §2](../../CLAUDE.md). `Transfer` never had a caller: the line's L0 topology was
+  conveyor-mediated and [L4](L4-orchestration.md) refused a direct arm-to-arm edge at plan time
+  ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), now
+  deprecated).
+  **`Detect` is not in the main tree.** Its action definition, `detection_server.cpp` and the
+  `DetectionEvent`/`Detection` messages left with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); they run, frozen,
+  in `projects/01`, whose line started a station on the beam
+  transition and stopped the belt on it
+  ([ADR-0032](../adr/0032-index-the-belt.md), deprecated). The beams themselves stay in
+  `cell_b`'s world, and their levels are still bridged into ROS; nothing in the main tree turns
+  them into a typed detection.
   **Built, and this layer now answers a question it used to pass upwards unanswered:** an
   execution abort is classified here, before [L4](L4-orchestration.md) dispatches any
   recovery motion ([ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md)).
@@ -93,7 +93,9 @@ Initial skill set:
 | `Grasp` | End-effector command | Actuated / failed |
 | `Detect` | Region of interest, object type | Detections, each with a pose **where the sensor can give one** |
 
-**No sensor in `cell_a` can give one today.** The zone detects with through-beams, which
+**`Detect` has no server in the main tree since 2026-10-01 (ADR-0069); this paragraph records
+how it behaved in the line, which still runs in `projects/01`.** No sensor in `cell_a` could
+give a pose. The zone detected with through-beams, which
 report occupancy, so `detection_server.cpp` marks `Detection.pose` unobserved rather than
 filling it with the beam's own mounting transform — the convention is in
 [`../interfaces/README.md`](../interfaces/README.md), and the cost of having got this wrong
@@ -181,7 +183,8 @@ plan time** rather than attempted
 
 A conveyor-mediated handoff is permitted, and **not** because anything re-observes the part:
 `Detect` returns no pose, because the only pose sensor in the cell is a through-beam and
-`cite_skills::mark_pose_unobserved` says so explicitly. It is permitted because the part is
+`cite_skills::mark_pose_unobserved` says so explicitly. *(Both left the main tree with the line
+on 2026-10-01, ADR-0069; the reasoning stands for any future handoff.)* It is permitted because the part is
 free when the **receiving** gripper closes on it, and closing on a yawed part squares it up —
 measured in
 [`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md),

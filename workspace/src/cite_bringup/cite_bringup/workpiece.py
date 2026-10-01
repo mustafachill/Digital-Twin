@@ -24,7 +24,7 @@ CLAUDE.md section 4 prohibits. A third caller was about to be written.
 
 WHY IT IS HERE AND NOT UNDER `tests/`. The callers are not all tests. `cite_bringup`
 is the package that already owns the one door into Gazebo transport (`gz.py`), and
-it is importable by a scenario, by a demo and by anything else that brings this
+it is importable by a scenario, by `./scripts/program` and by anything else that brings this
 cell up. A shared helper under `tests/scenarios/` would have been reachable by the
 scenarios alone.
 
@@ -50,7 +50,9 @@ obvious and reading it the wrong way would be worse than not knowing.
 from __future__ import annotations
 
 from pathlib import Path
+from xml.etree import ElementTree
 
+from cite_bringup.gz import run
 from cite_bringup.plan import Plan, resolve_uri, WorkpieceModel
 
 import yaml
@@ -74,6 +76,11 @@ APPEARANCE_URI = "package://cite_generated/materials/appearance.yaml"
 #: everything ADR-0061 does not: the box resting and sliding on the pick table and
 #: the belts.
 FRICTION_MU = 1.0
+
+#: How far above the pick surface a work-piece is released when it is spawned.
+#: Small enough that it settles rather than bounces, and non-zero so it is not
+#: spawned interpenetrating the table.
+SPAWN_DROP_M = 0.005
 
 
 class WorkpieceError(Exception):
@@ -172,6 +179,55 @@ def workpiece_sdf(part: WorkpieceModel, appearance_path: Path | None = None) -> 
   </model>
 </sdf>
 """
+
+
+def world_name(world: Path) -> str:
+    """Return the Gazebo world's NAME, read from the world the plan names.
+
+    Read rather than assumed to equal the zone. They agree today, and that is a
+    property of the generator rather than a rule: a zone whose world were named
+    anything else would leave a caller addressing `/world/<wrong>/...`, where
+    nothing answers, and an unpartitioned or misaddressed Gazebo query does not
+    fail — it waits. Reading it from the generated world is what keeps this from
+    being a second statement of a generated name (P1).
+    """
+    element = ElementTree.parse(world).getroot().find("world")
+    if element is None or not element.get("name"):
+        raise ValueError(f"{world} declares no named <world>")
+    return str(element.get("name"))
+
+
+def frame(plan: Plan, name: str) -> tuple[float, float, float]:
+    """Where one generated static frame stands, read from the plan's own file.
+
+    The generated frames document is what the static transform publisher itself
+    is given, so reading it is not a second statement of the geometry — it is the
+    same statement, read in the same place (P1).
+    """
+    document = yaml.safe_load(plan.static_frames.read_text())
+    for transform in document["static_transforms"]:
+        if transform["child"] == name:
+            x, y, z = transform["xyz_m"]
+            return (float(x), float(y), float(z))
+    raise KeyError(f"{plan.zone} declares no frame named {name!r}")
+
+
+def spawn(zone: str, side: str, name: str, at: tuple[float, float, float],
+          sdf: Path, timeout_s: float) -> str | None:
+    """Put one work-piece into one side's world. Returns None on success, else why not.
+
+    Returns rather than raises: a caller that cannot spawn should say so and go on
+    to tear the cell down, not traceback over a running pair. Through
+    `cite_bringup.gz.run`, the one door into Gazebo transport (ADR-0042).
+    """
+    result = run(
+        ["ros2", "run", "ros_gz_sim", "create", "-file", str(sdf), "-name", name,
+         "-x", f"{at[0]}", "-y", f"{at[1]}", "-z", f"{at[2]}"],
+        zone=zone, side=side, timeout=timeout_s,
+    )
+    if result.returncode == 0:
+        return None
+    return (result.stderr or result.stdout or "no output").strip().splitlines()[-1]
 
 
 def _friction() -> str:

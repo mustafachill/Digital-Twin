@@ -106,8 +106,8 @@ from sensor_msgs.msg import JointState
 from tf2_ros import Buffer, TransformListener
 import yaml
 
-ZONE = 'cell_a'
-ARM = 'arm_1'
+ZONE = 'cell_b'
+ARM = 'picker'
 
 #: The hardware plugin every generated description declares, and the two this rig
 #: substitutes for it. Asserted rather than assumed when the swap is made: if the

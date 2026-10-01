@@ -33,7 +33,8 @@ from cite_tools.generate.description import BindingError
 from cite_tools.model.loader import load
 from cite_tools.validate import Severity, referential
 
-ARM = "arm_1"
+ZONE = "cell_b"
+ARM = "picker"
 ADDRESS = "203.0.113.7"
 SECOND_ADDRESS = "203.0.113.8"
 
@@ -64,13 +65,13 @@ def macro_arguments(description: str) -> dict[str, str]:
 
 def description_of(model: Path, asset: str) -> str:
     for artifact in gen.generate(load(model)):
-        if artifact.path == f"description/cell_a_{asset}.urdf.xacro":
+        if artifact.path == f"description/{ZONE}_{asset}.urdf.xacro":
             return artifact.content
     raise AssertionError(f"no description was generated for {asset!r}")
 
 
 def select_real(document: dict, params: dict | None = None) -> None:
-    """Put `arm_1` on the `real` backend, supplying the address it must state."""
+    """Put `ARM` on the `real` backend, supplying the address it must state."""
     for asset in document["assets"]:
         if asset["id"] == ARM:
             asset["hardware"] = {
@@ -120,26 +121,28 @@ class TestTheValueReachesASelectingArm:
         assert arguments["report_type"] == "dev"
 
     def test_two_instances_of_one_backend_carry_different_values(
-        self, real_model: Path, edit_yaml: Callable
+        self, real_model: Path, edit_yaml: Callable, add_arm: Callable
     ) -> None:
         """`params` is per instance and the backend id is an index inside it.
 
         The failure this catches is hoisting the block onto `HardwareBackend`,
-        where the type would declare one address and three arms would share it.
+        where the type would declare one address and every arm would share it.
+        The shipped zone has one arm, so a second is added on the copy.
         """
+        second = add_arm(real_model)
 
         def two_real_arms(document: dict) -> None:
             for asset in document["assets"]:
-                if asset["id"] in ("arm_1", "arm_2"):
-                    address = ADDRESS if asset["id"] == "arm_1" else SECOND_ADDRESS
+                if asset["id"] in (ARM, second):
+                    address = ADDRESS if asset["id"] == ARM else SECOND_ADDRESS
                     asset["hardware"] = {
                         "backend": "real",
                         "params": {"real": {"robot_ip": address}},
                     }
 
         edit_yaml(real_model / "assets/instances/arms.yaml", two_real_arms)
-        assert macro_arguments(description_of(real_model, "arm_1"))["robot_ip"] == ADDRESS
-        assert macro_arguments(description_of(real_model, "arm_2"))["robot_ip"] == SECOND_ADDRESS
+        assert macro_arguments(description_of(real_model, ARM))["robot_ip"] == ADDRESS
+        assert macro_arguments(description_of(real_model, second))["robot_ip"] == SECOND_ADDRESS
 
 
 class TestItDoesNotReachASimulatedArm:
@@ -305,7 +308,7 @@ class TestTheFilterIsKeyedOnTheDeclaration:
     ) -> None:
         """The other half of the union, on the shipped model.
 
-        `robot_ip` is declared by `real` and not by `sim`, `arm_1` is `sim`, and
+        `robot_ip` is declared by `real` and not by `sim`, `picker` is `sim`, and
         the shipped type binds it — so the first term holds, the second does not,
         and the binding is dropped rather than raising.
         """

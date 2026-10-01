@@ -22,16 +22,16 @@
   guard that reaches every document instead of a named list; it is not 394 new behaviours.
   The contract level is populated: every interface definition in `cite_interfaces` is frozen
   against a stored baseline.
-  The scenario level has three: `bringup`, a blocking CI gate run twice per run;
-  `pick_and_place`, **promoted to a blocking gate at `c1e9e03`**; and `continuous_line`,
-  which drives the whole of the line its zone declares — end to end, source station to sink,
-  every station and every trigger, derived from the generated topology — and is the **one**
-  container-stage step still marked `continue-on-error`. **It drove the three-arm line until
-  ADR-0056 and drives the one-arm `cell_b` now**; the three-arm figures are a closed record of
-  the cell CI no longer drives, kept in CLAUDE.md §2, and
-  `./scripts/scenario continuous_line --zone cell_a` is what asks that question again. A scenario that cannot fail the build cannot hold a claim up, so
-  `continuous_line` is evidence and not a gate.
-  All three are run with `--teardown-advisory`, which splits the two questions a scenario
+  The scenario level has two, both blocking CI gates on `cell_b`, the one zone L0 declares:
+  `bringup`, run twice per run, and `program_cycle`, which runs the real robot's program
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)) on the plant for
+  one cycle and asserts where the work-piece ends. **It said three until 2026-10-01**:
+  `pick_and_place` (blocking since `c1e9e03`) and `continuous_line` (advisory) left the main
+  tree with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); both still run, frozen, from
+  `projects/01`, and the weekly, non-blocking
+  `.github/workflows/projects.yml` is what checks them there. Their figures are a closed
+  record, kept in CLAUDE.md §2.
+  Both are run with `--teardown-advisory`, which splits the two questions a scenario
   answers in one exit code: **the cycle gates, the post-shutdown teardown is reported and
   does not gate.** It exempts no process and deletes no assertion — see the phase-split block
   in `scripts/_lib.sh`.
@@ -160,7 +160,8 @@ people to re-run until green.
 **This is the one place in the tree that states the development host's real-time factor with
 its condition; everywhere else cites the campaign.** Every ceiling in `tests/scenarios/` is
 wall clock — the scenario observer nodes deliberately do not set `use_sim_time`, and
-`continuous_line.Sample`'s docstring gives the reason — so every one of them scales inversely
+`bringup.py`'s comment at its first wait gives the reason (so did the removed
+`continuous_line.Sample`'s docstring) — so every one of them scales inversely
 with real-time factor, and a timeout is as much a statement about the host as about the code.
 
 The figure those ceilings were written against — real-time factor about **0.14**, with
@@ -178,7 +179,10 @@ and are cited rather than copied (P1).
 no ceiling too tight and none too loose at a full allocation — but the margins are wall clock,
 so they shrink with the host. `pick_and_place`'s `CYCLE_CEILING_S` falls to a margin of about
 **1.2 under the one-core condition and fails below it**: below roughly 1.2 cores
-`pick_and_place` times out **with nothing broken**. Before looking for a motion bug, check
+`pick_and_place` times out **with nothing broken**. *(`pick_and_place` left the main tree on
+2026-10-01, ADR-0069; `program_cycle`'s ceilings were sized after that campaign and **have not
+been measured against any allocation** — the point about a starved host applies to them
+unchanged.)* Before looking for a motion bug, check
 what the container was allocated and what else was holding the host. **Never answer such a
 timeout by widening a ceiling** — a ceiling sized for a starved machine can no longer catch a
 hang on a healthy one, and that is the signal being spent.
@@ -299,7 +303,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The line actually works — **partly met**: one arm's pick-and-place cycle completes and gates the build (`pick_and_place` carries no `continue-on-error` in `ci.yml`, checked 2026-08-27), and the three-arm line has been reported completing its milestone ladder but **does not gate** and has not carried every piece in every run. Both are reported from runs rather than from a campaign. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
+| Cycle completion | The cell actually works — **partly met**: one cycle of the real program on `cell_b`'s plant completes and gates the build (`program_cycle` carries no `continue-on-error` in `ci.yml`, checked 2026-10-01). Reported from runs rather than from a campaign. It said "one arm's pick-and-place cycle … and the three-arm line" until 2026-10-01; both left the main tree with ADR-0069 and run only from `projects/01`. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
 | Scenario determinism | Same seed, same outcome — **not met today, and moving to Pilz did not meet it. Since 2026-09-22 the outcome half is measured rather than inferred**: two runs of one scenario under one seed put the part in two different places, and both passed ([`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md) — two runs on one machine, not a rate, and **where it comes from is UNRESOLVED**). One `move_group` returns a byte-identical trajectory to an identical request; **same seed, same *trajectory* across runs is still unmeasured** — that campaign recorded final positions and durations, not trajectories — and physics is unseeded either way. See Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
 
@@ -332,7 +336,7 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 ```bash
 ./scripts/test                    # host tooling tests, then ROS tests
 ./scripts/scenario                # list available scenarios
-./scripts/scenario pick_and_place # run one
+./scripts/scenario program_cycle  # run one
 ./scripts/validate-model          # L0 validation — runs anywhere
 ```
 
@@ -346,9 +350,10 @@ container stage can run the C++, CMake and package linters. A green `./scripts/l
 laptop means the Python, YAML, shell and documentation checks passed — it says nothing
 about the C++.
 
-**One** container-stage step is marked `continue-on-error`: `continuous_line`. It runs so
-that the failure is visible; it is not allowed to report success. Its promotion condition is
-recorded next to it in `.github/workflows/ci.yml`.
+**No** scenario step is marked `continue-on-error` since 2026-10-01; the one that was,
+`continuous_line`, left the main tree with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md). The only `continue-on-error` step left in
+`ci.yml` is the supply-chain job's CVE scan. The history below is kept because the promotions
+it records still explain the shape of the gates.
 
 The other two that used to be here were promoted at `c1e9e03`, against their own recorded
 conditions rather than by decree:

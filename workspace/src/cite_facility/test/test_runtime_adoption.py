@@ -32,14 +32,14 @@ from __future__ import annotations
 import pathlib
 import xml.etree.ElementTree as ElementTree
 
-from cite_facility import frame_server, model_info, planning_scene_loader, topology_server
+from cite_facility import frame_server, model_info, planning_scene_loader
 from cite_runtime import runtime
 import pytest
 
 PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 #: Everything in this package that owns a process.
-ENTRY_POINTS = [frame_server, model_info, planning_scene_loader, topology_server]
+ENTRY_POINTS = [frame_server, model_info, planning_scene_loader]
 
 
 @pytest.mark.parametrize("module", ENTRY_POINTS, ids=lambda m: m.__name__)

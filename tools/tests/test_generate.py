@@ -33,10 +33,10 @@ def per_zone(path: Path, template: str) -> list[str]:
 
     Three assertions below are of the form "exactly one of this artifact exists,
     per zone", and each of them used to spell the answer as a one-element list
-    naming `cell_a`. That made them assertions about how many cells the facility
-    declares as well as about the property they were written for, and declaring
-    `cell_b` (ADR-0056) falsified all three at once while the property each was
-    protecting held perfectly.
+    naming the one zone there was. That made them assertions about how many cells
+    the facility declares as well as about the property they were written for,
+    and declaring a second zone (ADR-0056) falsified all three at once while the
+    property each was protecting held perfectly.
 
     Derived from the model rather than listed, so the next zone falsifies none of
     them. The sort is on the formatted path and not on the zone id: they coincide
@@ -44,6 +44,18 @@ def per_zone(path: Path, template: str) -> list[str]:
     coincidence rather than a reason.
     """
     return sorted(template.format(zone=zone.id) for zone in load(path).zones)
+
+
+#: The zone and the arm the single-zone model declares. Named once here so that a
+#: test asserting on "the arm" reads which one, and so that the day a second zone
+#: or arm is declared moves one line rather than every test.
+ZONE = "cell_b"
+ARM = "picker"
+
+
+def robot_ids(path: Path) -> list[str]:
+    """Every arm the model declares in `ZONE`, sorted — asked, never listed."""
+    return sorted(asset.id for asset in resolve(load(path), ZONE).of_category("robot"))
 
 
 class TestDeterminism:
@@ -83,13 +95,15 @@ class TestDeterminism:
         # the model is divided across files must be invisible downstream.
         before = artifacts(real_model)
 
-        instances = real_model / "assets/instances/conveyors.yaml"
+        # The fixtures file, because it is a file with more than one asset to
+        # split: a document may not be empty.
+        instances = real_model / "assets/instances/fixtures.yaml"
         import yaml
 
         document = yaml.safe_load(instances.read_text())
         first, rest = document["assets"][:1], document["assets"][1:]
         instances.write_text(yaml.safe_dump({**document, "assets": first}, sort_keys=False))
-        (real_model / "assets/instances/conveyors_more.yaml").write_text(
+        (real_model / "assets/instances/fixtures_more.yaml").write_text(
             yaml.safe_dump({**document, "assets": rest}, sort_keys=False)
         )
 
@@ -113,7 +127,7 @@ class TestHandEditDetection:
         out = tmp_path / "cite_generated"
         produced = gen.generate(load(real_model))
         gen.write(produced, out)
-        target = out / "worlds/cell_a.sdf"
+        target = out / "worlds/cell_b.sdf"
         target.write_text(target.read_text().replace("0.001", "0.002", 1))
         assert any(
             "differs from a fresh generator run" in p for p in gen.differences(produced, out)
@@ -123,7 +137,7 @@ class TestHandEditDetection:
         out = tmp_path / "cite_generated"
         produced = gen.generate(load(real_model))
         gen.write(produced, out)
-        (out / "worlds/cell_a.sdf").unlink()
+        (out / "worlds/cell_b.sdf").unlink()
         assert any("missing" in p for p in gen.differences(produced, out))
 
     def test_a_stale_file_is_caught(self, real_model: Path, tmp_path: Path) -> None:
@@ -204,7 +218,7 @@ class TestModelHash:
         monkeypatch.setattr(bringup, "environment", through_the_copy)
         after = artifacts(real_model)
 
-        assert after["bringup/cell_a_plan.yaml"] != before["bringup/cell_a_plan.yaml"], (
+        assert after["bringup/cell_b_plan.yaml"] != before["bringup/cell_b_plan.yaml"], (
             "the template edit reached no artifact, so this test would pass "
             "whatever the hash did"
         )
@@ -221,33 +235,17 @@ class TestGrowingTheLineIsDataOnly:
     broken somewhere upstream.
     """
 
-    def test_a_fourth_arm_needs_no_code_change(self, real_model: Path, edit_yaml: Callable) -> None:
-        import yaml
-
-        fixtures = real_model / "assets/instances/fixtures.yaml"
-        document = yaml.safe_load(fixtures.read_text())
-        pedestal = dict(document["assets"][0])
-        pedestal["id"] = "pedestal_4"
-        pedestal["pose"] = {"frame": "cite_world", "xyz_m": [6.3, -0.35, 0.0]}
-        document["assets"].append(pedestal)
-        fixtures.write_text(yaml.safe_dump(document, sort_keys=False))
-
-        arms = real_model / "assets/instances/arms.yaml"
-        document = yaml.safe_load(arms.read_text())
-        arm = dict(document["assets"][0])
-        arm["id"] = "arm_4"
-        arm["pose"] = dict(arm["pose"], frame="pedestal_4/top")
-        document["assets"].append(arm)
-        arms.write_text(yaml.safe_dump(document, sort_keys=False))
+    def test_a_second_arm_needs_no_code_change(self, real_model: Path, add_arm: Callable) -> None:
+        arm = add_arm(real_model, "arm_new")
 
         produced = artifacts(real_model)
-        assert "control/cell_a_arm_4_controllers.yaml" in produced
-        assert (
-            "arm_4_joint_trajectory_controller" in produced["control/cell_a_arm_4_controllers.yaml"]
-        )
-        assert "description/cell_a_arm_4.urdf.xacro" in produced
-        assert "/cite/cell_a/arm_4" in produced["description/cell_a_arm_4.urdf.xacro"]
-        assert "arm_4" in produced["bringup/cell_a_plan.yaml"]
+        controllers = f"control/{ZONE}_{arm}_controllers.yaml"
+        description = f"description/{ZONE}_{arm}.urdf.xacro"
+        assert controllers in produced
+        assert f"{arm}_joint_trajectory_controller" in produced[controllers]
+        assert description in produced
+        assert f"/cite/{ZONE}/{arm}" in produced[description]
+        assert arm in produced[f"bringup/{ZONE}_plan.yaml"]
 
 
 #: One macro argument per line, which is what lets the parity test below account
@@ -265,8 +263,11 @@ class TestSimRealParity:
     """P2, asserted on the generator rather than hoped for at run time."""
 
     def test_only_the_plugin_differs_between_backends(
-        self, real_model: Path, edit_yaml: Callable
+        self, real_model: Path, edit_yaml: Callable, add_arm: Callable
     ) -> None:
+        # A second arm that stays `sim`, so that "a backend is a per-instance
+        # choice" has an instance to be asked of (ADR-0069 left one arm).
+        other = add_arm(real_model)
         sim = artifacts(real_model)
 
         edit_yaml(
@@ -281,17 +282,17 @@ class TestSimRealParity:
         # Controller and joint names are identical. If this ever fails, P2 is
         # broken and everything above L2 becomes unfounded.
         assert (
-            sim["control/cell_a_arm_1_controllers.yaml"].replace(
+            sim["control/cell_b_picker_controllers.yaml"].replace(
                 "use_sim_time: true", "use_sim_time: false"
             )
-            == real["control/cell_a_arm_1_controllers.yaml"]
+            == real["control/cell_b_picker_controllers.yaml"]
         )
 
         # The description differs in exactly two lines, and the second of them
         # arrived on 2026-09-01 when the shipped collision selection moved to the
-        # derived hulls (ADR-0028). Only arm_1 was switched, so arm_2's and
-        # arm_3's descriptions must be untouched — a backend is a per-instance
-        # choice, not a global mode.
+        # derived hulls (ADR-0028). Only the shipped arm was switched, so the
+        # second arm's description must be untouched — a backend is a
+        # per-instance choice, not a global mode.
         #
         # WHY A SECOND DIFFERING LINE IS NOT A P2 BREAK, checked below rather than
         # asserted here. `xarm_device_macro.xacro` resolves its OWN mesh root as
@@ -321,8 +322,8 @@ class TestSimRealParity:
         # the arguments named here. The length equality is therefore asserted
         # explicitly as well, so that removing the keyword cannot quietly retire
         # it either.
-        sim_lines = sim["description/cell_a_arm_1.urdf.xacro"].splitlines()
-        real_lines = real["description/cell_a_arm_1.urdf.xacro"].splitlines()
+        sim_lines = sim["description/cell_b_picker.urdf.xacro"].splitlines()
+        real_lines = real["description/cell_b_picker.urdf.xacro"].splitlines()
 
         accounted = ("robot_ip",)
         surplus = [line for line in real_lines if _argument_name(line) in accounted]
@@ -346,9 +347,8 @@ class TestSimRealParity:
             "package://cite_description", ""
         ), (sim_line, real_line)
 
-        for other in ("arm_2", "arm_3"):
-            key = f"description/cell_a_{other}.urdf.xacro"
-            assert sim[key] == real[key], f"{other} changed when only arm_1 was switched"
+        key = f"description/{ZONE}_{other}.urdf.xacro"
+        assert sim[key] == real[key], f"{other} changed when only {ARM} was switched"
 
 
 class TestBindings:
@@ -380,9 +380,9 @@ class TestOneCoordinatePerFrame:
 
     That is not hypothetical. The description generator subtracted half a body
     height from every type frame, which would only have been right if the link
-    origin were the box centre; it is the foot. `pedestal_1_top` was published at
-    z = 0.300 while `cell_a__pedestal_1__top` was published at z = 0.600, 0.3 m
-    below where the arm is actually bolted, and nothing consumed the URDF-side
+    origin were the box centre; it is the foot. A pedestal's `top` was published
+    at z = 0.300 as a URDF link and at z = 0.600 as a static transform, 0.3 m
+    below where the arm was actually bolted, and nothing consumed the URDF-side
     name yet — which is exactly what made it dangerous.
     """
 
@@ -418,8 +418,8 @@ class TestOneCoordinatePerFrame:
     ) -> None:
         model = load(real_model)
         produced = artifacts(real_model)
-        table = yaml.safe_load(produced["frames/cell_a_static_tf.yaml"])
-        urdf = self._urdf_world_poses(produced["description/cell_a_scene.urdf.xacro"])
+        table = yaml.safe_load(produced["frames/cell_b_static_tf.yaml"])
+        urdf = self._urdf_world_poses(produced["description/cell_b_scene.urdf.xacro"])
 
         static = {
             row["child"]: Pose(xyz_m=tuple(row["xyz_m"]), rpy_rad=tuple(row["rpy_rad"]))
@@ -427,10 +427,10 @@ class TestOneCoordinatePerFrame:
         }
 
         checked = 0
-        for asset in resolve(model, "cell_a").assets:
+        for asset in resolve(model, "cell_b").assets:
             for named in asset.asset_type.frames:
                 link_name = ids.link(asset.id, named.id)
-                frame_name = ids.frame("cell_a", asset.id, named.id)
+                frame_name = ids.frame("cell_b", asset.id, named.id)
                 if named.link is not None:
                     # Published by robot_state_publisher from a vendor
                     # description. Neither generator may emit a second copy.
@@ -445,30 +445,31 @@ class TestOneCoordinatePerFrame:
                     f"{static[frame_name].xyz_m} as a static transform"
                 )
                 checked += 1
-        # A test that silently checked nothing would pass forever.
-        assert checked >= 8, f"only {checked} frames were compared"
+        # A test that silently checked nothing would pass forever. The tables, the
+        # belt and the beams carry seven authored frames between them.
+        assert checked >= 5, f"only {checked} frames were compared"
 
     def test_a_reintroduced_half_height_offset_is_caught(self, real_model: Path) -> None:
-        # The exact defect, re-injected: raise the pedestal's own frame without
+        # The exact defect, re-injected: raise the table's own frame without
         # touching its body. The two representations must stop agreeing.
         import yaml as _yaml
 
-        target = real_model / "assets/types/fixtures/pedestal_600.yaml"
+        target = real_model / "assets/types/fixtures/work_table_600.yaml"
         document = _yaml.safe_load(target.read_text())
         document["asset_type"]["frames"][0]["xyz_m"] = [0.0, 0.0, 0.3]
         target.write_text(_yaml.safe_dump(document, sort_keys=False))
 
         produced = artifacts(real_model)
-        urdf = self._urdf_world_poses(produced["description/cell_a_scene.urdf.xacro"])
-        table = yaml.safe_load(produced["frames/cell_a_static_tf.yaml"])
+        urdf = self._urdf_world_poses(produced["description/cell_b_scene.urdf.xacro"])
+        table = yaml.safe_load(produced["frames/cell_b_static_tf.yaml"])
         static = {
             row["child"]: Pose(xyz_m=tuple(row["xyz_m"]), rpy_rad=tuple(row["rpy_rad"]))
             for row in table["static_transforms"]
         }
         # Both representations must move together, so they still agree with each
         # other — and both must show the new height rather than the old one.
-        assert urdf["pedestal_1_top"].approx_equal(static["cell_a__pedestal_1__top"])
-        assert round(urdf["pedestal_1_top"].xyz_m[2], 6) == 0.3
+        assert urdf["infeed_table_surface"].approx_equal(static["cell_b__infeed_table__surface"])
+        assert round(urdf["infeed_table_surface"].xyz_m[2], 6) == 0.3
 
 
 class TestFramesOfVendorLinks:
@@ -481,13 +482,13 @@ class TestFramesOfVendorLinks:
         # publishes at wherever forward kinematics puts it. Emitting it here as
         # well produced a STATIC transform at the arm's mount — the canonical
         # name for the tool centre point, answering with a constant.
-        table = yaml.safe_load(artifacts(real_model)["frames/cell_a_static_tf.yaml"])
+        table = yaml.safe_load(artifacts(real_model)["frames/cell_b_static_tf.yaml"])
         children = {row["child"] for row in table["static_transforms"]}
-        assert "cell_a__arm_1__tcp" not in children
-        assert "cell_a__arm_1__base" not in children
+        assert "cell_b__picker__tcp" not in children
+        assert "cell_b__picker__base" not in children
         # The mount is still there: nothing else ties the arm's own model to the
         # facility, and without it TF has two disconnected trees.
-        assert "arm_1_mount" in children
+        assert "picker_mount" in children
 
     def test_clearing_the_link_makes_the_frame_appear(
         self, real_model: Path, edit_yaml: Callable
@@ -498,9 +499,9 @@ class TestFramesOfVendorLinks:
                 frame.pop("link", None)
 
         edit_yaml(real_model / "assets/types/robots/xarm5.yaml", mutate)
-        table = yaml.safe_load(artifacts(real_model)["frames/cell_a_static_tf.yaml"])
+        table = yaml.safe_load(artifacts(real_model)["frames/cell_b_static_tf.yaml"])
         children = {row["child"] for row in table["static_transforms"]}
-        assert "cell_a__arm_1__tcp" in children
+        assert "cell_b__picker__tcp" in children
 
 
 class TestMassIsWhereTheGeometryIs:
@@ -509,7 +510,7 @@ class TestMassIsWhereTheGeometryIs:
     def test_the_inertial_origin_carries_the_same_half_height_as_the_geometry(
         self, real_model: Path
     ) -> None:
-        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        scene = artifacts(real_model)["description/cell_b_scene.urdf.xacro"]
         root = ElementTree.fromstring(scene)
         checked = 0
         for link in root.findall("link"):
@@ -530,18 +531,18 @@ class TestMassIsWhereTheGeometryIs:
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         # `com_m` is measured from the collision box centre, which is the same
-        # reference validate.physical uses. A pedestal whose mass sits 0.25 m low
+        # reference validate.physical uses. A table whose mass sits 0.25 m low
         # must land at z = 0.05 in the link frame, not at z = -0.25 below it.
         edit_yaml(
-            real_model / "assets/types/fixtures/pedestal_600.yaml",
+            real_model / "assets/types/fixtures/work_table_600.yaml",
             lambda d: d["asset_type"]["description"]["body"]["inertial"].__setitem__(
                 "com_m", [0.0, 0.0, -0.25]
             ),
         )
-        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        scene = artifacts(real_model)["description/cell_b_scene.urdf.xacro"]
         root = ElementTree.fromstring(scene)
         links = root.findall("link")
-        link = next(e for e in links if e.get("name") == "pedestal_1_base_link")
+        link = next(e for e in links if e.get("name") == "infeed_table_base_link")
         z = float(link.find("inertial").find("origin").get("xyz").split()[2])
         assert round(z, 9) == 0.05
 
@@ -550,7 +551,7 @@ class TestEverythingIsAnchored:
     """H3: nothing in the cell stands on the ground by friction alone."""
 
     def test_the_scene_is_static(self, real_model: Path) -> None:
-        scene = artifacts(real_model)["description/cell_a_scene.urdf.xacro"]
+        scene = artifacts(real_model)["description/cell_b_scene.urdf.xacro"]
         root = ElementTree.fromstring(scene)
         statics = [
             element.text
@@ -564,8 +565,10 @@ class TestEverythingIsAnchored:
 
     def test_every_arm_is_bolted_to_the_world(self, real_model: Path) -> None:
         produced = artifacts(real_model)
-        for arm in ("arm_1", "arm_2", "arm_3"):
-            root = ElementTree.fromstring(produced[f"description/cell_a_{arm}.urdf.xacro"])
+        arms = robot_ids(real_model)
+        assert arms, "the model declares no arm, so this would check nothing"
+        for arm in arms:
+            root = ElementTree.fromstring(produced[f"description/{ZONE}_{arm}.urdf.xacro"])
             anchors = [
                 joint
                 for gazebo in root.findall("gazebo")
@@ -581,11 +584,20 @@ class TestEverythingIsAnchored:
 
     def test_the_arm_anchor_is_invisible_to_robot_state_publisher(self, real_model: Path) -> None:
         # The anchor lives inside <gazebo> precisely so TF never sees it. A URDF
-        # joint from a link named `world` would give arm_1_mount a second parent
+        # joint from a link named `world` would give picker_mount a second parent
         # alongside the generated static transform table.
-        root = ElementTree.fromstring(artifacts(real_model)["description/cell_a_arm_1.urdf.xacro"])
-        assert root.findall("joint") == []
-        assert [link.get("name") for link in root.findall("link")] == ["arm_1_mount"]
+        #
+        # The arm rides a track (ADR-0067), so its description does carry URDF
+        # joints — the prismatic carriage joint among them. What may not exist is
+        # one that reaches `world`: the mount is the description's root, and
+        # nothing in it is parented to a link the static transform table owns.
+        root = ElementTree.fromstring(artifacts(real_model)["description/cell_b_picker.urdf.xacro"])
+        links = [link.get("name") for link in root.findall("link")]
+        children = {joint.find("child").get("link") for joint in root.findall("joint")}
+        parents = {joint.find("parent").get("link") for joint in root.findall("joint")}
+        assert "world" not in links
+        assert "world" not in parents
+        assert "picker_mount" in links and "picker_mount" not in children
 
 
 class TestPlanningSceneIsGenerated:
@@ -593,7 +605,7 @@ class TestPlanningSceneIsGenerated:
 
     def test_every_authored_body_becomes_a_collision_object(self, real_model: Path) -> None:
         produced = artifacts(real_model)
-        scene = yaml.safe_load(produced["moveit/cell_a_planning_scene.yaml"])
+        scene = yaml.safe_load(produced["moveit/cell_b_planning_scene.yaml"])
         objects = {o["id"]: o for o in scene["planning_scene"]["collision_objects"]}
         # DERIVED FROM THE MODEL, not listed again here. The list that used to be
         # written out was a second copy of the cell's inventory, and adding
@@ -604,35 +616,37 @@ class TestPlanningSceneIsGenerated:
         # now asserts.
         expected = {
             asset.id
-            for asset in resolve(load(real_model), "cell_a").assets
+            for asset in resolve(load(real_model), "cell_b").assets
             if asset.asset_type.description.body is not None
         }
         assert expected, "no authored body was found, so this test asserted nothing"
         assert set(objects) == expected
         # Arms are deliberately absent: an articulated robot frozen at a pose is
         # confidently wrong wherever it actually is.
-        assert not any(o.startswith("arm_") for o in objects)
+        assert not set(robot_ids(real_model)) & set(objects)
 
     def test_a_collision_object_agrees_with_the_scene_description(self, real_model: Path) -> None:
         # Same geometry, same place — the planner's cell and the simulator's cell
         # come from one resolved body, so they cannot drift.
         produced = artifacts(real_model)
-        scene = yaml.safe_load(produced["moveit/cell_a_planning_scene.yaml"])
+        scene = yaml.safe_load(produced["moveit/cell_b_planning_scene.yaml"])
         table = next(
-            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "table_pick"
+            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "infeed_table"
         )
         assert table["primitive"]["dimensions_m"] == [0.6, 0.6, 0.6]
         # MoveIt primitive poses are CENTRES; the L0 pose is the foot.
-        assert table["pose"]["xyz_m"] == [-0.475, 0.0, 0.3]
+        assert table["pose"]["xyz_m"] == [-0.5, 2.924, 0.3]
 
     def test_it_tracks_the_model(self, real_model: Path, edit_yaml: Callable) -> None:
         edit_yaml(
             real_model / "assets/instances/fixtures.yaml",
-            lambda d: d["assets"][3]["pose"].__setitem__("xyz_m", [-0.6, 0.0, 0.0]),
+            lambda d: next(a for a in d["assets"] if a["id"] == "infeed_table")["pose"].__setitem__(
+                "xyz_m", [-0.6, 2.924, 0.0]
+            ),
         )
-        scene = yaml.safe_load(artifacts(real_model)["moveit/cell_a_planning_scene.yaml"])
+        scene = yaml.safe_load(artifacts(real_model)["moveit/cell_b_planning_scene.yaml"])
         table = next(
-            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "table_pick"
+            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "infeed_table"
         )
         assert table["pose"]["xyz_m"][0] == -0.6
 
@@ -647,7 +661,7 @@ class TestPhysicalConstantsComeFromTheModel:
             real_model / "assets/types/robots/xarm5.yaml",
             lambda d: d["asset_type"]["planning"].__setitem__("max_acceleration_rad_s2", 3.5),
         )
-        limits = artifacts(real_model)["moveit/cell_a_arm_1_joint_limits.yaml"]
+        limits = artifacts(real_model)["moveit/cell_b_picker_joint_limits.yaml"]
         assert "max_acceleration: 3.5" in limits
         assert "max_acceleration: 2.0" not in limits
 
@@ -662,7 +676,7 @@ class TestPhysicalConstantsComeFromTheModel:
             real_model / "assets/types/robots/xarm5.yaml",
             lambda d: d["asset_type"]["planning"].__setitem__("max_deceleration_rad_s2", 3.5),
         )
-        limits = artifacts(real_model)["moveit/cell_a_arm_1_joint_limits.yaml"]
+        limits = artifacts(real_model)["moveit/cell_b_picker_joint_limits.yaml"]
         assert "has_deceleration_limits: true" in limits
         assert "max_deceleration: -3.5" in limits
         assert "max_deceleration: -2.0" not in limits
@@ -684,9 +698,9 @@ class TestPhysicalConstantsComeFromTheModel:
                 }
             ),
         )
-        limits = yaml.safe_load(artifacts(real_model)["moveit/cell_a_arm_1_cartesian_limits.yaml"])[
-            "cartesian_limits"
-        ]
+        limits = yaml.safe_load(
+            artifacts(real_model)["moveit/cell_b_picker_cartesian_limits.yaml"]
+        )["cartesian_limits"]
         assert limits == {
             "max_trans_vel": 0.11,
             "max_trans_acc": 0.22,
@@ -702,7 +716,7 @@ class TestPhysicalConstantsComeFromTheModel:
             real_model / "assets/types/robots/xarm5.yaml",
             lambda d: d["asset_type"]["control"].__setitem__("update_rate_hz", 250),
         )
-        controllers = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        controllers = artifacts(real_model)["control/cell_b_picker_controllers.yaml"]
         assert "update_rate: 250" in controllers
 
     def test_a_type_with_controllers_and_no_rate_is_an_error_not_a_default(
@@ -729,7 +743,7 @@ class TestThePlannerChoiceIsData:
 
     def test_both_pipelines_are_declared(self, real_model: Path) -> None:
         pipelines = yaml.safe_load(
-            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+            artifacts(real_model)["moveit/cell_b_picker_planning_pipelines.yaml"]
         )
         assert pipelines["planning_pipelines"] == [
             "pilz_industrial_motion_planner",
@@ -749,7 +763,7 @@ class TestThePlannerChoiceIsData:
         # names a frame its absence is a plan against the wrong frame rather than
         # an error.
         pipelines = yaml.safe_load(
-            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+            artifacts(real_model)["moveit/cell_b_picker_planning_pipelines.yaml"]
         )
         expected = [
             "default_planning_request_adapters/ResolveConstraintFrames",
@@ -771,7 +785,7 @@ class TestThePlannerChoiceIsData:
         from cite_tools.generate.moveit import PIPELINES
 
         pipelines = yaml.safe_load(
-            artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+            artifacts(real_model)["moveit/cell_b_picker_planning_pipelines.yaml"]
         )
         assert pipelines["planning_pipelines"] == list(PIPELINES)
         for name in PIPELINES:
@@ -785,9 +799,9 @@ class TestThePlannerChoiceIsData:
         # waypoints its own sampling time produced and interpolates nothing, so
         # the key would be an unread number in its block rather than a stricter
         # check — see the note the generator renders above it.
-        produced = artifacts(real_model)["moveit/cell_a_arm_1_planning_pipelines.yaml"]
+        produced = artifacts(real_model)["moveit/cell_b_picker_planning_pipelines.yaml"]
         pipelines = yaml.safe_load(produced)
-        assert pipelines["ompl"]["arm_1_xarm5"]["longest_valid_segment_fraction"] == 0.005
+        assert pipelines["ompl"]["picker_xarm5"]["longest_valid_segment_fraction"] == 0.005
         assert "longest_valid_segment_fraction" not in str(
             pipelines["pilz_industrial_motion_planner"]
         )
@@ -807,19 +821,19 @@ class TestThePlannerChoiceIsData:
             ),
         )
         produced = artifacts(real_model)
-        pipelines = yaml.safe_load(produced["moveit/cell_a_arm_1_planning_pipelines.yaml"])
+        pipelines = yaml.safe_load(produced["moveit/cell_b_picker_planning_pipelines.yaml"])
         assert pipelines["default_planning_pipeline"] == "ompl"
         # And the same choice reaches L3 through the bring-up plan, because a
         # planner named only in the MoveIt configuration is one the skill server
         # cannot ask for.
-        plan = yaml.safe_load(produced["bringup/cell_a_plan.yaml"])
-        arm = next(m for m in plan["plan"]["controller_managers"] if m["asset"] == "arm_1")
+        plan = yaml.safe_load(produced["bringup/cell_b_plan.yaml"])
+        arm = next(m for m in plan["plan"]["controller_managers"] if m["asset"] == "picker")
         assert arm["moveit"]["default_pipeline"] == "ompl"
         assert arm["moveit"]["fallback_pipeline"] == "pilz_industrial_motion_planner"
         assert arm["moveit"]["fallback_planner_id"] == "PTP"
 
     def test_the_plan_carries_the_planner_the_model_names(self, real_model: Path) -> None:
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])
         planned = 0
         for manager in plan["plan"]["controller_managers"]:
             if manager.get("moveit") is None:
@@ -832,7 +846,9 @@ class TestThePlannerChoiceIsData:
             # Empty means "the pipeline's own default", which for the generated
             # OMPL block is its single planner configuration.
             assert moveit["fallback_planner_id"] == ""
-        assert planned == 3, "the cell has three arms; this asserted on none of them"
+        assert (
+            planned == len(robot_ids(real_model)) and planned
+        ), "the plan's planned arms are not the model's arms, or there are none"
 
     def test_a_pipeline_the_generator_cannot_configure_is_an_error(
         self, real_model: Path, edit_yaml: Callable
@@ -921,14 +937,16 @@ class TestThePlannerChoiceIsData:
         # Which ids those are is a fact about MoveIt, stated once in the
         # generator and carried to the server as data rather than compiled into
         # it twice.
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])
         named = 0
         for manager in plan["plan"]["controller_managers"]:
             if manager.get("moveit") is None:
                 continue
             named += 1
             assert manager["moveit"]["cartesian_planner_ids"] == ["LIN", "CIRC"]
-        assert named == 3, "the cell has three arms; this asserted on none of them"
+        assert (
+            named == len(robot_ids(real_model)) and named
+        ), "the plan's planned arms are not the model's arms, or there are none"
 
 
 class TestTheDeterminismCheckCanSeeWhatItClaimsTo:
@@ -998,7 +1016,7 @@ class TestGraspPolicyReachesTheBringUpPlan:
     EFFECTOR = "assets/types/end_effectors/xarm_parallel_gripper.yaml"
 
     def test_the_default_width_is_delivered_to_every_arm(self, real_model: Path) -> None:
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         managers = [m for m in plan["controller_managers"] if m.get("gripper_action")]
         assert managers, "no arm in the plan has a gripper; this test would prove nothing"
         for manager in managers:
@@ -1011,7 +1029,7 @@ class TestGraspPolicyReachesTheBringUpPlan:
             real_model / self.EFFECTOR,
             lambda d: d["asset_type"]["grasp"].__setitem__("default_grasp_width_m", 0.031),
         )
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         widths = {
             m["gripper_default_grasp_width_m"]
             for m in plan["controller_managers"]
@@ -1030,12 +1048,12 @@ class TestGraspPolicyReachesTheBringUpPlan:
             real_model / self.EFFECTOR,
             lambda d: d["asset_type"]["grasp"].pop("default_grasp_width_m", None),
         )
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         for manager in plan["controller_managers"]:
             assert "gripper_default_grasp_width_m" not in manager
 
     def test_a_stall_is_reported_by_the_controller_rather_than_aborted(
-        self, real_model: Path
+        self, real_model: Path, add_arm: Callable
     ) -> None:
         """ADR-0022: a stall is reported, not interpreted.
 
@@ -1045,11 +1063,36 @@ class TestGraspPolicyReachesTheBringUpPlan:
         success out of a failed action. This is model data so that simulation and
         hardware are configured identically (P2).
         """
+        add_arm(real_model)
         produced = artifacts(real_model)
-        for asset in ("arm_1", "arm_2", "arm_3"):
-            controllers = yaml.safe_load(produced[f"control/cell_a_{asset}_controllers.yaml"])
-            gripper = controllers[f"/cite/cell_a/{asset}/{asset}_gripper_controller"]
+        arms = robot_ids(real_model)
+        assert len(arms) == 2, arms
+        for asset in arms:
+            controllers = yaml.safe_load(produced[f"control/{ZONE}_{asset}_controllers.yaml"])
+            gripper = controllers[f"/cite/{ZONE}/{asset}/{asset}_gripper_controller"]
             assert gripper["ros__parameters"]["allow_stalling"] is True
+
+
+def test_the_shipped_zone_is_paired(real_model: Path) -> None:
+    """The premise `TestTwinSidesAndTheGazeboPartition` inverts, held on its own.
+
+    That class unpairs the zone before every test so that pairing it measures
+    something. Without this, a model that stopped pairing the zone would leave
+    every one of those tests green and nothing would say the shipped cell had
+    changed (ADR-0059).
+    """
+    plan = yaml.safe_load(artifacts(real_model)[f"bringup/{ZONE}_plan.yaml"])["plan"]
+    assert [side["name"] for side in plan["sides"]] == list(ids.SIDES)
+
+
+def test_no_plan_carries_a_detection_block(real_model: Path) -> None:
+    """The detection server left the main tree with the line (ADR-0069).
+
+    A `detection:` block names a server nothing starts, and a reader would take it
+    for an interface the cell provides.
+    """
+    for path in per_zone(real_model, "bringup/{zone}_plan.yaml"):
+        assert "detection" not in yaml.safe_load(artifacts(real_model)[path])["plan"], path
 
 
 class TestTwinSidesAndTheGazeboPartition:
@@ -1061,7 +1104,22 @@ class TestTwinSidesAndTheGazeboPartition:
     so the first two tests below are the regression the whole L0 change rests on:
     introducing the field, and writing `counterpart_backend` where it agrees with
     `backend`, must change nothing at all.
+
+    **EVERY TEST HERE STARTS FROM THE ZONE UNPAIRED, and that is an inversion
+    rather than a convenience.** The shipped zone is paired (ADR-0059), so a test
+    that paired it and compared would compare a model with itself and pass
+    whatever pairing did. `_start_unpaired` sets the zone `single` on the copy
+    first, which is the model these assertions were written against; that the
+    shipped zone really is paired is asserted separately, by
+    `test_the_shipped_zone_is_paired`, so the fixture cannot hide a change.
     """
+
+    @pytest.fixture(autouse=True)
+    def _start_unpaired(self, real_model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            real_model / "facility/zones.yaml",
+            lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+        )
 
     @staticmethod
     def _pair(model: Path, edit_yaml: Callable) -> None:
@@ -1074,8 +1132,8 @@ class TestTwinSidesAndTheGazeboPartition:
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         # `counterpart_backend` absent means the same value as `backend`, and
-        # this is that sentence made mechanical: fifteen instances that say so
-        # explicitly generate the same bytes as fifteen that stay silent. The
+        # this is that sentence made mechanical: instances that say so
+        # explicitly generate the same bytes as instances that stay silent. The
         # property matters because it is what lets the field be optional without
         # the omission meaning something different from the value.
         before = artifacts(real_model)
@@ -1138,11 +1196,11 @@ class TestTwinSidesAndTheGazeboPartition:
         # belonging to a side carries the partition AND the domain, resolved from
         # the same side identity and read from this one block (ADR-0044,
         # clause 2).
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         assert plan["sides"] == [
             {
                 "name": ids.PLANT_SIDE,
-                "gz_partition": ids.partition("cell_a", ids.PLANT_SIDE),
+                "gz_partition": ids.partition("cell_b", ids.PLANT_SIDE),
                 "domain_offset": 0,
             }
         ]
@@ -1151,7 +1209,7 @@ class TestTwinSidesAndTheGazeboPartition:
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
         self._pair(real_model, edit_yaml)
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         assert [side["name"] for side in plan["sides"]] == list(ids.SIDES)
         partitions = [side["gz_partition"] for side in plan["sides"]]
         # The entire decision reduces to this inequality: two sides that shared a
@@ -1179,7 +1237,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # opt_in` reads these, which is how a physical counterpart is refused
         # without a second gate.
         self._pair(real_model, edit_yaml)
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         for manager in plan["controller_managers"]:
             assert manager["counterpart_backend"] == manager["backend"]
 
@@ -1258,7 +1316,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # below, which is the tripwire on `twin.sides` describing the system
         # rather than running it.
         differing = sorted(path for path in before if before[path] != after[path])
-        assert differing == ["MODEL_HASH", "bringup/cell_a_plan.yaml"]
+        assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
 
     def test_a_paired_zone_still_generates_exactly_one_world(
         self, real_model: Path, edit_yaml: Callable
@@ -1270,9 +1328,9 @@ class TestTwinSidesAndTheGazeboPartition:
         #
         # ONE PER ZONE, WHICH IS THE CLAIM — not one in total. A zone genuinely
         # has its own world, so the quantity that must not move when a zone is
-        # paired is the count per zone, and this used to state it as the literal
-        # `["worlds/cell_a.sdf"]` because there was only ever one zone. Pairing
-        # `cell_a` must leave BOTH sides of that equality alone.
+        # paired is the count per zone, and this used to state it as a literal
+        # one-element list. Pairing a zone must leave BOTH sides of that
+        # equality alone.
         before = sorted(
             p for p in artifacts(real_model) if p.startswith("worlds/") and p.endswith(".sdf")
         )
@@ -1332,7 +1390,7 @@ class TestTwinSidesAndTheGazeboPartition:
             lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
         )
 
-        plan = "bringup/cell_a_plan.yaml"
+        plan = "bringup/cell_b_plan.yaml"
         assert paired[plan] != before[plan], "pairing changed no plan; the round trip is vacuous"
         assert on_disk() == before
 
@@ -1345,7 +1403,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # property that matters — two sides sharing a domain collide on every
         # node name, because both sides carry identical names by rule.
         self._pair(real_model, edit_yaml)
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         by_name = {side["name"]: side["domain_offset"] for side in plan["sides"]}
         assert by_name == {ids.PLANT_SIDE: 0, ids.COUNTERPART_SIDE: 1}
 
@@ -1369,7 +1427,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # Read from the parsed document rather than from the text, because the
         # plan's own comments discuss the domain variable at length and a
         # substring search would be answered by the prose instead of by the data.
-        plan = yaml.safe_load(produced["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(produced["bringup/cell_b_plan.yaml"])["plan"]
         for side in plan["sides"]:
             assert set(side) == {"name", "gz_partition", "domain_offset"}
             # An offset is a small index into the sides, not a domain: anything
@@ -1420,10 +1478,10 @@ class TestTwinSidesAndTheGazeboPartition:
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0]["hardware"].__setitem__("counterpart_backend", "real"),
         )
-        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_a_plan.yaml"])["plan"]
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
         physical = {
             m["asset"]: m["counterpart_backend"]
             for m in plan["controller_managers"]
             if m["counterpart_backend"] != "sim"
         }
-        assert physical == {"arm_1": "real"}
+        assert physical == {"picker": "real"}

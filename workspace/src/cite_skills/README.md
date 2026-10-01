@@ -1,8 +1,10 @@
 # cite_skills
 
 L3: the robot-agnostic capability servers. Skills are the vocabulary the system speaks about
-work — `MoveTo`, `Grasp`, `Pick`, `Place`, `Transfer`, `Detect` — and they are the only thing
-L4 is allowed to call.
+work — `MoveTo`, `Grasp`, `Pick`, `Place`, `Transfer` — and they are the only thing a layer
+above is allowed to call. The beam-driven `Detect` skill and its server left the main tree with
+the event-driven line ([ADR-0069](../../../docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md));
+they run in `projects/01`.
 
 C++ because every skill sits on a motion path, and
 [`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md) requires
@@ -19,28 +21,22 @@ than six degrees of freedom almost every draw is unreachable.
 
 ## What is here
 
-Two executables.
+One executable.
 
 | Executable | Scope | Serves |
 |---|---|---|
 | `skill_server` | one per arm, in that arm's namespace | `MoveTo`, `Grasp`, `Pick`, `Place`, `Transfer` |
-| `detection_server` | **one per zone**, in a zone-scope namespace | `Detect`, plus one `DetectionEvent` publisher per beam |
-
-`Detect` is separate on purpose. It commands no motion, needs neither the planner nor the
-gripper, and belongs to a zone's sensors rather than to one arm — three arms each serving it
-would give the question "did the piece pass beam 2" three answers.
 
 Headers under `include/cite_skills/` hold the parts that are pure arithmetic or pure state:
 approach and retreat geometry, the gripper linkage, the pose-goal sequencing rule, the
-one-goal-at-a-time gate, the beam edge detector, and the unobserved-pose convention. They are
-exported, so L4 can include them — a downward dependency, which CLAUDE.md §5 permits.
+one-goal-at-a-time gate and the motion-end classifier. They are private to this package.
 
 ## Interfaces
 
 Every action name arrives as a generated parameter. **Nothing in this package concatenates a
 topic, an action or a frame name**, and a server refuses to start rather than guess. In
-`cell_a` the names are `/cite/cell_a/<arm>/{move_to,grasp,pick,place,transfer}` and
-`/cite/cell_a/detection/detect`, all from `cell_a_plan.yaml`.
+`cell_b` the names are `/cite/cell_b/picker/{move_to,grasp,pick,place,transfer}`, all from
+`cell_b_plan.yaml`.
 
 The action shapes are in `cite_interfaces` and are not restated here (P1); read them with
 `ros2 interface show`.
@@ -57,11 +53,6 @@ escalate (ADR-0046). `joint_positions_rad`, `joint_velocities_rad_s`, `tool_pose
 work-piece id, and inventing either would be a value in a second place. **It is not a
 simulation aid**: it publishes identically on both backends, and what reads it in simulation
 is a bridge one layer up.
-
-`detection_server` subscribes to each beam's bridged `std_msgs/Bool` level and publishes a
-`cite_interfaces/DetectionEvent` per beam on the `EVENT` profile. The raw level and the typed
-event are two different interfaces on two different topics — see
-[`cite_bringup`](../cite_bringup/README.md) for why.
 
 ## Contracts these servers keep
 
@@ -86,15 +77,16 @@ event are two different interfaces on two different topics — see
   and an **opaque** rendezvous token, never a peer's identity, and never learns whether
   anything is on the other side. L4 owns ownership.
 - **It does not branch on being in simulation.** There is no `if simulation` here or below it.
-  A physical through-beam delivers a level exactly as the simulated one does, and this is the
-  single place either becomes a `DetectionEvent`.
-- **It does not report a pose a break beam cannot know** — see the limitations below.
 - **It does not implement a straight-line Cartesian path.** `MoveTo` with `cartesian_path`
   returns `NOT_IMPLEMENTED` rather than silently planning a joint-space move. A straight line
   is a continuum of poses, and on this arm almost none of the interpolated poses has an IK
   solution; a caller asking for a line along a surface and receiving an arbitrary joint path
   would be receiving a different, possibly colliding, motion.
-- **The only named configuration is `home`**, and it comes from the L0 model.
+- **The named configurations are `home` and the arm's program poses**, and nothing else.
+  `home` comes from the L0 model; the program poses come from the robot's Blockly program,
+  read when the plan is generated and delivered as the plan's `poses_rad`
+  ([ADR-0067](../../../docs/adr/0067-the-real-program-drives-the-twin-on-a-track.md)). This line
+  said "the only named configuration is `home`" until 2026-10-01.
 
 ## Limitations that are known, and how each is known
 
@@ -118,42 +110,14 @@ entirely correct while nothing was ever listening, which is v1's handoff exactly
 `hold_timeout = 0` for a conveyor-mediated transfer, where the confirmation happened before
 the goal was sent.
 
-**`Transfer` has a server and no caller.** Today's L0 topology is conveyor-mediated, and L4
-refuses a direct arm-to-arm edge at plan time
-([ADR-0031](../../../docs/adr/0031-refuse-direct-handoff-without-orientation-certainty.md)).
-
-**`Detect` reports occupancy, not position.** A through-beam knows something crossed it; it
-does not know where along the beam, and nothing about how that something is turned. So
-`Detection.pose` is marked **explicitly unobserved** — empty `frame_id`, zero stamp, NaN in
-every component — by `cite_skills::mark_pose_unobserved`, and `workpiece_id` and
-`workpiece_type` are left empty for the same reason. This is not "the pose is uncertain":
-`Detection` has no covariance and no field separating a measured axis from an inferred one, so
-reporting a constrained pose without the shape of its uncertainty would put a number that
-looks measured back into the field. `observation.hpp` names the three fields `Detection` would
-need before that changes. Read `pose_is_observed` rather than re-deriving the test.
-
-That field used to be filled in — with the *sensor's own mounting pose*. For `beam_c1_out`
-that is 0.250 m across the belt from the point a station picks at, and `station_transfer_1`'s
-resulting pick was 0.7267 m from `arm_1` against a 0.700 m envelope, so it failed with "no IK
-solution from any of 8 seeds" and never reached a grasp. This is the case ADR-0031's
-correction section calls out: **a field's existence is not evidence that anything fills it.**
-
-**A `workpiece_type` filter returns `NOT_IMPLEMENTED`.** A through-beam cannot tell a
-work-piece from a hand. Filtering would mean either ignoring the filter or inventing the type
-from the goal — the caller's assumption handed back as a reading.
-
-**A region with no sensor in it returns `SUCCESS` with an empty list and says so in `detail`.**
-"No sensor watches here" and "nothing is here" are different facts and a caller cannot tell
-them apart from an empty list alone.
-
-**A beam mounted 0.030 m above the belt cannot see a part shorter than about 30 mm.** That
-bound is real and holds identically on hardware. `beam-cannot-see-workpiece` in
-`cite_tools.validate.geometric` rejects that pairing in the model rather than leaving it to be
-found at run time. There is no upper bound.
+**`Transfer` has a server and no caller.** Nothing in the main tree issues an arm-to-arm
+handoff; the line that refused one at plan time
+([ADR-0031](../../../docs/adr/0031-refuse-direct-handoff-without-orientation-certainty.md))
+runs only in `projects/01`.
 
 ## How to run it
 
-Both servers are started by `cite_bringup` with all their parameters generated:
+The server is started by `cite_bringup` with all its parameters generated:
 
 ```bash
 ./scripts/sim --headless
@@ -180,8 +144,6 @@ refuses to start without the names. Use the launch.
 | `Place`/`Transfer` returns `EXECUTION_FAILED` "commanded the jaws fully open and they still read as holding the part" | the release was commanded and did not happen. `GripperActionController` SUCCEEDS a command it has declared stalled, so `result.code` cannot see this and `release_jaws` confirms the outcome with `gripper_is_holding` instead. **The arm has not moved and must not be made to**: retreating from here carries the part off the place pose and drops it wherever the retreat reached — measured at **39 mm above the belt**, 74.68 mm apart between two sides of a pair ([ADR-0063](../../../docs/adr/0063-the-drive-joint-may-not-be-clamped.md)). `still_holding` is true and the custody latch below is set, so this escalates rather than being retried. **Operator action:** the jaws are left commanded FULLY OPEN at the configured effort and that command persists — the detail string says so — so free the part with that in mind, then send a `Grasp` to re-establish what the gripper holds |
 | `Place`/`Transfer` returns `PRECONDITION_FAILED` "not holding anything" | refused rather than mimed — the failure would otherwise surface at the receiving station, which is much harder to attribute |
 | `Transfer` returns `PRECONDITION_FAILED` "no rendezvous token" | L4 issues one for every handoff it has negotiated, so an empty token is a caller that skipped the two-party confirmation |
-| `Detect` returns `PRECONDITION_FAILED` on a zero-sized region | a default-constructed goal has one, and an empty result from it would read as "nothing is on the belt" — a wrong answer that looks exactly like a right one |
-| `Detect` times out waiting for a sensor | the bridge is not delivering. The grace period exists so a `Detect` issued just after start-up does not fail for want of a sample about to arrive; expiry is a diagnosis, not an empty belt |
 
 **The gripper result deadline is an L0 value, measured in this node's clock**
 ([ADR-0045](../../../docs/adr/0045-measure-a-gripper-deadline-in-the-simulated-clock.md)).
@@ -263,7 +225,7 @@ rather than going quiet.
 **An unreachable pose is reported as `UNREACHABLE`.** It used to be reported as
 `PLANNING_FAILED`, through a local `kUnreachable` alias written while `ResultCode.msg`
 carried no constant for reachability. The constant landed; the alias did not move; nothing
-failed. `cite_orchestration/recovery_policy.hpp` ESCALATEs `UNREACHABLE` and retries
+failed. The line's recovery policy (now in `projects/01`) ESCALATEd `UNREACHABLE` and retried
 `PLANNING_FAILED`, so the drift spent a station's whole retry budget resending a pose no IK
 branch can reach. The constant is now named at the one place that produces it, and
 `test_skill_contract.py::test_3b_an_unreachable_pose_is_reported_as_unreachable` sends a pose
@@ -285,13 +247,5 @@ no waiting.
 | `test_gripper` | metres against the drive joint's own units, where the pad face sits on the tool axis, and what a `Pick` closes to with the width unset |
 | `test_grasp_pose` | the composition of the two — the sign and the axis, both free to be wrong in a way that reads as plausible and moves the arm 37 mm the wrong way |
 | `test_exclusive_goal` | one arm, one goal — with threads, not with a comment |
-| `test_detection` | level to edge, including the first-sample case: a work-piece already in the beam must not be reported as an arrival nobody saw |
-| `test_observation` | the unobserved-pose convention, as a rule a consumer branches on |
 | `test_skill_contract.py` | launch test: goal exclusion, a cancel that reaches the gripper, and a reachable pose that is planned to rather than refused. `move_group` runs; there are no controllers, so execution always fails — which is what separates "the planner produced a trajectory" from "the trajectory ran" |
-| `test_detection_contract.py` | launch test: a level on the plan's topic becomes a typed event and a typed detection, driven by a plain ROS publisher |
-| `test_downstream_include.py` | whether another package can reach these headers **from the install space**. Every other test reaches them through the source tree, which is the one path a consumer does not have — so all of them passed while `observation.hpp` was unreachable from outside the package |
 
-`test_detection_contract.py` used to say "the bridge does not exist yet". It does, in
-`cite_bringup`, and the docstring now says what that test does and does not prove about it:
-the rig drives the ROS side by hand and is unchanged, so a Gazebo boolean actually arriving is
-`tests/scenarios/continuous_line.py`'s to show and not this file's.

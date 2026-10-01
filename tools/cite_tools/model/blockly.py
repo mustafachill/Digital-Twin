@@ -67,6 +67,13 @@ JOINT_FIELDS = ("i", "j", "k", "l", "m", "n", "o")
 ZERO_POSE = "zero"
 
 #: The prefix of every pose a `move_joints` produces.
+#:
+#: Together with `ZERO_POSE` this is every name the reader gives a pose, which is
+#: why neither can collide with `home`, the name `home_rad` owns on the skill
+#: server: a program pose is never named by the program's author, only by this
+#: module. A validator rule that refused a program pose called `home` used to
+#: stand beside this and could never fire, so it was removed; a change that lets
+#: a program name its own poses has to bring that refusal back.
 POSE_PREFIX = "blockly_"
 
 #: `value` inputs that are buttons on the Studio editor and carry no program.

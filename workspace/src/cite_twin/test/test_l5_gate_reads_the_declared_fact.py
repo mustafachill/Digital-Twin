@@ -147,9 +147,13 @@ def test_a_deployment_declaring_nothing_physical_gates_no_mode() -> None:
 # bare `bool` per (asset, side) makes every unpaired asset look like it HAS a far
 # side that is merely simulated, and the `PRECONDITION_FAILED` refusal of a
 # two-sided mode on a one-sided deployment stops firing - on any single-sided
-# deployment, which since ADR-0059 is `cell_a` rather than every zone the model
-# declares.
+# deployment, which no zone the model declares is since ADR-0069 removed the one
+# single zone; `_untwinned_plan` below makes one.
 
+
+#: The zone the model declares, and the arm in it (ADR-0069 left one of each).
+ZONE = "cell_b"
+ARMS = ("picker",)
 
 #: The reader of the live generated plan, and the one helper allowed to call it.
 #: Named rather than spelled inside the guard below, so that the guard cannot
@@ -173,12 +177,11 @@ def _live_document() -> dict:
     """Read the plan this checkout generates, in whatever shape its model declares.
 
     **Not for a test to call**, and the guard at the foot of this section is what
-    says so. Which shape this returns depends on the L0 model — `single` for the
-    `cell_a` it names today, `pair` for `cell_b` since ADR-0059 — so a test built
-    on it asserts about whichever cell happens to be committed rather than about
-    what it is asking.
+    says so. Which shape this returns depends on the L0 model — `pair` for the
+    `cell_b` it names today (ADR-0059) — so a test built on it asserts about
+    whichever cell happens to be committed rather than about what it is asking.
     """
-    return yaml.safe_load(Path(default_plan_path("cell_a")).read_text())
+    return yaml.safe_load(Path(default_plan_path(ZONE)).read_text())
 
 
 def _untwinned_plan(tmp_path: Path) -> Path:
@@ -199,7 +202,7 @@ def _untwinned_plan(tmp_path: Path) -> Path:
     reasoned about: on a checkout flipped to `twin: {sides: pair}` and
     regenerated, seven tests here failed on their own fixture — `set(sides) ==
     {"arm_1", "arm_2", "arm_3"}` is a statement about whichever model this
-    checkout carries.
+    checkout carries. (The set is the one arm the model now declares.)
 
     Only the untwinned shape is built, and no paired sibling: every assertion in
     this section is about the deployment that has NO far side, which is the one
@@ -213,7 +216,7 @@ def _untwinned_plan(tmp_path: Path) -> Path:
     for manager in document["plan"]["controller_managers"]:
         for field in _COUNTERPART_MANAGER_KEYS:
             manager.pop(field, None)
-    written = tmp_path / "cell_a_plan.yaml"
+    written = tmp_path / f"{ZONE}_plan.yaml"
     written.write_text(yaml.safe_dump(document))
     return written
 
@@ -282,8 +285,8 @@ def test_only_the_shape_helper_reads_the_live_plan() -> None:
 
 def test_the_shipped_plan_yields_a_deployment_with_no_far_side(shipped: Deployment) -> None:
     """And building it does not raise, which is the total accessor's whole job."""
-    assert set(shipped.sides) == {"arm_1", "arm_2", "arm_3"}
-    assert shipped.assets_without_a_far_side("") == ("arm_1", "arm_2", "arm_3")
+    assert set(shipped.sides) == set(ARMS)
+    assert shipped.assets_without_a_far_side("") == ARMS
     assert not shipped.has_a_far_side("")
 
 
@@ -318,7 +321,7 @@ def test_a_two_sided_mode_is_refused_on_the_shipped_deployment(
     assert not verdict.accepted
     assert verdict.code == ResultCode.PRECONDITION_FAILED
     # And it names the assets, which is what `assets_without_a_far_side` is for.
-    assert "arm_1" in verdict.detail
+    assert ARMS[0] in verdict.detail
 
 
 # --- Bullet 3: `far_side_physical` is a free function of the declaration -----

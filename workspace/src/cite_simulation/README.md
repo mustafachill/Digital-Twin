@@ -86,23 +86,21 @@ Gazebo transport, below the ROS boundary. `<zone>` and `<asset_id>` come from th
 **These names now have a ROS side, and it is generated rather than written.**
 `simulation.launch.py::_bridge_topics` runs one `ros_gz_bridge parameter_bridge` process
 carrying `/clock` plus **every aid topic the plan declares** — a command ROS→Gazebo and a
-state Gazebo→ROS per conveyor, and a detection Gazebo→ROS per sensor. In `cell_a` that is
-three belts and four beams, so ten aid topics. Not one of the names is written in the launch
-file; they are read from `cell_a_plan.yaml`, which is generated from L0. Bridging them by
+state Gazebo→ROS per conveyor, and a detection Gazebo→ROS per sensor. Not one of the names
+is written in the launch file; they are read from the zone's generated plan, which is
+generated from L0. Bridging them by
 hand is no longer necessary and would put a second publisher on a live topic.
 
-**A beam's level and a beam's events are two different interfaces, and the bridge keeps them
-apart.** The plugin's `gz.msgs.Boolean` lands in ROS on the plan's `level_topic`
-(`…/detection_level`), applied as a remapping — the Gazebo side of the argument has to stay
-the name the plugin advertises. The plan's `detection_topic` (`…/detection`) is left for the
-typed `DetectionEvent` that `cite_skills`' detection server publishes from that level, which
-is the name a station's trigger subscribes to. Landing the raw boolean on it would give one
-topic two publishers of two types.
+**A beam's level lands under a name the plan states.** The plugin's `gz.msgs.Boolean` lands
+in ROS on the plan's `level_topic` (`…/detection_level`), applied as a remapping — the Gazebo
+side of the argument has to stay the name the plugin advertises, the plan's
+`detection_topic` (`…/detection`).
 
-**Something reads them.** `cite_skills/src/detection_server.cpp` subscribes to every
-`level_topic` and turns it into `DetectionEvent`; in `cite_orchestration`, `TriggerWatch`
-starts a station on that event and `conveyor_index.hpp` stops the belt on it and commands
-every belt's setpoint ([ADR-0032](../../../docs/adr/0032-index-the-belt.md)).
+**Nothing in the main tree reads a beam level today.** The detection server and the
+behaviour-tree line that turned levels into events and stopped belts on them left with the
+event-driven line ([ADR-0069](../../../docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md));
+they run in `projects/01`. The belt command and state topics are used by `./scripts/program`
+and by the twin boundary's belt route.
 
 ## Fidelity costs, stated rather than hidden
 
@@ -129,7 +127,8 @@ Transport replaces a physical interaction with a deterministic one, and it flatt
   A beam reported a part only once its *centre* crossed the beam's volume, which with the
   old 0.040 m width gave the sensor a window of part-centre heights — it saw a part between
   20 mm and 100 mm tall and missed everything outside that, while a physical beam sees all
-  of it. Along the belt the same lateness cost the line its pick position: `beam_c1_out`
+  of it. Along the belt the same lateness cost the line its pick position (on `cell_a`, before
+  the line and that zone left the main tree with ADR-0069): `beam_c1_out`
   reported the 50 mm cube 25 mm after its leading edge arrived, the indexed belt stopped on
   that edge, and every piece parked 69 mm short of `arm_2`'s grasp. `continuous_line`
   stopped at milestone 4 of 10, four runs out of four.

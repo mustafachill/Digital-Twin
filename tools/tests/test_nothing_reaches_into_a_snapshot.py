@@ -30,6 +30,7 @@ ALLOWED = frozenset(
         "CLAUDE.md",
         "README.md",
         "docs/adr/0068-keep-proven-milestones-as-frozen-snapshots.md",
+        "docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md",
         "docs/operations/bring-up.md",
         "tools/snapshot_project.sh",
         "tools/tests/test_snapshots_are_left_out.py",

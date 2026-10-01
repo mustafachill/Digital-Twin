@@ -152,6 +152,17 @@ the defect around it. **No existing item below was re-read on this date and no t
 re-derived**, except #68, which #69 amends where it stands.
 
 
+**Updated 2026-10-01**, on the branch `feat/remove-parked-line`, which lands
+[ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md): the event-driven
+line, `cite_orchestration`, the detection server, `topology_server`, ten line-only interfaces,
+`./scripts/demo`, the `continuous_line` and `pick_and_place` scenarios and zone `cell_a` left the
+main tree, and run as the `projects/01` snapshot. **#19, #37, #60 and #77 are CLOSED as moved
+with the line to `projects/01`**; **#62 is CLOSED**, its fixtures now reading `cell_b`'s paired
+plan without appending a side; **#66, #67 and #68 are DORMANT**, because L0 declares one zone.
+#30, #17 and #55 carry `Overtaken` markers where they named the removed scenarios or `cell_a`'s
+scene. Items are not renumbered. **No other item was re-read and no table row below was
+re-derived on this date.**
+
 ---
 
 ## Where the repository stood when this was written
@@ -473,6 +484,11 @@ this repository ships. **Cite the directory; no figure from it is copied here (P
   tests/scenarios/*.py` returns **9** declarations across the three scenarios, and the campaign
   bands all nine, split into eleven (scenario, ceiling, condition) families. The heading is left
   as the item's identifier; the nine are what was measured.
+  **[Overtaken 2026-10-01 — [ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) removed `pick_and_place` and `continuous_line` and the ceilings
+  they declared. The same grep now returns **8** declarations across two scenarios: `bringup`'s
+  four, which the campaign banded, and `program_cycle`'s four, which postdate the campaign and
+  **have been banded by nothing**. Read the campaign's `pick_and_place` and `continuous_line`
+  families as a record of scenarios that run only in `projects/01` now.]**
 - **Two `bringup` ceilings read TOO LOOSE at a full allocation and stay TOO LOOSE at four
   CPUs**: `TRAJECTORY_CEILING_S` and `SKILL_CEILING_S`. **Both intervals the 2026-08-29 campaign
   had to report *"not assessed"* under its rule D3 — `DELIVERY_CEILING_S` and
@@ -539,6 +555,9 @@ survey of the published campaigns on 2026-09-04 found no earlier one that measur
 - **A campaign that did exercise the region would have to produce the two conditions together** —
   a trajectory that is moving fast at the moment it passes close to a thin object — which the
   shipped scenarios, at the shipped velocity scaling, did not produce in nine runs.
+  **[Overtaken 2026-10-01 — the scenarios that campaign captured ran on `cell_a`, and two of the
+  three left the main tree with [ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md). Main CI now drives `bringup` and `program_cycle` on
+  `cell_b`, whose trajectories no campaign has measured for this question.]**
   [ADR-0027](adr/0027-pilz-planning-pipeline.md)'s residual section records a second path to a
   larger step — a caller passing `velocity_scaling: 1.0`, which bypasses the 0.35 default — and
   nothing sends it today. Note also that the campaign's sub-sampling machinery **never ran on
@@ -559,7 +578,11 @@ L0 and cannot be set from a generated file.
 
 The arithmetic: at 0.1 s a waypoint step exceeds the 40 mm beam housing whenever the tool point
 exceeds 0.40 m/s, and this arm's 3.14 rad/s ceiling at 0.35 velocity scaling permits roughly
-0.077 m per step at 0.7 m reach. There are four beam housings in the scene.
+0.077 m per step at 0.7 m reach. There are four beam housings in the scene. **[Overtaken
+2026-10-01 — that was `cell_a`'s scene; `cell_b`, the one zone L0 declares, has two beams,
+`infeed_beam` and `outfeed_beam` in `model/assets/instances/sensors.yaml`, and both are
+objects in `workspace/src/cite_generated/moveit/cell_b_planning_scene.yaml`. Their housing
+dimensions were not re-read for this edit.]**
 
 Both obvious levers are cell-wide behaviour changes on a blocking CI gate — lower
 `max_velocity_scaling`, or change the layout. A third worth weighing: **densify the trajectory
@@ -917,7 +940,14 @@ do" list. Note that the 2026-09-01 campaign refuted a related prediction: over p
 jaws stall at exactly `stall_timeout × ramp rate`, so a control designed to test free air tested
 the ramp instead.
 
-### #19 — The `station_transfer_1` dead end: fixed, and the records stay `Proposed`
+### #19 — CLOSED 2026-10-01, moved with the line to projects/01: The `station_transfer_1` dead end: fixed, and the records stay `Proposed`
+**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
+the station tree, the L4 custody refusal and the `continuous_line` run that is ADR-0045's and ADR-0046's promotion condition — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
+**The L3 half stays in the main tree and is unaffected**: the L0-declared gripper deadline in the
+node's clock, the cancel and the custody-unknown latch are in `cite_skills`.
+It still describes the frozen snapshot, where the line runs. **The heading read *"The `station_transfer_1` dead end: fixed, and the records stay `Proposed`"*
+until that date. Nothing below is rewritten.**
+
 **This item covers the gripper-deadline door and only that door. It is not #60.** The two failures
 #60 records are at the same station and are a different signature: there the gripper answered with
 a genuine friction stall, the handoff completed, and the word `custody` appears **zero** times in
@@ -1111,7 +1141,12 @@ problem; **the unmeasured quantity that matters is planning latency**, which no 
 plant's on the same host, with the same code and the same model, is **not established**. Process
 start order, CPU affinity and cache state are candidates and **were not chased**.
 
-### #60 — `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
+### #60 — CLOSED 2026-10-01, moved with the line to projects/01: `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
+**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
+zone `cell_a`, its conveyor infeed, the station tree and `continuous_line` — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
+It still describes the frozen snapshot, where the line runs. **The heading read *"`Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door"*
+until that date. Nothing below is rewritten.**
+
 **Two CI failures, on two runners nobody prepared, at two commits, with nothing registered in
 advance. The physical cause is unestablished and nothing here attributes one.** The runs are
 `33575992281` at `4ef2d7c` and `33603610958` at `51195e0`, both 2026-09-02 — the third
@@ -1231,7 +1266,12 @@ a timeout, not an acceptance check, and that wording caused a wrong common-cause
 already. And *"Command of at least one joint is out of limits"* appears in **all 30** runs
 including the 25 clean ones, so it has zero discriminating power.
 
-### #37 — `line_orchestrator` timed out waiting for `LineTopology` at bring-up
+### #37 — CLOSED 2026-10-01, moved with the line to projects/01: `line_orchestrator` timed out waiting for `LineTopology` at bring-up
+**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
+`line_orchestrator`, `LineTopology` and `topology_server` — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
+It still describes the frozen snapshot, where the line runs. **The heading read *"`line_orchestrator` timed out waiting for `LineTopology` at bring-up"*
+until that date. Nothing below is rewritten.**
+
 Seen once on 2026-08-29, on a run that was **restarted rather than analysed**, so it is one event
 with no log kept. Nothing in the tree records this failure mode.
 
@@ -1384,7 +1424,11 @@ all**: `launch_test` with `IncludeLaunchDescription` holds one context on one do
 scenario cannot take today's shape. A regression here fails nothing. **This paragraph read "why
 one event matters more than usual here" until 2026-09-10**; the argument is unchanged by there
 being two. Note that the solo half *is* covered — `./scripts/scenario bringup` is a blocking CI
-gate and is exactly what caught this one.
+gate and is exactly what caught this one. **[Overtaken 2026-10-01 — both occurrences were on
+`cell_a`, which left the main tree with ADR-0069. The node still runs once per arm on `cell_b`,
+so a recurrence would now surface in `bringup` or `program_cycle`, the two scenarios main CI
+drives. #37, which this item cites for its capture-first instruction, is closed and moved to
+`projects/01`; the instruction stands here.]**
 
 P4 is the lens: if the scene load depends on a frame becoming resolvable, that is a sequencing
 question and the answer is an event, never a retry or a sleep.
@@ -1687,7 +1731,18 @@ load-time refusal ADR-0048's promotion section records, one for the hardware gat
 Reproduce with `./scripts/test`, or in the container
 `python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q`.
 
-### #62 — `cite_twin`'s two launch fixtures append a counterpart unconditionally
+### #62 — CLOSED 2026-10-01: `cite_twin`'s two launch fixtures append a counterpart unconditionally
+**Closed 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Both fixtures now name `cell_b` and read its generated plan,
+which is paired, and **neither appends a side**:
+`test_twin_boundary_paired_launch.py`'s `_paired_plan` returns the generated plan as generated,
+and `test_twin_boundary_launch.py` asserts the plan's sides are exactly `plant` and
+`counterpart` before it adds a renamed controller manager for its mixed far side (it edits
+managers and backends, never sides). So the duplicate-`counterpart` failure this item records
+cannot occur, and the dependency on `cell_a` being `single` that made it load-bearing is gone
+with `cell_a`. Read in `workspace/src/cite_twin/test/` on 2026-10-01; whether those two launch
+tests pass is `./scripts/test`'s answer, not this file's. **The heading read without
+"CLOSED" until that date. Nothing below is rewritten.**
+
 `workspace/src/cite_twin/test/test_twin_boundary_launch.py:97-121` and
 `test_twin_boundary_paired_launch.py:119-143` each build their paired plan the same way: read
 the live generated plan with `default_plan_path(...)`, `plan["sides"].append({"name":
@@ -1857,7 +1912,14 @@ guess.
 
 ---
 
-### #66 — Nothing compares two zones' bounding boxes, and the overlap check is per zone
+### #66 — DORMANT 2026-10-01: Nothing compares two zones' bounding boxes, and the overlap check is per zone
+**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)): L0 declares one zone, `cell_b`, so there is no second
+zone to compare against or to reference across, and the reproduction below — which edits
+`cell_a`'s box or names `arm_1` — no longer applies as written. **The gap in the validator is
+unchanged** and returns the day a second zone is declared; whoever declares one should read
+this item first. The heading did not say "DORMANT" until that date. Nothing below is
+rewritten.
+
 `model/facility/zones.yaml` declares two `aabb` bounds and **no rule anywhere reads one against
 the other.** A `cell_b` declared inside `cell_a`'s box validates clean, generates two worlds that
 describe the same volume twice, and reports nothing.
@@ -1900,7 +1962,14 @@ worth writing when a third zone appears or when anyone moves one, whichever come
 **Nothing is known to be wrong today.** The two boxes are disjoint, and
 `./scripts/validate-model` exits 0.
 
-### #67 — A cross-zone station reference passes validation and then skips its reach check in silence
+### #67 — DORMANT 2026-10-01: A cross-zone station reference passes validation and then skips its reach check in silence
+**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)): L0 declares one zone, `cell_b`, so there is no second
+zone to compare against or to reference across, and the reproduction below — which edits
+`cell_a`'s box or names `arm_1` — no longer applies as written. **The gap in the validator is
+unchanged** and returns the day a second zone is declared; whoever declares one should read
+this item first. The heading did not say "DORMANT" until that date. Nothing below is
+rewritten.
+
 `referential.py` resolves station and flow references against **globally** known ids —
 `_stations_reference_real_things` builds `known_assets` from `model.assets` and
 `_flow_is_consistent` builds `known_stations` from `model.stations`, neither filtered by zone. So
@@ -1960,7 +2029,15 @@ told about does not exist.
 which `model/topology/stations.yaml` states in a comment beside them because nothing states it
 mechanically.
 
-### #68 — The one-zone-at-a-time refusal is sound and incomplete, in two named ways
+### #68 — DORMANT 2026-10-01: The one-zone-at-a-time refusal is sound and incomplete, in two named ways
+**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which supersedes ADR-0056): L0 declares one zone, so
+`model_info`'s refusal of **another declared zone's** names has no other zone to fire on in a
+real bring-up — ADR-0069 records that it is now asserted with a second zone injected into the
+node. **Residual 2, the same zone twice, is the only half that can occur today**;
+#69 records what a second bring-up from one checkout does. The reproduction below names `cell_a`, which `declared_zones()` no longer returns, so its
+first line would print `[]` rather than `['cell_a']` — not re-run here. Nothing below is
+rewritten.
+
 [ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md) decision 3
 says exactly one zone is up at a time. `model_info.on_configure` now refuses a bring-up beside
 another **declared** zone's names and says which zone that is, returning `FAILURE` so that
@@ -2150,7 +2227,12 @@ pgrep -af twin_boundary.py                     # still there
 
 **Not observed; read from the allocation and the stop path on 2026-09-18.**
 
-### #77 — `--pair --line` puts three commanders on the same arms
+### #77 — CLOSED 2026-10-01, moved with the line to projects/01: `--pair --line` puts three commanders on the same arms
+**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
+`line:=true` and the L4 coordinator it started on each side — `pair.py`'s `_LAUNCH_STYLE` maps only `zone:=`, `headless:=` and `ceiling:=` now, so `./scripts/sim --pair line:=true` is refused as an unknown launch argument — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
+It still describes the frozen snapshot, where the line runs. **The heading read *"`--pair --line` puts three commanders on the same arms"*
+until that date. Nothing below is rewritten.**
+
 `pair.py` forwards `line:=true` to **both** sides, so each side starts its own L4 coordinator,
 which takes exclusive hold of that side's skills — and the boundary dispatches the operator's
 goals to both sides' L3 servers at the same time. Three processes command the same arm names.

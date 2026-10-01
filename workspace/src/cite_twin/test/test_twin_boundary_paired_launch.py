@@ -51,7 +51,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
 from cite_bringup.plan import default_plan_path
@@ -73,8 +72,8 @@ from rclpy.node import Node as RclpyNode
 from std_msgs.msg import Float64
 import yaml
 
-ZONE = "cell_a"
-ASSET = "arm_1"
+ZONE = "cell_b"
+ASSET = "picker"
 MOVE_TO = f"/cite/twin/{ZONE}/{ASSET}/move_to"
 PICK = f"/cite/twin/{ZONE}/{ASSET}/pick"
 
@@ -128,34 +127,25 @@ def _stdout(proc_output) -> str:
 
 
 def _paired_plan() -> Path:
-    """Write `cell_a`'s generated plan, plus a counterpart that zone lacks.
+    """Return the zone's generated plan, AS GENERATED — nothing appended or edited.
 
-    Every far side simulated. The mixed case is the other rig's.
-
-    **`ZONE` is `cell_a` and that is load-bearing, not incidental.** The append
-    below is unconditional, so on a zone the model already pairs — `cell_b`,
-    since ADR-0059 — it would write two sides named `counterpart` and
-    `cite_bringup.plan.load` would refuse the document. `cell_a` declares one
-    side, so the append produces exactly two. See `docs/open-work.md` #62: the
-    defect is stepped around rather than fixed, and pairing `cell_a` or reading
-    the default zone here trips it immediately.
+    Every far side simulated, which is what the shipped model declares; the mixed
+    case is the other rig's. This read the generated plan of an UNPAIRED zone and
+    appended a counterpart to it unconditionally, which was legal only because
+    that zone was single and would have written two sides named `counterpart` on
+    a paired one (`docs/open-work.md` #62). The zone the model declares now is
+    paired (ADR-0059), so the generated plan is used as it is, and the two
+    premises this rig rests on are asserted of it instead of manufactured.
     """
-    document = yaml.safe_load(default_plan_path(ZONE).read_text())
-    plan = document["plan"]
-    plan["sides"].append(
-        {
-            "name": "counterpart",
-            "gz_partition": f"cite/{ZONE}/counterpart",
-            "domain_offset": 1,
-        }
+    path = default_plan_path(ZONE)
+    plan = yaml.safe_load(path.read_text())["plan"]
+    assert [side["name"] for side in plan["sides"]] == ["plant", "counterpart"], (
+        f"{ZONE}'s generated plan is not paired, so there is no far side to cross to"
     )
-    for manager in plan["controller_managers"]:
-        manager["counterpart_backend"] = "sim"
-        # Both sides simulated, declared rather than inferred from the id
-        # (ADR-0054).
-        manager["counterpart_commands_physical_hardware"] = False
-    path = Path(tempfile.mkdtemp(prefix="cite_twin_paired_")) / f"{ZONE}_plan.yaml"
-    path.write_text(yaml.safe_dump(document))
+    assert not any(
+        manager.get("counterpart_commands_physical_hardware")
+        for manager in plan["controller_managers"]
+    ), f"{ZONE}'s generated plan declares a physical far side; this rig is the simulated one"
     return path
 
 

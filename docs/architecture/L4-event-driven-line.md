@@ -1,6 +1,14 @@
 # L4 — The event-driven line (parked)
 
-- **Status:** `BUILT — parked`.
+- **Status:** `DESIGNED` — **the implementation was removed from the main tree** by
+  [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) on
+  2026-10-01 and runs, frozen, as `projects/01` (its `./run`
+  and `./scripts/scenario continuous_line`, both run from that folder, whose README is the
+  runbook; [ADR-0068](../adr/0068-keep-proven-milestones-as-frozen-snapshots.md)). L4 stays in the
+  target architecture (charter §7). **Every "built", "tested" or "in CI" below, and every
+  file path under `cite_orchestration`, describes the tree before ADR-0069**; nothing in the
+  main tree today builds, tests or runs any of it.
+- **Status before 2026-10-01, kept as the design record:** `BUILT — parked`.
   **Parked** means: kept at its current paths, still built by `./scripts/build`, still tested
   by `./scripts/test` and CI, and no longer the way the cell is meant to be run. The cell is
   moving to a fixed-sequence program; this structure is kept for a future joystick or teleop

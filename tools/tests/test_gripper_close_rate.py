@@ -207,7 +207,7 @@ class TestTheRateReachesTheSkillLayer:
         convert into the vendor SDK's gripper speed. If it did not travel, the
         two paths would be free to disagree about how fast the gripper is.
         """
-        plan = yaml.safe_load(generated(real_model)["bringup/cell_a_plan.yaml"])
+        plan = yaml.safe_load(generated(real_model)["bringup/cell_b_plan.yaml"])
         managers = [
             m for m in plan["plan"]["controller_managers"] if m.get("gripper_action") is not None
         ]
@@ -276,6 +276,7 @@ class TestTheRateReachesTheDescription:
         self,
         real_model: Path,
         edit_yaml: Callable[[Path, Callable[[dict], None]], None],
+        add_arm: Callable[..., str],
     ) -> None:
         """The failure this generator exists to prevent, applied to a rate.
 
@@ -284,7 +285,12 @@ class TestTheRateReachesTheDescription:
         chose, and precisely the headroom-free configuration measured to fail
         3 of 3. Silence is the one unacceptable answer here, so it raises.
         """
+        # A second arm, with no program: the shipped arm runs a program, and the
+        # program reader refuses a gripperless arm first, for its own reason.
+        other = add_arm(real_model)
         path = real_model / "assets/instances/arms.yaml"
-        edit_yaml(path, lambda d: d["assets"][0].pop("end_effector"))
+        edit_yaml(
+            path, lambda d: next(a for a in d["assets"] if a["id"] == other).pop("end_effector")
+        )
         with pytest.raises(BindingError, match="max_drive_rate_rad_s"):
             generated(real_model)

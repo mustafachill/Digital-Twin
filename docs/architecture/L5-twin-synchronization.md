@@ -38,15 +38,21 @@
   **Not built, and read this before believing either line above.** `cell_b` declares
   `twin: {sides: pair}` as of 2026-09-18
   ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so a boundary now comes up
-  from a clean checkout on that zone — `cell_a` stays `single` and is refused. **A declaration
+  from a clean checkout on that zone, which since 2026-10-01 is the only zone L0 declares
+  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). **A declaration
   is not a gate**: **nothing automated brings a boundary up**, no scenario and no CI step
   reaches one, and what CI drives on `cell_b` is the plant alone, which is ADR-0057's unmet
   promotion clause 4 and is now a wider gap rather than a narrower one. **No goal has
   crossed the boundary into a running cell**, in any run: the rig above brings no cell up, so
-  it is evidence about the boundary and about nothing that moves. **State mirroring is not
+  it is evidence about the boundary and about nothing that moves. **[Overtaken — that clause
+  is stale: [ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md) records one `MoveTo`
+  sent through the boundary to both arms of a running pair, and `./scripts/program` sends the
+  real program through it (`--via twin`, ADR-0067). Neither is automated; the rest of the
+  sentence stands.]** **State mirroring is not
   implemented at all** — the monitor consumes each side's joint state and nothing follows
   anything. Registration is Phase 3: every asset instance in L0 carries a `registration`
-  block, `unregistered` for all three arms.
+  block, `unregistered` for `cell_b`'s one arm (it said "all three arms" while `cell_a` was in
+  L0).
   **`valid` is false in every sample the package can produce**, by construction, and that is
   the deliverable rather than a defect — see *Divergence measurement is the point* below.
 - **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)

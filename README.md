@@ -30,9 +30,10 @@ against reality yet. Saying so plainly is a project rule, not modesty.
   move sends no stop, and the counterpart's track position and custody are not read back —
   all recorded in ADR-0067. There is no hardware interface at all yet (Phase 2.B), and the
   cell layout is engineered, not surveyed (Phase 3).
-- **The three-arm event-driven line is parked, not deleted.** It stays in the tree on zone
-  `cell_a` and its scenarios still run in CI (`pick_and_place` blocking, `continuous_line`
-  advisory); it is shown running by milestone 01 below.
+- **The three-arm event-driven line is not in the main tree.** It, its behaviour-tree package
+  and zone `cell_a` were removed on 2026-10-01 ([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and run as milestone 01 below, which a
+  weekly, non-blocking workflow checks; main CI no longer drives `pick_and_place` or
+  `continuous_line`.
 
 The detailed, dated state — every count with the command that reproduces it — is
 [`CLAUDE.md`](./CLAUDE.md) §2. Each layer's design document in
@@ -132,6 +133,11 @@ dependency is an architectural defect, not a style preference.
   L0  FACILITY MODEL     the single declarative source of truth
 ```
 
+This is the target stack. **L4 and the `Detect` skill are not in the main tree today**: they
+were removed with the event-driven line
+([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and run in
+milestone 01. Each layer's document says what is built.
+
 Three ideas hold it together:
 
 **The facility is described once.** Worlds, robot descriptions, controller configurations,
@@ -165,10 +171,9 @@ directly — they route to the right environment automatically.
 | `./scripts/test` | Host tooling tests, then ROS tests. |
 | `./scripts/lint` · `format` | Check · apply formatting and static analysis. |
 | `./scripts/validate-model` | Validate the facility model. Runs anywhere. |
-| `./scripts/sim --zone <name> [--headless] [--pair]` | Launch the simulated cell. **`--zone` is required and has no default** (ADR-0056): `cell_b` is the one-arm cell, `cell_a` the three-arm showcase, and one zone runs at a time. `--pair` brings up both sides of a twin pair and needs a zone that declares one — `cell_b` does, `cell_a` does not. |
-| `./scripts/scenario [name] [--zone <name>]` | Run a headless scenario; no argument lists them. `program_cycle` drives `cell_b`; the behaviour-tree scenarios drive `cell_a`. |
+| `./scripts/sim [--zone <name>] [--headless] [--pair]` | Launch the simulated cell. The model declares one zone, `cell_b`, the one-arm cell, so `--zone` may be left out; it is required again whenever the model declares more than one ([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) decision 5). `--pair` brings up both sides of a twin pair and needs a zone that declares one — `cell_b` does. |
+| `./scripts/scenario [name] [--zone <name>]` | Run a headless scenario; no argument lists them. There are two, `bringup` and `program_cycle`, both on `cell_b`. |
 | `./scripts/program [--headless] [--cycles N]` | Bring up both sides of the paired zone and run the real program once per cycle through the twin boundary. A demonstration: it asserts nothing; `program_cycle` is the check. |
-| `./scripts/demo` | The parked event-driven line on a pair. **It does not run on the main tree today**: the line is refused on `cell_b`, whose transfer station declares no place frame since ADR-0067, and `cell_a` is not paired. Use `projects/01-three-arm-event-driven-line/run` for the three-arm line. |
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares. |
 | `./scripts/audit-deps [--image]` | Scan dependencies for known vulnerabilities. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |

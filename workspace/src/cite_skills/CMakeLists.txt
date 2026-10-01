@@ -16,7 +16,6 @@ find_package(moveit_msgs REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
 
 add_executable(skill_server
   src/skill_server.cpp
@@ -31,55 +30,11 @@ ament_target_dependencies(skill_server
   moveit_core moveit_msgs moveit_ros_planning_interface tf2_ros tf2_geometry_msgs
 )
 
-# `Detect` is a separate executable, and deliberately: it commands no motion, so
-# it needs neither MoveIt nor the gripper, and its sensors belong to a zone's
-# conveyor rather than to any one arm. Linking it into skill_server would give
-# every arm its own view of the same belt.
-add_executable(detection_server
-  src/detection_server.cpp
-  src/detection.cpp
-)
-target_include_directories(detection_server PRIVATE include)
-ament_target_dependencies(detection_server
-  rclcpp rclcpp_action cite_interfaces geometry_msgs std_msgs tf2_ros
-)
-
-install(TARGETS skill_server detection_server DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-
-# Installing the headers is not the same as making them reachable. Without an
-# `ament_export_*` the install rule above copies `observation.hpp` into the
-# install space and nothing downstream can find it: `find_package(cite_skills)`
-# succeeds and contributes no include directory, so the first `#include
-# <cite_skills/observation.hpp>` in another package fails to compile.
-#
-# It had a would-be consumer. `observation.hpp` holds `pose_is_observed`, the
-# rule for READING the unobserved-pose convention, beside `mark_pose_unobserved`,
-# the rule for writing it — one place, so the two cannot drift. L4's `PickAt`
-# needs exactly that predicate and could not reach it, so it fell back to testing
-# `header.frame_id.empty()` alone, which admits a pose with a frame set and NaN
-# position and hands it to the planner. Depending on an L3 header from L4 is
-# downward and therefore legal (CLAUDE.md §5); the export is what makes it
-# possible.
-#
-# `include/${PROJECT_NAME}`, not `include`, and the difference is load-bearing:
-# `install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})` above copies
-# the CONTENTS of include/ — that is, the `cite_skills/` directory — so the
-# header lands at `<prefix>/include/cite_skills/cite_skills/observation.hpp`.
-# The directory that makes `#include <cite_skills/observation.hpp>` resolve is
-# therefore `<prefix>/include/cite_skills`. Exporting `include` would export a
-# directory the headers are not in, which fails in exactly the same way as
-# exporting nothing while looking like it should work.
-ament_export_include_directories(include/${PROJECT_NAME})
-# `observation.hpp` and `approach.hpp` include geometry_msgs headers, so a
-# consumer needs geometry_msgs' include directories too. Exporting the
-# dependency is what stops that from being the consumer's problem to rediscover.
-ament_export_dependencies(geometry_msgs)
+install(TARGETS skill_server DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
-  find_package(ament_cmake_pytest REQUIRED)
 
   # Two linters in ament_lint_common are registered by hand rather than through
   # ament_lint_auto, because their defaults contradict conventions this
@@ -152,27 +107,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_exclusive_goal test/test_exclusive_goal.cpp)
   target_include_directories(test_exclusive_goal PRIVATE include)
 
-  # Turning a level into an event. The break beam publishes state and
-  # republishes it periodically, so the edge is made by the consumer — and the
-  # rule for it is a state machine over samples, testable with no bridge, no
-  # simulator and no waiting. The first-sample case is the one that matters: a
-  # work-piece already in the beam must not be reported as an arrival nobody saw.
-  ament_add_gtest(test_detection test/test_detection.cpp src/detection.cpp)
-  target_include_directories(test_detection PRIVATE include)
-
-  # What a `Detection` says about position when the sensor that made it cannot
-  # say anything about position. A through-beam reports occupancy, so the pose
-  # field has no honest value and is marked unset rather than filled with the
-  # sensor's own mounting pose — which for `beam_c1_out` stands 0.250 m off the
-  # belt centreline from the pick point. The marking is what a consumer branches
-  # on, so it is tested as a rule rather than only through the running server.
-  ament_add_gtest(test_observation test/test_observation.cpp)
-  target_include_directories(test_observation PRIVATE include)
-  ament_target_dependencies(test_observation geometry_msgs)
-
   # Where an arm ended up relative to the trajectory it was given (ADR-0037).
-  # This decides whether L4 retries a station unattended or stops it for an
-  # operator, and the boundary cases it has to get right — a short trajectory
+  # This decides whether a failure may be retried unattended or has to stop for
+  # an operator, and the boundary cases it has to get right — a short trajectory
   # whose ends overlap, one mistracking joint among five that arrived, a joint
   # state that could not be read at all — cannot be produced on demand in a
   # simulator. So the rule is tested as a rule. No ROS runtime and no MoveIt.
@@ -207,22 +144,6 @@ if(BUILD_TESTING)
   # than the rest of the file put together, which is what the raised timeout is
   # for.
   add_launch_test(test/test_planning_pipeline.py TIMEOUT 600)
-
-  # Whether another package can reach this one's headers at all. Every test above
-  # gets at them through `target_include_directories(... PRIVATE include)` on the
-  # SOURCE tree, which is the one path a consumer does not have — so all of them
-  # passed while `observation.hpp` was unreachable from outside the package. This
-  # one configures and compiles a throwaway consumer against the INSTALL space,
-  # which is the only way the difference shows up.
-  ament_add_pytest_test(downstream_include test/test_downstream_include.py TIMEOUT 300)
-
-  # `Detect` against a running server, with a plain ROS publisher standing in for
-  # the bridged beam. No simulator and no bridge is run here — the bridge exists
-  # and is `cite_bringup`'s, and what this file does and does not prove about it
-  # is stated in the test's own docstring rather than implied by a green result.
-  # Cancellation is tested where the skill actually blocks: inside its bounded
-  # wait for a sensor that has not reported.
-  add_launch_test(test/test_detection_contract.py TIMEOUT 300)
 endif()
 
 ament_package()

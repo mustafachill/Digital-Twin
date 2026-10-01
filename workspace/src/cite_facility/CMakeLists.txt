@@ -16,7 +16,6 @@ install(PROGRAMS
   ${PROJECT_NAME}/model_info.py
   ${PROJECT_NAME}/frame_server.py
   ${PROJECT_NAME}/planning_scene_loader.py
-  ${PROJECT_NAME}/topology_server.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -43,9 +42,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pep257 REQUIRED)
   ament_pep257(--add-ignore D213)
   ament_add_pytest_test(artifacts test/test_artifacts.py)
-  ament_add_pytest_test(topology_message test/test_topology_message.py)
   ament_add_pytest_test(planning_scene_loader test/test_planning_scene_loader.py)
-  # Asserts that the four nodes here still go through cite_runtime, and that the
+  # Asserts that the three nodes here still go through cite_runtime, and that the
   # dependency is declared. The shutdown mechanism itself is tested where it now
   # lives, in cite_runtime.
   ament_add_pytest_test(runtime_adoption test/test_runtime_adoption.py)

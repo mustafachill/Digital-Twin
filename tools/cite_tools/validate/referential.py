@@ -48,7 +48,6 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _paired_zone_has_no_physical_plant(model)
     findings += _counterpart_backend_matches_the_plant(model)
     findings += _configuration_matches_category(model)
-    findings += _named_poses_fit_the_arm(model)
     findings += _an_arm_rides_its_track_on_one_backend(model)
     findings += _programs_fit_the_arm(model)
     findings += _stations_reference_real_things(model)
@@ -733,46 +732,6 @@ def _configuration_matches_category(model: FacilityModel) -> list[Finding]:
     return findings
 
 
-def _named_poses_fit_the_arm(model: FacilityModel) -> list[Finding]:
-    """A named pose has one value per joint and is never called `home` (ADR-0066).
-
-    Checked here because the skill server can only refuse a wrong length at
-    configure time, which takes the whole arm down with a message about a
-    parameter. The joint LIMITS are not checked here: they live in the vendor
-    description, which L0 invokes and never reads, so the planning group's own
-    bounds check in `MoveTo` is what refuses an out-of-range pose.
-    """
-    findings: list[Finding] = []
-    for asset in model.assets:
-        configuration = asset.configuration
-        asset_type = model.asset_type(asset.type)
-        if configuration is None or configuration.kind != "robot" or asset_type is None:
-            continue
-        dof = asset_type.kinematics.dof if asset_type.kinematics else None
-        for name, values in configuration.poses_rad.items():
-            where = f"assets.{asset.id}.configuration.poses_rad.{name}"
-            if name == "home":
-                findings.append(
-                    error(
-                        "named-pose-is-home",
-                        where,
-                        "`home` is declared by home_rad; a second statement of it here "
-                        "could disagree with the first",
-                        "Remove this entry, or change home_rad.",
-                    )
-                )
-            if dof is not None and len(values) != dof:
-                findings.append(
-                    error(
-                        "named-pose-length",
-                        where,
-                        f"has {len(values)} value(s) but type {asset_type.id!r} has "
-                        f"{dof} joint(s)",
-                    )
-                )
-    return findings
-
-
 def _an_arm_rides_its_track_on_one_backend(model: FacilityModel) -> list[Finding]:
     """An arm on a track selects the backend the track selects (ADR-0067).
 
@@ -816,8 +775,6 @@ def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:
       model, a blended move, a move that does not wait.
     * `program-pose-outside-joint-limits` — a pose past the vendor's own joint
       limits, which L0 states for exactly this check.
-    * `program-pose-name-taken` — a program pose named like one `poses_rad`
-      declares, which would make one name mean two poses.
     * `program-track-*` — a track move on an arm with no track, or past the
       track's stroke or speed.
     """
@@ -847,16 +804,10 @@ def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:
             if asset_type is not None and asset_type.kinematics is not None
             else None
         )
+        # No rule reserves `home` here: the reader names every pose itself,
+        # `zero` or `blockly_NN`, so a program pose cannot be called `home`
+        # (see `cite_tools.model.blockly.POSE_PREFIX`).
         for name, values in blockly.poses(steps).items():
-            if name in configuration.poses_rad or name == "home":
-                findings.append(
-                    error(
-                        "program-pose-name-taken",
-                        where,
-                        f"the program's pose {name!r} is also declared in poses_rad",
-                        "Rename the entry in poses_rad; the program's names are derived.",
-                    )
-                )
             if limits is None:
                 findings.append(
                     error(

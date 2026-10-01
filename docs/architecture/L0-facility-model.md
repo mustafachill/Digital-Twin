@@ -1,13 +1,18 @@
 # L0 — Facility model
 
-- **Status:** `BUILT` — `model/` describes **two cells** (2 zones, 7 types, **22** assets, 8
-  stations, across 17 files) and the generators in `tools/cite_tools/generate/` emit every
-  artifact in the table below except the last two, **once per zone**. All five validation
+- **Status:** `BUILT` — `model/` describes **one cell**, `cell_b` (`./scripts/validate-model`
+  reports `1 zone(s), 7 type(s), 7 asset(s), 3 station(s), across 17 file(s)` on 2026-10-01 on
+  `feat/remove-parked-line`), and the generators in `tools/cite_tools/generate/` emit every
+  artifact in the table below except the last two, **once per zone**. It described two cells
+  (2 zones, 7 types, 22 assets, 8 stations) until
+  [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) removed
+  `cell_a` from L0 on 2026-10-01. All five validation
   levels run:
   `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
   **and** a determinism check that regenerates in a second interpreter under a different hash
-  seed. `tools/tests/` holds **1502** tests at this commit, counted by collection
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, 2026-09-16).
+  seed. `tools/tests/` holds **1597** tests on that branch, counted by collection
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, 2026-10-01); it held 1502 on
+  2026-09-16.
   Both figures were stale on 2026-08-27 — the asset count by one instance, the test count by
   two separate additions — and **both were stale again on 2026-09-16**, the first because
   ADR-0056 declared the second zone `cell_b` and the second because three of those test files
@@ -27,12 +32,16 @@
   datum made expressible. The end-effector type's `linkage` block declares the seven vendor
   dimensions from which the grasp-plane offset is *derived*, so the offset is a property of
   L0 and no longer hand-written above it.
-  Seven types, 22 assets: the work-piece type has **no instances**, deliberately — where a
+  Seven types, 7 assets: the work-piece type has **no instances**, deliberately — where a
   part is at any moment is the process's business, not the layout's.
   **Seven types across two zones, and the seven did not move when the second zone landed.**
   `resolve.py` hands every type to every zone, so `cell_b` (ADR-0056) is built entirely from
   the component library `cell_a` already used — that is P9 measured rather than asserted, and
-  it is why a second cell is a data change.
+  it is why a second cell is a data change. *(That was the two-zone model of 2026-09-16 to
+  2026-10-01. With `cell_a` gone the type count is still seven, because the type set changed
+  as well — `pedestal_600` left with `cell_a` and the linear-axis type of
+  [ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md) had arrived — so the
+  seven is not the same seven.)*
   **L0 now also decides which planner an arm plans with.** The robot type declares the
   default and fallback pipelines, the planner id for each, a per-joint deceleration limit and
   four Cartesian ceilings, and the generator holds what a pipeline is *made* of — that is the
@@ -122,9 +131,10 @@
   as of 2026-08-30** ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md));
   this document said "nothing brings a second side up" until then. **`cell_b` declares
   `twin: {sides: pair}` as of 2026-09-18**
-  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so this repository ships one
-  paired zone and one unpaired one; `cell_a` stays `single`. This document said "the shipped
-  model is still `single`" until that date. **Do not read a paired model as a running pair** —
+  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), and since `cell_a` left L0
+  on 2026-10-01 (ADR-0069) this repository ships exactly one zone, and it is paired. This
+  document said "the shipped model is still `single`" until 2026-09-18 and "one paired zone and
+  one unpaired one" until 2026-10-01. **Do not read a paired model as a running pair** —
   nothing automated brings one up — and
   read the emitted plan rather than this sentence for what a change produces: a list of what a
   change does not do is a claim with an expiry date.

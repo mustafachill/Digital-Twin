@@ -16,7 +16,7 @@
 
 L5 is the one component in this system holding endpoints in BOTH domains, and it
 computes a hardware gate from the backends its plan declares. A `--zone` that
-defaulted to `cell_a` therefore decided, silently, which cell's two sides a
+defaulted to a literal zone therefore decided, silently, which cell's two sides a
 process was wired across and which cell's hardware declarations a mode change
 was checked against.
 
@@ -78,7 +78,7 @@ def test_arguments_this_parser_does_not_own_are_still_ignored() -> None:
 
 
 def test_a_zone_that_contradicts_the_plan_is_refused(capsys) -> None:
-    """`--zone cell_b --plan .../cell_a_plan.yaml` used to span `cell_a` silently.
+    """`--zone X --plan .../cell_b_plan.yaml` used to span `cell_b` silently.
 
     `--zone` is never read again once the plan is located: `main` spans
     `plan.zone`. So the conditional in `_arguments` was satisfied by an argument
@@ -91,22 +91,35 @@ def test_a_zone_that_contradicts_the_plan_is_refused(capsys) -> None:
     from cite_bringup.plan import default_plan_path
     from cite_twin.twin_boundary import main
 
-    other = "cell_b" if default_plan_path("cell_a").is_file() else "cell_a"
-    assert main(["--zone", other, "--plan", str(default_plan_path("cell_a"))]) == 2
+    other = "zone_x"
+    assert main(["--zone", other, "--plan", str(default_plan_path("cell_b"))]) == 2
     message = capsys.readouterr().err
-    assert other in message and "cell_a" in message, message
+    assert other in message and "cell_b" in message, message
 
 
-def test_a_zone_that_agrees_with_the_plan_is_not_refused(capsys) -> None:
+def test_a_zone_that_agrees_with_the_plan_is_not_refused(capsys, tmp_path) -> None:
     """The other half. Stating the same fact twice is redundant, not wrong.
 
-    It gets past the comparison and fails later for its own reason — `cell_a`,
-    the zone this case names, declares `sides: single` and a boundary needs two
-    (ADR-0059 pairs `cell_b` and leaves this one alone) — which is what shows the
-    comparison let it through rather than stopping it.
+    It gets past the comparison and fails later for its own reason — the plan it
+    is handed declares one side, and a boundary needs two — which is what shows
+    the comparison let it through rather than stopping it. The plan is the
+    shipped zone's with its counterpart removed: the shipped zone is paired
+    (ADR-0059), and handed that one `main` would start a boundary rather than
+    return.
     """
-    from cite_bringup.plan import default_plan_path
+    from cite_bringup.plan import BACKEND_FIELD_BY_SIDE, default_plan_path, PHYSICAL_FIELD_BY_SIDE
     from cite_twin.twin_boundary import main
+    import yaml
 
-    assert main(["--zone", "cell_a", "--plan", str(default_plan_path("cell_a"))]) == 2
+    document = yaml.safe_load(default_plan_path("cell_b").read_text())
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == "plant"
+    ]
+    for manager in document["plan"]["controller_managers"]:
+        manager.pop(BACKEND_FIELD_BY_SIDE["counterpart"], None)
+        manager.pop(PHYSICAL_FIELD_BY_SIDE["counterpart"], None)
+    single = tmp_path / "cell_b_plan.yaml"
+    single.write_text(yaml.safe_dump(document))
+
+    assert main(["--zone", "cell_b", "--plan", str(single)]) == 2
     assert "cannot both be honoured" not in capsys.readouterr().err

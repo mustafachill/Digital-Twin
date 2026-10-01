@@ -20,8 +20,8 @@ mechanism produces something that serves none.
 
 ```bash
 ros2 bag record -s mcap -o runs/$(date +%Y%m%d-%H%M%S) \
-  /cite/cell_a/arm_1/joint_states \
-  /cite/line/state \
+  /cite/cell_b/picker/joint_states \
+  /cite/cell_b/picker/state \
   /cite/twin/divergence \
   /cite/twin/mode
 ```

@@ -236,6 +236,10 @@ has two entrances**, and decision 5's other half is what closes either.
 
 A station's escalation stops the line **and the coordinator stays alive**, serving the
 reset — and resumption is gated on **re-armability**, not on acknowledgement.
+**[Overtaken 2026-10-01 — ADR-0069 removed the line, its coordinator and the reset from the
+main tree; this mechanism runs only in `projects/01`. The reason
+`StopAll` exists — a physical belt's setpoint persists — is still cited by the twin boundary's
+belt route, which stays.]**
 
 ## Nothing here is a protective measure, and it must never be described as one
 
@@ -427,6 +431,7 @@ Chosen. Detailed below.
 
 The generated root tree becomes a `Fallback` whose **first** child is the existing
 `Parallel` of station subtrees, unchanged, and whose **second** child is a fault `Sequence`.
+**[Overtaken 2026-10-01 — ADR-0069; the station tree is not in the main tree.]**
 
 ```
 Fallback  "line"

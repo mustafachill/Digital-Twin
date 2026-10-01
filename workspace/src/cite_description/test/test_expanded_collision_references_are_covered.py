@@ -62,7 +62,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 MODEL_TYPES = REPO_ROOT / 'model' / 'assets' / 'types'
 DESCRIPTIONS = sorted(
     (REPO_ROOT / 'workspace' / 'src' / 'cite_generated' / 'description').glob(
-        'cell_a_arm_*.urdf.xacro'
+        'cell_b_picker*.urdf.xacro'
     )
 )
 

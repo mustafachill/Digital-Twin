@@ -38,9 +38,6 @@ appearance:
     conveyor_frame:
       ambient: [0.12, 0.15, 0.19, 1.0]
       diffuse: [0.28, 0.34, 0.42, 1.0]
-    pedestal_steel:
-      ambient: [0.22, 0.22, 0.24, 1.0]
-      diffuse: [0.52, 0.53, 0.56, 1.0]
     sensor_housing:
       ambient: [0.36, 0.28, 0.04, 1.0]
       diffuse: [0.78, 0.62, 0.1, 1.0]
@@ -53,7 +50,6 @@ appearance:
   bodies:
     belt_1200x400: conveyor_frame
     break_beam: sensor_housing
-    pedestal_600: pedestal_steel
     ufactory_linear_motor: conveyor_frame
     work_table_600: table_top
     workpiece: workpiece_stock

@@ -94,8 +94,8 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node as RclpyNode
 
-ZONE = 'cell_a'
-ARM = 'arm_1'
+ZONE = 'cell_b'
+ARM = 'picker'
 
 #: The hardware plugin every generated description declares, and the two this rig
 #: substitutes for it. Asserted rather than assumed when the swap is made: if the

@@ -72,26 +72,19 @@ The order is a real dependency chain, not a preference
    lifecycle driver and on nothing else. It waits for `/joint_states` itself, and gating it on
    the controllers would add an ordering constraint the system does not have.
 7. One `planning_scene_loader` per arm, chained.
-8. The zone's detection server, on the same gate as the controllers and the planners. It
-   commands no motion and needs neither, and it used to start with the facility nodes; what
-   moving it behind the gate costs is a beam subscription arriving a second or two later on a
-   cell that is not running yet either way.
-9. The skill servers, and the L4 coordinator if `line:=true`.
+8. The skill servers, then the readiness witness.
 
 ### The bridge
 
 `_bridge_topics` builds one `parameter_bridge` argument list carrying `/clock` plus **every
 aid topic the plan declares** — a command ROS→Gazebo and a state Gazebo→ROS per conveyor, and
-a detection Gazebo→ROS per sensor. In `cell_a` that is three belts and four beams, so ten aid
-topics. Not one name is written here. Until this existed, `/clock` was bridged and nothing
-else, so the plan advertised interfaces the running system did not provide and the
-sensor-driven line could not be driven by its sensors.
+a detection Gazebo→ROS per sensor. Not one name is written here. Until this existed,
+`/clock` was bridged and nothing else, so the plan advertised interfaces the running system
+did not provide.
 
-**A beam's level and a beam's events are two different interfaces.** The bridge lands the
-plugin's raw `gz.msgs.Boolean` on the plan's `level_topic` via a remapping, and leaves
-`detection_topic` for the typed `DetectionEvent` that `cite_skills` publishes from it — which
-is the name a station's trigger subscribes to. Landing the boolean there would put two
-publishers of two types on one topic. `plan.py` refuses a sensor that names the same topic for
+**A beam's level lands under a name the plan states.** The bridge lands the plugin's raw
+`gz.msgs.Boolean` on the plan's `level_topic` via a remapping; the Gazebo side keeps the
+plugin's own name, `detection_topic`. `plan.py` refuses a sensor that names the same topic for
 both.
 
 ## Interfaces
@@ -113,14 +106,8 @@ a Gazebo system plugin, has no structural reason it cannot reach the hardware pa
 | Launch argument | Default | Meaning |
 |---|---|---|
 | `headless` | `true` | run the simulator without a GUI. Required on macOS and in CI |
-| `zone` | `cell_a` | which zone of the facility model to bring up |
-| `line` | `false` | start the L4 line coordinator |
+| `zone` | none — required | which zone of the facility model to bring up. `./scripts/sim` supplies the model's only zone when there is one (ADR-0069 decision 5) |
 | `side` | `plant` | which side of the zone this launch is. It selects the partition and the domain the launch checks itself against, and changes no name |
-
-`line` is off by default and that is a real constraint rather than caution: a skill server
-admits one goal at a time per arm, so a running coordinator holds all three arms and any other
-client — a scenario, an operator, a diagnostic — has its goals refused by a server that is
-busy working.
 
 | Environment variable | Effect |
 |---|---|
@@ -173,7 +160,7 @@ list an empty transport unless you set the same partition first. Take it from th
 than typing it:
 
 ```bash
-ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # the model's only zone
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
 import sys
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
@@ -251,14 +238,14 @@ has.
 **What this is not.** Refusing to start is the only enforceable form of the rule until Phase 2
 builds the safety layer. It does not change *what* is commanded on either path (P2); it stops
 a physical machine being commanded by accident. There is no hardware launch file in this
-package at this commit, and every controller manager in `cell_a_plan.yaml` states
+package at this commit, and every controller manager in `cell_b_plan.yaml` states
 `commands_physical_hardware: false`.
 
 ## The ROS domain, and the other half of one rule
 
 A process belonging to a side carries **two** isolations, and neither substitutes for the
 other. `GZ_PARTITION` is a gz-transport namespace that `move_group`, the controller managers,
-the skill servers and the coordinator have never heard of; `ROS_DOMAIN_ID` was measured not to
+and the skill servers have never heard of; `ROS_DOMAIN_ID` was measured not to
 isolate the Gazebo transport at all. A pair carrying one and not the other is either two cells
 sharing every belt topic or two cells colliding on every node name, because **both sides carry
 byte-identical names by rule** ([ADR-0044](../../../docs/adr/0044-one-ros-domain-per-side-identical-names.md),
@@ -348,8 +335,7 @@ end on a running cell: it named the node and the step, the gate fired, and nothi
 **What it is not.** It is not a protective measure. Bring-up ordering decides when a planner
 starts; it stops no arm, and nothing here is an interlock
 ([`cross-cutting-safety.md`](../../../docs/architecture/cross-cutting-safety.md)). And it does
-not make every participant a managed node — the skill server and the line coordinator are plain
-nodes, which
+not make every participant a managed node — the skill server is a plain node, which
 [`cross-cutting-lifecycle.md`](../../../docs/architecture/cross-cutting-lifecycle.md) records
 and this program does not change.
 
@@ -361,7 +347,7 @@ had finished coming up — not a pair, and not the single cell every scenario ru
 
 `cite_bringup/readiness_witness.py` closes that. It is the same shape as every other link:
 a process that blocks on a condition and exits, whose exit `_gate` consumes. It waits for every
-skill action server the plan declares, and the zone's `detect` server, to be answering — on
+skill action server the plan declares to be answering — on
 **its own side's domain**, because it inherits the launch's environment and is given no other.
 On that gate, and nowhere else in the launch file, one fixed token line is emitted. The token
 is defined once, in `cite_bringup/readiness.py`, and imported by both the emitter and the
@@ -379,9 +365,6 @@ requirement plus a bound on the accumulated clock deficit; **in either shape it 
 bring-up** (ADR-0049 decision 4). Its own deadline is measured on the
 wall clock deliberately, because one of the failures it exists to catch is a simulated clock
 that never starts.
-
-The L4 coordinator is deliberately outside the witness's condition: it starts only under
-`line:=true`, and waiting on it would fail every bring-up that does not run it.
 
 ## The pair supervisor
 
@@ -444,7 +427,7 @@ boundary fails no gate in CI.
 
 - **It does not sequence anything by time.** See above.
 - **It does not compose a name.** Every action, topic, frame, controller and file path comes
-  from the plan or from a message constant (`LineState::TOPIC`). A name built here would be a
+  from the plan or from a message constant (`TwinMode.TOPIC`). A name built here would be a
   second place a name is made, outside the reach of `ids.py` and the tests that cover it.
 - **It does not default a value the plan omits.** `_gripper` passes through exactly the keys
   the plan carries. A zero manufactured here would override the server's declared defaults
@@ -465,16 +448,16 @@ boundary fails no gate in CI.
 ## How to run it
 
 ```bash
-./scripts/sim --zone cell_b --headless             # the cell, without the L4 coordinator
-./scripts/sim --zone cell_b --headless line:=true  # with it
-./scripts/sim --zone cell_b --pair                 # both sides of a twinned zone, and the boundary
-./scripts/scenario bringup                         # headless, asserted, and a blocking CI gate
+./scripts/sim --headless          # the cell; --zone defaults to the model's only zone
+./scripts/sim --pair              # both sides of a twinned zone, and the boundary
+./scripts/scenario bringup        # headless, asserted, and a blocking CI gate
 ```
 
-`--pair` implies headless and requires the zone to declare `twin: {sides: pair}` in the L0
+`--pair` takes `--headless` like a single side does, and without it opens one window per side
+(it used to imply `--headless` and no longer does). It requires the zone to declare `twin: {sides: pair}` in the L0
 model; on an untwinned zone it refuses rather than inventing a second side. **`cell_b`
-declares `pair` as of 2026-09-18 and `cell_a` stays `single`** (ADR-0059), so `--pair` comes
-up on `cell_b` from a clean checkout and is refused on `cell_a`. It brings up both sides and
+declares `pair`** (ADR-0059), so `--pair` comes up on it from a clean checkout. It brings up
+both sides and
 then the twin boundary, which serves `SetMode` — nothing here chooses a mode. **A declaration
 is not a gate**: there is still no asserted paired scenario and no CI step brings a pair up,
 which is ADR-0057's promotion clause 4, and `./scripts/scenario` addresses the plant.
@@ -489,20 +472,19 @@ started cell.
 
 The lifecycle driver is the exception in form and not in effect: it is a process, so it writes
 its own `LIFECYCLE DRIVER FAILED: <reason>` on standard error and exits non-zero, and the gate
-on its exit then produces `BRING-UP FAILED before the controllers, the planners and detection`.
+on its exit then produces `BRING-UP FAILED before the controllers and the planners`.
 Both lines appear, the driver's first, and it is the one that names the node and the step.
 
 | Symptom | Cause |
 |---|---|
 | `no bring-up plan at <path>` | the plan is generated. Run `./scripts/validate-model --write`, then `./scripts/build` |
 | `<uri>: package X is not on the ament index` | the workspace was not built, or the overlay not sourced |
-| `zone 'cell_a' declares a hardware backend for ...` | the opt-in gate. Confirm the cell is clear, then set `CITE_ALLOW_HARDWARE=1` deliberately — see [`safety-procedures.md`](../../../docs/operations/safety-procedures.md) |
+| `zone 'cell_b' declares a hardware backend for ...` | the opt-in gate. Confirm the cell is clear, then set `CITE_ALLOW_HARDWARE=1` deliberately — see [`safety-procedures.md`](../../../docs/operations/safety-procedures.md) |
 | `the plan declares no ``sides:``` | a plan generated before ADR-0042, or hand-edited. Run `./scripts/validate-model --write`, then `./scripts/build` |
 | `side 'plant' would start its Gazebo processes with no GZ_PARTITION` | the launch built the process environment without it. Not something a user sets — see "The Gazebo transport partition" above |
 | `sides share the Gazebo partition(s) ...` | two sides on one partition would subscribe to each other's belt commands. The partition is generated; regenerate rather than editing the plan |
 | `controller manager for X lists no controllers` | bring-up would report success having activated nothing |
-| a sensor names one topic for both its level and its events | the bridge would publish `std_msgs/Bool` on the topic a station reads `DetectionEvent` from |
-| a zone declares sensors and no `detection:` block | the beams would be bridged into ROS and read by nobody |
+| a sensor names one topic for both its level and its plugin's name | the remapping would land the level on its own name, so the plan never said where the level goes |
 | `BRING-UP FAILED before <step>: the previous step exited N` | a gated step failed. If it timed out, the node it waits on never appeared, or a controller's joint names do not match the description — run `./scripts/validate-model` |
 | `` <node> could not reach `active` `` | a managed node's `on_configure` or `on_activate` returned FAILURE or raised. The node logged why immediately above; nothing downstream of it is started. This is a `_refuses` handler riding the volatile transition topic, so it may or may not arrive — the driver's diagnosis below says the same thing from an observation, both messages may appear, and the driver's is the authoritative one |
 | `LIFECYCLE DRIVER FAILED: <node> never advertised '<node>/change_state'` | the launch started that node and its lifecycle services never appeared: either the process is not running, or it is not the node this launch believes it started |
@@ -514,7 +496,7 @@ Both lines appear, the driver's first, and it is the one that names the node and
 | a spawner times out on a service | usually `gz_ros2_control-system` failed to load, so no controller manager was ever created. The launch appends `GZ_SIM_SYSTEM_PLUGIN_PATH` for exactly this reason |
 | `side 'plant' would start on ROS_DOMAIN_ID=N, but the plan resolves M` | the process is not on its side's domain. Not something a user sets by hand — `scripts/_lib.sh` exports both values and the supervisor sets the child's |
 | `CITE_DOMAIN_BASE is unset` | something entered the ROS graph outside `./scripts/*` |
-| `zone 'cell_a' declares no side named 'counterpart'` | that zone says `sides: single`, as `cell_a` does and `cell_b` does not (ADR-0059). Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
+| `zone '<zone>' declares no side named 'counterpart'` | that zone says `sides: single`, which `cell_b` does not (ADR-0059). Whether a zone runs as a pair is an L0 fact; set it there and regenerate |
 | `READINESS WITNESS FAILED: side 'X' did not finish coming up within N s` | every step before it succeeded, so the servers were started and are not serving. The message names the endpoints that never answered |
 | `[pair] X never announced readiness and never exited` | the pair's ceiling. That is not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
 | `[pair] X announced readiness as 'Y'` | that participant was given the wrong `side:=` or `--zone`; the message names which |
@@ -569,8 +551,7 @@ set is the `ament_add_pytest_test` and `add_launch_test` calls in `CMakeLists.tx
 The bridge argument list is built by `_bridge_topics` rather than inline in the `Node`, so it
 can be read back: `launch_ros` hides a node's arguments behind a private attribute, and a test
 reaching into the action would be testing launch's internals rather than this file's
-decisions — a direction reversed, a name misspelled, a level landed on the topic the line acts
-on.
+decisions — a direction reversed, a name misspelled, a level landed on the wrong ROS name.
 
 Whether the cell actually comes up is `./scripts/scenario bringup`, which is a blocking CI
 gate run twice per CI run.

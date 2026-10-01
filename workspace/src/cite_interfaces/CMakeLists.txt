@@ -14,24 +14,14 @@ find_package(std_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  msg/ConveyorState.msg
-  msg/Detection.msg
-  msg/DetectionEvent.msg
   msg/DivergenceMetrics.msg
-  msg/LineState.msg
-  msg/LineTopology.msg
   msg/ModelVersion.msg
   msg/ResultCode.msg
   msg/RobotState.msg
   msg/SafetyState.msg
-  msg/StationEdge.msg
-  msg/StationState.msg
-  msg/StationTopology.msg
   msg/TwinMode.msg
   srv/GetModelVersion.srv
-  srv/ResetStation.srv
   srv/SetMode.srv
-  action/Detect.action
   action/Grasp.action
   action/MoveTo.action
   action/Pick.action

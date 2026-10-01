@@ -80,8 +80,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: The definition. Parsed from this file and nothing else: a `MODE_*` scan across
-#: `cite_interfaces` also reaches `ConveyorState.msg`'s `MODE_STOPPED`,
-#: `MODE_RUNNING` and `MODE_FAULTED`, which are belt states and not twin modes.
+#: `cite_interfaces` would reach any other message's `MODE_*` constants, which
+#: are not twin modes.
 TWIN_MODE = REPO_ROOT / "workspace" / "src" / "cite_interfaces" / "msg" / "TwinMode.msg"
 
 CHARTER = REPO_ROOT / "what-we-are-doing.md"

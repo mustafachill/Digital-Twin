@@ -24,8 +24,7 @@ module only maps each one onto the program vocabulary in `steps`:
     wait   -> a dwell in the cell's own clock
     track  -> a move of the linear track's carriage
 
-`cell_b_pick_place` is the fixed list ADR-0066 wrote by hand; it is kept as that
-record and is no longer what `python3 -m cite_bringup.program` runs.
+The fixed list ADR-0066 wrote by hand was removed by ADR-0069.
 """
 
 from __future__ import annotations

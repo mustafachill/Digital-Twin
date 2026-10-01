@@ -42,18 +42,21 @@ is the one that is wrong.
 | L1 | [Description and assets](L1-description-and-assets.md) | Geometry, kinematics, meshes, generated worlds | `PARTIAL` |
 | L2 | [Control and HAL](L2-control-and-hal.md) | `ros2_control`, controllers, MoveIt 2, hardware interfaces | `PARTIAL` |
 | L3 | [Capabilities](L3-capabilities.md) | Robot-agnostic skills as actions | `PARTIAL` |
-| L4 | [Orchestration](L4-orchestration.md) | Behaviour trees, line coordination, handoff | `PARTIAL` |
-| L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, mirroring, divergence, calibration | `DESIGNED` |
+| L4 | [Orchestration](L4-orchestration.md) | Behaviour trees, line coordination, handoff | `DESIGNED` |
+| L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, mirroring, divergence, calibration | `PARTIAL` |
 | L6 | [Data and telemetry](L6-data-and-telemetry.md) | Telemetry schema, recording, historian, replay | `DESIGNED` |
 | L7 | [Presentation](L7-presentation.md) | Operator HMI, remote access | `DESIGNED` |
 
 `DESIGNED` means the contract the code must satisfy, with nothing built. `PARTIAL` says
 which part is real; read the document's status block, which names it. `BUILT` means tested.
 
-**Parked:** [L4 — the event-driven line](L4-event-driven-line.md) (`BUILT — parked`). It
-records the beam-triggered line end to end: how it works, what it does not do, and how to run
-it again. The code is kept, built and tested, but it is no longer how the cell is meant to be
-run.
+**Not in the main tree:** [L4 — the event-driven line](L4-event-driven-line.md) (`DESIGNED`).
+It records the beam-triggered line end to end: how it works and what it does not do. Its code
+was removed from the main tree on 2026-10-01
+([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and runs,
+frozen, as `projects/01`; it said `BUILT — parked` until then.
+The L3 box in the diagram above is the target vocabulary: `Detect` left the main tree with the
+line and has no action definition there today.
 
 ## Cross-cutting
 

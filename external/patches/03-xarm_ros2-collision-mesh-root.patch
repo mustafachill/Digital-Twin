@@ -30,10 +30,16 @@
 # means "root collision geometry with the visuals". Every existing caller -
 # `xarm_device`, the standalone gripper macros, `uf850`, `lite6`, every entry
 # point in the vendor tree - passes nothing and expands to the same bytes it
-# expanded to before. That is verified in this repository rather than asserted:
-# the generated `cell_a_arm_*.urdf.xacro` still names
-# `.../xarm_description/meshes/...` for all 13 collision meshes with the shipped
-# L0 default, which selects the vendor set.
+# expanded to before. That was verified in this repository rather than asserted,
+# while the shipped L0 selection was still the vendor set: the generated arm
+# descriptions then named `.../xarm_description/meshes/...` for all 13 collision
+# meshes.
+# [Corrected 2026-10-01.] This paragraph named `cell_a_arm_*.urdf.xacro` and
+# called the vendor set "the shipped L0 default". Both have since moved: ADR-0028
+# made `convex_hull` the shipped selection, and ADR-0069 removed `cell_a`, so the
+# one generated arm description today is `cell_b_picker.urdf.xacro` and it roots
+# its collisions at the hulls. The compatibility claim is about the patch and
+# still holds: an empty `collision_mesh_path` expands to the vendor's bytes.
 #
 # Scope on the hardware path (P2). This one IS symmetric, unlike patch 02.
 # `common_link_collision` is reached identically whichever `ros2_control_plugin`

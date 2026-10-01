@@ -58,7 +58,7 @@ from cite_bringup.plan import (
 import pytest
 import yaml
 
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
 
 
 def _generated() -> Path:
@@ -232,10 +232,12 @@ def _written(tmp_path: Path, document: dict) -> Path:
 
 def test_the_generated_plan_loads() -> None:
     plan = load(_generated())
-    assert plan.zone == "cell_a"
+    assert plan.zone == "cell_b"
     assert plan.scene.exists()
     assert plan.world.exists()
-    assert len(plan.controller_managers) == 3, "one controller manager per arm"
+    assert [m.asset for m in plan.controller_managers] == ["picker"], (
+        "one controller manager per arm, and the arm carries its track"
+    )
     for manager in plan.controller_managers:
         assert manager.description.exists(), manager.asset
 
@@ -275,8 +277,8 @@ def test_stages_are_ordered_with_the_broadcaster_first() -> None:
 
 def test_stage_grouping_is_deterministic() -> None:
     manager = ControllerManager(
-        asset="arm_1",
-        node="/cite/cell_a/arm_1/controller_manager",
+        asset="picker",
+        node="/cite/cell_b/picker/controller_manager",
         backend="sim",
         # No counterpart: this manager stands for an untwinned zone, which is
         # what `None` means here — never "the key was left out".
@@ -284,7 +286,7 @@ def test_stage_grouping_is_deterministic() -> None:
         commands_physical_hardware=False,
         counterpart_commands_physical_hardware=None,
         description_topic="/robot_description",
-        joint_state_topic="/cite/cell_a/arm_1/joint_states",
+        joint_state_topic="/cite/cell_b/picker/joint_states",
         description=Path("/dev/null"),
         spawn_xyz_m=(0.0, 0.0, 0.0),
         spawn_rpy_rad=(0.0, 0.0, 0.0),
@@ -333,29 +335,29 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
     # Bring-up would otherwise report success having activated nothing.
     document = {
         "plan": {
-            "zone": "cell_a",
-            "world": "package://cite_generated/worlds/cell_a.sdf",
-            "gui_config": "package://cite_generated/worlds/cell_a_gui.config",
-            "scene": "package://cite_generated/description/cell_a_scene.urdf.xacro",
-            "static_frames": "package://cite_generated/frames/cell_a_static_tf.yaml",
-            "topology": "package://cite_generated/topology/cell_a_flow.yaml",
+            "zone": "cell_b",
+            "world": "package://cite_generated/worlds/cell_b.sdf",
+            "gui_config": "package://cite_generated/worlds/cell_b_gui.config",
+            "scene": "package://cite_generated/description/cell_b_scene.urdf.xacro",
+            "static_frames": "package://cite_generated/frames/cell_b_static_tf.yaml",
+            "topology": "package://cite_generated/topology/cell_b_flow.yaml",
             "sides": [
                 {
                     "name": "plant",
-                    "gz_partition": "cite/cell_a/plant",
+                    "gz_partition": "cite/cell_b/plant",
                     "domain_offset": 0,
                 }
             ],
             "controller_managers": [
                 {
-                    "asset": "arm_1",
-                    "node": "/cite/cell_a/arm_1/controller_manager",
+                    "asset": "picker",
+                    "node": "/cite/cell_b/picker/controller_manager",
                     "backend": "sim",
                     "commands_physical_hardware": False,
                     "description_topic": "/robot_description",
-                    "joint_state_topic": "/cite/cell_a/arm_1/joint_states",
+                    "joint_state_topic": "/cite/cell_b/picker/joint_states",
                     "description": (
-                        "package://cite_generated/description/cell_a_arm_1.urdf.xacro"
+                        "package://cite_generated/description/cell_b_picker.urdf.xacro"
                     ),
                     "spawn_xyz_m": "0 0 0",
                     "spawn_rpy_rad": "0 0 0",
@@ -401,9 +403,9 @@ def test_a_missing_top_level_key_is_a_plan_error(tmp_path: Path, document: dict)
 def test_a_non_numeric_value_is_a_plan_error(tmp_path: Path, document: dict) -> None:
     document["plan"]["conveyors"] = [
         {
-            "asset": "conveyor_1",
-            "state_topic": "/cite/cell_a/conveyor_1/state",
-            "command_topic": "/cite/cell_a/conveyor_1/command",
+            "asset": "transfer_belt",
+            "state_topic": "/cite/cell_b/transfer_belt/state",
+            "command_topic": "/cite/cell_b/transfer_belt/command",
             "installed_speed_mps": "quite fast",
         }
     ]
@@ -461,8 +463,8 @@ def test_a_physical_declaration_is_refused_without_the_opt_in(
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
     # The refusal must name the asset. "Hardware is not permitted" sends the
-    # reader looking through three arms for the one that is not simulated.
-    assert "arm_2" in message
+    # reader looking through every arm for the one that is not simulated.
+    assert "second" in message
     # And the plan FIELD that decided, which is what a reader has to go and
     # change. The backend id rides along as context and decides nothing.
     assert "commands_physical_hardware" in message
@@ -701,13 +703,13 @@ def test_the_total_sibling_answers_the_plant_and_none_elsewhere(
 # --- The simulation-fidelity aids: two topics per beam, not two names for one --
 
 
-def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
-    """A beam has two interfaces and they must not collide.
+def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name() -> None:
+    """A beam's raw level lands in ROS under a name the plan states.
 
-    `detection_topic` is already spoken for: `cell_a_flow.yaml` gives it to a
-    station as a `DetectionEvent` trigger and `StationTopology.msg` documents it
-    as one. Bridging the raw `std_msgs/Bool` level onto that name would put two
-    publishers of two types on the topic the line acts on.
+    `detection_topic` is the name the plugin advertises on the Gazebo side and
+    `level_topic` is where the bridge lands the level in ROS, by a remapping. A
+    remapping onto its own name would be a plan that never said where the level
+    goes.
     """
     plan = load(_generated())
     assert plan.sensors, "the generated plan declares no sensors at all"
@@ -716,39 +718,17 @@ def test_every_beam_carries_a_level_topic_and_an_event_topic() -> None:
         assert sensor.asset in sensor.detection_topic
         assert sensor.asset in sensor.level_topic
         assert sensor.frame_id.startswith(f"{plan.zone}__{sensor.asset}__"), (
-            "a beam's detections are reported in a frame the generated static TF "
-            "table publishes; this one names a frame from nowhere"
+            "a beam's frame is one the generated static TF table publishes; this "
+            "one names a frame from nowhere"
         )
 
 
 def test_a_beam_whose_two_topics_are_one_name_is_refused(tmp_path: Path, document: dict) -> None:
-    """Refused when the plan says it, not discovered when the line stalls.
-
-    The two would connect, both publish, and `ros2 topic echo` would show a
-    stream of deserialisation errors naming neither publisher.
-    """
+    """Refused when the plan says it, not discovered when nothing arrives."""
     sensor = document["plan"]["sensors"][0]
     sensor["level_topic"] = sensor["detection_topic"]
-    with pytest.raises(PlanError, match="fight over it"):
+    with pytest.raises(PlanError, match="never said where the level goes"):
         load(_written(tmp_path, document))
-
-
-def test_sensors_without_a_detection_block_are_refused(tmp_path: Path, document: dict) -> None:
-    """Beams bridged into ROS and read by nobody is a silent half-system."""
-    del document["plan"]["detection"]
-    with pytest.raises(PlanError, match="turns their levels into typed events"):
-        load(_written(tmp_path, document))
-
-
-def test_the_detection_server_is_zone_scoped() -> None:
-    plan = load(_generated())
-    assert plan.detection is not None
-    assert plan.detection.namespace == f"/cite/{plan.zone}/detection"
-    assert plan.detection.detect_action == f"{plan.detection.namespace}/detect"
-    # Not an arm's namespace: one server watches every belt in the zone, and
-    # three would give the same question three answers.
-    for manager in plan.controller_managers:
-        assert manager.asset not in plan.detection.namespace
 
 
 # --- The skill actions L4 calls come from the model ---------------------------
@@ -1183,7 +1163,7 @@ def test_a_physical_counterpart_is_refused_without_the_opt_in(tmp_path: Path) ->
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
-    assert "arm_2" in message
+    assert "second" in message
     assert "counterpart_commands_physical_hardware" in message
     assert HARDWARE_OPT_IN_ENV in message
 
@@ -1261,7 +1241,7 @@ def test_each_side_is_answered_with_its_own_backend(tmp_path: Path) -> None:
         for manager in plan.controller_managers
         if manager.backend_on(COUNTERPART_SIDE) != manager.backend_on(PLANT_SIDE)
     ]
-    assert [manager.asset for manager in divergent] == ["arm_2"], (
+    assert [manager.asset for manager in divergent] == ["second"], (
         "the fixture puts one asset's counterpart on a different backend; an "
         "accessor reading one field for both sides reports none"
     )
@@ -1307,7 +1287,7 @@ def test_the_hardware_gate_reads_through_the_accessor(tmp_path: Path) -> None:
     with pytest.raises(HardwareNotPermittedError) as raised:
         require_hardware_opt_in(plan, {})
     message = str(raised.value)
-    assert "arm_2 (counterpart_commands_physical_hardware, backend 'real')" in message
+    assert "second (counterpart_commands_physical_hardware, backend 'real')" in message
     assert (
         plan.controller_managers[1].commands_physical_hardware_on(COUNTERPART_SIDE)
         is True
@@ -1356,7 +1336,7 @@ def test_a_declared_side_no_asset_states_a_backend_for_is_refused(tmp_path: Path
     assert COUNTERPART_SIDE in message
     # Named assets, because a refusal that cannot say where to look sends its
     # reader to the wrong half of the cell.
-    for asset in ("arm_1", "arm_2", "arm_3"):
+    for asset in ("picker", *_MORE_ARMS):
         assert repr(asset) in message, message
     assert "counterpart_backend" in message
 
@@ -1379,8 +1359,8 @@ def test_the_refusal_names_only_the_assets_that_are_silent(tmp_path: Path) -> No
     with pytest.raises(SideNotDeclaredError) as raised:
         load(_written(tmp_path, document))
     message = str(raised.value)
-    assert "'arm_2'" in message
-    assert "'arm_1'" not in message and "'arm_3'" not in message, message
+    assert "'second'" in message
+    assert "'picker'" not in message and "'third'" not in message, message
 
 
 def test_a_solo_plan_is_not_refused_for_the_side_it_does_not_declare(
@@ -1411,7 +1391,7 @@ def test_the_gate_does_not_swallow_an_accessor_that_fails_some_other_way(
     """
 
     class _BrokenManager:
-        asset = "arm_1"
+        asset = "picker"
         backend = "real"
         commands_physical_hardware = True
 
@@ -1521,9 +1501,48 @@ def _counterpart(offset: int = 1) -> dict:
     """Return a second side, as a paired zone's generated plan would state it."""
     return {
         "name": "counterpart",
-        "gz_partition": "cite/cell_a/counterpart",
+        "gz_partition": "cite/cell_b/counterpart",
         "domain_offset": offset,
     }
+
+
+#: The arms the shape helpers below add beside the shipped one, in order.
+_MORE_ARMS = ("second", "third")
+
+
+def _with_more_arms(document: dict) -> dict:
+    """Return ``document`` with the shipped arm's controller manager cloned twice.
+
+    The shipped zone has one arm (ADR-0069), and the questions half of this file
+    asks are PER ASSET: a gate that names the one asset that is physical and not
+    its neighbours, a refusal that names only the silent manager, an accessor that
+    answers each asset for itself. Asked of one manager, every one of them passes
+    for an implementation that reads the first manager, or all of them, which is
+    the defect each is there to catch. So the two shape helpers carry three, the
+    shipped one first, each clone renamed throughout by asset id so that every
+    name in it — node, topics, actions, joints — is its own.
+    """
+    managers = document["plan"]["controller_managers"]
+    shipped = managers[0]
+    for name in _MORE_ARMS:
+        managers.append(_renamed(shipped, shipped["asset"], name))
+    return document
+
+
+def _renamed(value: object, old: str, new: str) -> object:
+    """Return ``value`` with ``old`` replaced by ``new`` in every string but a file.
+
+    A `package://` URI names a generated file that exists once, for the shipped
+    arm, and the reader refuses a URI that resolves to nothing; so a clone shares
+    the shipped arm's files and differs in every NAME.
+    """
+    if isinstance(value, dict):
+        return {key: _renamed(item, old, new) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_renamed(item, old, new) for item in value]
+    if isinstance(value, str) and not value.startswith("package://"):
+        return value.replace(old, new)
+    return value
 
 
 def _paired_document() -> dict:
@@ -1545,7 +1564,7 @@ def _paired_document() -> dict:
     every test taking the paired half of the `document` fixture would be asking
     about that instead of about a pair.
     """
-    document = _live_document()
+    document = _with_more_arms(_live_document())
     sides = document["plan"]["sides"]
     if not any(side["name"] == COUNTERPART_SIDE for side in sides):
         sides.append(_counterpart())
@@ -1586,7 +1605,7 @@ def _solo_document() -> dict:
     than spelled here, so this helper cannot name a key the reader has stopped
     parsing, or miss one it has started (P1).
     """
-    document = _live_document()
+    document = _with_more_arms(_live_document())
     document["plan"]["sides"] = [
         side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
     ]
@@ -1834,7 +1853,7 @@ def test_nothing_reaches_the_live_plan_by_a_spelling_the_guards_cannot_see() -> 
     )
 
     # And the same reach with the string ARITHMETIC that walks past the clause
-    # above: `resolve_uri("package://cite_generated/bringup/" + "cell_a_plan.yaml")`
+    # above: `resolve_uri("package://cite_generated/bringup/" + "cell_b_plan.yaml")`
     # is a `BinOp`, so no `ast.Constant` in this file equals the URI and the
     # count stays at one. Demonstrated on 2026-09-10, passing the full suite.
     #
@@ -1991,7 +2010,7 @@ def test_two_sides_with_the_same_name_are_refused(tmp_path: Path) -> None:
     # #40).
     document = _solo_document()
     twin = dict(document["plan"]["sides"][0])
-    twin["gz_partition"] = "cite/cell_a/elsewhere"
+    twin["gz_partition"] = "cite/cell_b/elsewhere"
     twin["domain_offset"] = 1
     document["plan"]["sides"].append(twin)
     with pytest.raises(SideNotDeclaredError, match="two sides are named"):

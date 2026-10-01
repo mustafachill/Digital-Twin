@@ -72,7 +72,7 @@ def announced_side(line: str) -> str | None:
 
     Substring rather than prefix matching, because `launch` prefixes what it logs
     — the emitter's line reaches the pipe as `[INFO] [launch.user]: CITE_SIDE_READY
-    side=plant zone=cell_a`. Matching on the token rather than on the start of the
+    side=plant zone=cell_b`. Matching on the token rather than on the start of the
     line keeps this reader independent of that formatting, which is upstream's and
     not ours.
     """

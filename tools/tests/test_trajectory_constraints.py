@@ -20,10 +20,21 @@ import yaml
 
 from cite_tools import generate as gen
 from cite_tools.model.loader import ModelError, load
+from cite_tools.model.resolve import resolve
 
-#: Every arm in the real cell. The detector is worth nothing on two arms out of
-#: three, and an expansion bug is per-instance rather than per-type.
-ARMS = ("arm_1", "arm_2", "arm_3")
+#: The zone and its arm, named once (ADR-0069 left one of each). Every-arm
+#: assertions ask `arms()` instead, because the detector is worth nothing on some
+#: arms and an expansion bug is per-instance rather than per-type.
+ZONE = "cell_b"
+ARM = "picker"
+
+
+def arms(path: Path) -> list[str]:
+    """Every arm the model declares in `ZONE`, asked rather than listed."""
+    found = sorted(a.id for a in resolve(load(path), ZONE).of_category("robot"))
+    assert found, "the model declares no arm, so an every-arm assertion checks nothing"
+    return found
+
 
 ARM_TYPE = "assets/types/robots/xarm5.yaml"
 
@@ -34,8 +45,24 @@ def artifacts(path: Path) -> dict[str, str]:
 
 def controller_block(path: Path, arm: str) -> dict:
     """The parsed `ros__parameters` of one arm's trajectory controller."""
-    document = yaml.safe_load(artifacts(path)[f"control/cell_a_{arm}_controllers.yaml"])
-    return document[f"/cite/cell_a/{arm}/{arm}_joint_trajectory_controller"]["ros__parameters"]
+    document = yaml.safe_load(artifacts(path)[f"control/{ZONE}_{arm}_controllers.yaml"])
+    return document[f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller"]["ros__parameters"]
+
+
+def controller_text(path: Path, arm: str) -> str:
+    """The generated text of one arm's trajectory controller section, comments included.
+
+    The arm's controllers file also carries its TRACK's trajectory controller
+    (ADR-0067), which has its own constraints and its own generated comment, so a
+    search over the whole file answers for two controllers. This cuts out the
+    arm's own section: from its top-level key to the next one.
+    """
+    text = artifacts(path)[f"control/{ZONE}_{arm}_controllers.yaml"]
+    key = f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller:"
+    lines = text.splitlines()
+    start = lines.index(key)
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("/")), len(lines))
+    return "\n".join(lines[start:end])
 
 
 def edit_constraints(edit_yaml: Callable, model: Path, mutate: Callable[[dict], None]) -> None:
@@ -61,7 +88,7 @@ class TestTheDetectorReachesEveryJoint:
     """The block is generated, complete, and per-instance."""
 
     def test_every_arm_declares_a_constraints_block(self, real_model: Path) -> None:
-        for arm in ARMS:
+        for arm in arms(real_model):
             assert "constraints" in controller_block(real_model, arm), arm
 
     def test_every_joint_the_controller_owns_has_a_tolerance(self, real_model: Path) -> None:
@@ -69,7 +96,7 @@ class TestTheDetectorReachesEveryJoint:
         # in the controller's own `joints:` list is a parameter the controller
         # never reads — it does not error, it is simply ignored, which is the
         # silent-miss shape this whole block exists to remove.
-        for arm in ARMS:
+        for arm in arms(real_model):
             block = controller_block(real_model, arm)
             constraints = block["constraints"]
             per_joint = {k: v for k, v in constraints.items() if isinstance(v, dict)}
@@ -79,19 +106,23 @@ class TestTheDetectorReachesEveryJoint:
                 assert tolerances["goal"] > 0.0, joint
                 assert tolerances["trajectory"] > 0.0, joint
 
-    def test_the_joint_names_are_the_instances_own(self, real_model: Path) -> None:
-        # arm_2's tolerances must name arm_2's joints. A type-level expansion
-        # would emit the vendor's bare `joint1`, which every controller ignores.
-        block = controller_block(real_model, "arm_2")
-        assert "arm_2_joint1" in block["constraints"]
+    def test_the_joint_names_are_the_instances_own(
+        self, real_model: Path, add_arm: Callable
+    ) -> None:
+        # A second arm's tolerances must name that arm's joints. A type-level
+        # expansion would emit the vendor's bare `joint1`, which every controller
+        # ignores. The shipped zone has one arm, so a second is added on the copy.
+        other = add_arm(real_model)
+        block = controller_block(real_model, other)
+        assert f"{other}_joint1" in block["constraints"]
         assert "joint1" not in block["constraints"]
-        assert "arm_1_joint1" not in block["constraints"]
+        assert f"{ARM}_joint1" not in block["constraints"]
 
     def test_a_non_trajectory_controller_gets_no_constraints(self, real_model: Path) -> None:
         # The gripper ends a goal by stalling, deliberately (ADR-0022). A path
         # tolerance there would abort exactly the grasp it is supposed to report.
-        document = yaml.safe_load(artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"])
-        gripper = document["/cite/cell_a/arm_1/arm_1_gripper_controller"]["ros__parameters"]
+        document = yaml.safe_load(artifacts(real_model)[f"control/{ZONE}_{ARM}_controllers.yaml"])
+        gripper = document[f"/cite/{ZONE}/{ARM}/{ARM}_gripper_controller"]["ros__parameters"]
         assert "constraints" not in gripper
 
 
@@ -111,14 +142,14 @@ class TestTheValuesAreTheTypesOwn:
                 }
             ),
         )
-        constraints = controller_block(real_model, "arm_1")["constraints"]
+        constraints = controller_block(real_model, ARM)["constraints"]
         assert constraints["goal_time"] == 1.25
         assert constraints["stopped_velocity_tolerance"] == 0.03
-        assert constraints["arm_1_joint3"] == {"trajectory": 0.75, "goal": 0.02}
+        assert constraints[f"{ARM}_joint3"] == {"trajectory": 0.75, "goal": 0.02}
 
         # The negative half. A generator holding its own constants would still
         # have passed everything above if it also emitted them somewhere.
-        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        text = controller_text(real_model, ARM)
         body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
         assert "goal_time: 0.5" not in body
         assert "trajectory: 1.0" not in body
@@ -129,10 +160,10 @@ class TestTheValuesAreTheTypesOwn:
         # bare `0`. The node declares a double and rejects an integer with
         # "invalid type: expected [double] got [integer]" — an error that names
         # the type and not the missing decimal point, at controller load.
-        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        text = controller_text(real_model, ARM)
         assert "stopped_velocity_tolerance: 0.0" in text
         assert "stopped_velocity_tolerance: 0\n" not in text
-        value = controller_block(real_model, "arm_1")["constraints"]["stopped_velocity_tolerance"]
+        value = controller_block(real_model, ARM)["constraints"]["stopped_velocity_tolerance"]
         assert isinstance(value, float)
 
     def test_the_block_is_identical_on_both_backends(
@@ -141,7 +172,7 @@ class TestTheValuesAreTheTypesOwn:
         # P2. A tolerance that differed between simulation and hardware would
         # mean the two cells fail at different times on the same trajectory, and
         # every claim built on the twin's execution path would be unfounded.
-        sim = controller_block(real_model, "arm_1")["constraints"]
+        sim = controller_block(real_model, ARM)["constraints"]
         edit_yaml(
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0].__setitem__(
@@ -149,7 +180,7 @@ class TestTheValuesAreTheTypesOwn:
                 {"backend": "real", "params": {"real": {"robot_ip": "192.168.1.100"}}},
             ),
         )
-        assert controller_block(real_model, "arm_1")["constraints"] == sim
+        assert controller_block(real_model, ARM)["constraints"] == sim
 
 
 class TestThePathToleranceCanBeDeclined:
@@ -166,8 +197,8 @@ class TestThePathToleranceCanBeDeclined:
             real_model,
             lambda c: c["constraints"].__setitem__("trajectory_tolerance_rad", None),
         )
-        constraints = controller_block(real_model, "arm_1")["constraints"]
-        for arm_joint in (f"arm_1_joint{n}" for n in range(1, 6)):
+        constraints = controller_block(real_model, ARM)["constraints"]
+        for arm_joint in (f"{ARM}_joint{n}" for n in range(1, 6)):
             assert constraints[arm_joint] == {"goal": 0.01}, arm_joint
         # The goal-side pair is untouched: declining the path check must not
         # quietly disable the detector that fires after the trajectory ends.
@@ -263,13 +294,13 @@ class TestTheVelocityCheckIsDeadOnThisCell:
         # xarm5_controllers.yaml commands [position, velocity], so this is a
         # plausible direction rather than a hypothetical one. Whoever makes it
         # owns deciding that tolerance: the upstream default is 0.01, not zero.
-        for arm in ARMS:
+        for arm in arms(real_model):
             block = controller_block(real_model, arm)
             assert set(block["command_interfaces"]) == {"position"}, arm
             assert block["constraints"]["stopped_velocity_tolerance"] == 0.0, arm
 
     def test_the_generated_comment_says_the_check_cannot_fire(self, real_model: Path) -> None:
-        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        text = controller_text(real_model, ARM)
         assert "THIS CHECK CANNOT FIRE on this controller" in text
         assert "THIS CHECK IS LIVE" not in text
 
@@ -287,7 +318,7 @@ class TestTheVelocityCheckIsDeadOnThisCell:
             real_model,
             lambda c: c.__setitem__("command_interfaces", ["position", "velocity"]),
         )
-        text = artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
+        text = controller_text(real_model, ARM)
         assert "THIS CHECK IS LIVE on this controller" in text
         assert "THIS CHECK CANNOT FIRE" not in text
 
@@ -301,10 +332,7 @@ class TestTheVelocityCheckIsDeadOnThisCell:
             real_model,
             lambda c: c.__setitem__("command_interfaces", ["position", "effort"]),
         )
-        assert (
-            "THIS CHECK IS LIVE on this controller"
-            in artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
-        )
+        assert "THIS CHECK IS LIVE on this controller" in controller_text(real_model, ARM)
 
     def test_a_velocity_state_interface_alone_does_not_arm_it(
         self, real_model: Path, edit_yaml: Callable
@@ -317,10 +345,7 @@ class TestTheVelocityCheckIsDeadOnThisCell:
             real_model,
             lambda c: c.__setitem__("state_interfaces", ["position", "velocity"]),
         )
-        assert (
-            "THIS CHECK CANNOT FIRE on this controller"
-            in artifacts(real_model)["control/cell_a_arm_1_controllers.yaml"]
-        )
+        assert "THIS CHECK CANNOT FIRE on this controller" in controller_text(real_model, ARM)
 
 
 class TestEveryControllerTypeIsClassified:

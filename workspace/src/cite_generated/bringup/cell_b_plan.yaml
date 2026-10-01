@@ -267,9 +267,9 @@ plan:
         # The home configuration comes from L0: where an arm rests between cycles
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [0, -0.35, -1.05, 0, 1.4]
-        # Named joint poses a fixed program moves the arm through (ADR-0066),
-        # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
-        # and each of these.
+        # Named joint poses the arm's program moves it through, read from that
+        # program file by the generator (ADR-0067); none is written in L0.
+        # `MoveTo.named_configuration` accepts `home` and each of these.
         poses_rad:
           zero: [0, 0, 0, 0, 0]
           blockly_01: [0, 0, -0.785398163, 0.785398163, 0]
@@ -331,43 +331,29 @@ plan:
       attach_topic: /cite/cell_b/picker/grasp/attach
       detach_topic: /cite/cell_b/picker/grasp/detach
 
-  # A break beam has TWO topics and they are deliberately not the same name.
+  # A break beam has TWO topic names and they are deliberately not the same.
   #
-  #   detection_topic — the TYPED `DetectionEvent`. The name a station's trigger
-  #                     in the process topology already subscribes to, and also
-  #                     the name the break-beam plugin advertises on the GAZEBO
-  #                     transport: both come from one call to `ids.interface`.
-  #   level_topic     — where the bridge lands the RAW `std_msgs/Bool` level in
-  #                     ROS. Bridging the level onto `detection_topic` would put
-  #                     two publishers of two different types on the one topic the
-  #                     line acts on, and they would fight over it.
-  #
-  # They are different interfaces, not two names for one: the level is a state
-  # republished periodically and a dropped sample is recovered by the next; the
-  # event is an edge that must not be dropped at all. L3 turns one into the other.
+  #   detection_topic — the name the break-beam plugin advertises on the GAZEBO
+  #                     transport, from one call to `ids.interface`.
+  #   level_topic     — where the bridge lands that RAW `std_msgs/Bool` level in
+  #                     ROS. The reader refuses a plan that makes the two one.
   sensors:
     - asset: infeed_beam
       detection_topic: /cite/cell_b/infeed_beam/detection
       level_topic: /cite/cell_b/infeed_beam/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_b__infeed_beam__beam
       beam_axis: y
       beam_length_m: 0.5
     - asset: outfeed_beam
       detection_topic: /cite/cell_b/outfeed_beam/detection
       level_topic: /cite/cell_b/outfeed_beam/detection_level
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: cell_b__outfeed_beam__beam
       beam_axis: y
       beam_length_m: 0.5
-
-  # L3 detection for the whole zone: one server for every beam, because a beam
-  # watches a belt rather than a robot.
-  detection:
-    namespace: /cite/cell_b/detection
-    detect_action: /cite/cell_b/detection/detect
 
   # What each arm's program does, step by step, read from the program file the
   # real robot's programming tool wrote (ADR-0067) and converted to SI units by

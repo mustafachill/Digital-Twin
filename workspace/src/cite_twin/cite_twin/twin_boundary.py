@@ -266,10 +266,9 @@ class TwinBoundary:
         # plan reader's own message, rather than L5 inventing a second side.
         #
         # Built one at a time and released on the way out, because the refusal
-        # is a real case on this repository's own model, not a hypothetical one:
-        # `cell_a` ships `twin: {sides: single}` while `cell_b` is paired
-        # (ADR-0059), so L5 pointed at that zone reaches the second `address()`
-        # call and raises. Constructing both in one literal
+        # is a real case, not a hypothetical one: any zone declaring
+        # `twin: {sides: single}` reaches the second `address()` call and
+        # raises. Constructing both in one literal
         # left the plant's `rclpy` context initialised with no reference to it
         # anywhere — `main`'s `finally` only stops a boundary that finished
         # constructing — and the process then exited with a live context.
@@ -1272,14 +1271,12 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     `--plan` exists so a test can drive L5 against a plan that declares a
     counterpart WITHOUT editing L0. `cell_b` declares `twin: {sides: pair}` as of
     2026-09-18 (ADR-0059), so L5 does come up against that zone's generated plan;
-    `cell_a` stays `single`, and a boundary needs two sides, so L5 cannot come up
-    against ITS generated plan at all — which is the plan this package's launch
-    tests fabricate a counterpart onto (`docs/open-work.md` #62). It is not a
-    second source of truth — the default is the generated plan and nothing but a
-    test passes anything else.
+    this package's mixed-far-side launch test hands it an edited copy of that plan.
+    It is not a second source of truth — the default is the generated plan and
+    nothing but a test passes anything else.
     """
     parser = argparse.ArgumentParser(prog="cite_twin", description=__doc__)
-    # NO DEFAULT (ADR-0056 decision 4). `--zone` used to default to `cell_a`,
+    # NO DEFAULT (ADR-0056 decision 4). `--zone` used to default to a literal zone,
     # which decided which cell a boundary spanned without anyone naming it.
     parser.add_argument("--zone", default="")
     parser.add_argument("--plan", default="")
@@ -1319,9 +1316,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Both were given and they disagree. `--zone` is not read again after the
-    # plan is located — `main` spans `plan.zone` — so passing `--zone cell_b`
-    # beside `--plan .../cell_a_plan.yaml` satisfied the condition in
-    # `_arguments` and then silently spanned `cell_a`. L5 is the one component
+    # plan is located — `main` spans `plan.zone` — so passing `--zone X`
+    # beside `--plan .../cell_b_plan.yaml` satisfied the condition in
+    # `_arguments` and then silently spanned `cell_b`. L5 is the one component
     # holding endpoints in BOTH domains and computing a hardware gate from the
     # plan's declared backends, so the cell it is wired across is not a detail
     # to be inferred from whichever argument happened to win.

@@ -15,14 +15,15 @@
 """A facility node that was never told which cell it serves refuses to start.
 
 WHAT THIS CATCHES, stated as the edit rather than as the rule. Someone puts
-`self.declare_parameter("zone", "cell_a")` back into one of these four nodes —
+`self.declare_parameter("zone", "<some zone>")` back into one of these nodes —
 it is a one-word change, it makes a launch that forgot the parameter work again,
-and every unit test of `require_zone` still passes, because a node holding
-`"cell_a"` never calls it with an empty string. Then `./scripts/sim --zone cell_b`
-brings up `cell_b` with `cell_a`'s planning scene: twelve collision objects three
-metres away in +y, `cell_b`'s own table, pedestal, conveyor and beams absent, and
-`_verify` reading the objects back and succeeding because they were applied. The
-first `Pick` plans a Pilz straight line onto a surface MoveIt cannot see.
+and every unit test of `require_zone` still passes, because a node holding a
+name never calls it with an empty string. Then bringing up any other zone loads
+that zone's planning scene: another cell's collision objects, this cell's own
+table, conveyor and beams absent, and `_verify` reading the objects back and
+succeeding because they were applied. The first `Pick` plans a Pilz straight
+line onto a surface MoveIt cannot see. With one zone declared (ADR-0069) the
+damage is latent, and it is armed the day a second zone is declared.
 
 So these tests assert on the NODE and not on the rule: with nothing supplying the
 parameter, configuration must fail. A restored default makes configuration
@@ -39,7 +40,6 @@ from cite_facility.artifacts import ArtifactError, require_zone, require_zones
 from cite_facility.frame_server import FrameServer
 from cite_facility.model_info import ModelInfo
 from cite_facility.planning_scene_loader import PlanningSceneLoader
-from cite_facility.topology_server import TopologyServer
 import pytest
 import rclpy
 from rclpy.lifecycle import TransitionCallbackReturn
@@ -47,7 +47,7 @@ from rclpy.lifecycle import TransitionCallbackReturn
 #: The nodes that read a zone, and how each one is asked to use it. Named rather
 #: than discovered: a test that walks the package passes when a node stops being
 #: in it, which is the failure mode this file exists to prevent.
-MANAGED = (FrameServer, ModelInfo, TopologyServer)
+MANAGED = (FrameServer, ModelInfo)
 
 
 @pytest.fixture()
@@ -134,7 +134,7 @@ def test_the_planning_scene_loader_given_no_zone_refuses_to_load(ros) -> None:
     also on `if not apply_client.wait_for_service(...)` — and in a unit-test
     environment no `move_group` ever answers, so `load() != 0` is satisfied by a
     node that never looked at its zone at all. Restoring
-    `self.declare_parameter("zone", "cell_a")` — the exact edit this file's
+    `self.declare_parameter("zone", "<some zone>")` — the exact edit this file's
     docstring names — left that assertion passing; what surfaced the mutation was
     the ament ctest wall-clock timeout, which reports "timeout" rather than a
     diagnosis and stops working the moment anyone lengthens `TIMEOUT` or shortens
@@ -192,7 +192,7 @@ def test_a_managed_node_declares_no_zone_of_its_own(ros, node_type) -> None:
 
     The test above is the behavioural one and this is its diagnosis: it names
     the default that came back, so the failure reads as "someone restored
-    'cell_a'" instead of "configure returned the wrong thing".
+    '<some zone>'" instead of "configure returned the wrong thing".
     """
     node = node_type()
     try:
@@ -217,7 +217,7 @@ def test_a_named_zone_still_configures(ros, node_type) -> None:
     node = node_type()
     try:
         name = "zones" if node_type is ModelInfo else "zone"
-        value = ["cell_a"] if node_type is ModelInfo else "cell_a"
+        value = ["cell_b"] if node_type is ModelInfo else "cell_b"
         node.set_parameters([rclpy.Parameter(name, value=value)])
         if node_type is ModelInfo:
             # Stood down so that this test answers the question it asks. The

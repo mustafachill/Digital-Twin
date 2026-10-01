@@ -98,9 +98,7 @@ NODE_NAME = "twin_boundary"
 #:
 #: Keyed by that dataclass's own field names and checked against them at import,
 #: so a sixth skill added to the plan reader is a failure here rather than a
-#: skill L5 silently does not route. `Detect` is deliberately absent: it is
-#: zone-level rather than per-asset, and it observes rather than commands, so it
-#: is not a goal that crosses (ADR-0050 decision 2 is about commands).
+#: skill L5 silently does not route.
 SKILL_ACTION_TYPES: Mapping[str, type] = {
     "move_to": MoveTo,
     "pick": Pick,
@@ -225,11 +223,11 @@ class BoundaryError(Exception):
 def operator_endpoint(name: str) -> str:
     """Form the `/cite/twin/...` name L5 advertises for a side-owned interface.
 
-    `/cite/cell_a/arm_1/move_to` becomes `/cite/twin/cell_a/arm_1/move_to`.
+    `/cite/cell_b/picker/move_to` becomes `/cite/twin/cell_b/picker/move_to`.
 
     **The operator's command enters L5 and not the plant's skill server**, and
     it cannot enter the plant's skill server and be observed there: both sides
-    carry identical names, so L5 cannot serve `/cite/cell_a/arm_1/move_to`
+    carry identical names, so L5 cannot serve `/cite/cell_b/picker/move_to`
     beside the plant's own server, and reading another server's goals is not
     something the action protocol offers (ADR-0050 decision 2).
 
@@ -472,5 +470,5 @@ def twin_endpoints() -> tuple[str, ...]:
     """
     # `SetMode.Request.SERVICE` and not `SetMode.SERVICE`: rosidl puts a
     # service's constants on the section they were declared in, which is how
-    # C++ reaches it too (`ResetStation::Request::SERVICE`).
+    # C++ reaches it too (`SetMode::Request::SERVICE`).
     return (TwinMode.TOPIC, DivergenceMetrics.TOPIC, SetMode.Request.SERVICE)

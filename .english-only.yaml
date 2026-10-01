@@ -84,7 +84,7 @@ signals:
 # One exact repository-relative path per entry, and a `reason` that is not optional. No
 # globs, no directory prefixes, and no inline suppression comment — an inline marker is the
 # easiest possible hatch to reach, and a rule whose hatch is easy to reach is not a rule.
-# The precedent is the teardown exemption in `tests/scenarios/continuous_line.py`, kept at
+# The precedent is the scenarios' teardown exemption (`tests/scenarios/bringup.py`), kept at
 # "one signal, one process name" and recorded in CLAUDE.md §2 as never having been widened.
 #
 # Two things keep this list from becoming a blanket. An entry whose file no longer contains

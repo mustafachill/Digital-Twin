@@ -48,7 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from cite_bringup.plan import Plan
 
 #: Every mode, under the name every document writes it by. Mapped rather than
-#: formatted, for the reason `cite_facility.topology_server.STATION_TYPES` is: a
+#: formatted, so that a
 #: mode the message grows and this table does not know about is refused by name
 #: at the boundary, rather than being reported as a number no reader can act on.
 #:
@@ -295,12 +295,11 @@ def deployment_from_plan(plan: Plan) -> Deployment:
     `__init__` can reach that. Built here, the whole of it is assertable on the
     shipped single-sided plan without a node, a graph or a cell.
 
-    **It asks the plan's TOTAL accessor and never the refusing one.** `cell_a`
-    declares `twin: {sides: single}` (ADR-0059 leaves it there), so no controller
-    manager of that zone states a counterpart, and
-    `commands_physical_hardware_on` refuses an undeclared side with
-    `SideNotDeclaredError`. Calling that here would raise on a zone this
-    repository actually ships. `commands_physical_hardware_on_or_none` returns
+    **It asks the plan's TOTAL accessor and never the refusing one.** A zone
+    may declare `twin: {sides: single}`, and then no controller manager of it
+    states a counterpart and `commands_physical_hardware_on` refuses an
+    undeclared side with `SideNotDeclaredError`. Calling that here would raise
+    on any single-sided zone. `commands_physical_hardware_on_or_none` returns
     the `None` `Deployment` needs, with the same meaning `Deployment` gives it,
     so the distinction survives the crossing instead of being rebuilt from an
     exception at this end.

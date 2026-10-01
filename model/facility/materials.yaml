@@ -6,7 +6,7 @@ schema: cite/materials/v1
 #
 # WHY THIS FILE EXISTS. `Body.material` has carried a name on every authored body
 # since the component library was written — `table_top`, `conveyor_frame`,
-# `pedestal_steel`, `sensor_housing`, `workpiece_stock` — and until this file
+# `sensor_housing`, `workpiece_stock` — and until this file
 # existed not one of them resolved to anything. There was no library, no rule
 # requiring one, and no emitter: every `<visual>` in the generated scene was a
 # bare `<geometry>`, every renderer fell back to its own default, and the project
@@ -47,7 +47,7 @@ schema: cite/materials/v1
 # THAT EXCEPTION IS HELD BY A RULE AND NOT BY THIS PARAGRAPH.
 # `scene-material-clips`, in `cite_tools.validate.physical`, is an ERROR on any
 # component above the ceiling worn by a type something in the model instantiates
-# — so giving `workpiece_stock` to a pedestal, or giving the work-piece an
+# — so giving `workpiece_stock` to a table, or giving the work-piece an
 # instance, refuses at validate time. It was prose alone for one commit, which is
 # a measured constraint held by a comment, and the reviewer was right to say so:
 # the safety above is a property of today's model rather than a rule, and the
@@ -60,18 +60,11 @@ schema: cite/materials/v1
 # edge visible.
 materials:
   # The conveyor frame: powder-coated machine grey-blue, the colour a belt stand
-  # is usually painted. Distinctly cooler and darker than the pedestals so that
-  # the two families of steel in the cell do not read as one. The linear track's
-  # rail wears it too: it is machine, not structure.
+  # is usually painted. The linear track's rail wears it too: it is machine,
+  # not structure.
   - id: conveyor_frame
     ambient: [0.12, 0.15, 0.19, 1.0]
     diffuse: [0.28, 0.34, 0.42, 1.0]
-
-  # The arm pedestals: bare structural steel, warmer and lighter than the belt
-  # stands and plainly not the ground plane, which is a neutral grey.
-  - id: pedestal_steel
-    ambient: [0.22, 0.22, 0.24, 1.0]
-    diffuse: [0.52, 0.53, 0.56, 1.0]
 
   # A break-beam housing: safety yellow, which is what these are on a real line
   # and also the one thing in the cell that has to be findable at a glance when

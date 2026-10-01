@@ -1,28 +1,3 @@
-msg/ConveyorState.msg
-  std_msgs/Header header
-  string asset_id
-  uint8 MODE_STOPPED=0
-  uint8 MODE_RUNNING=1
-  uint8 MODE_FAULTED=2
-  uint8 mode
-  float64 commanded_speed_mps
-  float64 measured_speed_mps
-  uint32 workpieces_on_belt
-msg/Detection.msg
-  string workpiece_id
-  string workpiece_type
-  geometry_msgs/PoseStamped pose
-  float64 confidence
-msg/DetectionEvent.msg
-  std_msgs/Header header
-  string asset_id
-  uint8 STATE_CLEAR=0
-  uint8 STATE_BLOCKED=1
-  uint8 state
-  uint8 previous_state
-  builtin_interfaces/Duration duration_in_previous_state
-  geometry_msgs/Point position
-  string workpiece_id
 msg/DivergenceMetrics.msg
   string TOPIC="/cite/twin/divergence"
   std_msgs/Header header
@@ -42,30 +17,6 @@ msg/DivergenceMetrics.msg
   float64 window_s
   bool far_side_physical
   bool counterpart_observed
-msg/LineState.msg
-  string TOPIC="/cite/line/state"
-  std_msgs/Header header
-  string asset_id
-  uint8 STATE_STOPPED=0
-  uint8 STATE_RUNNING=1
-  uint8 STATE_PAUSED=2
-  uint8 STATE_BLOCKED=3
-  uint8 STATE_FAULTED=4
-  uint8 STATE_STALLED=5
-  uint8 state
-  StationState[] stations
-  uint32 workpieces_completed
-  float64 cycle_time_s
-  float64 throughput_per_hour
-  string blocked_reason
-  string[] stall_reasons
-msg/LineTopology.msg
-  string TOPIC="/cite/line/topology"
-  std_msgs/Header header
-  string zone
-  string flow_id
-  StationTopology[] stations
-  StationEdge[] edges
 msg/ModelVersion.msg
   std_msgs/Header header
   string asset_id
@@ -117,39 +68,6 @@ msg/SafetyState.msg
   uint8 estop_source
   builtin_interfaces/Time estop_asserted_at
   string detail
-msg/StationEdge.msg
-  string from_station_id
-  string to_station_id
-  string via_asset_id
-  uint32 buffer_capacity
-msg/StationState.msg
-  string station_id
-  string actor_asset_id
-  uint8 STATE_IDLE=0
-  uint8 STATE_WAITING=1
-  uint8 STATE_WORKING=2
-  uint8 STATE_BLOCKED=3
-  uint8 STATE_FAULTED=4
-  uint8 state
-  uint32 buffer_occupancy
-  uint32 buffer_capacity
-  string current_workpiece_id
-msg/StationTopology.msg
-  string id
-  uint8 TYPE_SOURCE=0
-  uint8 TYPE_SINK=1
-  uint8 TYPE_TRANSFER=2
-  uint8 type
-  string actor_asset_id
-  uint32 capacity
-  string pick_frame
-  string place_frame
-  string trigger_topic
-  uint8 TRIGGER_ON_CLEAR=0
-  uint8 TRIGGER_ON_BLOCKED=1
-  uint8 trigger_state
-  string[] upstream_ids
-  string[] downstream_ids
 msg/TwinMode.msg
   string TOPIC="/cite/twin/mode"
   uint8 MODE_SIM=0
@@ -167,14 +85,6 @@ msg/TwinMode.msg
 srv/GetModelVersion.srv
   ---
   ModelVersion version
-srv/ResetStation.srv
-  string SERVICE="/cite/line/reset_station"
-  string station_id
-  ---
-  bool accepted
-  ResultCode result
-  uint8 station_state
-  string cleared_reason
 srv/SetMode.srv
   string SERVICE="/cite/twin/set_mode"
   uint8 mode
@@ -184,15 +94,6 @@ srv/SetMode.srv
   bool accepted
   ResultCode result
   uint8 current_mode
-action/Detect.action
-  string region_frame
-  geometry_msgs/Vector3 region_size_m
-  string workpiece_type
-  ---
-  ResultCode result
-  Detection[] detections
-  ---
-  uint32 detections_so_far
 action/Grasp.action
   float64 width_m
   float64 max_effort_n

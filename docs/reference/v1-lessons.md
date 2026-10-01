@@ -109,6 +109,12 @@ project wrote.
 
 ### Which half of it is built
 
+*Overtaken 2026-10-01: everything this section calls built — `cell_a`, its flow document, the
+line coordinator, `line_plan.hpp` and `./scripts/scenario continuous_line` — left the main tree
+with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) and runs,
+frozen, in `projects/01`, where the paths below resolve. The section
+is kept as the record of what Phase 1.D delivered against this requirement.*
+
 The resemblance between this sentence and what Phase 1.D produced is close enough to be
 worth recording and close enough to overclaim, so both halves are stated.
 
@@ -257,7 +263,7 @@ the problem, not an accident of v1.
 | Failure | v1 | Rebuild |
 |---|---|---|
 | A git submodule's contents do not arrive, and the build dies somewhere unrelated | `legacy/README.md` records `gazebo_ros2_control` as a gitlink with no `.gitmodules` entry, resolving to an empty directory on any fresh clone | `scripts/bootstrap` lines 96-108 needs `vcs import --recursive` for `xarm_ros2`'s `xarm_sdk/cxx`, "without it that directory arrives empty and the build fails on `xarm_sdk`" |
-| One model holding several arms gives every controller manager every joint | not reached — v1 spawned separately, and failed on names instead (§4) | `workspace/src/cite_bringup/test/test_plan.py` lines 68-77: "With all three arms in a single model, every controller manager claimed all eighteen joints and wrote to them each cycle" |
+| One model holding several arms gives every controller manager every joint | not reached — v1 spawned separately, and failed on names instead (§4) | `workspace/src/cite_bringup/test/test_plan.py`, `test_each_arm_has_its_own_description`'s docstring: "With all three arms in a single model, every controller manager claimed all eighteen joints and wrote to them each cycle" |
 | Neither simulator offers a surface-velocity primitive, so "the belt moves things" has to be faked, and the fake is easy to describe wrongly | the belt link genuinely moves, in a 10 mm sawtooth (§3) | `workspace/src/cite_simulation/src/conveyor.cpp` lines 26-37: an earlier draft claimed `SetLinearVelocity` "keeps the surface where it is"; it moves the link |
 | A command issued unconditionally every step is a command that is never withdrawn | the plugin drives `belt_joint_` on every world update whether or not the belt is enabled (§3) | `conveyor.cpp` lines 63-75: `LinearVelocityCmd` is zeroed but never removed, so a part carried once sat under a standing zero command for the rest of the run |
 | The vendor gripper's follower joints are resolved by nothing | the mimic plugin is commented out of the build, and the gripper is on by default (§2) | [ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md): not by `ros2_control`, not by dartsim, not by the Classic plugin |

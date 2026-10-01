@@ -316,8 +316,10 @@ class MoveItConfig:
     #: endpoints, so that the skill server can refuse to have such a request
     #: rescued by a planner that samples (ADR-0027).
     cartesian_planner_ids: tuple[str, ...]
-    #: The arm's named joint poses (ADR-0066), by name. Empty where L0 declares
-    #: none; `home` is never among them, because it is `home_rad` above.
+    #: The arm's named joint poses, by name: the poses of the program it runs
+    #: (ADR-0067), which the generator reads from the program file. Empty for an
+    #: arm with no program; `home` is never among them, because it is
+    #: `home_rad` above.
     poses_rad: Mapping[str, tuple[float, ...]]
 
 
@@ -617,12 +619,11 @@ class GraspHold:
 class Sensor:
     """One break beam: where its level arrives, and where its events go.
 
-    `level_topic` and `detection_topic` are two interfaces, not two names for
-    one. The level is a state the beam republishes periodically; the event is
-    the edge L3 makes from it, and the process topology already gives
-    `detection_topic` to a station as a `DetectionEvent` trigger. Bridging the
-    raw `std_msgs/Bool` onto that name would put a second publisher of a second
-    type on the topic the line acts on.
+    `detection_topic` is the name the beam plugin advertises on the Gazebo side;
+    `level_topic` is where the bridge lands that `std_msgs/Bool` level in ROS.
+    They are kept apart so that the ROS name of the raw level is stated by the
+    plan rather than inherited from the plugin, and the reader refuses a plan
+    that makes them one.
     """
 
     asset: str
@@ -631,18 +632,6 @@ class Sensor:
     frame_id: str
     beam_axis: str
     beam_length_m: float
-
-
-@dataclass(frozen=True)
-class Detection:
-    """Where the zone's single detection server runs, and what it advertises.
-
-    One per zone. A break beam watches a belt rather than a robot, so three
-    servers would give the question "did the piece pass beam 2" three answers.
-    """
-
-    namespace: str
-    detect_action: str
 
 
 @dataclass(frozen=True)
@@ -726,10 +715,6 @@ class Plan:
     #: grasp nothing, and read by the simulated launch alone (ADR-0065).
     grasp_holds: tuple[GraspHold, ...]
     sensors: tuple[Sensor, ...]
-    #: `None` when the zone declares no sensors, which is a real state and not a
-    #: fault: a cell with no beams has nothing for a detection server to watch,
-    #: and starting one would advertise `detect` over an empty sensor table.
-    detection: Detection | None
     #: `None` when the zone declares no work-piece whose width L0 can state — no
     #: part at all, or a mesh part whose extents live in a file L1 owns. A real
     #: state and not a fault HERE, because a facility that grasps nothing has no
@@ -885,20 +870,11 @@ def load(path: Path) -> Plan:
     for sensor in sensors:
         if sensor.level_topic == sensor.detection_topic:
             raise PlanError(
-                f"sensor {sensor.asset!r} names one topic for both its raw level and its "
-                f"typed events ({sensor.detection_topic}). The bridge would publish a "
-                "std_msgs/Bool on the topic a station subscribes to for DetectionEvent, "
-                "and the two would fight over it."
+                f"sensor {sensor.asset!r} names one topic for both its plugin's name and "
+                f"its level in ROS ({sensor.detection_topic}). The bridge lands the level "
+                "under `level_topic` by a remapping, and a remapping onto its own name is "
+                "a plan that never said where the level goes."
             )
-
-    detection = _detection(_optional(plan, "detection"))
-    if sensors and detection is None:
-        raise PlanError(
-            f"zone {_require(plan, 'zone', 'plan')!r} declares {len(sensors)} sensor(s) and "
-            "no `detection:` block, so nothing says where the server that turns their "
-            "levels into typed events runs. The beams would be bridged into ROS and "
-            "read by nobody."
-        )
 
     return Plan(
         zone=_require(plan, "zone", "plan"),
@@ -912,7 +888,6 @@ def load(path: Path) -> Plan:
         conveyors=conveyors,
         grasp_holds=grasp_holds,
         sensors=sensors,
-        detection=detection,
         workpieces=_workpieces(_optional(plan, "workpieces")),
         programs=tuple(
             _program(entry, index) for index, entry in enumerate(_sequence(plan, "programs"))
@@ -1274,15 +1249,6 @@ def require_domain(plan: Plan, side: str, environ: Mapping[str, str]) -> None:
         "the wrong domain is either two identical node sets and two /clock "
         "publishers in one graph, or a cell alone on a domain nobody addresses. "
         "Neither reports anything (ADR-0044, clauses 1 and 4)."
-    )
-
-
-def _detection(entry: object | None) -> Detection | None:
-    if entry is None:
-        return None
-    return Detection(
-        namespace=_require(entry, "namespace", "detection"),
-        detect_action=_require(entry, "detect_action", "detection"),
     )
 
 
@@ -1658,7 +1624,7 @@ def _moveit(entry: object | None, where: str = "plan") -> MoveItConfig | None:
 
 
 def _poses(entry: object, where: str) -> Mapping[str, tuple[float, ...]]:
-    """Read `moveit.poses_rad`, which the plan emits only where L0 declares poses."""
+    """Read `moveit.poses_rad`, which the plan emits only for an arm with a program."""
     poses = _optional(entry, "poses_rad") or {}
     if not isinstance(poses, dict):
         raise PlanError(f"{where}: 'poses_rad' must be a mapping, not {_kind(poses)}")
@@ -1799,18 +1765,23 @@ def default_plan_path(zone: str) -> Path:
     """Where the generated bring-up plan for ``zone`` lives.
 
     THE ZONE IS REQUIRED, AND THAT IS THE WHOLE POINT OF THE PARAMETER. It
-    defaulted to `cell_a` until ADR-0056, and while the facility declared one
-    zone that default was invisible rather than harmless: every caller that
+    defaulted to a literal zone until ADR-0056, and while the facility declared
+    one zone that default was invisible rather than harmless: every caller that
     omitted it was choosing a cell without saying so, and there was no way to
-    tell a caller that meant `cell_a` from one that had simply never thought
+    tell a caller that meant that zone from one that had simply never thought
     about it. A second zone turns each of those into a silently wrong answer —
     the plan loads, the names resolve, and the cell that comes up is not the one
-    the caller wanted.
+    the caller wanted. Defaulting to the model's only zone (ADR-0069 decision
+    5) happens before anything reaches this function, in the shell entry points
+    and the scenarios, which run the SOURCE-TREE `cite_bringup/zones.py` by its
+    path. That file refuses to be imported from an install prefix, so nothing
+    that calls this function — a node, a launch file, a supervisor — can ask it
+    for a default: it is handed a zone and passes it here.
 
     Removing the default is what turned them into visible call sites. It is the
-    same rule `cite_bringup.gz.plan_for`, `readiness_witness`, `skill_server.cpp`
-    and `detection_server.cpp` already follow, and for the reason those two C++
-    nodes state at their own parameter declarations: guessing a name puts the
+    same rule `cite_bringup.gz.plan_for`, `readiness_witness` and
+    `skill_server.cpp` already follow, and for the reason that C++ node states
+    at its own parameter declaration: guessing a name puts the
     work somewhere nothing is looking.
     """
     return resolve_uri(f"package://cite_generated/bringup/{zone}_plan.yaml")

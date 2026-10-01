@@ -40,7 +40,7 @@ from shape_msgs.msg import SolidPrimitive
 
 
 def test_every_generated_body_becomes_a_collision_object() -> None:
-    frame_id, bodies = planning_scene("cell_a")
+    frame_id, bodies = planning_scene("cell_b")
     objects = [_collision_object(body) for body in bodies]
     assert len(objects) == len(bodies)
     for obj in objects:

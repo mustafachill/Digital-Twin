@@ -54,12 +54,12 @@ import pytest
 import yaml
 
 LAUNCH_FILE = Path(__file__).resolve().parent.parent / "launch" / "simulation.launch.py"
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
 
 #: The managed nodes bring-up must not proceed without. Named rather than
-#: counted: a test that asserts "three handlers exist" passes when the wrong
-#: three exist.
-MANAGED = ("frame_server", "model_info", "topology_server")
+#: counted: a test that asserts "two handlers exist" passes when the wrong
+#: two exist.
+MANAGED = ("frame_server", "model_info")
 
 
 @pytest.fixture()
@@ -94,17 +94,10 @@ def side_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture()
 def context() -> LaunchContext:
     ctx = LaunchContext()
-    ctx.launch_configurations["zone"] = "cell_a"
+    ctx.launch_configurations["zone"] = "cell_b"
     ctx.launch_configurations["headless"] = "true"
-    ctx.launch_configurations["line"] = "false"
     ctx.launch_configurations["side"] = PLANT_SIDE
     return ctx
-
-
-@pytest.fixture()
-def line_context(context: LaunchContext) -> LaunchContext:
-    context.launch_configurations["line"] = "true"
-    return context
 
 
 class _Exited:
@@ -125,15 +118,15 @@ def _plan_with_backend(tmp_path: Path, backend: str) -> Path:
     alone moves nothing, which is the whole point of that record.
     """
     document = copy.deepcopy(_document())
-    document["plan"]["controller_managers"][1]["backend"] = backend
-    document["plan"]["controller_managers"][1]["commands_physical_hardware"] = True
+    document["plan"]["controller_managers"][0]["backend"] = backend
+    document["plan"]["controller_managers"][0]["commands_physical_hardware"] = True
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return path
 
 
 def _use(module: ModuleType, monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
-    monkeypatch.setattr(module, "default_plan_path", lambda zone="cell_a": path)
+    monkeypatch.setattr(module, "default_plan_path", lambda zone: path)
 
 
 def _kinds(actions: list) -> list[str]:
@@ -182,7 +175,55 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
     )
     assert not _processes(actions), "nothing may be started on the way to refusing"
     reason = _refusal(actions, context)
-    assert "arm_2" in reason and HARDWARE_OPT_IN_ENV in reason
+    assert "picker" in reason and HARDWARE_OPT_IN_ENV in reason
+
+
+def _ends_non_zero(module: ModuleType, entities: list, context: LaunchContext) -> bool:
+    """Whether ``entities`` end the launch with a non-zero status.
+
+    `Shutdown` alone exits 0; what makes `ros2 launch` exit 1 is an exception
+    reaching its run loop. So the entities have to carry, after their
+    `Shutdown`, an action that raises `BringUpFailed` when it is executed.
+    """
+    kinds = _kinds(entities)
+    if "Shutdown" not in kinds:
+        return False
+    after = entities[kinds.index("Shutdown"):]
+    for entity in after:
+        if not isinstance(entity, module.FailTheLaunch):
+            continue
+        try:
+            entity.execute(context)
+        except module.BringUpFailed:
+            return True
+    return False
+
+
+def test_a_refusal_ends_the_launch_non_zero(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """`./scripts/sim --zone <undeclared>` printed BRING-UP FAILED and exited 0.
+
+    The refusal was a `LogInfo` and a `Shutdown`, and a `Shutdown` ends a launch
+    successfully. Measured before the fix with an undeclared zone: `exit=0`.
+    """
+    _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+
+    assert _ends_non_zero(module, module._bring_up(context), context)
+
+
+def test_a_missing_plan_ends_the_launch_non_zero(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """The exact path an undeclared zone takes: no plan file under that name."""
+    _use(module, monkeypatch, tmp_path / "zone_nobody_declared_plan.yaml")
+
+    actions = module._bring_up(context)
+
+    assert not _processes(actions)
+    assert "zone_nobody_declared_plan.yaml" in _refusal(actions, context)
+    assert _ends_non_zero(module, actions, context)
 
 
 def test_a_hardware_plan_starts_with_the_opt_in(
@@ -256,6 +297,38 @@ def test_no_process_exit_handler_passes_a_failure_through(
             f"{handler.describe()[0]} continues after a non-zero exit, which "
             "leaves a half-built system running"
         )
+        assert _ends_non_zero(module, entities, context), (
+            f"{handler.describe()[0]} stops the launch with status 0"
+        )
+
+
+def test_an_interrupted_bring_up_is_not_a_refusal(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """Ctrl-C mid-bring-up is not BRING-UP FAILED, and does not change the status.
+
+    An interrupted step exits non-zero. Before the guard, the gate after it
+    logged "BRING-UP FAILED before ..." and `FailTheLaunch` made the launch
+    exit 1 — blaming the cell for the operator's Ctrl-C.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
+    handlers = [
+        action.event_handler
+        for action in actions
+        if isinstance(action, RegisterEventHandler)
+        and isinstance(action.event_handler, OnProcessExit)
+    ]
+    assert handlers
+    context._set_is_shutdown(True)
+
+    for handler in handlers:
+        assert not handler.handle(_Exited(returncode=-2), context), (
+            f"{handler.describe()[0]} reports a refusal while the launch is stopping"
+        )
+    # The transition refusals are static entity lists, so their last action is
+    # what has to stand down.
+    module.FailTheLaunch().execute(context)
 
 
 def test_a_successful_exit_continues_the_chain(
@@ -332,6 +405,11 @@ def test_a_managed_node_that_fails_a_transition_stops_bring_up(
             f"a managed node reaching {start_state} -> {goal_state} does not stop "
             "bring-up; the cell would come up without it"
         )
+        assert all(
+            _ends_non_zero(module, list(handler.handle(event, context) or []), context)
+            for handler in handlers
+            if handler.matches(event)
+        ), f"{start_state} -> {goal_state} stops the launch with status 0"
 
 
 def test_activation_is_triggered_only_by_a_successful_configure(
@@ -373,8 +451,8 @@ def test_activation_is_triggered_only_by_a_successful_configure(
 # in `move_group`, blaming the model. `docs/open-work.md` #72.
 #
 # Two properties are checked here and they are separable. The FIRST is that the
-# driver is asked about every managed node — a driver that is handed two of three
-# exits 0 having confirmed nothing about the third. The SECOND is that nothing
+# driver is asked about every managed node — a driver that is handed one of two
+# exits 0 having confirmed nothing about the other. The SECOND is that nothing
 # downstream of `_facility` is started before that exit, which is what turns a
 # stalled node from a ten-second misdirection into a one-second diagnosis.
 
@@ -411,8 +489,8 @@ def test_the_driver_is_asked_about_every_managed_node(module: ModuleType) -> Non
     `_facility` hands back the fully-qualified name of each node it started, so a
     node added there is driven with nothing else to remember — which is why this
     asserts against `MANAGED` above, the deliberately independent statement of
-    what the three are. A driver handed two of three would exit 0 having
-    confirmed nothing about the third, and every gate below it would fire.
+    what they are. A driver handed one of two would exit 0 having confirmed
+    nothing about the other, and every gate below it would fire.
     """
     _, managed = module._facility(_plan())
     assert [name.rsplit("/", 1)[-1] for name in managed] == list(MANAGED)
@@ -442,7 +520,7 @@ def test_nothing_downstream_of_the_facility_starts_until_the_driver_exits(
     actions = module._bring_up(context)
     driver = _driver(actions)
 
-    downstream = ("spawner", "move_group", "detection_server")
+    downstream = ("spawner", "move_group")
     for executable in downstream:
         assert _nodes(actions, executable, context), (
             f"{executable} is not in the description at all, so this test would "
@@ -462,8 +540,9 @@ def test_nothing_downstream_of_the_facility_starts_until_the_driver_exits(
         for entity in (action.event_handler.handle(_exit(driver, 0), context) or [])
     ]
     assert started.count("spawner") == 1, "the controller chain has more than one head"
-    assert started.count("move_group") == 3, started
-    assert started.count("detection_server") == 1, started
+    planned = [m for m in _plan().controller_managers if m.moveit is not None]
+    assert planned, "the plan carries no arm with MoveIt, so this would count nothing"
+    assert started.count("move_group") == len(planned), started
 
 
 def test_no_transition_event_makes_anything_happen(
@@ -499,8 +578,12 @@ def test_no_transition_event_makes_anything_happen(
                 for handler in handlers:
                     if not handler.matches(event):
                         continue
+                    # `FailTheLaunch` is part of the stop — it only sets the
+                    # launch's exit status — and starts nothing.
                     for entity in handler.handle(event, context) or []:
-                        assert type(entity).__name__ in ("LogInfo", "Shutdown"), (
+                        assert type(entity).__name__ in (
+                            "LogInfo", "Shutdown", "FailTheLaunch"
+                        ), (
                             f"{start_state} -> {goal_state} makes bring-up do "
                             f"something ({type(entity).__name__}), and a "
                             "transition event can be dropped"
@@ -565,7 +648,7 @@ def test_only_a_window_is_given_the_gui_config(
         assert "--gui-config" not in command
     else:
         path = command[command.index("--gui-config") + 1]
-        assert path.endswith("worlds/cell_a_gui.config")
+        assert path.endswith("worlds/cell_b_gui.config")
         assert command[-1].endswith(".sdf"), "the world must stay the last argument"
 
 
@@ -614,8 +697,10 @@ def test_the_planning_scene_is_loaded_before_the_skills(
             elif name == "skill_server":
                 skills.append(entity)
 
-    assert len(loaders) == 3, "one planning-scene loader per arm"
-    assert len(skills) == 3, "one skill server per arm"
+    planned = [m for m in _plan().controller_managers if m.moveit is not None]
+    assert planned, "the plan carries no arm with MoveIt, so this would count nothing"
+    assert len(loaders) == len(planned), "one planning-scene loader per arm"
+    assert len(skills) == len(planned), "one skill server per arm"
 
     # Ordering: the skill servers must be reachable only through a chain that has
     # already passed a loader. Structurally, the loaders are produced by handlers
@@ -628,7 +713,7 @@ def test_the_planning_scene_is_loaded_before_the_skills(
         for e in (action.event_handler.handle(_Exited(returncode=0), context) or [])
         if getattr(e, "node_executable", None) in ("planning_scene_loader.py", "skill_server")
     ]
-    assert order.count("loader") == 3
+    assert order.count("loader") == len(planned)
     assert order.index("skill") > max(
         index for index, kind in enumerate(order) if kind == "loader"
     ), "a skill server can start before the planning scene is loaded"
@@ -678,16 +763,16 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
 
     The belt and beam plugins were built, instantiated by the generated world and
     publishing on the Gazebo transport under exactly these names — and
-    `cite_bringup` bridged `/clock` and nothing else. Ten declared interfaces had
-    no ROS endpoint at all — a command and a state topic for each of the three
-    belts, and a level for each of the four beams — so the bring-up plan
-    advertised a system the running one did not provide.
+    `cite_bringup` bridged `/clock` and nothing else. Every declared aid
+    interface had no ROS endpoint at all — a command and a state topic for each
+    belt, and a level for each beam — so the bring-up plan advertised a system
+    the running one did not provide.
 
-    The count below is arithmetic on the plan rather than the literal ten, for
-    the reason this docstring had to be corrected: a number written out is a
-    number that stops being true when the cell gains a sensor.
+    The count below is arithmetic on the plan rather than a literal: a number
+    written out is a number that stops being true when the cell gains a sensor.
     """
     plan = _plan()
+    assert plan.conveyors and plan.sensors, "the plan bridges no aid, so this checks nothing"
     arguments, _ = module._bridge_topics(plan)
 
     assert module.CLOCK_BRIDGE in arguments
@@ -728,13 +813,11 @@ def test_the_bridge_directions_are_not_interchangeable(module: ModuleType) -> No
     assert all("[" in a and "]" not in a for a in inbound)
 
 
-def test_the_bridged_level_never_lands_on_the_event_topic(module: ModuleType) -> None:
-    """The collision the whole naming split exists to prevent.
+def test_the_bridged_level_lands_on_the_plans_level_topic(module: ModuleType) -> None:
+    """The level reaches ROS under the name the plan states for it.
 
-    `cell_a_flow.yaml` gives `/cite/<zone>/<asset>/detection` to L4 as a typed
-    `DetectionEvent` trigger, and the `Detect` server publishes its events there.
-    A bridge that put a `std_msgs/Bool` on the same name would give one topic two
-    publishers of two types, and both would look healthy in `ros2 topic info`.
+    The Gazebo side keeps the plugin's own name, `detection_topic`, and the ROS
+    end is moved to `level_topic` by a remapping.
     """
     plan = _plan()
     arguments, remappings = module._bridge_topics(plan)
@@ -744,7 +827,7 @@ def test_the_bridged_level_never_lands_on_the_event_topic(module: ModuleType) ->
     for sensor in plan.sensors:
         assert remapped.get(sensor.detection_topic) == sensor.level_topic, (
             f"{sensor.asset}: the raw level would be published on "
-            f"{sensor.detection_topic}, which is the typed event topic"
+            f"{sensor.detection_topic} rather than on the plan's level topic"
         )
     # The bridge argument still names the GAZEBO topic, because that is what the
     # plugin advertises. Only the ROS end moves.
@@ -758,183 +841,6 @@ def test_one_bridge_process_carries_them_all(
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     bridges = _nodes(module._bring_up(context), "parameter_bridge", context)
     assert len(bridges) == 1
-
-
-# --- L3 detection is started, and it is one server for the zone ---------------
-
-
-def test_the_detection_server_is_started_with_every_beam(
-    module: ModuleType, context: LaunchContext, monkeypatch
-) -> None:
-    """Built, installed, tested — and started by no launch graph until now."""
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
-    plan = _plan()
-
-    servers = _nodes(module._bring_up(context), "detection_server", context)
-    assert len(servers) == 1, "one detection server per zone, not one per arm"
-    assert plan.detection is not None
-    assert _namespace(servers[0], context) == plan.detection.namespace
-
-    parameters = module._detection_parameters(plan)
-    assert parameters["zone"] == plan.zone
-    assert parameters["sensors"] == [s.asset for s in plan.sensors]
-    assert parameters["use_sim_time"] is True
-    for sensor in plan.sensors:
-        assert parameters[f"sensor.{sensor.asset}.state_topic"] == sensor.level_topic
-        assert parameters[f"sensor.{sensor.asset}.event_topic"] == sensor.detection_topic
-        assert parameters[f"sensor.{sensor.asset}.frame_id"] == sensor.frame_id
-
-
-def test_the_detection_server_reads_the_level_and_publishes_the_event(
-    module: ModuleType,
-) -> None:
-    """Reversing the two gives a node that subscribes to its own output.
-
-    It would start, log that it is watching every beam, and never see a sample.
-    """
-    plan = _plan()
-    parameters = module._detection_parameters(plan)
-    for sensor in plan.sensors:
-        assert (
-            parameters[f"sensor.{sensor.asset}.state_topic"]
-            != parameters[f"sensor.{sensor.asset}.event_topic"]
-        )
-        # And the level side is the one the bridge writes to.
-        _, remappings = module._bridge_topics(plan)
-        assert (sensor.detection_topic, sensor.level_topic) in remappings
-
-
-# --- L4 is startable, and off by default -------------------------------------
-
-
-def test_the_line_coordinator_is_off_unless_asked_for(
-    module: ModuleType, context: LaunchContext, monkeypatch
-) -> None:
-    """A running coordinator holds all three arms.
-
-    A skill server admits one goal at a time per arm, so anything else driving an
-    arm directly — a scenario, an operator, a diagnostic — would have its goals
-    refused by a server that is busy working.
-    """
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
-    assert not _nodes(module._bring_up(context), "line_orchestrator", context)
-
-
-def test_the_line_coordinator_gets_its_action_names_from_the_plan(
-    module: ModuleType, line_context: LaunchContext, monkeypatch
-) -> None:
-    """Parallel arrays, lined up by asset, every value generated by `ids.py`.
-
-    The shape is `line_orchestrator`'s and is deliberate: a mismatched length is
-    refused at start-up with both lengths named. What has changed is that the
-    names are no longer assembled by whoever launches the node — that put
-    `/cite/<zone>/<asset>/pick` in a second place, outside `ids.py` and outside
-    every test that covers it.
-    """
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
-    coordinators = _nodes(module._bring_up(line_context), "line_orchestrator", line_context)
-    assert len(coordinators) == 1, "one coordinator per zone"
-
-    plan = _plan()
-    parameters = module._line_parameters(plan)
-    assert parameters is not None
-
-    served = [m for m in plan.controller_managers if m.skills is not None]
-    assert served
-    assert parameters["skill_assets"] == [m.asset for m in served]
-    assert parameters["zone"] == plan.zone
-    assert parameters["use_sim_time"] is True
-    for key, attribute in (
-        ("move_to_actions", "move_to"),
-        ("pick_actions", "pick"),
-        ("place_actions", "place"),
-        ("transfer_actions", "transfer"),
-    ):
-        assert parameters[key] == [getattr(m.skills, attribute) for m in served], key
-        assert len(parameters[key]) == len(parameters["skill_assets"])
-
-    # One detection server for the zone, so every station is given the same
-    # action: one name read once, not one name in three places.
-    assert plan.detection is not None
-    assert parameters["detect_actions"] == [plan.detection.detect_action] * len(served)
-
-    assert Path(parameters["station_tree"]).exists(), parameters["station_tree"]
-
-
-def test_the_line_coordinator_is_given_every_belt_drive_from_the_plan(
-    module: ModuleType,
-) -> None:
-    """L4 owns the belt setpoint (ADR-0032), so it has to be given every drive.
-
-    The same parallel-array shape as the skills, and for the same reason. What
-    matters here is that the three arrays line up and that the speed is the plan's
-    own `installed_speed_mps` rather than a number written into this launch file —
-    the belt runs at the speed `model/assets/instances/conveyors.yaml` declares,
-    in one place (P1).
-
-    EVERY belt, not only the indexed ones. Which belts index is derived from the
-    flow by the coordinator; deciding it here would put that rule in a second
-    place, and a belt feeding a sink still has to be started by somebody.
-    """
-    plan = _plan()
-    parameters = module._line_parameters(plan)
-    assert parameters is not None
-
-    assert plan.conveyors, "the generated plan declares no conveyor to command"
-    assert parameters["conveyor_assets"] == [c.asset for c in plan.conveyors]
-    assert parameters["conveyor_command_topics"] == [c.command_topic for c in plan.conveyors]
-    assert parameters["conveyor_speeds_mps"] == [c.installed_speed_mps for c in plan.conveyors]
-
-    lengths = {
-        len(parameters["conveyor_assets"]),
-        len(parameters["conveyor_command_topics"]),
-        len(parameters["conveyor_speeds_mps"]),
-    }
-    assert len(lengths) == 1, f"the conveyor arrays do not line up: {lengths}"
-
-    # The command topic is the one the bridge carries ROS->Gazebo. A setpoint sent
-    # anywhere else is published to a topic nobody consumes, which is a silent
-    # no-op and a belt that never moves.
-    bridged, _ = module._bridge_topics(plan)
-    for topic in parameters["conveyor_command_topics"]:
-        assert any(topic in argument for argument in bridged), topic
-    for speed in parameters["conveyor_speeds_mps"]:
-        assert speed > 0.0, "a belt that cannot run cannot be indexed"
-
-
-def test_the_line_state_topic_comes_off_the_message(module: ModuleType) -> None:
-    """`LineState` now carries its own topic name, the way `LineTopology` does.
-
-    Without the constant the name has to be supplied to the publisher and written
-    again in every subscriber, which is a value in two places and is not
-    discoverable with `ros2 interface show`.
-    """
-    from cite_interfaces.msg import LineState
-
-    parameters = module._line_parameters(_plan())
-    assert parameters is not None
-    assert parameters["line_state_topic"] == LineState.TOPIC
-    assert LineState.TOPIC == "/cite/line/state"
-
-
-def test_the_line_coordinator_starts_behind_the_same_gate_as_the_skills(
-    module: ModuleType, line_context: LaunchContext, monkeypatch
-) -> None:
-    """It calls those skills, so it may not start on a cell that never finished.
-
-    Reachable only through a process-exit gate, which is what makes a failed
-    planning-scene load stop it rather than let it drive an arm against a
-    planning scene that holds nothing but the arm.
-    """
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
-    actions = module._bring_up(line_context)
-    assert not [
-        a for a in actions if getattr(a, "node_executable", None) == "line_orchestrator"
-    ], "the coordinator is started ungated, before anything it needs exists"
-    assert _nodes(actions, "line_orchestrator", line_context)
-
-
-# --- The gripper values the plan states are the ones L3 receives ---------------
 
 
 def test_every_gripper_value_in_the_plan_reaches_the_skill_server(
@@ -1064,7 +970,8 @@ def test_the_skill_servers_are_given_those_parameters(
     """The pure function above is only worth testing if the nodes use it."""
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     servers = _nodes(module._bring_up(context), "skill_server", context)
-    assert len(servers) == 3
+    planned = [m for m in _plan().controller_managers if m.moveit is not None]
+    assert planned and len(servers) == len(planned)
     namespaces = {_namespace(node, context) for node in servers}
     assert namespaces == {
         m.node.rsplit("/", 1)[0] for m in _plan().controller_managers
@@ -1218,19 +1125,32 @@ def test_a_side_started_without_a_base_refuses_to_start(
     assert DOMAIN_BASE_ENV in _refusal(actions, context)
 
 
+#: The counterpart partition the paired fixture below states when the generated
+#: plan does not already carry one.
+_COUNTERPART_PARTITION = "cite/cell_b/counterpart"
+
+
+def _counterpart_partition() -> str:
+    """Return the partition the counterpart side carries in the plan `_paired` writes."""
+    for side in _document()["plan"]["sides"]:
+        if side["name"] == "counterpart":
+            return side["gz_partition"]
+    return _COUNTERPART_PARTITION
+
+
 def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
     """Point the launch at a plan for a paired zone, as `sides: pair` generates it."""
     document = copy.deepcopy(_document())
     # Built from whatever the generated plan declares rather than assuming it is
-    # `single`: a checkout whose model has been flipped to `pair` for a run would
-    # otherwise end up with two sides named 'counterpart', and these tests would
-    # fail on the fixture rather than on what they are asking about.
+    # paired or single: a fixture that appended a counterpart unconditionally
+    # would end up with two sides named 'counterpart' on a paired zone, and these
+    # tests would fail on the fixture rather than on what they are asking about.
     sides = document["plan"]["sides"]
     if not any(side["name"] == "counterpart" for side in sides):
         sides.append(
             {
                 "name": "counterpart",
-                "gz_partition": "cite/cell_a/counterpart",
+                "gz_partition": _COUNTERPART_PARTITION,
                 "domain_offset": 1,
             }
         )
@@ -1274,7 +1194,7 @@ def test_the_counterpart_takes_the_other_partition_and_the_other_domain(
     for process in carriers:
         assert (
             _environment(context, process).get(GZ_PARTITION_ENV)
-            == "cite/cell_a/counterpart"
+            == _counterpart_partition()
         )
 
 
@@ -1290,12 +1210,32 @@ def test_the_counterpart_started_on_the_plants_domain_refuses(
     assert DOMAIN_ENV in _refusal(actions, context)
 
 
+def _single(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
+    """Point the launch at the generated plan with every counterpart trace removed.
+
+    What a `sides: single` zone generates. The shipped zone is paired, so a test
+    about an untwinned zone has to make one; asking the shipped plan would pass
+    for the wrong reason or fail on a counterpart that is really there.
+    """
+    document = copy.deepcopy(_document())
+    document["plan"]["sides"] = [
+        side for side in document["plan"]["sides"] if side["name"] == PLANT_SIDE
+    ]
+    for manager in document["plan"]["controller_managers"]:
+        manager.pop("counterpart_backend", None)
+        manager.pop("counterpart_commands_physical_hardware", None)
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
+    _use(module, monkeypatch, path)
+
+
 def test_asking_an_untwinned_zone_for_a_counterpart_refuses(
-    module: ModuleType, context: LaunchContext, monkeypatch
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
 ) -> None:
     # Whether a zone runs as a pair is an L0 fact. Bring-up does not invent a
     # second side, and the refusal says so rather than reporting a domain error.
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _single(module, tmp_path, monkeypatch)
     context.launch_configurations["side"] = "counterpart"
     assert "counterpart" in _refusal(module._bring_up(context), context)
 
@@ -1346,7 +1286,7 @@ def test_the_side_starts_exactly_one_readiness_witness(
     assert len(witnesses) == 1, "one witness per side, not one per arm"
     assert module._witness_arguments(_plan(), PLANT_SIDE) == [
         "--zone",
-        "cell_a",
+        "cell_b",
         "--side",
         PLANT_SIDE,
     ]
@@ -1506,7 +1446,7 @@ def _declared(module: ModuleType, name: str):
 def test_the_zone_argument_has_no_default(module: ModuleType) -> None:
     """A default here is a cell nobody chose.
 
-    `zone` defaulted to `cell_a` until ADR-0056. With one zone declared that was
+    `zone` defaulted to a literal zone until ADR-0056. With one zone declared that was
     invisible rather than harmless; with two, an omitted `zone:=` brings up a
     cell nobody asked for and every name inside it resolves perfectly, so there
     is no error anywhere to notice.

@@ -52,15 +52,17 @@ joint state stays where it started while the trajectory advances. The amplitude
 of the commanded motion is then exactly the error, which is what lets one
 mechanism straddle both thresholds.
 
-Two rigs run side by side under the namespaces of two different arms, each with
-its own generated configuration: `arm_1` tracks, `arm_2` is stuck. Using two real
-arms' files rather than one file twice also means a per-arm generation bug shows
-up here as well as in the generator suite.
+Two rigs run side by side, each with the arm's own generated configuration: one
+tracks, one is stuck. The model declares one arm (ADR-0069), so the stuck rig
+runs the same file under a second namespace, its node-path keys rewritten to that
+namespace and nothing else touched. A per-arm generation bug is the generator
+suite's to catch now; this rig used to catch it as well, on two arms' files.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import unittest
 
 from ament_index_python.packages import get_package_share_directory
@@ -84,13 +86,18 @@ from rclpy.qos import (
 from trajectory_msgs.msg import JointTrajectoryPoint
 import yaml
 
-ZONE = "cell_a"
+ZONE = "cell_b"
+ARM = "picker"
 
-#: The arm whose rig tracks its trajectory, and the arm whose rig does not.
-TRACKING_ARM = "arm_1"
-STUCK_ARM = "arm_2"
+#: The namespace of the rig that tracks its trajectory, which is the arm's own,
+#: and of the rig that does not, beside it. Both carry `ARM`'s configuration.
+TRACKING_ARM = f"/cite/{ZONE}/{ARM}"
+STUCK_ARM = f"/cite/{ZONE}/{ARM}_stuck_rig"
 
 GENERATED = Path(get_package_share_directory("cite_generated"))
+
+#: Where the stuck rig's copy of the configuration is written, once per run.
+_RIG_CONFIGS = Path(tempfile.mkdtemp(prefix="trajectory_constraints_rig_"))
 
 STARTUP_CEILING_S = 90.0
 GOAL_CEILING_S = 60.0
@@ -115,28 +122,43 @@ CONTROLLER_STATE_QOS = QoSProfile(
 )
 
 
-def _config_path(arm):
-    return GENERATED / "control" / f"{ZONE}_{arm}_controllers.yaml"
+def _config_path(rig):
+    """Return the configuration file the rig in namespace `rig` loads.
+
+    The tracking rig loads the generated file itself. The stuck rig loads a copy
+    whose node-path keys name its own namespace — a parameters file is keyed by
+    node path, so the unmodified file would configure nothing there — and whose
+    every value, tolerance and joint name is the generated file's.
+    """
+    generated = GENERATED / "control" / f"{ZONE}_{ARM}_controllers.yaml"
+    if rig == TRACKING_ARM:
+        return generated
+    copy = _RIG_CONFIGS / f"{rig.rsplit('/', 1)[-1]}_controllers.yaml"
+    if not copy.exists():
+        text = generated.read_text()
+        assert f"{TRACKING_ARM}/" in text, f"{generated} keys nothing under {TRACKING_ARM}"
+        copy.write_text(text.replace(f"{TRACKING_ARM}/", f"{rig}/"))
+    return copy
 
 
-def _controller_parameters(arm):
-    """Return the generated `ros__parameters` of one arm's trajectory controller."""
-    document = yaml.safe_load(_config_path(arm).read_text())
-    key = f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller"
+def _controller_parameters(rig):
+    """Return the `ros__parameters` of one rig's trajectory controller."""
+    document = yaml.safe_load(_config_path(rig).read_text())
+    key = f"{rig}/{ARM}_joint_trajectory_controller"
     return document[key]["ros__parameters"]
 
 
-def _constraints(arm):
-    constraints = _controller_parameters(arm).get("constraints")
-    assert constraints, f"{arm} has no generated constraints block — ADR-0036"
+def _constraints(rig):
+    constraints = _controller_parameters(rig).get("constraints")
+    assert constraints, f"{rig} has no generated constraints block — ADR-0036"
     return constraints
 
 
-def _joints(arm):
-    return list(_controller_parameters(arm)["joints"])
+def _joints(rig):
+    return list(_controller_parameters(rig)["joints"])
 
 
-def _urdf(arm, stuck):
+def _urdf(rig, stuck):
     """Return a minimal arm carrying the joints the generated file names.
 
     The joint NAMES are read from that configuration rather than written here: a
@@ -149,7 +171,7 @@ def _urdf(arm, stuck):
     limit here would clamp the command, and the resulting error would be the
     limiter's doing rather than the injected fault's.
     """
-    joints = _joints(arm)
+    joints = _joints(rig)
     links = "".join('<link name="{0}_link"/>'.format(j) for j in joints)
 
     tree = ""
@@ -189,12 +211,12 @@ def _urdf(arm, stuck):
         '<ros2_control name="{0}_rig" type="system">'
         "<hardware><plugin>mock_components/GenericSystem</plugin>{3}</hardware>"
         "{4}</ros2_control></robot>"
-    ).format(arm, links, tree, disable, interfaces)
+    ).format(rig.rsplit("/", 1)[-1], links, tree, disable, interfaces)
 
 
-def _rig(arm, stuck):
-    namespace = f"/cite/{ZONE}/{arm}"
-    description = _urdf(arm, stuck)
+def _rig(rig, stuck):
+    namespace = rig
+    description = _urdf(rig, stuck)
     return [
         # The controller manager finds the description on this namespace's own
         # `robot_description` topic, exactly as it does under `gz_ros2_control`
@@ -215,7 +237,7 @@ def _rig(arm, stuck):
             namespace=namespace,
             parameters=[
                 # THE FILE UNDER TEST, unmodified.
-                str(_config_path(arm)),
+                str(_config_path(rig)),
                 # The generated file says `use_sim_time: true` because the cell
                 # it configures runs under Gazebo. There is no `/clock` in this
                 # rig, and a manager waiting for one never runs a control cycle.
@@ -230,9 +252,9 @@ def _rig(arm, stuck):
         Node(
             package="controller_manager",
             executable="spawner",
-            name=f"spawn_{arm}",
+            name=f"spawn_{rig.rsplit('/', 1)[-1]}",
             arguments=[
-                f"{arm}_joint_trajectory_controller",
+                f"{ARM}_joint_trajectory_controller",
                 "--controller-manager",
                 f"{namespace}/controller_manager",
                 "--controller-manager-timeout",
@@ -270,7 +292,7 @@ class _Activation:
         self.seen = False
         self.subscription = node.create_subscription(
             JointTrajectoryControllerState,
-            f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/controller_state",
+            f"{arm}/{ARM}_joint_trajectory_controller/controller_state",
             self._record,
             CONTROLLER_STATE_QOS,
         )
@@ -304,12 +326,12 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
         #
         # An action rejection carries no reason to the client, so all the test
         # could see was a bare `handle.accepted == False`. On CI run 33200891048
-        # the goal reached arm_2 10.6 ms before its "Activating controllers"
-        # line; on an idle machine the same goal lands after activation and
-        # everything passes. That is the entire "intermittent, load-correlated"
-        # behaviour this file carried — a race with the spawner, not with any
-        # earlier test, and not specific to arm_2: reproducing it under CPU
-        # contention failed on arm_1 too.
+        # the goal reached the stuck rig 10.6 ms before its "Activating
+        # controllers" line; on an idle machine the same goal lands after
+        # activation and everything passes. That is the entire "intermittent,
+        # load-correlated" behaviour this file carried — a race with the spawner,
+        # not with any earlier test, and not specific to one rig: reproducing it
+        # under CPU contention failed on the tracking rig too.
         waiters = [_Activation(cls.node, arm) for arm in (TRACKING_ARM, STUCK_ARM)]
         deadline = cls.node.get_clock().now() + Duration(seconds=STARTUP_CEILING_S)
         while not all(w.seen for w in waiters):
@@ -339,7 +361,7 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
         client = ActionClient(
             self.node,
             FollowJointTrajectory,
-            f"/cite/{ZONE}/{arm}/{arm}_joint_trajectory_controller/follow_joint_trajectory",
+            f"{arm}/{ARM}_joint_trajectory_controller/follow_joint_trajectory",
         )
         # Kept for the clear message it gives if the server is absent outright.
         # It is NOT what makes a goal safe to send: this server is created in
@@ -396,7 +418,7 @@ class TestTheGeneratedTolerancesAreRead(unittest.TestCase):
         """A healthy motion must not trip the detector.
 
         This is the direction that matters most for keeping the detector alive.
-        `./scripts/scenario pick_and_place` is a blocking CI gate, and a
+        `./scripts/scenario program_cycle` drives this controller in CI, and a
         tolerance that fires on a good run is a flake — which this project's
         history says gets exempted rather than fixed.
 

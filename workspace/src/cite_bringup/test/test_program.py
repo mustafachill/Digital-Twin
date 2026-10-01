@@ -23,7 +23,6 @@ import os
 import signal
 
 from cite_bringup.plan import default_plan_path, load
-from cite_bringup.program import cell_b_pick_place
 from cite_bringup.program.cell import (
     holding_refusal,
     RosCell,
@@ -277,15 +276,20 @@ def test_a_wait_for_a_condition_is_bounded_by_time_not_by_spins(monkeypatch) -> 
     assert clock["t"] > cell_module.SERVER_WAIT_S
 
 
-def test_a_cell_without_a_program_is_refused() -> None:
+def test_a_cell_without_a_program_is_refused(tmp_path) -> None:
+    """The shipped plan, with its program block removed.
+
+    Written here rather than read from a second zone: the model declares one,
+    and it has a program (ADR-0069).
+    """
+    import yaml
+
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
+    document["plan"].pop("programs", None)
+    path = tmp_path / "plan.yaml"
+    path.write_text(yaml.safe_dump(document))
     with pytest.raises(ValueError, match="program"):
-        target(load(default_plan_path("cell_a")))
-
-
-def test_the_adr_0066_record_refuses_todays_plan() -> None:
-    """The hand-written list is a record: its taught poses are gone from L0."""
-    with pytest.raises(ValueError, match="declares no pose"):
-        cell_b_pick_place.target(load(default_plan_path(ZONE)))
+        target(load(path))
 
 
 def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:

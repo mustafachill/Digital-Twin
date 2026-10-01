@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Guard: the `CITE_TIMING` record has one shape, and all three scenarios write it.
+"""Guard: the `CITE_TIMING` record has one shape, and every scenario writes it.
 
 The defect this closes, stated as a class rather than as an incident: **a machine
--readable record emitted by three files, consumed by a parser none of them can
+-readable record emitted by several files, consumed by a parser none of them can
 see, bound by no test.**
 
 `CITE_TIMING` exists so that a measurement campaign can re-derive this project's
 wall-clock scenario ceilings from measurement instead of from the proxies
 `docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md` §3 had to
-use. The records are printed by three scenario modules, are read by a parser that
+use. The records are printed by every scenario module, are read by a parser that
 does not exist yet, and will be read into a `criteria.md` that is FROZEN before
-its first trial. A key silently renamed in one of the three, or added in one and
+its first trial. A key silently renamed in one of them, or added in one and
 not the others, is not a test failure anywhere — it is a column that is empty for
-a third of the table, discovered after the thresholds are locked.
+part of the table, discovered after the thresholds are locked.
 
 So this asserts the contract itself, with nothing ROS-shaped in the way: the
 `CITE_TIMING ` prefix, one line, `json.loads`-parseable, and the exact key set —
@@ -60,7 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_scenario_modules_load as loader
 
 #: Every key a `CITE_TIMING` record carries, and the type each must have. This is
-#: the contract. Adding a key here without adding it to all three scenarios fails
+#: the contract. Adding a key here without adding it to every scenario fails
 #: below, which is the point: the campaign parser is written against this set.
 EXPECTED_KEYS: dict[str, type | tuple[type, ...]] = {
     "scenario": str,
@@ -124,16 +124,16 @@ def emitters() -> list[tuple[Path, object]]:
     return _emitters()
 
 
-def test_at_least_three_scenarios_are_checked(emitters) -> None:
+def test_every_scenario_that_writes_the_format_is_checked(emitters) -> None:
     """A guard that silently checks nothing is not a guard.
 
     If a scenario stops defining `_emit_timing`, `_emitters` raises. If the
     scenario directory moves, it returns an empty list and every test below
     passes vacuously. This is the tripwire for the second case.
     """
-    assert len(emitters) >= 3, (
-        f"found {len(emitters)} scenario emitter(s); bringup, pick_and_place and "
-        "continuous_line all write this format"
+    assert len(emitters) >= 2, (
+        f"found {len(emitters)} scenario emitter(s); bringup and program_cycle "
+        "both write this format"
     )
 
 
@@ -239,7 +239,7 @@ def _prefix_literals(source: str) -> list[int]:
 
 
 def test_every_scenario_has_exactly_one_writer() -> None:
-    """The format is stated in three files; it must not be stated four times.
+    """The format is stated once per scenario file; never twice in one.
 
     A source scan, because the check is about where the string is written and not
     about what a call produces. Each scenario opens the prefix in exactly one

@@ -68,7 +68,8 @@
 # a hardware path that is opted into is not thereby supervised (P7).
 #
 # SERVICE below is the ONE place this name is written, for the same reason
-# ResetStation.srv carries its own.
+# TwinMode.msg carries its TOPIC: a name in the contract is discoverable with
+# `ros2 interface show`, and one in prose is not.
 
 string SERVICE="/cite/twin/set_mode"
 

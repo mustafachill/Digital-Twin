@@ -52,7 +52,13 @@ from cite_tools.validate import Severity, referential
 #: Both come from the real model rather than from a toy, so a change to either —
 #: a renamed instance, a withdrawn backend — fails here loudly instead of quietly
 #: making the test vacuous.
-MUTATED_ARM = "arm_1"
+#:
+#: NOT THE SHIPPED ARM. `picker` rides a track that declares no `real` backend,
+#: and `track-backend-differs-from-its-arm` refuses an arm and its track on two
+#: backends — so a `real` picker is illegal L0 and would make the premise below
+#: fail for a reason unrelated to this file. A second arm on the floor, added by
+#: the `add_arm` fixture, is the instance the mutation is applied to.
+MUTATED_ARM = "picker_2"
 BACKEND_WITH_PARAMS = "real"
 
 #: Values chosen to be unmistakable in a text search. The address is from
@@ -67,7 +73,9 @@ PLUGIN_OF_THE_REAL_BACKEND = "uf_robot_hardware/UFRobotSystemHardware"
 PLUGIN_OF_THE_SIM_BACKEND = "gz_ros2_control/GazeboSimSystem"
 
 
-def _hardware(model: Path, edit_yaml: Callable, block: dict) -> Path:
+def _hardware(model: Path, edit_yaml: Callable, add_arm: Callable, block: dict) -> Path:
+    add_arm(model, MUTATED_ARM)
+
     def mutate(document: dict) -> None:
         for asset in document["assets"]:
             if asset["id"] == MUTATED_ARM:
@@ -76,24 +84,35 @@ def _hardware(model: Path, edit_yaml: Callable, block: dict) -> Path:
         raise AssertionError(f"{MUTATED_ARM} is not in assets/instances/arms.yaml any more")
 
     edit_yaml(model / "assets/instances/arms.yaml", mutate)
+    # The shipped zone is paired (ADR-0059), and a physical plant on a paired
+    # zone is refused at validate time — so the premise "this is valid L0" is
+    # asked of the zone unpaired, which is where a plant may load `real`.
+    edit_yaml(
+        model / "facility/zones.yaml",
+        lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+    )
     return model
 
 
 @pytest.fixture
-def selecting_the_backend(real_model: Path, edit_yaml: Callable) -> Path:
-    """The real model, with `arm_1` loading the backend whose block it writes."""
+def selecting_the_backend(real_model: Path, edit_yaml: Callable, add_arm: Callable) -> Path:
+    """The real model, with `MUTATED_ARM` loading the backend whose block it writes."""
     return _hardware(
         real_model,
         edit_yaml,
+        add_arm,
         {"backend": BACKEND_WITH_PARAMS, "params": {BACKEND_WITH_PARAMS: dict(PARAMS)}},
     )
 
 
 @pytest.fixture
-def not_selecting_the_backend(real_model: Path, edit_yaml: Callable) -> Path:
+def not_selecting_the_backend(real_model: Path, edit_yaml: Callable, add_arm: Callable) -> Path:
     """The same block, on an arm that stays simulated."""
     return _hardware(
-        real_model, edit_yaml, {"backend": "sim", "params": {BACKEND_WITH_PARAMS: dict(PARAMS)}}
+        real_model,
+        edit_yaml,
+        add_arm,
+        {"backend": "sim", "params": {BACKEND_WITH_PARAMS: dict(PARAMS)}},
     )
 
 

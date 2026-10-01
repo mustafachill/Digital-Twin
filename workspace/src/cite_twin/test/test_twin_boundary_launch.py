@@ -34,21 +34,19 @@ can take. What neither rig does is bring a cell up: **a comparison over two real
 arms is still shown by nothing**, no paired scenario exists, and
 `./scripts/scenario` addresses the plant (CLAUDE.md §2).
 
-**The plan is fabricated, and what keeps that legal is the zone this rig names.**
-`model/facility/zones.yaml` pairs `cell_b` (ADR-0059) and leaves `cell_a`
-`twin: {sides: single}`; this rig reads `cell_a`'s generated plan, which
-therefore has one side, so L5 cannot come up against it — a boundary needs two —
-and appending a counterpart in memory produces a document with exactly two
-sides. **The append is unconditional**, so it would produce two sides named
-`counterpart` on a plan that already carries one, and `cite_bringup.plan.load`
-refuses that: naming `cell_a` literally is the only thing keeping this green.
-That is `docs/open-work.md` #62, stepped around rather than fixed, and anyone
-pairing `cell_a` must fix it in the same change. The
-counterpart it adds is **mixed**: two simulated far sides and one physical one,
-which is charter §8's planned state and the case
-`cross-cutting-safety.md` insists is not an edge case. That is what lets the
-hardware gate be exercised against the real `require_hardware_opt_in` rather
-than against a stub.
+**The plan is the zone's generated paired plan, with its far side made mixed.**
+`cell_b` is paired (ADR-0059), so its generated plan already carries both sides
+and this rig appends no side — which is what closes `docs/open-work.md` #62,
+whose fixture appended a counterpart unconditionally and was legal only because
+the zone it named was single. Two edits are made in memory, and only two: the
+shipped arm's far side is declared PHYSICAL, and a clone of that arm's
+controller manager is added under the id `SIMULATED_ASSET` with its far side
+left simulated. The model has one arm (ADR-0069), and a far side that is
+**mixed** — some assets physical, some not — is charter §8's planned state and
+the case `cross-cutting-safety.md` insists is not an edge case; it is also the
+only shape in which "the physical predicate is per asset" can fail. That is what
+lets the hardware gate be exercised against the real `require_hardware_opt_in`
+rather than against a stub.
 
 **The domain is this process's, and only the plant's.** The test observes one
 side, so it is not a cross-domain observer and needs no carve-out (ADR-0044
@@ -81,8 +79,14 @@ from rclpy.action import ActionClient
 from rclpy.node import Node as RclpyNode
 import yaml
 
-#: The asset whose far side is physical in the fabricated plan.
-PHYSICAL_ASSET = "arm_2"
+ZONE = "cell_b"
+
+#: The asset whose far side is physical in the edited plan: the shipped arm.
+PHYSICAL_ASSET = "picker"
+#: The clone added beside it, whose far side stays simulated.
+SIMULATED_ASSET = "picker_clone"
+#: Every asset the edited plan states, for the per-asset assertions below.
+ASSETS = {PHYSICAL_ASSET, SIMULATED_ASSET}
 PHYSICAL_BACKEND = "uf_robot_hardware"
 SIMULATED_BACKEND = "sim"
 
@@ -99,17 +103,35 @@ PLANT_DOMAIN = BASE
 SETTLE_S = 20.0
 
 
+def _renamed(value: object, old: str, new: str) -> object:
+    """Return ``value`` with ``old`` replaced by ``new`` in every string but a file.
+
+    A `package://` URI names a generated file that exists once, for the shipped
+    arm, and the plan reader refuses a URI that resolves to nothing; so the clone
+    shares the shipped arm's files and differs in every NAME.
+    """
+    if isinstance(value, dict):
+        return {key: _renamed(item, old, new) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_renamed(item, old, new) for item in value]
+    if isinstance(value, str) and not value.startswith("package://"):
+        return value.replace(old, new)
+    return value
+
+
 def _paired_plan() -> Path:
-    """Write the generated plan, plus a counterpart the shipped model lacks."""
-    document = yaml.safe_load(default_plan_path("cell_a").read_text())
+    """Write the zone's generated paired plan with a mixed far side.
+
+    No side is appended: the generated plan already has both, and asserting so
+    is what keeps this from quietly becoming the #62 fixture again.
+    """
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
     plan = document["plan"]
-    plan["sides"].append(
-        {
-            "name": "counterpart",
-            "gz_partition": "cite/cell_a/counterpart",
-            "domain_offset": 1,
-        }
+    assert [side["name"] for side in plan["sides"]] == ["plant", "counterpart"], (
+        f"{ZONE}'s generated plan is not paired, so this rig has no far side to gate"
     )
+    (shipped,) = [m for m in plan["controller_managers"] if m["asset"] == PHYSICAL_ASSET]
+    plan["controller_managers"].append(_renamed(shipped, PHYSICAL_ASSET, SIMULATED_ASSET))
     for manager in plan["controller_managers"]:
         physical = manager["asset"] == PHYSICAL_ASSET
         manager["counterpart_backend"] = (
@@ -118,7 +140,7 @@ def _paired_plan() -> Path:
         # What that side DECLARES, which after ADR-0054 is what every gate in
         # this rig reads. The backend id beside it decides nothing.
         manager["counterpart_commands_physical_hardware"] = physical
-    path = Path(tempfile.mkdtemp(prefix="cite_twin_plan_")) / "cell_a_plan.yaml"
+    path = Path(tempfile.mkdtemp(prefix="cite_twin_plan_")) / f"{ZONE}_plan.yaml"
     path.write_text(yaml.safe_dump(document))
     return path
 
@@ -258,7 +280,7 @@ class TestTheTwinBoundary(unittest.TestCase):
         physical far side, `CITE_ALLOW_HARDWARE` unset —
         `SetMode(VIRTUAL_LEAD)` was refused `SAFETY_BLOCKED` and
         `SetMode(VALIDATED)` was accepted with no gate, after which a goal
-        reached `arm_2`'s physical far side. A passing test is what checked it
+        reached an asset's physical far side. A passing test is what checked it
         in.
 
         What an accepted transition looks like is now asserted where one is
@@ -309,8 +331,8 @@ class TestTheTwinBoundary(unittest.TestCase):
         it could only be L5 — which is the defect ADR-0050 decision 1 clause 3
         forbids.
         """
-        twin = ActionClient(self.node, MoveTo, "/cite/twin/cell_a/arm_1/move_to")
-        side = ActionClient(self.node, MoveTo, "/cite/cell_a/arm_1/move_to")
+        twin = ActionClient(self.node, MoveTo, f"/cite/twin/{ZONE}/{PHYSICAL_ASSET}/move_to")
+        side = ActionClient(self.node, MoveTo, f"/cite/{ZONE}/{PHYSICAL_ASSET}/move_to")
         try:
             self._spin_until(
                 lambda: twin.server_is_ready(), "the twin MoveTo endpoint appeared"
@@ -333,7 +355,7 @@ class TestTheTwinBoundary(unittest.TestCase):
         said no and never learn why.
         """
         self._reset_to_sim()
-        client = ActionClient(self.node, MoveTo, "/cite/twin/cell_a/arm_1/move_to")
+        client = ActionClient(self.node, MoveTo, f"/cite/twin/{ZONE}/{PHYSICAL_ASSET}/move_to")
         try:
             self._spin_until(
                 lambda: client.server_is_ready(), "the twin MoveTo endpoint appeared"
@@ -365,7 +387,7 @@ class TestTheTwinBoundary(unittest.TestCase):
         3). This asserts the shape of that answer, not a fidelity result: both
         sides of a 2.A pair run the same model, so no number here is one.
         """
-        expected = {"arm_1", "arm_2", "arm_3"}
+        expected = ASSETS
         self._spin_until(
             lambda: expected <= {sample.asset_id for sample in self.samples},
             "a divergence sample arrived for every asset",
@@ -416,14 +438,12 @@ class TestTheTwinBoundary(unittest.TestCase):
         side) fact — which is also why there is no aggregate.
         """
         self._spin_until(
-            lambda: {"arm_1", "arm_2", "arm_3"}
-            <= {sample.asset_id for sample in self.samples},
+            lambda: ASSETS <= {sample.asset_id for sample in self.samples},
             "a divergence sample arrived for every asset",
         )
         by_asset = {sample.asset_id: sample for sample in self.samples}
         self.assertTrue(by_asset[PHYSICAL_ASSET].far_side_physical)
-        self.assertFalse(by_asset["arm_1"].far_side_physical)
-        self.assertFalse(by_asset["arm_3"].far_side_physical)
+        self.assertFalse(by_asset[SIMULATED_ASSET].far_side_physical)
 
 
 @launch_testing.post_shutdown_test()

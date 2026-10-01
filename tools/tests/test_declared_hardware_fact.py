@@ -294,13 +294,13 @@ def test_the_generated_plan_states_the_truth_for_every_arm(tmp_path: Path) -> No
     could have carried.
     """
     artifacts = generate_artifacts(load(reproduction_model(tmp_path)))
-    plan = next(a for a in artifacts if a.path.endswith("bringup/cell_a_plan.yaml"))
+    plan = next(a for a in artifacts if a.path.endswith("bringup/cell_b_plan.yaml"))
     stated = [
         line.strip()
         for line in plan.content.splitlines()
         if line.strip().startswith("commands_physical_hardware:")
     ]
-    assert stated == ["commands_physical_hardware: true"] * 3, stated
+    assert stated == ["commands_physical_hardware: true"], stated
     assert "backend: sim" in plan.content, (
         "the reproduction keeps the friendly id throughout; a test that renamed "
         "it would be measuring something else"

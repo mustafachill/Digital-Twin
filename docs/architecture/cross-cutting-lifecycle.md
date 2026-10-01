@@ -3,8 +3,8 @@
 - **Status:** `PARTIAL`.
   **Built:** bring-up is event-driven. `cite_bringup/launch/simulation.launch.py` contains
   **no `TimerAction` and no sleep**, and sequences on process exit and service availability,
-  with every deadline documented as a ceiling on a failure rather than a schedule. The three
-  `cite_facility` nodes (`frame_server`, `model_info`, `topology_server`) are
+  with every deadline documented as a ceiling on a failure rather than a schedule. The two
+  managed `cite_facility` nodes (`frame_server`, `model_info`) are
   `LifecycleNode`s with real `on_configure`/`on_activate` work, and they are driven through
   `configure` and `activate` by a program that asks and confirms rather than by a transition
   event ([ADR-0058](../adr/0058-drive-lifecycle-transitions-by-request-and-confirmation.md));
@@ -20,10 +20,14 @@
   handler per managed node and added one process gate. **Count it rather than quoting this
   paragraph**, by building the description and filtering it for
   `launch.actions.RegisterEventHandler`; a number in prose about a generated graph is one
-  zone away from being wrong again.
+  zone away from being wrong again. **Both figures predate 2026-10-01**: ADR-0069 removed
+  `cite_facility`'s `topology_server` (a third managed node), the detection server and the line
+  coordinator from the launch, and `cell_a` from L0, so the `cell_b` figure may have moved and **was
+  not re-counted for this edit** (unverified).
   **Not built:** "every node that participates in bring-up is a managed node" is not true
-  today. `cite_skills`' skill server and `cite_orchestration`'s line coordinator are plain
-  `rclcpp::Node`s with no lifecycle interface. The pattern below remains binding on them.
+  today. `cite_skills`' skill server is a plain `rclcpp::Node` with no lifecycle interface; the
+  line coordinator this line also named left the main tree with `cite_orchestration` on
+  2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). The pattern below remains binding on them.
   **Nor is shutdown symmetric with startup**: on SIGINT the Python lifecycle nodes are
   destroyed without transitioning, so `on_deactivate` and `on_cleanup` never run — see
   *Lifecycle callbacks do not run on SIGINT* below, which records it as a gap.

@@ -12,6 +12,9 @@
   unchanged. The status stays `Proposed` for that reason and because this record's own
   verification table says what would settle it — a `continuous_line` run on a CI runner in
   which this failure occurs and the line reports it — **and no such run exists**.
+  **[Overtaken 2026-10-01 — ADR-0069 removed `continuous_line` from main CI and the line from
+  the main tree, so no main-tree run can meet that condition; it could only be met in
+  `projects/01`.]**
   **Decision 4's assertion was tested rather than assumed and it held.** The shipped station
   tree, driven through real arrivals by
   `RunningLine.ALineIsNeverReportedStalledWhileAPartIsArriving`, never once produced the
@@ -83,7 +86,8 @@ the nominal branch at `AwaitTrigger`: the retry is refused and the station escal
 fact — waiting while holding — is published through
 [ADR-0039](0039-report-a-station-that-cannot-be-triggered.md)'s existing `STATE_STALLED`, and
 it needs no belt and no sensor, so it works at the table-fed station where that detector is
-blind.
+blind. **[Overtaken 2026-10-01 — ADR-0069 removed the station tree and `LineState` from the main
+tree; this runs only in `projects/01`.]**
 
 ## The same dead end as ADR-0038, entered by a different door
 

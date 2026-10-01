@@ -29,7 +29,7 @@ from cite_tools.validate import Severity, physical
 
 ARM_TYPE = "assets/types/robots/xarm5.yaml"
 ARM_INSTANCES = "assets/instances/arms.yaml"
-ARM_DESCRIPTION = "description/cell_a_arm_1.urdf.xacro"
+ARM_DESCRIPTION = "description/cell_b_picker.urdf.xacro"
 
 #: The component-library id the two paths above describe. Stated once, because
 #: `_arm_descriptions` below has to ask the model which instances bind it.
@@ -42,10 +42,10 @@ def _arm_descriptions(path: Path) -> set[str]:
     Derived from the model, not listed. A collision selection is a fact about the
     type, and `resolve.py` hands every type to every zone, so the set of
     descriptions it moves is "one per instance of that type, wherever it stands".
-    Spelling it as the three `cell_a` arms made the test below an assertion about
-    how many arms the facility declares and in which cell as well as about the
-    property it exists for, and declaring `cell_b` (ADR-0056) falsified it while
-    that property held.
+    Spelling it as one cell's arms made the test below an assertion about how
+    many arms the facility declares and in which cell as well as about the
+    property it exists for, and declaring a second zone (ADR-0056) falsified it
+    while that property held.
     """
     return {
         f"description/{instance.zone}_{instance.id}.urdf.xacro"

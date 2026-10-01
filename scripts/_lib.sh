@@ -830,6 +830,96 @@ cite_python() {
 }
 
 # -----------------------------------------------------------------------------
+# default_zone [plans-dir] — the zone a command drives when none is named.
+#
+# Prints the only zone the generated bring-up plans declare; when they declare
+# several, or none, it prints nothing on stdout, says why on stderr naming every
+# zone found, and fails (ADR-0069 decision 5). The rule lives in
+# `cite_bringup/zones.py` and only there: this runs that FILE by its path, with
+# the standard library alone, so it answers on a host with no ROS and no build,
+# before `require_ros_env` — a refusal here costs no container.
+#
+# The directory argument exists for the self-test, which points it at synthetic
+# plan sets; every production caller leaves it out.
+# -----------------------------------------------------------------------------
+default_zone() {
+    local plans="${1:-${REPO_ROOT}/workspace/src/cite_generated/bringup}"
+    local python
+    python="$(cite_python)" || python=python3
+    "$python" "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" --plans "$plans"
+}
+
+# require_declared_zone <zone> [plans-dir] — refuse a zone the model does not declare.
+#
+# Succeeds silently when the generated bring-up plans declare <zone>; otherwise
+# says on stderr which zones they do declare and fails. Asked on the host, before
+# `require_ros_env`, for the reason `default_zone` is: an undeclared zone used to
+# start a container, fail inside the launch's plan lookup and exit 0. Same file,
+# same rule (`cite_bringup/zones.py --check`), so the set a name is checked
+# against and the set a default is taken from cannot disagree.
+# -----------------------------------------------------------------------------
+require_declared_zone() {
+    local plans="${2:-${REPO_ROOT}/workspace/src/cite_generated/bringup}"
+    local python
+    python="$(cite_python)" || python=python3
+    "$python" "${REPO_ROOT}/workspace/src/cite_bringup/cite_bringup/zones.py" \
+        --plans "$plans" --check "$1" >/dev/null
+}
+
+# -----------------------------------------------------------------------------
+# start_in_own_group <log> <command...> — start a background job that the
+# terminal's Ctrl-C does not reach. Sets STARTED_PID.
+#
+# A job started with `&` shares the script's process group, so the terminal
+# delivers its SIGINT to the job and to the script AT THE SAME TIME. A
+# non-interactive shell does start such a job with SIGINT ignored, but a program
+# that installs its own handler — `cite_bringup.pair` does — undoes that and
+# starts tearing down while the script's trap is still running, so any step the
+# trap meant to take FIRST finds what it needed already gone. With job control
+# on for this one job it gets a process group of its own: the terminal signals
+# the foreground group only, and the job hears exactly what the script sends it.
+# The previous job-control setting is put back, so later jobs are unaffected.
+#
+# The job's pid is also its process-group id, which is what
+# `stop_own_group` uses to reach everything it started.
+# -----------------------------------------------------------------------------
+start_in_own_group() {
+    local log="$1"; shift
+    local had_m=0
+    case "$-" in *m*) had_m=1 ;; esac
+    set -m
+    "$@" > "$log" 2>&1 &
+    # shellcheck disable=SC2034  # read by the caller that sourced this file
+    STARTED_PID=$!
+    [ "$had_m" -eq 1 ] || set +m
+}
+
+# stop_own_group <pid> <ceiling-seconds> — SIGINT, then SIGKILL the whole group.
+#
+# Sends SIGINT to the job `start_in_own_group` started and waits for it to end.
+# If it is still running after <ceiling-seconds>, SIGKILL goes to its entire
+# process group. Returns 0 when SIGINT was enough and 1 when it had to kill.
+# The ceiling bounds a failure and sequences nothing (P4): a job that stops
+# promptly is not delayed, and the poll only decides how soon a hung one is
+# noticed.
+# -----------------------------------------------------------------------------
+stop_own_group() {
+    local pid="$1" ceiling="$2" waited=0
+    kill -INT "$pid" 2>/dev/null || true
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$waited" -ge "$ceiling" ]; then
+            kill -KILL -- "-${pid}" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    wait "$pid" 2>/dev/null || true
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # cite_tools resolution — which checkout's tooling is about to run?
 #
 # `cite_tools` is installed editable, so the interpreter resolves it through a
@@ -1089,7 +1179,7 @@ first_party_packages() {
 # itself (P1).
 #
 # `tests/` holds the simulation scenarios and their guards. The scenarios are not
-# collected by pytest — they are named `bringup.py` and `pick_and_place.py`, not
+# collected by pytest — they are named `bringup.py` and `program_cycle.py`, not
 # `test_*.py`, and they need a running simulator — but the guards under
 # `tests/scenarios/guards/` are, and they are the reason this path is here.
 #

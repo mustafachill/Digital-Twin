@@ -211,7 +211,7 @@ an accident that disappears the moment two sides share a container.
 Take the value from the plan rather than typing it, then use `gz` as before:
 
 ```bash
-ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # the one zone L0 declares
 export GZ_PARTITION="$(./scripts/enter dev python3 -c '
 import sys
 from cite_bringup.plan import default_plan_path, load, PLANT_SIDE
@@ -247,7 +247,7 @@ discover each other. The base travels in `CITE_DOMAIN_BASE`, and one function ad
 ask it rather than doing the arithmetic:
 
 ```bash
-ZONE=cell_b   # or cell_a for the showcase; there is no default
+ZONE=cell_b   # the one zone L0 declares
 ./scripts/enter dev python3 -c '
 import os, sys
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
@@ -302,52 +302,10 @@ and has not been taken.
 
 ### `line_orchestrator` exits with "no LineTopology arrived"
 
-**Seen once, on a run that was restarted rather than analysed, so there is no log.** That is
-the whole reason this section exists: the next person to see it should capture the evidence
-before killing anything. A restart is what turned the only observation of this into an
-anecdote.
-
-**Capture first, while the cell is still up.** In another shell on the same domain
-(`./scripts/enter dev`, which lands on the plant — `./scripts/doctor` prints the domain):
-
-```bash
-ros2 topic info /cite/line/topology --verbose     # BOTH endpoints, all three QoS fields
-ros2 lifecycle get /cite/facility/topology_server # configured? active?
-ros2 node list | grep topology
-```
-
-Keep the full launch log. The coordinator's own FATAL line and the topology server's
-`configured with N station(s)` line, with their timestamps, are what separate the causes
-below; nothing reconstructs them afterwards.
-
-**Three candidate causes, worth separating rather than merging into "it was slow".**
-
-- **A QoS or latching mismatch on the topic.** The subscriber asks for the latched profile,
-  and the failure has two shapes. If the publisher is not `TRANSIENT_LOCAL`, the two are
-  *incompatible* and never connect — silently, which
-  [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md) and CLAUDE.md §10's first
-  bullet name as the most-misdiagnosed failure in ROS 2. If both sides are compatible but
-  the durability is volatile, they connect and still deliver nothing, because the server
-  publishes the topology **once**: a subscriber that matched after that publish gets no
-  sample and waits out the deadline. `ros2 topic info --verbose` distinguishes these two
-  from each other and from everything below.
-- **A publisher created and published from inside one callback.** Reliable is a promise to
-  *matched* subscribers, so anything published in the same callback that created the
-  publisher reaches nobody. This is the defect that cost this project a belt setpoint for
-  ten commits. **On the code as it stands it is ruled out, not suspected**: `topology_server`
-  creates its publisher in `on_configure` and publishes in `on_activate`, which are two
-  transitions. Check that this is still true before spending time elsewhere — it is the
-  cheapest of the three to re-confirm and the easiest to reintroduce.
-- **Genuinely slow bring-up under load.** `topology_deadline_s` defaults to 30 s. If the
-  topology arrives and the coordinator had already given up, the launch log shows the
-  server's own line *after* the FATAL. **Do not widen the parameter to make the symptom go
-  away.** It is a ceiling on a failure, not a schedule (P4), and
-  [`../architecture/cross-cutting-testing.md`](../architecture/cross-cutting-testing.md) is
-  explicit that no ceiling may be widened to absorb a slow host.
-
-**One thing that is not a candidate.** The deadline is a `std::condition_variable` wait on
-the wall clock, so a simulated clock that never started cannot expire it and cannot explain
-this. That failure produces a different symptom.
+The line coordinator and the topology server left the main tree on 2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). This
+entry — capture-first instructions and three candidate causes — is kept, unchanged, in the
+frozen copy of this document inside the `projects/01` snapshot
+(`docs/operations/troubleshooting.md` there), which is where the line still runs.
 
 ### Bring-up fails on the second attempt
 
@@ -362,11 +320,13 @@ the cause.
 
 ### Two `/clock` publishers, or two `/cite/facility/*` nodes with the same name
 
-Two zones are up on one ROS graph. **Exactly one is meant to be**
+Two cells are up on one ROS graph. **Exactly one is meant to be**
 ([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
-decision 3), and the likeliest way it happens is the use `cell_a` is kept for: the showcase
-started in a second terminal while a `cell_b` run is up. `ROS_DOMAIN_ID` is derived per
-checkout and per side, never per zone, so both land on one graph.
+decision 3, superseded by [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which keeps the rule for any second zone). L0 declares one zone
+since 2026-10-01, so the likeliest way this happens now is the same cell started twice from one
+checkout — two terminals, or a run left up — or a second zone declared in a model edit.
+`ROS_DOMAIN_ID` is derived per checkout and per side, never per zone, so both land on one
+graph.
 
 ```bash
 ros2 topic info /clock                     # more than one publisher is the symptom
@@ -374,9 +334,9 @@ ros2 node list | grep /cite/facility/      # each name should appear once
 ros2 topic list | grep -o '^/cite/[a-z0-9_]*' | sort -u   # one zone scope, plus facility/line/twin
 ```
 
-**Only one of the collisions is loud**, and only with `line:=true`: `line_orchestrator`
-`RCLCPP_FATAL`s on a zone mismatch from the second latched `/cite/line/topology`. The rest
-are silent, and the consequences are not subtle — one `/cite/facility/get_model_version`
+**None of the collisions is loud** in the main tree since the line coordinator — which
+`RCLCPP_FATAL`ed on a zone mismatch from a second latched `/cite/line/topology` — left it with
+ADR-0069. They are silent, and the consequences are not subtle — one `/cite/facility/get_model_version`
 answered by whichever server got there first, two `/robot_description` publishers describing
 **different robots**, so a bring-up can spawn the other cell's furniture into this cell's
 world, and a `/clock` fed by two independent simulators, which is CLAUDE.md §10's

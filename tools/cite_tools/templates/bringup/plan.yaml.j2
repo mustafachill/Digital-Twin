@@ -294,9 +294,9 @@ plan:
         # is a fact about this facility, not about the vendor's robot.
         home_rad: [{{ manager.home_rad | map('m') | join(', ') }}]
 {% if manager.poses_rad %}
-        # Named joint poses a fixed program moves the arm through (ADR-0066),
-        # from L0 like `home_rad`. `MoveTo.named_configuration` accepts `home`
-        # and each of these.
+        # Named joint poses the arm's program moves it through, read from that
+        # program file by the generator (ADR-0067); none is written in L0.
+        # `MoveTo.named_configuration` accepts `home` and each of these.
         poses_rad:
 {% for name, values in manager.poses_rad %}
           {{ name }}: [{{ values | map('m') | join(', ') }}]
@@ -360,39 +360,23 @@ plan:
       detach_topic: {{ hold.detach_topic }}
 {% endfor %}
 
-  # A break beam has TWO topics and they are deliberately not the same name.
+  # A break beam has TWO topic names and they are deliberately not the same.
   #
-  #   detection_topic — the TYPED `DetectionEvent`. The name a station's trigger
-  #                     in the process topology already subscribes to, and also
-  #                     the name the break-beam plugin advertises on the GAZEBO
-  #                     transport: both come from one call to `ids.interface`.
-  #   level_topic     — where the bridge lands the RAW `std_msgs/Bool` level in
-  #                     ROS. Bridging the level onto `detection_topic` would put
-  #                     two publishers of two different types on the one topic the
-  #                     line acts on, and they would fight over it.
-  #
-  # They are different interfaces, not two names for one: the level is a state
-  # republished periodically and a dropped sample is recovered by the next; the
-  # event is an edge that must not be dropped at all. L3 turns one into the other.
+  #   detection_topic — the name the break-beam plugin advertises on the GAZEBO
+  #                     transport, from one call to `ids.interface`.
+  #   level_topic     — where the bridge lands that RAW `std_msgs/Bool` level in
+  #                     ROS. The reader refuses a plan that makes the two one.
   sensors:
 {% for sensor in sensors %}
     - asset: {{ sensor.asset }}
       detection_topic: {{ sensor.detection_topic }}
       level_topic: {{ sensor.level_topic }}
-      # The frame a detection from this beam is reported in, published by the
-      # generated static TF table.
+      # The frame the beam stands at, published by the generated static TF
+      # table.
       frame_id: {{ sensor.frame_id }}
       beam_axis: {{ sensor.beam_axis }}
       beam_length_m: {{ sensor.beam_length_m | m }}
 {% endfor %}
-{% if detection %}
-
-  # L3 detection for the whole zone: one server for every beam, because a beam
-  # watches a belt rather than a robot.
-  detection:
-    namespace: {{ detection.namespace }}
-    detect_action: {{ detection.detect_action }}
-{% endif %}
 {% if programs %}
 
   # What each arm's program does, step by step, read from the program file the

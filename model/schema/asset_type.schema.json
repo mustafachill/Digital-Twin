@@ -1056,7 +1056,7 @@
     },
     "NamedFrame": {
       "additionalProperties": false,
-      "description": "A reference frame a type offers, that instances can be placed against.\n\n``conveyor_1/outfeed`` resolves through one of these, so the coordinate of a\nbelt's end is written once — in the type — rather than at every station that\nreaches for it.",
+      "description": "A reference frame a type offers, that instances can be placed against.\n\n``transfer_belt/outfeed`` resolves through one of these, so the coordinate of a\nbelt's end is written once — in the type — rather than at every station that\nreaches for it.",
       "properties": {
         "id": {
           "pattern": "^[a-z][a-z0-9_]*$",
@@ -1129,7 +1129,7 @@
     },
     "PlanningSpec": {
       "additionalProperties": false,
-      "description": "How this type is planned for, and where its SRDF comes from.\n\nGroup names are the vendor's, prefixed with the asset id exactly as joints\nand controllers are — so `arm_1` plans with group `arm_1_xarm5`. Recording\nthe vendor's suffix here rather than hardcoding it keeps the same property\nthe description has: a vendor rename is a model edit.",
+      "description": "How this type is planned for, and where its SRDF comes from.\n\nGroup names are the vendor's, prefixed with the asset id exactly as joints\nand controllers are — so `picker` plans with group `picker_xarm5`. Recording\nthe vendor's suffix here rather than hardcoding it keeps the same property\nthe description has: a vendor rename is a model edit.",
       "properties": {
         "default_pipeline": {
           "title": "Default Pipeline",

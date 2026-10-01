@@ -39,8 +39,8 @@ from cite_bringup.plan import (
 import pytest
 import yaml
 
-GENERATED_PLAN = "package://cite_generated/bringup/cell_a_plan.yaml"
-ZONE = "cell_a"
+GENERATED_PLAN = "package://cite_generated/bringup/cell_b_plan.yaml"
+ZONE = "cell_b"
 
 
 def _generated() -> Path:
@@ -195,7 +195,7 @@ def _snapshot(**models: tuple[float, float, float]) -> bytes:
 def test_model_poses_answers_from_the_newest_snapshot_only(monkeypatch) -> None:
     """One subscription, on the plan's partition; absence is read, never remembered.
 
-    The removal wait in `continuous_line` depends on the last clause: a cached
+    A wait for a work-piece's removal depends on the last clause: a cached
     pose from before the removal would keep the work-piece "in the world" for
     ever.
     """
@@ -224,8 +224,8 @@ def test_model_poses_answers_from_the_newest_snapshot_only(monkeypatch) -> None:
 
 
 def test_the_plan_is_read_once_per_process() -> None:
-    # `continuous_line` asks for this about twice a second for the length of a
-    # run. Re-reading and re-resolving the YAML per sample would make the
+    # A scenario polling a pose asks for this about twice a second for the
+    # length of a run. Re-reading and re-resolving the YAML per sample would make the
     # instrument the expensive part of the measurement.
     gz._PLANS.pop(ZONE, None)
     first = gz.plan_for(ZONE)

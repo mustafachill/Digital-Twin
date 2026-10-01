@@ -1,6 +1,10 @@
 # ADR-0031: Refuse a direct arm-to-arm handoff at plan time until a grasp holds an orientation
 
-- **Status:** Accepted (corrected 2026-08-26) — **both halves of the decision stand**: the
+- **Status:** Deprecated — [ADR-0069](0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  removed the event-driven line from the main tree with no replacement there: its refusal lived in `cite_orchestration`'s `line_plan.hpp`.
+  The mechanism still runs, unchanged, in `projects/01`.
+  **Nothing below is rewritten, and nothing below binds the main tree.**
+  **[Replaced 2026-10-01, kept for the record:]** *"Accepted (corrected 2026-08-26) — **both halves of the decision stand**: the
   direct arm-to-arm edge is still refused and the conveyor-mediated one is still permitted.
   The *justification* given below for permitting the conveyor case is false, and the
   arithmetic given for refusing the direct one is keyed to the wrong angle. Neither is
@@ -10,7 +14,7 @@
   Recorded **after** the change landed, not before, which CLAUDE.md
   §12 requires and this did not get. The decision existed only in the message of commit
   `7f7f451` until this ADR was written during the documentation pass following `b2be77f`.
-  Stated rather than smoothed over (P7).
+  Stated rather than smoothed over (P7)."*
 - **Date:** 2026-08-26
 - **Deciders:** Project owner
 - **Related:** [ADR-0024](0024-handoff-split-between-l3-and-l4.md),

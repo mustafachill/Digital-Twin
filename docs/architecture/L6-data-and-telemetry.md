@@ -2,8 +2,12 @@
 
 - **Status:** `DESIGNED` — nothing built, and `cite_telemetry` does not exist. Phase 4,
   with recording used earlier as test evidence. The state messages this layer would record
-  (`RobotState`, `LineState`, `ConveyorState`, `SafetyState`) are defined and frozen against
-  the contract baseline; no node publishes them.
+  are `RobotState` and `SafetyState`, both defined and frozen against the contract baseline.
+  `RobotState` has a producer — `cite_skills`' skill server publishes it latched on each arm's
+  `state` topic, and the simulation-only grasp-hold bridge reads it — and `SafetyState` has
+  none. `LineState` and `ConveyorState`, which this line also named, left `cite_interfaces` with
+  the event-driven line on 2026-10-01
+  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [L5](L5-twin-synchronization.md), [L7](L7-presentation.md)
 
 ## Responsibility

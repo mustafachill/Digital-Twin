@@ -393,18 +393,6 @@
           "title": "Kind",
           "type": "string"
         },
-        "poses_rad": {
-          "patternProperties": {
-            "^[a-z][a-z0-9_]*$": {
-              "items": {
-                "type": "number"
-              },
-              "type": "array"
-            }
-          },
-          "title": "Poses Rad",
-          "type": "object"
-        },
         "program": {
           "anyOf": [
             {

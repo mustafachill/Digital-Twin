@@ -73,3 +73,34 @@ def remove_flow() -> Callable[[Path, str], str]:
         return zone
 
     return _remove
+
+
+@pytest.fixture
+def add_arm() -> Callable[..., str]:
+    """Declare one more arm in the shipped zone, on a copy of the model.
+
+    The shipped model has one arm (ADR-0069), and several properties the suite
+    asserts are about TWO instances of one type — that a backend or a parameter is
+    a per-instance choice, that every arm gets the same controller policy, that
+    adding an arm is a data change. A copy of the shipped arm standing on the
+    floor, with no program, is the smallest model those properties can be asked
+    of. Where it stands is not the question: a test that validates geometry must
+    not use it.
+    """
+
+    def _add(model: Path, asset_id: str = "picker_2") -> str:
+        arms = model / "assets/instances/arms.yaml"
+        document = yaml.safe_load(arms.read_text())
+        arm = yaml.safe_load(yaml.safe_dump(document["assets"][0]))
+        arm["id"] = asset_id
+        arm["pose"] = {
+            "frame": "cite_world",
+            "xyz_m": [2.0, 3.6, 0.0],
+            "rpy_rad": [0.0, 0.0, 0.0],
+        }
+        arm["configuration"].pop("program", None)
+        document["assets"].append(arm)
+        arms.write_text(yaml.safe_dump(document, sort_keys=False))
+        return asset_id
+
+    return _add

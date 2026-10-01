@@ -36,14 +36,9 @@
 // can plan to the target the first just installed, and the arm executes it. A
 // second goal is therefore rejected rather than queued.
 //
-// `Detect` is the sixth skill and is deliberately NOT here. It commands no
-// motion, needs neither the planner nor the gripper, and belongs to a zone's
-// sensors rather than to one arm — three arms each serving it would be three
-// views of one belt. It lives in `detection_server.cpp`.
-//
 // Every skill implements the full action contract, cancellation included. L3 is
 // explicit that covering only the happy path is a review finding — a skill that
-// cannot be cancelled leaves L4 with no way to recover from anything.
+// cannot be cancelled leaves its caller with no way to recover from anything.
 
 #include <algorithm>
 #include <atomic>
@@ -189,7 +184,8 @@ public:
     declare_parameter("tip_link", "");
     declare_parameter("gripper_action", "");
     declare_parameter("home_rad", std::vector<double>{});
-    // Named joint poses beside `home`, from L0's `poses_rad` (ADR-0066). Two
+    // Named joint poses beside `home`, from the bring-up plan's `moveit.poses_rad`,
+    // which the generator fills from this arm's own program (ADR-0067). Two
     // parallel parameters because a ROS parameter cannot be a map: the i-th name
     // owns values [i * dof, (i + 1) * dof) of the flat array. Empty on an arm
     // that declares none, which leaves `home` the only named configuration.
@@ -629,7 +625,8 @@ public:
       RCLCPP_ERROR(
         get_logger(),
         "pose_values_rad has %zu values for %zu pose name(s), but planning group '%s' "
-        "has %zu joints, so it should have %zu. The poses come from L0 `poses_rad`.",
+        "has %zu joints, so it should have %zu. The poses come from the plan's "
+        "`moveit.poses_rad`, generated from the arm's program (ADR-0067).",
         pose_values_.size(), pose_names_.size(), planning_group_.c_str(), dof,
         pose_names_.size() * dof);
       return false;
@@ -1670,12 +1667,11 @@ private:
     // retreat", and `hold_timeout` is contracted to expire with the piece still
     // held. Both need L4 to tell this arm that the peer has taken the part.
     //
-    // **There is no typed channel for that signal.** `cite_interfaces` has six
-    // actions, fourteen messages and two services, and none of them carries a
-    // rendezvous release; `LineState` and `StationState` publish ownership
-    // nowhere. Inventing one is not this change's to make — the interface package
-    // is reviewed before its consumers (ADR-0010) — and improvising an untyped
-    // one would be P3 twice over.
+    // **There is no typed channel for that signal.** Nothing in
+    // `cite_interfaces` carries a rendezvous release or publishes ownership.
+    // Inventing one is not this change's to make — the interface package is
+    // reviewed before its consumers (ADR-0010) — and improvising an untyped one
+    // would be P3 twice over.
     //
     // So a caller asking for the hold is told, in a code it can branch on, that
     // the path is unbuilt. It is told BEFORE the arm moves: parking a loaded arm

@@ -32,6 +32,11 @@ def test_the_generated_package_is_found() -> None:
     assert artifacts.generated_dir().is_dir()
 
 
+#: The zone the model declares (ADR-0069 left one), and its one arm.
+ZONE = "cell_b"
+ARMS = ("picker",)
+
+
 def test_the_model_hash_is_available() -> None:
     digest = artifacts.model_hash()
     assert len(digest) == 64, "expected a SHA-256 hex digest"
@@ -39,7 +44,7 @@ def test_the_model_hash_is_available() -> None:
 
 
 def test_static_transforms_load_and_are_rooted_in_the_world() -> None:
-    transforms = artifacts.static_transforms("cell_a")
+    transforms = artifacts.static_transforms(ZONE)
     assert transforms
     assert {t.parent for t in transforms} == {"cite_world"}
 
@@ -51,8 +56,8 @@ def test_every_arm_mount_is_tied_to_the_facility() -> None:
     planning frame, and the failure reads as an extrapolation or lookup error
     naming the frames rather than the missing link.
     """
-    children = {t.child for t in artifacts.static_transforms("cell_a")}
-    for arm in ("arm_1", "arm_2", "arm_3"):
+    children = {t.child for t in artifacts.static_transforms(ZONE)}
+    for arm in ARMS:
         assert f"{arm}_mount" in children, f"{arm} has no transform from cite_world"
 
 
@@ -62,28 +67,28 @@ def test_no_transform_is_declared_twice() -> None:
     The resulting behaviour is intermittent and very hard to attribute, so the
     reader rejects a table that would cause it rather than publishing anyway.
     """
-    transforms = artifacts.static_transforms("cell_a")
+    transforms = artifacts.static_transforms(ZONE)
     children = [t.child for t in transforms]
     assert len(children) == len(set(children))
 
 
 def test_station_frames_are_present() -> None:
     """A station reaches for a named frame; it must exist in the TF table."""
-    children = {t.child for t in artifacts.static_transforms("cell_a")}
+    children = {t.child for t in artifacts.static_transforms(ZONE)}
     for expected in (
-        "cell_a__table_pick__surface",
-        "cell_a__conveyor_1__infeed",
-        "cell_a__conveyor_1__outfeed",
-        "cell_a__table_accumulation__surface",
+        "cell_b__infeed_table__surface",
+        "cell_b__transfer_belt__infeed",
+        "cell_b__transfer_belt__outfeed",
+        "cell_b__outfeed_table__surface",
     ):
         assert expected in children, expected
 
 
 def test_topology_loads_with_its_stations() -> None:
-    topology = artifacts.topology("cell_a")
+    topology = artifacts.topology(ZONE)
     stations = {s["id"] for s in topology["stations"]}
-    assert "station_transfer_1" in stations
-    assert topology["zone"] == "cell_a"
+    assert "b_transfer_1" in stations
+    assert topology["zone"] == ZONE
 
 
 def test_the_planning_scene_loads_with_the_cell_furniture() -> None:
@@ -93,10 +98,10 @@ def test_the_planning_scene_loads_with_the_cell_furniture() -> None:
     pick and place point lies exactly on a surface, a plan through that surface
     was the normal case rather than an exotic one.
     """
-    frame_id, bodies = artifacts.planning_scene("cell_a")
+    frame_id, bodies = artifacts.planning_scene(ZONE)
     assert frame_id == "cite_world"
     ids = {body.object_id for body in bodies}
-    for expected in ("table_pick", "conveyor_1", "pedestal_1", "table_accumulation"):
+    for expected in ("infeed_table", "transfer_belt", "outfeed_table"):
         assert expected in ids, expected
     assert len(bodies) == len(ids), "a duplicated id would silently replace an object"
 
@@ -105,15 +110,15 @@ def test_no_collision_object_stands_in_for_an_arm() -> None:
     """Deliberately absent, and asserted so that it stays deliberate.
 
     An articulated robot frozen at one pose is confidently wrong wherever it
-    actually is. Coordinating arms needs the live scene and is L4's problem; a
-    box where a robot used to be is worse than no box at all.
+    actually is. Coordinating arms needs the live scene; a box where a robot used
+    to be is worse than no box at all.
     """
-    _, bodies = artifacts.planning_scene("cell_a")
-    assert not {b.object_id for b in bodies} & {"arm_1", "arm_2", "arm_3"}
+    _, bodies = artifacts.planning_scene(ZONE)
+    assert not {b.object_id for b in bodies} & set(ARMS)
 
 
 def test_every_collision_body_carries_a_frame_and_a_size() -> None:
-    _, bodies = artifacts.planning_scene("cell_a")
+    _, bodies = artifacts.planning_scene(ZONE)
     for body in bodies:
         assert body.frame_id, body.object_id
         assert body.primitive == "box", f"{body.object_id} is a {body.primitive}"
@@ -213,7 +218,7 @@ def test_nothing_here_reads_the_model_directory() -> None:
 
 # --- An unnamed zone is refused rather than guessed (ADR-0056 decision 4) ------
 #
-# These two functions replaced a `cell_a` default in four nodes in this package.
+# These two functions replaced a literal zone default in the nodes of this package.
 # While the facility declared one zone the default was invisible rather than
 # harmless; with two, every one of them was a way to serve one cell's frames,
 # topology or planning scene into another cell's graph under names that resolve
@@ -225,7 +230,7 @@ def test_nothing_here_reads_the_model_directory() -> None:
 def test_a_named_zone_is_returned_unchanged() -> None:
     assert artifacts.require_zone("cell_b") == "cell_b"
     assert artifacts.require_zones(["cell_b"]) == ["cell_b"]
-    assert artifacts.require_zones(["cell_a", "cell_b"]) == ["cell_a", "cell_b"]
+    assert artifacts.require_zones(["zone_x", "cell_b"]) == ["zone_x", "cell_b"]
 
 
 def test_an_empty_zone_is_refused() -> None:

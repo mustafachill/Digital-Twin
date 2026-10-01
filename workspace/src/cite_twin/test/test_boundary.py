@@ -46,7 +46,7 @@ from cite_twin.boundary import (
 from cite_twin.twin_boundary import _refuse_sim_time
 import pytest
 
-PLAN = load(default_plan_path("cell_a"))
+PLAN = load(default_plan_path("cell_b"))
 
 #: This package's own source, read from where it was installed from.
 PACKAGE_SOURCE = Path(cite_twin.__file__).resolve().parent
@@ -75,8 +75,6 @@ def side_owned_names() -> set[str]:
         names.update({conveyor.state_topic, conveyor.command_topic})
     for sensor in PLAN.sensors:
         names.update({sensor.detection_topic, sensor.level_topic})
-    if PLAN.detection is not None:
-        names.add(PLAN.detection.detect_action)
     return names
 
 
@@ -112,15 +110,17 @@ class TestNothingIsRepublishedOntoANameASideOwns:
 
     def test_the_plan_actually_carried_some_names(self) -> None:
         """A guard on the guard: an empty set is disjoint from everything."""
+        # One arm's names and L5's own products; the floors are what one arm
+        # yields, so a plan that stopped carrying an arm's skills fails here.
         assert len(side_owned_names()) > 10
-        assert len(l5_owned_names()) > 10
+        assert len(l5_owned_names()) >= len(SKILL_ACTION_TYPES) + len(twin_endpoints())
 
 
 class TestTheOperatorEndpointIsDerivedRatherThanComposed:
     def test_the_reserved_scope_is_the_only_thing_it_adds(self) -> None:
         assert (
-            operator_endpoint("/cite/cell_a/arm_1/move_to")
-            == "/cite/twin/cell_a/arm_1/move_to"
+            operator_endpoint("/cite/cell_b/picker/move_to")
+            == "/cite/twin/cell_b/picker/move_to"
         )
 
     def test_a_name_this_system_did_not_form_is_refused(self) -> None:
@@ -361,10 +361,10 @@ class TestL5StartsNothingAndNothingStartsL5:
     def test_no_bring_up_starts_the_twin_boundary(self) -> None:
         """A solo bring-up must be exactly what it was before this package existed.
 
-        L5 is a paired component: it needs a zone declaring two sides, and
-        `cell_a` declares one (ADR-0059 pairs `cell_b` and leaves `cell_a`
-        alone). A launch graph that started it would fail every single-sided
-        bring-up, and `simulation.launch.py` is the launch every zone uses.
+        L5 is a paired component: it needs a zone declaring two sides, and a
+        zone may declare one. A launch graph that started it would fail every
+        single-sided bring-up, and `simulation.launch.py` is the launch every
+        zone uses; the pair supervisor starts it instead (ADR-0057).
         """
         launch_file = (
             Path(get_package_share_directory("cite_bringup"))
