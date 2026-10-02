@@ -13,8 +13,8 @@ original's environment. Each snapshot's README has the recipe.
 Whether each one has been verified to build and run, and when, is recorded in its own
 `PROVENANCE.md` and nowhere else. From 2026-10-01 on, what is **measured** of it is kept in
 its own `MEASUREMENTS.md`; earlier campaigns whose subject is that milestone remain under
-[`docs/measurements/`](../docs/measurements/README.md), frozen where they are (the
-[review queue](../docs/reference/claude-md-review-queue.md)'s Q84 sorts them).
+[`docs/measurements/`](../docs/measurements/README.md), frozen where they are (that README's
+Subject column says which).
 
 ## The journey
 

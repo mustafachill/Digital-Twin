@@ -42,10 +42,8 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 
 The charter describes the target; the repository is partway there. Check before assuming.
 Measurements whose subject left the main tree are in the `MEASUREMENTS.md` of the snapshot that
-keeps it (via [`projects/README.md`](projects/README.md)), and the rest of what this section
-used to hold is in the [review queue](docs/reference/claude-md-review-queue.md); an older
-"CLAUDE.md §2" citation names a paragraph now in one of those places
-(`git show 960e6b4:CLAUDE.md`).
+keeps it (via [`projects/README.md`](projects/README.md)); an older "CLAUDE.md §2" citation
+names text that is `git show 960e6b4:CLAUDE.md`.
 
 - **Phase 1 is closed** (charter §8; the evidence that closed it, and what that does not
   cover, is in snapshot 01's `MEASUREMENTS.md`, reached via [`projects/README.md`](projects/README.md)). **Phase 2.A
@@ -112,7 +110,8 @@ file before):
 
 - **Ask a command; do not quote a count.** `./scripts/validate-model`, `./scripts/doctor`,
   `./scripts/test` and `./scripts/lint` report the current figures; a count in prose names the
-  command that reproduces it, or it is not written.
+  command that reproduces it, or it is not written. Measure a figure; never derive it. A claim
+  that something has never happened expires the moment it runs again.
 - **Where a measurement goes.** Main tree: a campaign under
   [`docs/measurements/`](docs/measurements/README.md), thresholds written before the first
   trial — cite it, do not copy its numbers. A snapshot: its own `MEASUREMENTS.md`, with

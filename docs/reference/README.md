@@ -3,8 +3,7 @@
 External sources: standards, literature, and authoritative documentation — plus three
 internal sources: [v1-lessons.md](v1-lessons.md), which is here because it outlives the tree
 it cites and is consulted the same way; [charter-history.md](charter-history.md), the
-archive of what the charter said before it stopped holding measurements and decision records;
-and [claude-md-review-queue.md](claude-md-review-queue.md), a one-off record of a cleanup.
+archive of what the charter said before it stopped holding measurements and decision records.
 
 | Document | Holds |
 |---|---|
@@ -13,7 +12,6 @@ and [claude-md-review-queue.md](claude-md-review-queue.md), a one-off record of 
 | [toolchain.md](toolchain.md) | Version-specific documentation for every tool in the stack |
 | [v1-lessons.md](v1-lessons.md) | What the superseded v1 tree taught, captured before that tree was deleted at the end of Phase 1 |
 | [charter-history.md](charter-history.md) | The charter's document history up to v1.16 in full, and every passage removed from it on 2026-10-02 — verbatim, read-only |
-| [claude-md-review-queue.md](claude-md-review-queue.md) | What was cut from `CLAUDE.md` on 2026-10-01 and is not a snapshot's measurement — count histories, lessons and status detail — verbatim and numbered, for the project owner to decide item by item |
 
 ## How to use this section
 

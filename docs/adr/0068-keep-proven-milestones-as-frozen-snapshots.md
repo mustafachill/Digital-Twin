@@ -24,9 +24,8 @@ identity, goal and working discipline.
   shown in its "Diff against a clean extract" block.
 - **What it holds.** From 2026-10-01 on, the measurements of that milestone; earlier campaigns
   whose subject is that milestone remain under [`docs/measurements/`](../measurements/README.md),
-  frozen where they are (the review queue's Q84,
-  [`../reference/claude-md-review-queue.md`](../reference/claude-md-review-queue.md), sorts
-  them). On 2026-10-01 it received, verbatim,
+  frozen where they are (the campaigns table's Subject column in
+  [`docs/measurements/README.md`](../measurements/README.md) says which). On 2026-10-01 it received, verbatim,
   the measurements `CLAUDE.md` §2 held whose subject had left the main tree — the three-arm
   line and `cell_a`, the `pick_and_place` and `continuous_line` scenarios, the fixed program.
   A measurement taken of a snapshot from now on is added there, dated, with the hash bump
