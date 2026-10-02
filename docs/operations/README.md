@@ -3,16 +3,16 @@
 Runbooks: what to do, in order, and what you should see.
 
 - **Status:** `PARTIAL` — [bring-up.md](bring-up.md) and [troubleshooting.md](troubleshooting.md)
-  describe a simulated cell that exists and commands that run. The other three describe
-  procedures for parts of the system that are not built.
-  **No procedure here is valid for physical hardware until Phase 2.**
+  describe the simulated pair that exists and commands that run.
+  [safety-procedures.md](safety-procedures.md) and
+  [calibration-and-registration.md](calibration-and-registration.md) are the procedures for the
+  physical arm the main tree is heading for. **No procedure here has been run against physical hardware.**
 
 | Runbook | For |
 |---|---|
-| [bring-up.md](bring-up.md) | Starting the system, simulated or physical |
-| [calibration-and-registration.md](calibration-and-registration.md) | Establishing the correspondence between the real cell and the model |
+| [bring-up.md](bring-up.md) | Starting the system: one side, the pair, the real program |
 | [safety-procedures.md](safety-procedures.md) | Anything involving physical motion |
-| [recording-and-replay.md](recording-and-replay.md) | Capturing a run and replaying it |
+| [calibration-and-registration.md](calibration-and-registration.md) | Tying the real cell's frame to the model's (Phase 2, `DESIGNED`) |
 | [troubleshooting.md](troubleshooting.md) | When something is wrong |
 
 ## How these are written

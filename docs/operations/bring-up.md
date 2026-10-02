@@ -1,16 +1,11 @@
 # Bring-up
 
 - **Status:** `PARTIAL` — the simulated path below works and is what `./scripts/scenario bringup`
-  drives. Of the last two stages of the step-4 sequence, **twin sync is started by the paired
-  bring-up and by nothing else** — `cite_twin` is started by `./scripts/sim --pair`
-  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)) and appears in
-  no launch file and no scenario, so a solo bring-up starts no L5; it refuses a zone that
-  declares one side, and `cell_b`, the one zone L0 declares, is paired since 2026-09-18
-  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)) — and **orchestration is not
-  in the main tree**: the line coordinator, the detection server and `line:=true` left it on
-  2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). The three-arm line is run from
-  [`../../projects/01-three-arm-event-driven-line/`](../../projects/01-three-arm-event-driven-line/README.md).
-  The physical path is Phase 2 and has never been run.
+  drives. A solo bring-up stops at the skills; **twin sync** (`cite_twin`) is started by the
+  pair supervisor under `./scripts/sim --pair` and `./scripts/program`
+  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)), on the paired
+  zone `cell_b`, and appears in no launch file and no scenario. The physical path is Phase 2.B
+  and has never been run.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell
@@ -65,11 +60,10 @@ one reporting active:
 
 ```
 simulator → descriptions → controller manager → controllers
-          → MoveIt → skills → twin sync → orchestration
+          → MoveIt → skills → twin sync
 ```
 
-The last two stages are the target sequence: a solo bring-up stops at skills, twin sync is the
-pair supervisor's (below), and orchestration is not in the main tree.
+A solo bring-up stops at skills; twin sync is the pair supervisor's (below).
 
 **If a step fails:** bring-up stops with a diagnosis naming the step. It does not continue
 degraded — that is the point of lifecycle sequencing.
@@ -80,8 +74,8 @@ degraded — that is the point of lifecycle sequencing.
 ros2 control list_controllers          # all active
 ros2 topic hz /cite/cell_b/picker/joint_states
 ros2 action list | grep cite           # skill servers present
-# /cite/twin/mode has NO publisher in this bring-up: cite_twin is not started
-# by it, and needs a zone declaring `twin: {sides: pair}` to start at all.
+# /cite/twin/mode has NO publisher in this bring-up: cite_twin is started
+# only by the pair supervisor (./scripts/sim --pair, ./scripts/program).
 ```
 
 The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process:
@@ -93,16 +87,13 @@ ros2 topic pub --once /cite/cell_b/transfer_belt/command \
     std_msgs/msg/Float64 "{data: 0.15}"                         # the belt, by hand
 ```
 
-The beams still stand in `cell_b`'s world and their levels are still bridged, but **nothing in
-the main tree reads them**: the detection server that turned a level into a typed event on
-`…/detection` left with the line (ADR-0069). The topic names are the plan's — read
+The beams stand in `cell_b`'s world and their levels are bridged, but **nothing in the main
+tree reads them**. The topic names are the plan's — read
 `workspace/src/cite_generated/bringup/cell_b_plan.yaml` rather than this block.
 
 **If a belt setpoint seems never to arrive:** reliable QoS is a promise to *matched*
 subscribers, so a setpoint published before the bridge's subscriber matched is delivered to
-nobody, however long the bridge has been up. The line's belt owner failed this way silently for
-ten commits; the measurement is in the 2026-08-27 correction on
-[ADR-0032](../adr/0032-index-the-belt.md), and the rule is in
+nobody, however long the bridge has been up. The rule is in
 [`../interfaces/qos-profiles.md`](../interfaces/qos-profiles.md).
 
 **If a controller is inactive:** check that its joint names match the description
@@ -118,8 +109,7 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 > inventing a second side: whether a zone runs as a pair is an L0 fact.
 > `model/facility/zones.yaml` ships one zone, `cell_b`, as `twin: {sides: pair}`
 > ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so the command below comes
-> up from a clean checkout. It said `cell_a` was shipped `single` and refused until that zone
-> left L0 on 2026-10-01 (ADR-0069).
+> up from a clean checkout.
 >
 > **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
 > step does, and what CI drives on `cell_b` is the plant alone (`bringup` twice and
@@ -159,11 +149,10 @@ two lines arrive in says nothing and carries no meaning.
 **The console is two labelled streams.** Every line is prefixed with the side it came from.
 That is a real ergonomic cost of running a pair and there is no single-stream form of it.
 
-### Running the fixed program on the pair
+### Running the real program on the pair
 
-The cell's default cycle is the **real xArm 5's own program**
-([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md), which continues
-[ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md)). Its steps are not written in
+The cell's cycle is the **real xArm 5's own program**
+([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)). Its steps are not written in
 Python: `model/programs/xarm5_real_demo.blockly.xml`, the robot's exported UFACTORY Studio
 program, is named by the arm's `configuration.program` in L0, read strictly by
 `cite_tools.model.blockly` when the plan is generated, and arrives in the bring-up plan's
@@ -177,7 +166,7 @@ belt is started on that side's own domain by `python3 -m cite_bringup.program.be
 through the twin boundary.
 
 ```bash
-./scripts/program                     # bring the pair up without the line, start each side's
+./scripts/program                     # bring the pair up, start each side's
                                       # belt on that side, one box per side, one cycle through
                                       # the twin, report where the boxes ended, tear down
 ./scripts/program --headless --cycles 3
@@ -206,13 +195,9 @@ carriages are moving drops later track commands and sends no stop, so each side 
 point it already has; and through the twin the counterpart's track position and custody are
 not read back.
 
-**The beam-triggered line is not in the main tree** ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). It ran single-sided on `cell_a`,
-and never on `cell_b` after ADR-0067, whose transfer station declares no place frame because the
-belt's infeed is out of reach at track position 0. The previous behaviour — taught poses and a timed
-belt run through the twin (ADR-0066) — is kept runnable in
-[`../../projects/02-fixed-program-pair/`](../../projects/02-fixed-program-pair/README.md), and
-the three-arm line in
-[`../../projects/01-three-arm-event-driven-line/`](../../projects/01-three-arm-event-driven-line/README.md).
+Past milestones are not run from here: each runs from its own folder under `projects/`, for
+example `projects/01-three-arm-event-driven-line/run` — see
+[`../../projects/README.md`](../../projects/README.md).
 
 ### Reaching one side
 
@@ -263,30 +248,21 @@ model and the same solver, so any agreement between them is agreement of a thing
   holds one context on one domain — and defers what one would look like. `./scripts/scenario`
   addresses the plant.
 - **No mirroring, and a divergence metric nothing can read.** `cite_twin` exists and
-  publishes `DivergenceMetrics` per asset, but only `./scripts/sim --pair` starts it, it
-  refuses a single-sided zone, and `valid` is false in every sample it can produce — one of the
+  publishes `DivergenceMetrics` per asset, only the pair supervisor starts it, and `valid` is
+  false in every sample it can produce — one of the
   conjunction's terms is each side's clock deficit within a bound
   [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) leaves unset, measured by
   nothing ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3). Mirroring in
   the sense L5 owns it — physical state driving the virtual side — is not implemented at all,
   and ADR-0041's open questions are still open.
-- **Real-time factor is not a bring-up condition.** ADR-0043's half 2 puts a real-time floor on
-  both sides and **nothing in bring-up measures it**, so a side can be up, slow, and
-  indistinguishable from a healthy one here. **Do not cite half 2's original wording as the
-  requirement**: it was restated on 2026-08-31 by
-  [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) as a **capacity** floor of
-  1.0 measured with the world's throttle lifted, plus a bound on the **accumulated clock
-  deficit** measured with it in force. Neither of ADR-0049's two thresholds is set, and nothing
-  in `workspace/`, `tools/`, `tests/` or `scripts/` measures either quantity during a run, so
-  the floor is **not met** under either shape and nothing in bring-up would notice. The
-  paired figure measured by hand on 2026-08-30 is in ADR-0043's correction of that date; it was
-  taken with the throttle in force, so it is a real shortfall and not a capacity number. A
-  capacity number now exists, for a named machine, in
-  [`docs/measurements/2026-08-31-capacity-and-clock-deficit/`](../measurements/2026-08-31-capacity-and-clock-deficit/ANALYSIS.md);
-  it was taken by that campaign's own frozen harness, which nothing here starts. In
-  either shape, **a pair that comes up is not a pair that is keeping time.**
+- **Real-time factor is not a bring-up condition.** ADR-0043 puts a real-time floor on both
+  sides, restated by [ADR-0049](../adr/0049-measure-the-real-time-floor-as-capacity.md) as a
+  **capacity** floor of 1.0 measured with the world's throttle lifted plus a bound on the
+  **accumulated clock deficit**. Neither threshold is set and nothing in bring-up measures
+  either quantity, so a side can be up, slow, and indistinguishable from a healthy one here.
+  **A pair that comes up is not a pair that is keeping time.**
 
-## Physical cell — Phase 2
+## Physical cell — Phase 2.B
 
 > **Not valid yet.** No hardware interface exists. This is the designed procedure, recorded
 > so that Phase 2 implements against it rather than inventing it under time pressure.
@@ -296,7 +272,9 @@ model and the same solver, so any agreement between them is agreement of a thing
 1. Risk assessment current. **Not a software artifact.**
 2. Physical E-stop tested this session, latency verified.
 3. Cell clear, confirmed by a person looking at it.
-4. Registration current — see [calibration-and-registration.md](calibration-and-registration.md).
+4. Registration current — the real cell's frame tied to the model's
+   ([calibration-and-registration.md](calibration-and-registration.md); charter §8, Phase 2;
+   not built).
 5. A human at the stop, watching.
 
 ### Sequence
@@ -322,7 +300,7 @@ Reduced speed. A human on the stop. A single short motion before anything else.
 Ctrl-C   # the launch handles ordered shutdown
 ```
 
-**Expect:** orchestration stops accepting work, in-flight skills cancel cleanly,
+**Expect:** a running program's goal in flight is cancelled, in-flight skills cancel cleanly,
 controllers deactivate with the robot in a safe state, no orphaned processes.
 
 **Verify:**

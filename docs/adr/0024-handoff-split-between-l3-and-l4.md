@@ -2,14 +2,14 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Related:** ADR-0007, ADR-0010, [L3](../architecture/L3-capabilities.md), [L4](../architecture/L4-orchestration.md)
+- **Related:** ADR-0007, ADR-0010, [L3](../architecture/L3-capabilities.md), L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`)
 
 ## Context
 
 Two documents both describe handoff, and neither is wrong, but together they leave the
 division of labour undefined.
 
-[`L4-orchestration.md`](../architecture/L4-orchestration.md) lists "the handoff protocol
+`L4-orchestration.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) lists "the handoff protocol
 between robots" under **Owns**, and fixes four rules: a work-piece has exactly one owner at
 any instant and ownership transfers atomically; both parties must confirm before physical
 transfer begins; a timeout has a defined outcome — the upstream robot retains ownership and

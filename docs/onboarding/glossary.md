@@ -44,15 +44,12 @@ carries the level each mode sits at.
 
 `VIRTUAL_LEAD` is `CLOSED_LOOP` without the validation gate and `SHADOW` with the arrow
 reversed ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)
-Decision 2). **A node serves the mode and only the paired bring-up starts it** —
-`cite_twin/twin_boundary.py` serves `SetMode` and publishes `TwinMode`
-([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)), started by `./scripts/sim --pair`
-and by nothing else ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
-It refuses a zone that declares one side; the one zone L0 declares, `cell_b`, is paired
-([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)). `./scripts/program` also starts
-it, through the same supervisor. A mode has been set on a
-running boundary by hand, once; **nothing automated brings a pair up**, so the mode set is
-still vocabulary in every run CI takes.
+Decision 2). **A node serves the mode**: `cite_twin/twin_boundary.py` serves `SetMode` and
+publishes `TwinMode` ([ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md)), started by the
+pair supervisor under `./scripts/sim --pair` and `./scripts/program`
+([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)) on the paired zone
+`cell_b`. **Nothing in CI brings a pair up**, so the mode set is vocabulary in every run CI
+takes.
 
 ## Architecture
 
@@ -66,12 +63,16 @@ still vocabulary in every run CI takes.
 | **Asset instance** | One occurrence of a component type, with an identity and a pose. |
 | **Zone** | A named region of the facility. Zones partition; they do not nest. |
 | **Skill** | An L3 robot-agnostic capability exposed as a ROS 2 action. The unit of meaningful work. |
-| **Station** | An L4 position in the process topology where work happens. A station has a robot; a robot may serve a station. L0 still declares `cell_b`'s stations and `program_cycle` reads their frames, but no L4 code is in the main tree since ADR-0069. |
+| **Station** | A position in the L0 process topology where work happens. A station has a robot; a robot may serve a station. `program_cycle` reads `cell_b`'s station frames. |
 | **Handoff** | Transfer of ownership of a work-piece between two robots. Exactly one owner at any instant. |
-| **Work-piece** | The thing being processed. Tracked by L4. Its geometry is declared once, in L0, as a type with no instances. |
+| **Work-piece** | The thing being processed. Its geometry is declared once, in L0, as a type with no instances; where it is at any moment is the process's business. |
 | **Through beam / break beam** | The cell's only sensor: an emitter and a receiver across the belt. It reports **occupancy** — that something crossed it — and nothing about where along the beam or how the part is turned. |
-| **Indexed belt** | A belt that stops when the station it feeds is triggered and restarts when that station reports `CompleteHandoff`, so the part stands still to be picked ([ADR-0032](../adr/0032-index-the-belt.md), deprecated). Its effective concurrency is 1, whatever buffer the topology declares. Not in the main tree since ADR-0069; it runs in `projects/01`. |
 | **Index stand-off** | How far downstream of a pick point an indexing beam is mounted, so that a part breaking it on its **leading edge** comes to rest centred on that point. Derived from the declared part length, never authored ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)). |
+| **Linear track** | The rail the arm rides on, as on the real cell: a prismatic joint under the arm's base with its own trajectory controller ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)). |
+| **The program** | The real xArm 5's own UFACTORY Studio Blockly program, `model/programs/xarm5_real_demo.blockly.xml`, read-only. `cite_tools.model.blockly` reads it into the bring-up plan and `cite_bringup.program` runs it step by step. |
+| **Twin boundary** | The L5 node (`cite_twin/twin_boundary.py`) holding one ROS context per side. A goal sent to `/cite/twin/...` is dispatched to both sides' own servers in the modes that route a command — one signal, both arms. |
+| **Pair** | The two sides of a twinned zone: the `plant` and the `counterpart`, each on its own `ROS_DOMAIN_ID` and Gazebo partition. Both are simulations today; Phase 2.B makes one physical. |
+| **`program_cycle`** | The scenario that runs the real program for one cycle on the plant and asserts where the work-piece ends. A blocking CI gate. |
 | **Twin monitor** | The L5 component that continuously measures and publishes divergence. |
 | **Divergence** | Measured difference between predicted (model) and observed (physical) behaviour. Never an estimate — always a published number. |
 | **Registration** | The transform between the real cell's coordinate frame and the model's. What makes measurements transferable. |
@@ -93,7 +94,7 @@ still vocabulary in every run CI takes.
 
 | Term | Means here |
 |---|---|
-| **ISO 23247** | The manufacturing digital twin framework our architecture aligns with. See [`../architecture/standards-alignment.md`](../architecture/standards-alignment.md). |
+| **ISO 23247** | The manufacturing digital twin framework our architecture aligns with. See [ADR-0016](../adr/0016-iso-23247-alignment.md) and [`../reference/standards.md`](../reference/standards.md). |
 | **OME** | Observable Manufacturing Element — ISO 23247's term for a physical asset being twinned. |
 | **DCDC** | Data Collection and Device Control — the ISO 23247 domain mapping to our L2 and L5. |
 | **Aligned, not certified** | We map our architecture onto ISO 23247. We have not undergone conformance assessment, and no document may claim we have. |

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Related:** [ADR-0010](0010-typed-ros-interfaces.md), [`../architecture/L6-data-and-telemetry.md`](../architecture/L6-data-and-telemetry.md)
+- **Related:** [ADR-0010](0010-typed-ros-interfaces.md), `../architecture/L6-data-and-telemetry.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`)
 
 ## Context
 

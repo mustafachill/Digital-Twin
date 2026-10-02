@@ -14,9 +14,10 @@
 #
 # TOPIC below is the ONE place this name is written, because a name stated in
 # the contract is discoverable and one in prose is not: it was in prose in
-# docs/operations/bring-up.md and docs/operations/recording-and-replay.md and
-# nowhere in the contract, which is one value in two documents waiting for a
-# third (ADR-0050, decision 5d).
+# docs/operations/bring-up.md and in a recording runbook (whose divergence
+# part is now in docs/architecture/L5-twin-synchronization.md) and nowhere in
+# the contract, which is one value in two documents waiting for a third
+# (ADR-0050, decision 5d).
 #
 # `valid` IS A CONJUNCTION, and ADR-0050 decision 3 is where it is decided
 # rather than here. Its five terms: the mode defines the comparison; both

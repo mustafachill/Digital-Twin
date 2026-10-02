@@ -1,150 +1,73 @@
 # L0 — Facility model
 
-- **Status:** `BUILT` — `model/` describes **one cell**, `cell_b` (`./scripts/validate-model`
-  reports `1 zone(s), 7 type(s), 7 asset(s), 3 station(s), across 17 file(s)` on 2026-10-01 on
-  `feat/remove-parked-line`), and the generators in `tools/cite_tools/generate/` emit every
-  artifact in the table below except the last two, **once per zone**. It described two cells
-  (2 zones, 7 types, 22 assets, 8 stations) until
-  [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) removed
-  `cell_a` from L0 on 2026-10-01. All five validation
-  levels run:
-  `./scripts/validate-model` exits 0, and that command includes the fresh-generator diff
-  **and** a determinism check that regenerates in a second interpreter under a different hash
-  seed. `tools/tests/` holds **1597** tests on that branch, counted by collection
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, 2026-10-01); it held 1502 on
-  2026-09-16.
-  Both figures were stale on 2026-08-27 — the asset count by one instance, the test count by
-  two separate additions — and **both were stale again on 2026-09-16**, the first because
-  ADR-0056 declared the second zone `cell_b` and the second because three of those test files
-  parametrize over `git ls-files` and so grow with the tree. They are counts of a generated or
-  collected set written by
-  hand into prose, and nothing can fail when one moves. Take them from the two commands
-  above rather than from this sentence.
-  **Not produced:** registration reference data for L5 (Phase 2) and scene topology for L7
-  (Phase 4) — the two rows whose consumers do not exist yet.
-  **The two gaps this line used to name are closed**, both by
-  [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md):
-  `model/assets/types/workpieces/workpiece.yaml` gives the cell's reference part extents,
-  mass and inertia, so `tools/cite_tools/validate/physical.py` now enforces the bound that
-  matters under a friction grasp — the default grasp width must be narrower than the
-  narrowest part, less the discrimination margin L3 needs — and
-  `tools/cite_tools/validate/geometric.py` gained the support-margin rule that the same
-  datum made expressible. The end-effector type's `linkage` block declares the seven vendor
-  dimensions from which the grasp-plane offset is *derived*, so the offset is a property of
-  L0 and no longer hand-written above it.
-  Seven types, 7 assets: the work-piece type has **no instances**, deliberately — where a
-  part is at any moment is the process's business, not the layout's.
-  **Seven types across two zones, and the seven did not move when the second zone landed.**
-  `resolve.py` hands every type to every zone, so `cell_b` (ADR-0056) is built entirely from
-  the component library `cell_a` already used — that is P9 measured rather than asserted, and
-  it is why a second cell is a data change. *(That was the two-zone model of 2026-09-16 to
-  2026-10-01. With `cell_a` gone the type count is still seven, because the type set changed
-  as well — `pedestal_600` left with `cell_a` and the linear-axis type of
-  [ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md) had arrived — so the
-  seven is not the same seven.)*
-  **L0 now also decides which planner an arm plans with.** The robot type declares the
-  default and fallback pipelines, the planner id for each, a per-joint deceleration limit and
-  four Cartesian ceilings, and the generator holds what a pipeline is *made* of — that is the
-  P5 split, and it is why the MoveIt row below reads "planning pipelines" rather than "OMPL"
-  ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). The four Cartesian ceilings are
-  placeholders that no motion in this cell consumes — every motion is planned in joint space
-  — and one of the four is MoveIt's template default rather than a figure chosen here; the
-  model comment says so, and so does the ADR.
-  **The work-piece datum now also places a sensor.** An indexing break beam declares
-  `indexes_workpiece: true` and a **zero** along-belt offset; the resolver derives its
-  stand-off from the declared part length and the beam width, and
-  `tools/cite_tools/validate/geometric.py` refuses a non-zero authored offset so a fitted
-  constant cannot re-enter the model
-  ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)).
-  **L0 now says whether a zone is twinned, and what each side of an asset loads.** A zone
-  declares `twin: {sides: single | pair}` — required, with no default — and an instance may
-  declare `hardware.counterpart_backend`, which when absent means the same backend as
-  `hardware.backend`
-  ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), Decision 3).
-  There is no `counterpart` field and no `none` sentinel: **twinned is derived** from
-  `sides == pair`. Two consequences to carry rather than rediscover. First, no omitted key
-  can produce a hardware path anywhere, because the value `counterpart_backend` falls back
-  to is itself required and explicit — and, since
-  [ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md), because what makes
-  a backend a hardware path is a required field on the backend rather than the value of its
-  id. Second, `twin.sides` is read by the generators, so
-  pairing a zone produces a committed `cite_generated/` diff and a new `MODEL_HASH` — which
-  is accepted, and rests on pairing not being a runtime mode: the runtime knob is `TwinMode`
-  and it regenerates nothing. A launch argument or an environment variable that turned
-  pairing on without regenerating is the reopening trigger ADR-0041 names, not an
-  optimisation.
-  **A type declares whether each backend can reach a physical machine, and every hardware
-  gate reads that rather than the backend's name.** `hardware_backends.<id>` carries
-  `commands_physical_hardware`, **required with no default**, beside the
-  `ros2_control_plugin` string it is about
-  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md), decision 1).
-  It exists because an id is a name: nothing constrained what plugin an id could carry, so a
-  type could declare the vendor's physical component under the id `sim` and the validator,
-  the bring-up refusal, L5's mode gate and L5's divergence validity all answered wrongly at
-  once — that record's *Context* measures all four. **Nothing verifies the claim against the
-  plugin string beside it**, and catching a false one needs a transcribed list of plugin
-  classes, which `cross-cutting-safety.md`'s own lesson refuses; what the field buys is that
-  the fact is stated by the person who chose the plugin, where they chose it.
-  **`use_sim_time` deliberately still keys on the id** and is measured wrong in both
-  directions; that residual is ADR-0054 decision 2's, pinned by two characterisation tests
-  and owed its own record.
-  **One configuration is refused rather than left expressible:** a zone declaring
-  `twin.sides: pair` may not contain an asset selecting a backend that declares
-  `commands_physical_hardware: true`. `plant` is the side `./scripts/sim`, every scenario and every Phase 1 artifact
-  already address, so that encoding would point the existing suite at a physical cell behind
-  a bring-up refusal rather than a per-command one. The same two machines are written as
-  `counterpart_backend`. It is a cross-document rule — the zone holds one half and the
-  instance the other — so it lives in `cite_tools.validate.referential`, as
-  `physical-plant-on-paired-zone`, and the exported JSON Schema does not claim it. **The rule
-  id is unchanged and its `where` moved** to the type's backend declaration, because that is
-  where the cause now lives (ADR-0054).
-  **A second refusal sits beside it and closes the other half of the same cross product:**
-  no asset's `counterpart_backend` may differ from its `backend`, on a paired zone or a
-  `single` one, as `divergent-counterpart-backend`
-  ([ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md), clause 1).
-  The encoding is unchanged and stays the 2.B encoding; what is refused is *generating* from
-  it. Every generator site that branches on a backend reads `hardware.backend` — the
-  plant's — so a divergent counterpart was handed the plant's description, plugin and
-  `use_sim_time`, validated cleanly and was committed under ADR-0021. It is a cross-*field*
-  equality rather than a cross-document one, so pydantic could state it only as a validator
-  the exported schema would not carry — which is the same reason it lives here. **It is
-  temporary by construction**: ADR-0048 clause 2 fixes the per-side artifact set that lifts
-  it, and that set does not exist, so the refusal's own message names the record.
-  **Each side carries two isolations, and both are emitted for every side including a `single`
-  zone's plant.** The plan's `sides:` entry states a `gz_partition` and a `domain_offset`,
-  formed side by side in `cite_tools.model.ids` from one side identity, because neither
-  substitutes for the other: `GZ_PARTITION` is a gz-transport namespace the ROS graph has never
-  heard of, and `ROS_DOMAIN_ID` was measured not to isolate the Gazebo transport
-  ([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md),
-  [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md) clause 2). The domain is
-  an **offset** and never an absolute value: an absolute one derived from the deployment
-  differs in every clone and breaks the byte-identity check `./scripts/validate-model`
-  performs, and one derived from the model is identical in every clone, so two checkouts of one
-  commit would discover each other. The base travels in `CITE_DOMAIN_BASE` and
-  `cite_bringup.plan.resolve_domain_id` adds them, once.
-  **What L0 emits for a pair, and what it does not:** `twin.sides: pair` emits a second
-  `sides:` entry — with the counterpart's partition and its offset — and each asset's
-  counterpart backend, and what each side declares about physical hardware, into the bring-up
-  plan; there is no second world, no second controller
-  manager and no second set of node names, because a counterpart is the same generated
-  artifacts started in a different environment. **A pair is brought up by `./scripts/sim --pair`
-  as of 2026-08-30** ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md));
-  this document said "nothing brings a second side up" until then. **`cell_b` declares
-  `twin: {sides: pair}` as of 2026-09-18**
-  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), and since `cell_a` left L0
-  on 2026-10-01 (ADR-0069) this repository ships exactly one zone, and it is paired. This
-  document said "the shipped model is still `single`" until 2026-09-18 and "one paired zone and
-  one unpaired one" until 2026-10-01. **Do not read a paired model as a running pair** —
-  nothing automated brings one up — and
-  read the emitted plan rather than this sentence for what a change produces: a list of what a
-  change does not do is a claim with an expiry date.
-- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)
+- **Status:** `BUILT` — `model/` describes **one zone, `cell_b`, paired**: one xArm 5 on a
+  linear track, one belt, one pick table, and the real robot's program
+  (`model/programs/xarm5_real_demo.blockly.xml`). The generators in
+  `tools/cite_tools/generate/` emit every artifact in the table below except the last two.
+  `./scripts/validate-model` runs all five validation levels, diffs the committed
+  `cite_generated/` against a fresh generator run, and regenerates in a second interpreter
+  under a different hash seed to prove the output byte-identical. **Ask that command for the
+  model's cardinality; do not read a count out of prose.**
+  **Not produced:** registration reference data for L5 and scene topology for a display — the
+  two rows whose consumers do not exist.
+  What L0 decides, beyond layout:
+  - **The work-piece** ([ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md)):
+    `model/assets/types/workpieces/workpiece.yaml` gives the reference part's extents, mass
+    and inertia, so the validator enforces that the default grasp width is narrower than the
+    narrowest part less the discrimination margin, and the support-margin rule. The type has
+    **no instances**, deliberately — where a part is at any moment is the process's business,
+    not the layout's. The end-effector's `linkage` block declares the vendor dimensions from
+    which the grasp-plane offset is *derived*.
+  - **The program** ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)):
+    `cite_tools.model.blockly` reads the real robot's Blockly export into the bring-up plan,
+    accepts only the block types that program uses, and refuses anything else, so a program
+    edited on the robot to use a block the twin does not model fails validation instead of
+    being approximated. The file is read-only and pinned by
+    `tools/tests/test_real_program_is_pinned.py` (`model/programs/README.md`).
+  - **The track** (ADR-0067): the arm stands on a linear-axis type
+    (`model/assets/types/axes/ufactory_linear_motor.yaml`) with its own trajectory controller.
+  - **The planner** ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)): the robot type declares
+    default and fallback pipelines, the planner id for each, a per-joint deceleration limit
+    and Cartesian ceilings; the generator holds what a pipeline is *made* of (the P5 split).
+  - **The beams** ([ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md)): an
+    indexing break beam's stand-off is derived from the part length and the beam width, and a
+    non-zero authored offset is refused.
+  - **The pair** ([ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)):
+    a zone declares `twin: {sides: single | pair}`, required with no default, and an instance
+    may declare `hardware.counterpart_backend`. **Twinned is derived** from `sides == pair`.
+    Pairing is a model change, not a runtime mode: it regenerates `cite_generated/` and moves
+    `MODEL_HASH`; the runtime knob is `TwinMode`. A paired zone emits one more `sides:` entry
+    and each asset's counterpart backend into the bring-up plan, and nothing else — no second
+    world, controller manager or set of node names, because a counterpart is the same
+    artifacts started in another environment.
+  - **Which backend reaches a machine**
+    ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)):
+    `hardware_backends.<id>.commands_physical_hardware` is required with no default, and every
+    hardware gate reads it rather than the backend's name. Nothing verifies the claim against
+    the plugin string beside it. `use_sim_time` still keys on the backend id, a residual pinned
+    by two characterisation tests.
+  - **Two refusals** in `cite_tools.validate.referential`: `physical-plant-on-paired-zone` (a
+    paired zone may not contain an asset whose backend commands physical hardware) and
+    `divergent-counterpart-backend` ([ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md)
+    clause 1: a counterpart backend may not differ from the plant's, because every generator
+    site reads the plant's). The second is temporary by construction; its message names the
+    record.
+  - **Two isolations per side**, emitted for every side: a `gz_partition` and a
+    `domain_offset`, formed together in `cite_tools.model.ids`
+    ([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md),
+    [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md) clause 2). The domain is
+    an **offset**, never absolute; the base travels in `CITE_DOMAIN_BASE` and
+    `cite_bringup.plan.resolve_domain_id` adds them, once.
+  `./scripts/sim --pair` brings the pair up
+  ([ADR-0047](../adr/0047-two-independent-launches-joined-not-sequenced.md)). Read the emitted
+  plan rather than this list for what a model change produces.
+- **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0013](../adr/0013-host-agnostic-tooling.md), [ADR-0030](../adr/0030-facility-model-describes-the-workpiece.md), [ADR-0033](../adr/0033-derive-the-index-standoff-from-the-workpiece.md), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)
 
 ## Responsibility
 
 L0 is the single declarative description of everything that physically exists: the
-facility and its zones, every asset instance, their poses, their types, and the process
-topology connecting them. Every artifact the rest of the system needs is **generated** from
+facility and its zones, every asset instance, their poses, their types, the process
+topology connecting them, and the program the cell runs. Every artifact the rest of the system needs is **generated** from
 it.
 
 This layer has **no runtime behaviour.** It is data, a schema, a validator, and generators.
@@ -166,7 +89,8 @@ That is why it can be plain Python with no ROS dependency and run on any machine
 - **Anything at runtime.** No node, no topic, no service. A running system never reads the
   model; it reads what was generated from it.
 - Behaviour. The model says a station *exists* and what it is connected to, never what it
-  *does* — that is L4.
+  *does*. The one behaviour it carries is the real robot's program, which it reads, not
+  writes.
 - Geometry itself. The model references meshes; L1 owns them.
 - Tuning values that are not facts about the facility. A controller gain is not a property
   of the building.
@@ -186,16 +110,16 @@ That is why it can be plain Python with no ROS dependency and run on any machine
 | Planning scene | L2 |
 | Facility appearance — the material library, and which body wears which entry | whatever spawns a body that is in no description; today `cite_bringup.workpiece` |
 | Launch graphs | bringup |
-| Process topology | L4 |
+| Process topology | nothing at runtime today; generated and validated |
 | Frame and namespace plan | everything |
-| Registration reference data | L5 |
-| Scene topology for display | L7 |
+| Registration reference data | L5 (not produced) |
+| Scene topology for display | a future display (not produced) |
 
 ## Design
 
 ### Shape of the model
 
-Four concerns, kept in separate files so that a layout change and a topology change are
+Five concerns, kept in separate files so that a layout change and a topology change are
 separately reviewable:
 
 ```
@@ -205,6 +129,7 @@ model/
 │   ├── types/        the component library: reusable type definitions
 │   └── instances/    asset instances: id, type, pose, zone, configuration
 ├── topology/         process flow: stations, upstream/downstream, buffers
+├── programs/         the real robot's program, as its own tool exported it
 └── schema/           JSON Schema definitions
 ```
 
@@ -267,8 +192,8 @@ an error, never a default.
 - **How are zones bounded?** Axis-aligned boxes are simple and probably enough for a robot
   cell; a scanned building may want polygons. Deferred to Phase 3, when the scan exists.
 - **How are model changes versioned against recorded data?** A bag recorded against
-  yesterday's layout is not comparable to today's. The likely answer is a model version
-  hash stamped into every recording — decide with L6 in Phase 4.
+  yesterday's layout is not comparable to today's. The likely answer is the model version
+  hash (`MODEL_HASH`, served by `model_info`) stamped into every recording.
 - **How is a work-piece fact that is really a *pair* fact housed?**
   `default_grasp_width_m` is a property of an end-effector paired with a work-piece and
   currently sits on the end-effector type. With one part size that is written once and the

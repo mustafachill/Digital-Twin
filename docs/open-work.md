@@ -1,261 +1,28 @@
-# Open work — snapshot of 2026-09-01
+# Open work — snapshot of 2026-10-02
 
-**Status: SNAPSHOT.** This is not a tracker and must not become one.
+**Status: SNAPSHOT.** This is not a tracker and must not become one. It lists the open work of
+the **main project** — the paired `cell_b`, where one signal drives one real and one Gazebo
+xArm 5 with the same code — and nothing else.
 
 Charter §11 says the home of *"what is being worked on right now"* is the issue tracker and
-explicitly **not** a document. No tracker is configured for this repository, and the working
-list has been living in a session that ends. This file exists so that the list survives that
-ending, and it is written as a **dated snapshot** for a successor session.
+explicitly **not** a document. No tracker is configured for this repository, so this file keeps
+the list as a **dated snapshot**. **When a real tracker exists, delete this file rather than
+maintaining it.**
 
-**It goes stale the moment work resumes.** Every item below names the command, file or record
-that reproduces it; check that, never this file. If an item here disagrees with
-`./scripts/doctor`, with a record in [`docs/adr/`](adr/README.md), or with a campaign in
+**It goes stale the moment work resumes.** Every item names the command, file or record that
+reproduces it; check that, never this file. If an item disagrees with `./scripts/doctor`, with a
+record in [`docs/adr/`](adr/README.md), or with a campaign in
 [`docs/measurements/`](measurements/README.md), those are right and this is wrong.
 
-**When a real tracker exists, delete this file rather than maintaining it.** A second place
-where open work is written down is a P1 violation waiting to happen, and this file's only
-defence is that it is dated and says so.
-
-**Updated 2026-09-03**, on the branch `feat/close-phase-debts`: #30's open half has a published
-campaign and is rewritten against it, #55 gains a related but textually distinct sibling event
-from that campaign's raw, and the table below was re-derived by running the commands its rows
-name. **The heading date is the date this file was first written and is deliberately not
-moved**; every later reading carries its own date.
-
-**Updated 2026-09-04**, on the same branch at `f6f8827`: a thirteenth campaign is published and
-#36 is rewritten against it — §A.10 item 1 is recorded as met, and item 2's bracketing bullet as
-**half** met. The two table rows below that could have moved were re-derived with the commands
-they name: `main` is still `51195e0` (`git rev-parse main`, with `origin/main` agreeing), and the
-campaign count is **13 on this branch, 11 on `main`**. No other row was re-read on this date.
-
-**Updated again 2026-09-04**, on the same branch at `2affb36`: a **fourteenth** campaign is
-published and **#20 is rewritten against it** — its **healthy-run half is closed** and its firing
-half is not. [ADR-0036](adr/0036-execution-side-trajectory-tolerances.md) carries a dated
-amendment of the same date; its **status did not move**. The same two table rows were re-derived
-with the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, with
-`origin/main` agreeing), and the campaign count is now **14 on this branch, 11 on `main`**. No
-other row was re-read on this date.
-
-**Updated a third time on 2026-09-04**, on the same branch at `20612c8`: a **fifteenth** campaign
-is published and **#49 and #17 are rewritten against it**. #49's **margin half is partially
-measured** and its refusal half is unanswerable through the door that campaign used; **#17 was
-refused by the campaign's own pre-registered rule and is not advanced one step**.
-[ADR-0027](adr/0027-pilz-planning-pipeline.md) carries a dated amendment of the same date; its
-**status did not move**. A new instrument-honesty item **#59** records the empty description
-read-back, which has now cost three campaigns data. The same two table rows were re-derived with
-the commands they name: `main` is **still `51195e0`** (`git rev-parse main`, with `origin/main`
-agreeing), and the campaign count is now **15 on this branch, 11 on `main`**. No other row was
-re-read on this date.
-
-**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived` at `7d7ac19`, which is ahead
-of `main`:
-**#45 and #40 are both closed** by the change that lands ADR-0048 clause 3, and each entry names
-the command that reproduces its closure. #45's own text carried a wrong cost — that removing
-`hosted_by` moves `MODEL_HASH` — which is corrected where it stood rather than deleted, in this
-file and in ADR-0048. **#38 is deliberately untouched** and is now stale in two directions; #45
-says why and who owes it. No table row below was re-derived on this reading, and none of the
-notes above is disturbed.
-
-**Updated 2026-09-16**, on the branch `feat/cell-b-zone`: two new structural items, **#66**
-and **#67**, record the two validation gaps a second zone exposed — nothing compares two zones'
-bounding boxes, and a cross-zone station reference passes referential validation and then skips
-its reach check in silence. Both are **filed rather than fixed**, which is
-[ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)'s own
-decision and is recorded there under "What this costs us". Each entry names the command that
-reproduces it. **No existing item was re-read on this date** and no table row below was
-re-derived, so everything else in this file still carries whatever date it already carried.
-
-**Updated 2026-09-18**, on the branch `feat/pair-boundary`, which is ahead of `main`: **six new
-items, #74 to #79**, all pre-existing L5 design rather than that branch's defects — the pair
-supervisor starting the twin boundary ([ADR-0057](adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md))
-is the first thing that puts a boundary in front of a running pair, and what it exposed is what
-the boundary already did. They are **filed rather than fixed**, deliberately: a remediation round
-scoped to one branch's findings is the wrong place to redesign an L5 command path. Each entry
-names what reproduces it and **attributes nothing beyond what was observed**. **No existing item
-was re-read on this date** and no table row below was re-derived, so everything else in this file
-still carries whatever date it already carried.
-
-**Corrected 2026-09-17, on the same branch.** Two table rows below WERE stale and are
-re-derived here rather than left, because the change that made them stale is this branch's:
-the **L0 model** row read `1 zone, 7 types, 15 assets, 5 stations, 15 files` beside a command
-that now answers `2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 16 file(s)`, and the
-**Decision records** row read 52 against `./scripts/doctor`'s 55. A count printed beside the
-command that produces it is a promise the two agree; not re-running a command you have just
-invalidated is how each wrong figure in CLAUDE.md §2 got written. **Four other rows were
-re-run on that date and did not move** — Packages (23), Measurement campaigns (15), Shipped
-collision geometry (`convex_hull`) and the L0 model's own command exit status — and the two CI
-rows were **not** re-read, because no CI run of this branch exists. **Item #67's reproduction
-command was also updated** for the `cell_b` asset rename; a reproduction that no longer
-reproduces is worse than none.
-
-**Amended later the same day, after four reviewers read that change.** #45 stated that
-`hosted_by` was *"never a branch on a backend"*, which is false and is corrected in place — it
-was one of #38's three sites, which is why #38's count is **stale** rather than **wrong when
-written**, and the difference matters because ADR-0041 still rests on that argument. #40's
-closure narrated a failure that was already gone at `e18251e` and declined a measurement that
-was two minutes away; the measurement is now taken, on both trees and both model shapes, and
-its base row says the failures were already gone. **#61 is new** — a third side would be gated
-by nothing — and is filed rather than fixed, for the reason it gives itself.
-
-**Updated 2026-09-08**, and this reading is taken on **`main` itself at `30baea8`**, not on a
-branch: the work the notes above describe is merged, and `git rev-parse main` reads `30baea8`
-while `git rev-parse origin/main` reads `13bc8e9`, so `main` is **one commit ahead of the
-remote**. A new known defect **#60** records the third `continuous_line` failure signature, which
-is **not** the door #19 covers; #19 gains a cross-reference and is otherwise untouched. **Six of
-the eight table rows below were re-derived** with the commands they name on this date: five did
-not move and the campaign row did. **Two were not re-read** — the environment row, which needs
-the container, and the CI row, which needs an authenticated `gh` and does not have one here.
-
-**Updated again 2026-09-08**, on the branch `feat/hosted-by-derived`, after a second review round
-and a `tester` run over the fix commit. **Three items are new** — **#62**, the two `cite_twin`
-fixtures that append a counterpart unconditionally, which is #40's class alive one package over;
-**#63**, the paired-plan document shape hand-built in five fixtures and tied to the generator in
-none; and **#64**, a host-virtualenv `typer`/`click` incompatibility that breaks
-`cite_tools.cli --help`. **#40 is corrected twice**: its closure is scoped to `cite_bringup`,
-because the guard that holds it parses `Path(__file__)` and reaches one file, and its
-measurement table's `single` row is re-measured — it read **205** and is **209**, which is what
-the `pair` row already read. **#45's instrument count is corrected** from five lines in four
-files to **6 in 5**, one of the six being the sentence that names the instrument. Every figure
-in these edits was re-measured in this checkout on this date by the change that writes them; no
-table row in the section below was re-read.
-
-**Updated 2026-09-10**, on the branch `feat/declared-simulation-backend`, which is ahead of
-`main` and implements [ADR-0054](adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md). **One
-item is new: #65**, filed from a `safety-auditor` finding on that branch and re-driven by the
-fixer that filed it — the arm type's `bound_args` carries the declared `ros2_control_plugin`
-string into the description, **no validator reads `bound_args`**, and the vendor macro's own
-default is the physical component, so an omitted binding reaches a physical arm with L0, the
-plan and the bring-up gate all telling the truth. It is **pre-existing**, is filed rather than
-fixed because the fix is a choice between two shapes, and ADR-0054 carries a matching Correction
-of the same date for the three places it stated its residual as bounded to a *false* declaration.
-**No other item was touched and no table row below was re-read on this date.**
-
-**Updated again 2026-09-10**, on the same branch at `5516169`, from a `tester` run taken before
-the merge. **#55 is corrected**: its *"One event in eleven paired and twelve solo bring-ups"* was
-true when written and is false now — there is a **second occurrence**, and it is the **first in
-the solo configuration**, which removes the concurrent clean counterpart that was the argument
-for reading it as a race. The signature was compared against both the first occurrence and the
-2026-09-03 sibling rather than matched on the node name: it is **the same as the first** and
-**still distinct from the sibling**, and one of the four grounds that separated the sibling is
-retired by it. Its console is **deliberately not committed** and the item says why and what that
-costs. The item's heading changed and records what it used to read. **No other item was touched**
-— the same run's second failure matches **#26** and is named in #55 without being developed
-there — **and no table row below was re-read on this date.**
-
-**Updated 2026-09-17**, on the branch `feat/cell-b-zone` at `87470fc`, which is ahead of `main`
-and lands [ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md).
-**Three items are new and all three were measured rather than reasoned about**: **#69**, which a
-`tester` reproduced 3 of 3 while answering a question about #68 and which **amends #68's closing
-sentence**; **#70**, found by a `fixer` when `./scripts/test` reported 0 of 11 packages and
-nothing of ours executed; and **#71**, a coverage gap a `tester` named in the round that closed
-the defect around it. **No existing item below was re-read on this date and no table row was
-re-derived**, except #68, which #69 amends where it stands.
-
-
-**Updated 2026-10-01**, on the branch `feat/remove-parked-line`, which lands
-[ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md): the event-driven
-line, `cite_orchestration`, the detection server, `topology_server`, ten line-only interfaces,
-`./scripts/demo`, the `continuous_line` and `pick_and_place` scenarios and zone `cell_a` left the
-main tree, and run as the `projects/01` snapshot. **#19, #37, #60 and #77 are CLOSED as moved
-with the line to `projects/01`**; **#62 is CLOSED**, its fixtures now reading `cell_b`'s paired
-plan without appending a side; **#66, #67 and #68 are DORMANT**, because L0 declares one zone.
-#30, #17 and #55 carry `Overtaken` markers where they named the removed scenarios or `cell_a`'s
-scene. Items are not renumbered. **No other item was re-read and no table row below was
-re-derived on this date.**
-
----
-
-## Where the repository stood when this was written
-
-`main` at `30baea8` — `git rev-parse main` on 2026-09-08, with `git rev-parse origin/main` one
-commit behind at `13bc8e9`. It read `51195e0` on both, on 2026-09-03. This table was first taken at `3725af5`; every one of its original seven rows was
-re-measured at `abdae38` on 2026-09-01 and **none of them moved**, and the head line read
-`abdae38` until 2026-09-02. Reproduce each figure rather than quoting it from here.
-
-**Re-measured again on 2026-09-03, and this time the checkout is not `main`.** The reading is
-taken on the branch `feat/close-phase-debts`, which is **ahead of `main`** and carries the
-twelfth measurement campaign; `main` itself **has not moved since 2026-09-02** and
-is still `51195e0`, which was re-derived rather than assumed. **Seven of the eight rows were
-re-read and one moved.** Measurement campaigns went **11 → 12**:
-`2026-09-02-scenario-ceilings/` is the twelfth, and it is on this branch and **not yet on
-`main`** — the same command run against `main` still returns 11.
-**Re-read on 2026-09-04 at `f6f8827`: the count is 13 on this branch** —
-`2026-09-03-stall-band-flip/` is the thirteenth — **and still 11 on `main`**, which has not
-moved from `51195e0`.
-**Re-read again on 2026-09-04 at `2affb36`: the count is 14 on this branch** —
-`2026-09-04-following-error/` is the fourteenth — **and still 11 on `main`**, which still reads
-`51195e0`.
-**Re-read a third time on 2026-09-04 at `20612c8`: the count is 15 on this branch** —
-`2026-09-04-waypoint-clearance/` is the fifteenth — **and still 11 on `main`**, which still reads
-`51195e0`.
-The other six re-read identically: `11` / `23` package manifests; `1 zone(s), 7 type(s),
-15 asset(s), 5 station(s), across 15 file(s)` with `validate-model` exiting 0; `52 records, all
-indexed` on `doctor`'s `ADR index` line, with `ADR references` resolving; charter v1.12; and
-`select: convex_hull` at `model/assets/types/robots/xarm5.yaml:153`. The environment row was
-re-read **in the container** at `29 passed, 0 failed, 1 skipped`, unchanged. **The row not
-re-measured is the last one**, which needs `gh` against a CI run: **`gh` is installed neither
-on this host nor in the container image**, so that row has now gone two days unchecked and a
-claim about what CI has done expires the moment CI runs again. The environment row's own
-history is the note below.
-
-**Amended 2026-09-07: the host half of that sentence no longer holds.** A `gh` binary was
-installed on this host on 2026-09-07 — `~/.local/bin/gh`, `gh version 2.100.0 (2026-09-03)` —
-and the last row was re-measured with it that day. Whether the container image carries one was
-**not checked**, so that clause is left as written and unverified. The sentence was true when it
-was written; what it predicted came true faster than it allowed for.
-
-| | | Command |
-|---|---|---|
-| Environment | 29 passed, 0 failed, 1 skipped, **in the container** | `./scripts/enter dev ./scripts/doctor` |
-| Packages | 11 first-party, 23 with the imported vendor tree | `find workspace/src -name package.xml \| wc -l` |
-| L0 model | 2 zone(s), 7 type(s), 22 asset(s), 8 station(s), across 16 file(s) | `./scripts/validate-model` |
-| Decision records | 55 indexed | `./scripts/doctor`, `ADR index` line |
-| Measurement campaigns | 15, on `main` and on `origin/main` alike | `find docs/measurements -mindepth 1 -maxdepth 1 -type d \| wc -l` |
-| Charter | v1.12, 2026-09-01 | `what-we-are-doing.md` header |
-| Shipped collision geometry | `convex_hull` | `model/assets/types/robots/xarm5.yaml` |
-| CI runs on the shipped geometry | 5 — `e51238e`, `4ef2d7c`, `51195e0`, `f6a3779`, `13bc8e9`; `continuous_line` passed in 3 of the 5 | `gh run view <id> --log \| grep -o "Scenario '[a-z_]*'[^\"]*"`, restricted to the scenario step column |
-
-**The last row is five runs and is not a rate.** No thresholds were registered in advance, and it
-says nothing about the grasp or about capacity. CLAUDE.md §2's collision-geometry item is where
-it is kept. It read **four** until 2026-09-08, when `34247027502` at `13bc8e9` was added: that
-run's `continuous_line` and `pick_and_place` both passed and one of its two `bringup` invocations
-took the advisory branch on `parameter_bridge-2 exited with -6`. **That row is the only one in
-this table not re-derived on 2026-09-08** — `gh` on this host is unauthenticated, so no CI log
-could be opened; it carries the single reading of the agent that supplied it. The instrument now
-carries a restriction it did not have on 2026-09-07: a CI log echoes the **commit message**, so a
-whole-log grep also counts verdict strings quoted in a commit body, which is exactly what
-`13bc8e9`'s message does.
-
-**That row read `1, 33501707588 at e51238e, all three scenarios passed` until 2026-09-07**, and
-the note above it said it "has now gone two days unchecked". It had in fact been falsified within
-nine seconds of the commit that wrote it: `4ef2d7c`'s own CI run is a hull run. Re-read on
-2026-09-07 with `gh run list --branch main` and the whole-string grep above over every run's log —
-`gh` is on that host at `~/.local/bin/gh`, which is why the row could be re-measured at all.
-**`pick_and_place` passed in all four**, `bringup`'s cycle passed in all eight invocations with
-one teardown failure at `f6a3779`, and `continuous_line` failed in `4ef2d7c` and `51195e0`.
-
-**The environment row was re-measured on 2026-09-02 at `51195e0` and it moved.** It read
-`25 passed, 0 failed, 1 skipped` until then. Two
-things about that row, both read from `scripts/doctor` rather than assumed:
-
-- **Say which side of the container the reading is from.** `doctor` is the one command in
-  CLAUDE.md §7's table that does **not** re-execute itself inside the container — `build`, `test`,
-  `sim`, `scenario` and `audit-deps` all call `require_ros_env` and `doctor` does not. On a
-  Linux machine with Docker but no native ROS, the **host** `./scripts/doctor` therefore reports
-  `✗ ros 2 — no /opt/ros/jazzy/setup.bash` and **exits 1**; it read `25 passed, 1 failed,
-  0 skipped` here on 2026-09-02. The container reading is the meaningful one.
-- **The figure depends on whether a build tree is present**, which is why two readings taken on
-  the same day can differ by one. **Measured here:** `29 passed, 0 failed, 1 skipped`, with the
-  one skip being `docker … not installed` inside the container and `build fingerprint` passing.
-  **Reported separately on the same day and not re-taken here:** `28 passed, 0 failed,
-  2 skipped`. **Read from `scripts/doctor:149-164`,** the branch that accounts for the
-  difference: an empty `workspace/build` is reported as a **skip** (`build tree … absent`) and a
-  matching one as a **pass** (`build fingerprint … matches`), which moves exactly one check
-  between the two columns. That the second reading was taken without a build tree is the
-  explanation this makes available, **not something observed**. Run it rather than quoting it.
-
-Phase 1 is closed (charter §8, exit criterion MET 2026-08-28). Phase 2 has split into 2.A and
-2.B; 2.A's bring-up mechanism exists and **closes no clause** of the Phase 2 exit criterion.
+**Re-cut on 2026-10-02 for the main project.** The file was first written on 2026-09-01 and
+carried a "where the repository stood" table and a dated update log; both are gone, and so is
+the body of every item that is closed or whose subject left the main tree with
+[ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md). Such an item keeps
+its number and one line, because code and documents cite items by number. Its full text is in
+git history: `git show 911ba08:docs/open-work.md`. Items whose subject is still in the main tree
+but whose evidence was taken on `cell_a` or on a removed scenario keep their text and open with
+a line saying so; **re-verify those on `cell_b` before acting on them.** Nothing else in an item
+was re-read on 2026-10-02.
 
 ---
 
@@ -278,6 +45,8 @@ what "done" means:
 ## 1. Measurement debts
 
 ### #49 — Link-versus-environment clearance under hull geometry: the margin half is partially measured, the refusal half is not
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Partially answered on 2026-09-04, and every part of the answer is bounded.** The
 measurement this item asked for — in one of its two directions, on two of the three scenarios it
 names — is
@@ -365,6 +134,8 @@ above.
 promotion.**
 
 ### #20 — Following error under `gz_ros2_control`: the healthy-run half is closed, the firing half is not
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Answered on the healthy-run half, 2026-09-04, and still open on the firing half.** The
 measurement this item asked for, in one of its two directions, is
 [`docs/measurements/2026-09-04-following-error/`](measurements/2026-09-04-following-error/ANALYSIS.md)
@@ -470,6 +241,8 @@ tolerance flakes, set it to `null` before lowering its value. The campaign propo
 no threshold and no ceiling.
 
 ### #30 — Re-derive the six scenario wall-clock ceilings
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Answered on the under-load half, 2026-09-03, and still open on the attribution half.** The
 measurement this item asked for is
 [`docs/measurements/2026-09-02-scenario-ceilings/`](measurements/2026-09-02-scenario-ceilings/ANALYSIS.md)
@@ -532,6 +305,8 @@ change to the project owner and it proposes no replacement value for anything.
 **Change no ceiling without the measurement, and never widen one to absorb a failure.**
 
 ### #17 — Pilz checks collisions every 0.1 s and can step past a beam housing
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **A campaign has looked for this and refused the question, 2026-09-04. That is not progress
 toward closing it.**
 [`docs/measurements/2026-09-04-waypoint-clearance/`](measurements/2026-09-04-waypoint-clearance/ANALYSIS.md)
@@ -605,6 +380,8 @@ during a run — the only instrument is a frozen campaign harness no bring-up, s
 reaches.
 
 ### #85 — The cell does not reproduce under one seed, and where that enters is UNRESOLVED
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Opened 2026-09-22, on a published campaign:**
 [`2026-09-22-is-a-run-reproducible`](measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md),
 criteria frozen before its harness existed, harness frozen before its first trial, machine
@@ -661,6 +438,8 @@ against itself is the background any such failure sits against, and **that is a 
 careful with both, not a link between them.**
 
 ### #86 — The box still lands 0.201 mm apart, and where that comes from is unestablished
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Opened 2026-09-23, on the measurement in
 [ADR-0061](adr/0061-hold-the-box-while-the-jaws-are-shut.md)'s "Clause 2" section.** Cite that
 record; the figures are not copied here (P1).
@@ -940,43 +719,17 @@ do" list. Note that the 2026-09-01 campaign refuted a related prediction: over p
 jaws stall at exactly `stall_timeout × ramp rate`, so a control designed to test free air tested
 the ramp instead.
 
-### #19 — CLOSED 2026-10-01, moved with the line to projects/01: The `station_transfer_1` dead end: fixed, and the records stay `Proposed`
-**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
-the station tree, the L4 custody refusal and the `continuous_line` run that is ADR-0045's and ADR-0046's promotion condition — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
-**The L3 half stays in the main tree and is unaffected**: the L0-declared gripper deadline in the
-node's clock, the cancel and the custody-unknown latch are in `cite_skills`.
-It still describes the frozen snapshot, where the line runs. **The heading read *"The `station_transfer_1` dead end: fixed, and the records stay `Proposed`"*
-until that date. Nothing below is rewritten.**
-
-**This item covers the gripper-deadline door and only that door. It is not #60.** The two failures
-#60 records are at the same station and are a different signature: there the gripper answered with
-a genuine friction stall, the handoff completed, and the word `custody` appears **zero** times in
-the scenario half of either log — the investigation's reading of those two logs on 2026-09-08,
-not re-read since. Do not read a `continuous_line` failure at `station_transfer_1` as this item
-without first checking which of the three signatures it is.
-
-Cause established: a wall-clock gripper deadline supervising a simulation-time process; on expiry
-`Pick` returned `TIMEOUT` without recording custody or cancelling the goal, and the retry's
-`MoveToHome` carried the part off its own trigger beam. Fixed and merged — the deadline is
-L0-declared and counted in the node's clock, the goal is cancelled, L3 latches custody-unknown,
-and L4 refuses a retry while a station still names a work-piece.
-
-**ADR-0045 and ADR-0046 stay `Proposed` deliberately.** The promotion condition for each is a
-`continuous_line` run on a CI runner **in which the gripper fails to answer and the line reports
-it**. A run in which the gripper answers quickly shows nothing. What is evidenced is the
-mechanism, forced in both directions locally; not the outcome.
-
-Two things recorded and open: whether a friction grasp survives the cancel is unmeasured
-(`set_hold_position` holds width and stops squeezing, and ADR-0029 leaves the grasp to friction
-alone); and after a missed grasp `MoveToHome` no longer runs, so the arm stops inside the fixture
-and nothing in software reopens the jaws.
+### #19 — The `station_transfer_1` dead end
+Closed: moved with the event-driven line to snapshot 01 (ADR-0069); the L3 gripper-deadline half stays in `cite_skills` and is unaffected; full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #80 — A held work-piece is attached to nothing, so the collision gate cannot see it
 `ValidateSolution` is the sole environment-collision gate, and it checks the arm's links against
 the planning scene. **It checks nothing at all against the part in the jaws.** `grep -rn
-AttachedCollisionObject workspace/src` reaches three prose mentions and **no call**; ADR-0029
-removed the simulation-side attachment as well, so friction alone holds the part and MoveIt does
-not know it exists. A 50 mm cube hangs roughly 25 mm below the fingertip plane, so a plan that
+AttachedCollisionObject workspace/src` reaches three prose mentions and **no call**. The
+simulation holds the part by its own grasp hold — a Gazebo-side hold while the jaws are shut
+([ADR-0061](adr/0061-hold-the-box-while-the-jaws-are-shut.md)), told what is held by
+[ADR-0065](adr/0065-the-cell-says-what-it-holds.md) — and that hold is not a MoveIt attachment,
+so MoveIt does not know the part exists. A 50 mm cube hangs roughly 25 mm below the fingertip plane, so a plan that
 clears a surface at the fingers can drag the part through it.
 
 **Pre-existing, and newly exercised by ADR-0060.** Before that record the transit from the pick
@@ -989,8 +742,9 @@ Whether any real interpolation brings the part within reach of a surface is **un
 **Not fixed, by the project owner's decision on 2026-09-21** — *"do not build a simulation that
 depends on a simulation"*. Attaching the part for the duration of custody is the fix that would
 make the gate honest for **every** held motion, and it is a decision of its own, not a detail of
-ADR-0060. What checks this today is that `pick_and_place` and `continuous_line` assert where the
-work-piece ends up: if the arm knocks it off a surface, they fail.
+ADR-0060. What checks this today is that `program_cycle` asserts where the work-piece ends up — resting
+on the belt at its infeed frame, then carried along it: if the arm knocks it off a surface, the
+scenario fails.
 
 **The cheapest measurement that would settle it** is the minimum part-to-surface clearance over
 the transit, which is one instrument away from what
@@ -1141,115 +895,12 @@ problem; **the unmeasured quantity that matters is planning latency**, which no 
 plant's on the same host, with the same code and the same model, is **not established**. Process
 start order, CPU affinity and cache state are candidates and **were not chased**.
 
-### #60 — CLOSED 2026-10-01, moved with the line to projects/01: `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door
-**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
-zone `cell_a`, its conveyor infeed, the station tree and `continuous_line` — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
-It still describes the frozen snapshot, where the line runs. **The heading read *"`Place`'s final descent aborts at `cell_a__conveyor_1__infeed`: the same dead end through a third door"*
-until that date. Nothing below is rewritten.**
-
-**Two CI failures, on two runners nobody prepared, at two commits, with nothing registered in
-advance. The physical cause is unestablished and nothing here attributes one.** The runs are
-`33575992281` at `4ef2d7c` and `33603610958` at `51195e0`, both 2026-09-02 — the third
-`continuous_line` signature, tabled in CLAUDE.md §2, which is where the log evidence is kept.
-
-**The chain, as the logs record it.** `Place`'s approach reports `Goal reached, success!`; the
-**final descent onto the release pose** — the fifth trajectory of that work-piece — aborts in the
-arm's `JointTrajectoryController` on a state-tolerance failure followed by a `goal_time_tolerance`
-overrun — the exact strings and figures are in CLAUDE.md §2 and are not copied here (P1); the L3
-classifier
-(ADR-0037) reads the arm as stopped part-way and `/cite/cell_a/arm_1/place` returns code 10,
-`MOTION_INTERRUPTED`, whose policy row is `ESCALATE`; L4 stops the line (ADR-0038) and the process
-exits 1. **Every figure in this paragraph is the investigation's reading of those two logs on
-2026-09-08 and was not re-read afterwards** — `gh` on this host is unauthenticated.
-
-**It is not #19, and the check is cheap.** In both runs the gripper answered with a genuine
-friction stall and the handoff completed, and the word `custody` appears **zero** times in the
-scenario half of either log — so ADR-0045's deadline and ADR-0046's custody refusal are not what
-fired. Neither run is evidence for either record's promotion condition, and neither record's
-status moves on this item.
-
-**What was re-derived from the tree on 2026-09-08, as opposed to read from a log.**
-
-- The log's `joint 2` and `arm_1_joint3` are **one joint**, not two. The controller prints a
-  zero-based index into its own `joints:` list, which is `joint1 … joint5`
-  (`workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml:47-52`), and upstream
-  prints that index into the error arrays (`ros2_controllers`, `jazzy`,
-  `joint_trajectory_controller/include/joint_trajectory_controller/tolerances.hpp`).
-- The descent is supposed to leave a **15 mm air gap**: `PlaceAt`'s `release_height_m` default is
-  0.04 against a 50 mm part whose centre rests at 0.025, stated in that port's own comment
-  (`workspace/src/cite_orchestration/include/cite_orchestration/skill_nodes.hpp:675-686`). Nothing
-  should touch the belt during it.
-- **Nothing in the cell changed to explain the onset.** `git diff e51238e..4ef2d7c -- workspace
-  model tools tests scripts .github assets` is **one test file**, and **option F is not the
-  discriminator**: `git merge-base --is-ancestor d3eeac4 <sha>` fails for `4ef2d7c`, which failed
-  without it, and succeeds for `51195e0`, which failed with it, and for `f6a3779`, which passed
-  with it.
-
-**The investigation's strongest reading, not re-taken here: the arm was stationary or drifting
-further from its goal, not converging.** Recovered two independent ways that agree — the limiter's
-clamped command plus one control cycle of that joint's 3.14 rad/s limit, against `actual +
-reported error` — the implied movement over the last cycle is **1.0e-4 rad** and **4.3e-6 rad** in
-the two runs. That is what rules out a scheduling lag: a lag closing on its target would show the
-opposite velocity sign.
-
-**The cheapest measurement that would settle it.** Drive L3 `Place` at
-`cell_a__conveyor_1__infeed` with `release_height_m = 0.04` repeatedly while recording
-`/cite/cell_a/arm_1/arm_1_joint_trajectory_controller/controller_state`, and read
-`arm_1_joint3`'s **terminal** error against the 0.010 rad goal tolerance. Running it **with and
-without the part in the gripper** separates payload from contact.
-
-**Most of that rig already exists, and the closest existing measurement did not reproduce the
-abort.** `docs/measurements/2026-09-04-following-error/harness/` subscribes to that topic and its
-**CARRY** arm already runs this exact motion: `PLACE_FRAME = cell_a__conveyor_1__infeed` and
-`RELEASE_HEIGHT_M = 0.04`, with a real work-piece carried and `require_holding` true
-(`harness/common.py:89-90`, `harness/cell.py:104-105`, `harness/measure.py:542-543`, read
-2026-09-08). It ran **9 `place` trials** on that arm — counted from the campaign's own
-`raw/B*_trials.json` on 2026-09-08 — and its verdict for CARRY is **QUIET**: no tolerance event of
-any kind. **So the abort has not been reproduced by the closest instrument that exists**, at nine
-trials, on a developer host rather than on a CI runner. What that harness never varied is the
-**absence** of the part on this frame, and it reports the peak following error in flight rather
-than the terminal error at the goal — which is where the two additions above go.
-
-**A THIRD OCCURRENCE, ON `cell_b`, OBSERVED LOCALLY ON 2026-09-21 — and it is kept apart from
-the two above rather than appended to them.** Watching a paired `cell_b` run its line, the
-project owner saw one side's box sit on the belt while the other's was carried away. Measured:
-`Place` aborted with `State tolerances failed for joint 2, Position Error 0.022293 vs Tolerance
-0.010000` then `goal_time_tolerance exceeding by 0.506378 s` — against `0.506172 s` and
-`0.506390 s` in the two `cell_a` CI runs. The station escalated, `StopAll` set the belt to 0.0,
-and **the arm was left with its gripper clamped on the part** at `picker_drive_joint = +0.4088
-rad`, because `Place` opens the jaws at a step the aborted descent never reached. The healthy
-twin finished the same job with the gripper at 0.0000.
-
-**This is a different cell, a different asset and a developer host**, so it is not appended to
-the `cell_a` counts, which close where they are. What is shared is the assertion and the
-mechanism; **sharing a signature is not sharing a cause**, and the physical cause of all three
-remains unestablished. One event, one machine, nothing registered in advance. **That is not a
-rate.** The campaign registered at
-[`2026-09-21-place-abort-and-the-held-part`](measurements/2026-09-21-place-abort-and-the-held-part/criteria.md)
-is what would turn it into a measurement, and its own rule 1 says that if the abort does not
-reproduce, its silence evidences nothing.
-
-**What the arm being left clamped now produces, which it did not before.** `Place.Result` carries
-`still_holding`, filled at every exit and true when custody is unknown, and L4's blocked reason
-names the held work-piece whatever the recovery — where before, `MOTION_INTERRUPTED` escalating
-on its own meant the sentence was never written. **Nothing opens the jaws**: what to do with a
-held part is ADR-0038 decision 5 and stays open.
-
-**One observation, recorded as an observation and not as a decision.** The controller's per-joint
-abort threshold (`goal: 0.01`, `workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml`)
-and the classifier's `arm_goal_tolerance_rad` (0.01,
-`workspace/src/cite_generated/bringup/cell_a_plan.yaml`) are **one L0 value** —
-`goal_tolerance_rad: 0.01` at `model/assets/types/robots/xarm5.yaml:332`, reaching both through
-the generator — so this is **not** a P1 duplication. The consequence is structural:
-`classify_motion_end` tests `within_tolerance(current, goal, arm_goal_tolerance_rad)` per joint
-(`workspace/src/cite_skills/include/cite_skills/motion_end.hpp:102-145`), and a goal-tolerance
-abort means some joint lies outside exactly that band, so such an abort **cannot** classify
-`AT_GOAL`; it is `PART_WAY`, hence `MOTION_INTERRUPTED` and `ESCALATE`, unless the arm is also
-within the band of its start. "Close enough to retry" is unreachable by construction. **Whether
-that is the intended reading of ADR-0037 is the project owner's decision. This item takes none
-and recommends none.**
+### #60 — `Place`'s final descent aborts at `cell_a__conveyor_1__infeed`
+Closed: moved with the line to snapshot 01 (ADR-0069); full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #26 — `bringup`'s `MoveTo` fails when a run is slow, and the split is perfectly disjoint
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 In the teardown campaign's 30 pre-fix `bringup` runs, five exited non-zero; two are teardown-only
 and three failed `bringup`'s own `MoveTo` assertion — the functional half of a blocking CI gate.
 
@@ -1266,23 +917,12 @@ a timeout, not an acceptance check, and that wording caused a wrong common-cause
 already. And *"Command of at least one joint is out of limits"* appears in **all 30** runs
 including the 25 clean ones, so it has zero discriminating power.
 
-### #37 — CLOSED 2026-10-01, moved with the line to projects/01: `line_orchestrator` timed out waiting for `LineTopology` at bring-up
-**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
-`line_orchestrator`, `LineTopology` and `topology_server` — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
-It still describes the frozen snapshot, where the line runs. **The heading read *"`line_orchestrator` timed out waiting for `LineTopology` at bring-up"*
-until that date. Nothing below is rewritten.**
-
-Seen once on 2026-08-29, on a run that was **restarted rather than analysed**, so it is one event
-with no log kept. Nothing in the tree records this failure mode.
-
-Candidates worth separating before calling it a flake: a QoS or latching mismatch on the topology
-topic (CLAUDE.md §10's first bullet — a compatible pair still delivers nothing to a subscriber
-that matched late); the publisher creating its publisher and publishing in the same callback (the
-defect class that cost this project a belt setpoint for ten commits); or genuine slow bring-up.
-
-**If it recurs, capture the log before restarting.**
+### #37 — `line_orchestrator` timed out waiting for `LineTopology` at bring-up
+Closed: moved with the line to snapshot 01 (ADR-0069); full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #55 — `planning_scene_loader.py` exits 1 on a refused scene diff: two occurrences
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **The heading read *"A paired bring-up failed on the plant side"* until 2026-09-10**, and it was
 right about the only occurrence there was. The second occurrence is a **solo** bring-up, so the
 configuration is not what this item is about; the refused scene diff is. Two dated documents
@@ -1551,251 +1191,14 @@ has no simulator.
 **Needs an ADR before 2.B** — either the three sites become per-side, or the schema refuses the
 combination until they are.
 
-### #45 — ADR-0048 clause 3 — CLOSED 2026-09-08
-**Closed at `7d7ac19`** on the branch `feat/hosted-by-derived`. ADR-0048's status block records clause 3 as
-`Accepted` and carries a "Promotion — 2026-09-08" section; read that rather than this entry.
+### #45 — ADR-0048 clause 3
+Closed: closed at `7d7ac19`; ADR-0048 records clause 3 as `Accepted`; full text in git history (`git show 911ba08:docs/open-work.md`).
 
-`hosted_by` is gone from the generator, the template, the plan schema and the committed plan.
-`ControllerManager.backend_on(side)` replaces it and is the one place in `cite_bringup` that
-maps an (asset, side) to a backend; `require_hardware_opt_in` now reads through it.
-Reproduce with `grep -rn hosted_by workspace tools tests scripts model .github infra`, which
-returns **two** files and both are about the removal: the guard
-`tools/tests/test_a_removed_plan_key_stays_removed.py`, which fails if any other tracked file
-under those seven trees states the name — it walked the first four when this entry was written
-and gained `model/`, `.github/` and `infra/` later the same day, because its own docstring
-claimed every tree code is read out of — and
-`workspace/src/cite_bringup/test/test_a_removed_plan_key_is_ignored.py`, which pins that a plan
-still carrying the key **loads** rather than being refused — the document most likely to carry
-it is one left in a stale build tree, where the cause is a rebuild and not a key.
+### #40 — `test_plan.py` on a paired checkout
+Closed: closed by construction at `7d7ac19` and measured on 2026-09-08; full text in git history (`git show 911ba08:docs/open-work.md`).
 
-**One claim in the entry above was wrong and is worth keeping rather than deleting.** It said
-removing the field moves *"the committed generated tree and `MODEL_HASH`"*, copying ADR-0048's
-own *Consequences*. The tree moved — `bringup/cell_a_plan.yaml`, twelve lines, and nothing else
-under `cite_generated/`. **`MODEL_HASH` did not**: it digests the loaded model's object graph
-and not file bytes, the L0 model is untouched here, and the hash is byte-identical
-(`95dbbdd9…`). ADR-0048 carries the correction in place, and
-`tools/tests/test_generate.py::TestModelHash::test_does_not_change_when_a_template_changes`
-asserts the property for every future template edit rather than the value for this one.
-
-**The `test_two_sides_with_the_same_name_are_refused` half is also done**: it is on
-`_solo_document()`, and #40 below is where that is kept.
-
-**What this does NOT close:** #38 above. Its "exactly three generator call sites" is still
-stated there, and it is now wrong for **two** reasons — one site was removed, and one site was
-never listed. `hosted_by` **was** a branch on the plant's backend, which is precisely why it
-was one of the three; what made it cheap to delete is that it was a total function of a backend
-the plan already states per side and nothing read it. And the collision scheme in
-`generate/description.py` was a site the count never included at all.
-**[Corrected 2026-09-08 — this paragraph read "`hosted_by` was never a branch on a backend and
-is no longer anywhere" when it was written hours earlier.** That is false: the deleted code was
-`hosted_by="simulator" if asset.instance.hardware.backend == ids.SIMULATION_BACKEND else
-"ros2_control_node"` (`e18251e:tools/cite_tools/generate/bringup.py:407-409`). Saying otherwise
-retroactively invalidates #38's count, which was **correct when written**, and it invalidates
-the same argument where ADR-0041 still rests on it. A stale count is not the same as a count
-that was always wrong, and only the first of those is what happened here.**]**
-**That entry is deliberately untouched here**, because the change that
-makes those sites per-side is the one that owes them; `grep -rn "instance.hardware.backend"
-tools/cite_tools` returns **6 lines in 5 files** and is the instrument — three of
-them branch (the `ros2_control` plugin in `model/resolve.py`, the collision scheme in
-`generate/description.py`, `use_sim_time` in `generate/control.py`), one restates the
-value into the plan, one is `model/resolve.py`'s refusal message beside its own branch, and the
-sixth is `validate/referential.py`'s own sentence naming this instrument.
-**[Corrected 2026-09-08 — this read "five lines in four files today", measured before the
-sentence naming the instrument was written into `referential.py`, which put the search scope
-inside the search.** Re-run in this checkout on 2026-09-08 it is 6 in 5, and the sixth is that
-sentence: **a guard that counts a string counts its own message**, which is the hazard this
-branch named in `test_plan.py` and then walked into one file over. That docstring now states
-6/5 and says which one is prose.**]**
-**Ask the instrument for its reach as well as its count**: it reaches every read through
-`ResolvedAsset.instance`, which is every **generator** site, and not every read of the plant's
-backend — `model/schema.py`, `cli.py` and three lines in `validate/referential.py` spell it
-`asset.hardware.backend` off the raw model asset, and none of them generates an artifact. The
-docstring claimed the wider set and was corrected with the count.
-**The instrument this entry first named,
-`grep -rnE "backend|SIMULATION_BACKEND" tools/cite_tools/generate/*.py`, could not reach the
-first of those three**, which lives outside `generate/`, so it under-read the very list it was
-offered as the answer to. The two
-places this commit's own edits landed in —
-`tools/cite_tools/validate/referential.py`'s `divergent-counterpart-backend` docstring and
-`tools/cite_tools/model/ids.py`'s `SIMULATION_BACKEND` comment — were corrected, because both
-justified their count by naming `hosted_by` and could not be left saying "three" once it was
-gone.
-
-### #40 — `test_plan.py` on a paired checkout — CLOSED 2026-09-08
-**Closed by construction at `7d7ac19`** on the branch `feat/hosted-by-derived`, **and measured
-on 2026-09-08** — the entry said the measurement had not been taken and it was two minutes
-away. The committed model stayed `twin: {sides: single}`; the run below was taken in the working
-tree and reverted, and `git status` was checked clean afterwards. **[Overtaken 2026-09-18 —
-ADR-0059 pairs `cell_b`; `cell_a` stays `single`. The closure is unaffected: the guard this item
-closed on is the tree's, not the model's.]**
-
-**What the class was:** a test that reads the live generated plan instead of building its own
-document, so it asserts about whichever model the checkout happens to carry. On a checkout
-flipped to `pair`, `_document()["plan"]["sides"].append(_counterpart(...))` produced two sides
-named `counterpart` and the test failed on its own fixture rather than on what it asked about.
-**[Corrected 2026-09-08 — that describes the tree BEFORE an earlier fixture fix, not before
-this commit.** At `e18251e` no test does it unconditionally. Written as the state this change
-found, it credits this change with a failure that was already gone — and the measurement below
-says so directly, since the base passes paired.
-
-**The first wording of this marker miscounted the base it was about**, which is worth keeping
-because the whole subject of the marker is the base state. It read *"all three
-`_counterpart(...)` appenders were already on `_solo_document()`"*; at `e18251e` there are
-**two** on `_solo_document()`, at `:987` and `:1114`, and the third `_counterpart()` call is
-inside `_paired_document` on `_document()`, guarded by `if not any(side["name"] ==
-"counterpart" ...)`. Three is the **branch's** count, not the base's. Verified on 2026-09-08
-with `git show e18251e:workspace/src/cite_bringup/test/test_plan.py | grep -n "_counterpart("`,
-which returns four lines — the definition at `:931` and the three calls. The load-bearing
-claim is untouched: nothing at `e18251e` appended a counterpart unconditionally, which is why
-the base row passes paired.**]**
-
-**What replaces it.** `_document()` is gone. `_live_document()` is the only reader of the live
-plan and a test may not call it: `test_only_the_two_shape_helpers_read_the_live_plan` parses
-the module and requires its callers to be exactly `_paired_document` and `_solo_document`.
-Parsed rather than grepped, because a guard that counts a string counts its own message.
-**That guard alone had a one-line bypass, and it was demonstrated on 2026-09-08.**
-`_live_document`'s whole body is `yaml.safe_load(_generated().read_text())`, and `_generated`
-is a module-level accessor with two dozen callers — so a test spelling that one line itself got
-the live document with the guard green, and died on a paired tree with this entry's exact
-signature. `test_nothing_reaches_the_live_plan_around_that_reader` closes it by SHAPE rather
-than by caller: outside `_live_document` a call to the accessor must be the direct argument of
-`load`, which returns a `Plan` with no `sides` list to append to, and `GENERATED_PLAN` may be
-read nowhere but the accessor, since `Path(resolve_uri(GENERATED_PLAN))` is the same reach one
-step lower. Both routes were written as mutations first and both are refused by name.
-Every test that edits a plan document now takes a `document` fixture parametrised over
-**both** shapes, so both run on every checkout and neither can be the one nobody tried; the
-three tests that APPEND a side take `_solo_document()` by name and say why.
-`test_two_sides_with_the_same_name_are_refused` is one of those three — #45's second half, the
-one that *"passes for a partly accidental reason"*.
-
-**One thing the fixtures got wrong and this fixes.** `_paired_document()` appended the
-counterpart's `sides:` entry and nothing else, while `_solo_document()`'s own docstring says
-pairing adds exactly two things — the side, and a `counterpart_backend` on every controller
-manager. So the paired fixture built a document no generator emits. It now applies both, in
-ADR-0041 Decision 3's shape.
-
-**The measurement, taken 2026-09-08 in this checkout, on one machine, with nothing registered
-in advance.** Method: `sed -i 's/sides: single/sides: pair/' model/facility/zones.yaml`, then
-`./scripts/validate-model --write`, then
-`./scripts/enter dev bash -lc "cd /workspace && python3 -m pytest <path> -q"`. The generated
-tree is symlink-installed, so no rebuild is needed for the tests to read the paired plan.
-Reverted with `git checkout -- model/facility/zones.yaml workspace/src/cite_generated`, and
-`MODEL_HASH` verified back at `95dbbdd9…`.
-
-| tree | model | `test_plan.py` | whole `cite_bringup` suite |
-|---|---|---|---|
-| `e18251e` (base) | `single` | **84 passed** | not taken |
-| `e18251e` (base) | `pair` | **84 passed** | not taken |
-| branch, after two review rounds | `single` | **124 passed** | **209 passed** |
-| branch, after two review rounds | `pair` | **124 passed** | **209 passed** |
-
-**[Corrected 2026-09-08 — the `single` suite row read 205 and nobody can source it.** Two
-readers went looking: a `tester` could reproduce 205 at neither commit (it read 204 at
-`8b74f80`), and the project owner ran
-`./scripts/enter dev … pytest workspace/src/cite_bringup/test --collect-only -q` on the
-committed single-sided model and got **209 collected**. The row was re-measured a third time on
-2026-09-08 in this checkout, by the change that writes this correction, on the same tree as the
-`pair` row: **209 collected and 209 passed on `single`, 209 collected and 209 passed on
-`pair`**, with `test_plan.py` at **124** on both. **The conclusion the table was offered for
-comes out stronger, not weaker** — the count does not move with the model, and now both rows
-say the same number rather than differing by four. Where the 205 came from is **unestablished**
-and is left stated rather than smoothed over; the branch has gained tests since it was written,
-so a stale reading is the likeliest explanation and nobody has shown it.**]**
-
-**Read the base row before reading the branch row.** The base passes paired too, so what this
-change closed is the class **in `cite_bringup`** — a test in that package may no longer read the
-live plan, and the guard says so by parsing rather than by remembering — and **not** a set of
-failures that were still occurring.
-
-**The scope is the package and not the repository, and this entry said otherwise until
-2026-09-08.** `test_nothing_reaches_the_live_plan_around_that_reader` and its sibling both parse
-`Path(__file__)`, so each guards **one file**, and nothing outside `cite_bringup/test/` is
-reached by either. The class is alive one package over: **#62** records the two `cite_twin`
-fixtures that still append a counterpart unconditionally, measured refusing on a paired tree on
-2026-09-08. Close a class only as far as the guard walks.
-The fourteen failures this entry was opened for were already gone at `e18251e`. Saying this
-change fixed them would be claiming a measurement nobody took.
-
-**Two smaller things the run settled.** The count does not move with the model: `test_plan.py`
-collects and passes the same number on both shapes, because the `document` fixture's
-parametrisation is static. And the before-figure this entry carried was wrong —
-**[Corrected 2026-09-08 — it read "119 passed at this commit, against 76 tests before".** The
-119 was measured; the **76** was copied from this entry's own older text, and `test_plan.py` at
-`e18251e` collects **84** (`pytest --collect-only -q`, in the container). Setting a freshly
-measured number beside a copied one is what CLAUDE.md §2 exists to prevent, and it happened
-inside the entry that was closing a defect about trusting a stale figure.**]** The branch figure
-has since moved from 119 to **124**: review added five tests to the same file — four for the
-load-time refusal ADR-0048's promotion section records, one for the hardware gate's narrow
-`except`.
-
-Reproduce with `./scripts/test`, or in the container
-`python3 -m pytest workspace/src/cite_bringup/test/test_plan.py -q`.
-
-### #62 — CLOSED 2026-10-01: `cite_twin`'s two launch fixtures append a counterpart unconditionally
-**Closed 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Both fixtures now name `cell_b` and read its generated plan,
-which is paired, and **neither appends a side**:
-`test_twin_boundary_paired_launch.py`'s `_paired_plan` returns the generated plan as generated,
-and `test_twin_boundary_launch.py` asserts the plan's sides are exactly `plant` and
-`counterpart` before it adds a renamed controller manager for its mixed far side (it edits
-managers and backends, never sides). So the duplicate-`counterpart` failure this item records
-cannot occur, and the dependency on `cell_a` being `single` that made it load-bearing is gone
-with `cell_a`. Read in `workspace/src/cite_twin/test/` on 2026-10-01; whether those two launch
-tests pass is `./scripts/test`'s answer, not this file's. **The heading read without
-"CLOSED" until that date. Nothing below is rewritten.**
-
-`workspace/src/cite_twin/test/test_twin_boundary_launch.py:97-121` and
-`test_twin_boundary_paired_launch.py:119-143` each build their paired plan the same way: read
-the live generated plan with `default_plan_path(...)`, `plan["sides"].append({"name":
-"counterpart", ...})` with **no test for a counterpart already being there**, write it to a
-temporary file, and bind the result to a module-level `PLAN_PATH`. On a checkout whose L0
-declares `twin: {sides: pair}` the live plan already carries that side, so the fixture writes a
-document with **two sides named `counterpart`** and `cite_bringup.plan.load` refuses it. That is
-**#40 verbatim**, in the package that is Phase 2.A's subject.
-
-**Measured on 2026-09-08, in this checkout, one reading.** Method: flip
-`model/facility/zones.yaml` to `sides: pair`, `./scripts/validate-model --write`, then import
-each module in the container and call `load(PLAN_PATH)`. Both give
-`SideNotDeclaredError: … two sides are named 'counterpart'`. Reverted, with `MODEL_HASH`
-verified back at `95dbbdd9…`.
-
-**Where it bites is later than it looks, and the difference matters for whoever fixes it.**
-Collection **passes** — `pytest --collect-only` over both modules returns `2 tests collected` on
-a paired tree — because `_paired_plan()` only *writes* the file; nothing at module scope loads
-it. The refusal fires when the boundary node reads the plan at launch, so the symptom is a
-launch test whose node exits, not an import error. An earlier reading of this said the module
-errors at collection; it does not.
-
-**Pre-existing, and not introduced by ADR-0048 clause 3.** The same fixtures behave identically
-at `e18251e`. What changed is that #40's closure was written as a repository-wide statement
-about the class while the guard that holds it parses `Path(__file__)` and reaches one file.
-
-**THIS ITEM IS NOW LOAD-BEARING RATHER THAN MERELY OPEN, AS OF 2026-09-18.** `cell_b` is paired
-in the shipped model (**ADR-0059**), and `./scripts/test` still passes, for one reason and one
-reason only: **both fixtures name `cell_a` literally** — `default_plan_path("cell_a")` in
-`test_twin_boundary_launch.py` and `ZONE = "cell_a"` in `test_twin_boundary_paired_launch.py`,
-re-measured on that date — and `cell_a` is still `single`. So the defect is **stepped around,
-not fixed**, and two ordinary changes trip it immediately: pairing `cell_a`, or making either
-fixture read the default zone the way the scenarios do. ADR-0059 records that dependency as a
-cost of pairing `cell_b`, and `model/facility/zones.yaml` states it at `cell_a`'s own `twin:`
-block so that whoever flips that line reads it first. **Anyone who does either must fix this
-item in the same change.**
-
-**The fix is one line in each**, and it is already written twice in `cite_bringup`:
-`if not any(side["name"] == "counterpart" for side in sides):` around the append, which is what
-`test_plan.py`'s `_paired_document`, `test_pair.py`'s `_paired_plan` and
-`test_simulation_launch.py`'s `_paired` all do. **Deliberately not fixed on
-`feat/hosted-by-derived`**: `cite_twin` is L5 and outside that branch's subject, and an L5 edit
-inside a plan-schema change is the blast-radius widening ADR-0048's own promotion section
-declines for the same package.
-
-**It bit on 2026-09-18, when `cell_b` was paired, and it is stepped around rather than fixed** —
-see the paragraph above for the one reason `./scripts/test` still passes.
-`./scripts/sim --zone cell_b --pair` now comes up from a clean checkout; `--pair` on `cell_a`
-refuses, because that zone alone declares one side. Cross-references: #40, whose class this
-is, and #63, which is the same fixtures counted a different way.
-
-Reported by review on 2026-09-08 (G-2) and filed rather than fixed, at the project owner's
-instruction.
+### #62 — `cite_twin`'s two launch fixtures append a counterpart unconditionally
+Closed: both fixtures read `cell_b`'s paired plan and append no side (ADR-0069); full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #63 — The paired-plan document shape is hand-built in five places and tied to the generator in none
 Five fixtures now spell out what a paired plan looks like: `cite_bringup/test/test_plan.py`'s
@@ -1830,6 +1233,8 @@ change that makes the generator sites per-side and will move this shape again.
 Reported by review on 2026-09-08 (R-06) and filed rather than fixed.
 
 ### #65 — Nothing verifies that the plugin L0 declares is the plugin the description loads
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 The hardware opt-in decides on `commands_physical_hardware`, which L0 declares one line from the
 `ros2_control_plugin` string it is about (ADR-0054). That plugin string reaches the generated
 description through exactly one binding — `ros2_control_plugin: instance.hardware.ros2_control_plugin`
@@ -1912,185 +1317,18 @@ guess.
 
 ---
 
-### #66 — DORMANT 2026-10-01: Nothing compares two zones' bounding boxes, and the overlap check is per zone
-**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)): L0 declares one zone, `cell_b`, so there is no second
-zone to compare against or to reference across, and the reproduction below — which edits
-`cell_a`'s box or names `arm_1` — no longer applies as written. **The gap in the validator is
-unchanged** and returns the day a second zone is declared; whoever declares one should read
-this item first. The heading did not say "DORMANT" until that date. Nothing below is
-rewritten.
+### #66 — Nothing compares two zones' bounding boxes, and the overlap check is per zone
+Removed — subject left the main tree (ADR-0069): L0 declares one zone; the validator gap returns the day a second zone is declared, so read the full text first then; full text in git history (`git show 911ba08:docs/open-work.md`).
 
-`model/facility/zones.yaml` declares two `aabb` bounds and **no rule anywhere reads one against
-the other.** A `cell_b` declared inside `cell_a`'s box validates clean, generates two worlds that
-describe the same volume twice, and reports nothing.
+### #67 — A cross-zone station reference passes validation and then skips its reach check in silence
+Removed — subject left the main tree (ADR-0069): L0 declares one zone; the gap returns with a second zone; full text in git history (`git show 911ba08:docs/open-work.md`).
 
-Two independent reasons, and closing either alone would not close the gap.
-`cite_tools.validate.geometric.check` takes a **single** `ResolvedCell`, and `cli.py` runs the
-geometric level once per zone, so `_no_overlapping_bodies` — the rule that would notice two
-solid bodies in one volume — only ever sees one zone's assets and can never be handed a pair
-from different zones. And no rule at any level compares `Zone.bounds` to `Zone.bounds`; the only
-thing that reads a zone's bounds is `_assets_inside_zone`, which asks whether a body is inside
-**its own** zone.
-
-Reproduce it — widen `cell_b`'s box in `model/facility/zones.yaml` until it swallows `cell_a`'s
-whole, leaving every body exactly where it stands:
-
-```bash
-#   cell_b bounds: min_m [-1.000, 2.000, 0.000] -> [-1.000, -1.200, 0.000]
-#                  max_m [ 3.000, 4.000, 2.500] -> [ 6.800,  4.000, 2.500]
-./scripts/validate-model --write     # ok model valid — 2 zone(s) ... ; restore with git checkout
-```
-
-Run here on 2026-09-16: it exits **0** and reports the model valid, with `cell_b`'s zone now
-containing all three of `cell_a`'s arms, its three belts and both its tables. Not one finding.
-`--write` rather than a bare run, because a bare run fails on the byte-identity diff against the
-committed tree — which fires for **any** model edit and says nothing whatever about this one.
-That distinction is the trap: the first attempt at this recipe read the stale-tree error as the
-validator noticing, and it was not.
-
-Widening a zone is the mild version. Moving `cell_b`'s bodies into `cell_a`'s box as well is
-equally silent, and produces two worlds that describe the same volume twice.
-
-**Not fixed, deliberately** (ADR-0056, "What this costs us"). A guard written against the one
-case we control is weaker than placing the cell correctly and recording why, which is what
-`model/facility/zones.yaml` does: the comment on `cell_b`'s bounds states the 1.200 m of clear
-air between the two boxes and states that nothing checks it. What a fix looks like is a
-model-global rule beside the other model-global levels — `referential.py` and `physical.py` are
-already model-global by construction — asking whether any two zones' boxes intersect. It is
-worth writing when a third zone appears or when anyone moves one, whichever comes first.
-
-**Nothing is known to be wrong today.** The two boxes are disjoint, and
-`./scripts/validate-model` exits 0.
-
-### #67 — DORMANT 2026-10-01: A cross-zone station reference passes validation and then skips its reach check in silence
-**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)): L0 declares one zone, `cell_b`, so there is no second
-zone to compare against or to reference across, and the reproduction below — which edits
-`cell_a`'s box or names `arm_1` — no longer applies as written. **The gap in the validator is
-unchanged** and returns the day a second zone is declared; whoever declares one should read
-this item first. The heading did not say "DORMANT" until that date. Nothing below is
-rewritten.
-
-`referential.py` resolves station and flow references against **globally** known ids —
-`_stations_reference_real_things` builds `known_assets` from `model.assets` and
-`_flow_is_consistent` builds `known_stations` from `model.stations`, neither filtered by zone. So
-a `cell_b` station naming `arm_1`, which stands in `cell_a` three metres away, is a **valid
-reference**.
-
-What makes it silent rather than merely permitted is what happens next.
-`cite_tools.validate.geometric._stations_are_reachable` does `actor = cell.asset(station.actor)`
-against the **resolved cell**, which holds only that zone's assets, and returns `None` for an
-actor from another zone — at which point the rule `continue`s. The single most valuable check in
-that module, the one its own docstring says pays for the file, is skipped with no finding at all
-for exactly the station most likely to need it.
-
-**IT IS `actor` AND ONLY `actor`, and this entry claimed more than that until 2026-09-17.**
-It said the same shape applies to `pick_from` and `place_to` naming another zone's asset. It
-does not. `resolve.py`'s `point` — the local function `_resolve_stations` calls for each
-station point — raises `ResolveError` for an asset that is not in the resolved cell, and
-`cite_tools/cli.py` catches it around its `geometric.check(resolve(...))` call, prints
-`error resolve zone <id>: ...` and raises `typer.Exit(code=1)`. Both were re-read on
-2026-09-17, and both are cited by symbol rather than by line because a line number in a file
-under edit goes stale exactly as this claim did. So a cross-zone `pick_from` or
-`place_to` **aborts the command with a diagnosis**, which is a different instrument from a rule
-that reports a finding and is the opposite of silent. Only `actor` is unguarded, because
-`_stations_are_reachable` reaches it through `cell.asset(...)` and treats `None` as nothing to
-check rather than as something missing.
-
-The distinction matters for whoever fixes this: an error that aborts `validate-model` cannot be
-collected alongside other findings and cannot be downgraded with `--strict`, so a fix that gave
-`actor` the same treatment would change the shape of the answer as well as its content.
-
-Reproduce it:
-
-```bash
-sed -i 's/^    actor: picker$/    actor: arm_1/' model/topology/stations.yaml
-./scripts/validate-model --write     # ok model valid — 2 zone(s) ... ; restore with git checkout
-grep -n 'actor' workspace/src/cite_generated/topology/cell_b_flow.yaml
-```
-
-Run here on 2026-09-16: it exits **0** and reports the model valid, and
-`cell_b_flow.yaml` then reads `actor: arm_1` against `b_transfer_1` — an arm three metres away in
-another cell, whose reach to this station's pick point was checked by nothing. L4 would dispatch
-a `cell_b` station's skills at a `cell_a` arm's action names, which on a one-zone-at-a-time
-deployment is a station waiting for a server that is not running.
-
-`--write` rather than a bare run, for the reason #66 gives: a bare run fails on the byte-identity
-diff, which fires for any model edit and is not the validator noticing anything.
-
-**Not fixed, deliberately** (ADR-0056, "What this costs us"), for the same reason as #66. The
-shape of a fix is a referential rule requiring a station's `actor`, `assets`, `trigger.sensor`,
-`pick_from.asset` and `place_to.asset` to be in that station's **own** zone — which is a rule
-about the model rather than a guard against one mistake, and is worth writing as such. Note that
-it is `referential.py` that owes it, not `geometric.py`: by the time the geometric level runs,
-the cross-zone asset is simply absent, and a rule there could only report that an actor it was
-told about does not exist.
-
-**Nothing is known to be wrong today.** Every id a `cell_b` station names is a `cell_b` asset,
-which `model/topology/stations.yaml` states in a comment beside them because nothing states it
-mechanically.
-
-### #68 — DORMANT 2026-10-01: The one-zone-at-a-time refusal is sound and incomplete, in two named ways
-**Dormant since 2026-10-01** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which supersedes ADR-0056): L0 declares one zone, so
-`model_info`'s refusal of **another declared zone's** names has no other zone to fire on in a
-real bring-up — ADR-0069 records that it is now asserted with a second zone injected into the
-node. **Residual 2, the same zone twice, is the only half that can occur today**;
-#69 records what a second bring-up from one checkout does. The reproduction below names `cell_a`, which `declared_zones()` no longer returns, so its
-first line would print `[]` rather than `['cell_a']` — not re-run here. Nothing below is
-rewritten.
-
-[ADR-0056](adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md) decision 3
-says exactly one zone is up at a time. `model_info.on_configure` now refuses a bring-up beside
-another **declared** zone's names and says which zone that is, returning `FAILURE` so that
-`simulation.launch.py`'s existing handler stops the launch. It is a synchronous graph-cache
-query: nothing waits, and nothing is added to a clean bring-up. **It is therefore sound and not
-exhaustive**, in two ways it is worth having written down rather than rediscovered.
-
-**1. The discovery race.** DDS discovery is asynchronous. A zone started at the same instant as
-this one may not be in the graph cache when `on_configure` runs, and will not be seen; the two
-cells then come up together exactly as before. Closing it means concluding "I am alone" from an
-**absence**, which needs a timeout — and a bring-up that waits a guessed interval to decide is
-the timing guess CLAUDE.md P4 forbids. Refusing on a positive is an event; refusing on an
-absence is not. A shape that would close it without a guess is a latched `ModelVersion`
-subscription whose **arrival** is the event, with a rule for telling the newcomer from the
-incumbent; nobody has designed that rule.
-
-**2. The same zone twice.** Two `cell_b` bring-ups collide identically — one
-`/cite/facility/get_model_version`, one `/clock` fed twice — and this rule says nothing about
-them, because `cell_b`'s names are not foreign to `cell_b`. **Deliberate.** CI brings one zone
-up twice in a row per run, and this project has a recurring teardown-leak history
-(CLAUDE.md §2's teardown-family bullet); a rule that could not tell an unfinished teardown from
-a second cell would convert a lingering process into a hard bring-up failure. Whoever closes it
-needs a way to distinguish the two that does not rest on timing.
-
-**That teardown-leak exposure is not confined to the same zone, and the argument above reads as
-though it were.** The rule that IS enforced fires on any *declared* zone's names, so a `cell_b`
-process that outlives its run and still holds `/cite/cell_b/...` makes the next
-`./scripts/scenario bringup --zone cell_a` — ADR-0056's own named mitigation for a broken
-showcase — fail at `on_configure`, naming `cell_b` as the intruder. Nothing is wrong with the
-rule there: a live `cell_b` on the graph is exactly what it refuses on, and it cannot know the
-process is a corpse. What is recorded here is the reading hazard. **A refused showcase bring-up
-is evidence that `cell_b`'s names are on the graph and is not evidence that a second cell was
-started**, and this repository's leak history makes the first far likelier than the second.
-Check for a surviving process before attributing it to a cell nobody launched. The same-zone
-case is excluded from the rule; the exposure the exclusion was reasoning about is not.
-
-Reproduce the refusal working, without two simulators:
-
-```bash
-./scripts/enter dev python3 -c '
-from cite_facility.artifacts import declared_zones
-from cite_facility.occupancy import zones_already_on_the_graph
-print(zones_already_on_the_graph(["/cite/cell_a/arm_1/move_to"], ["cell_b"], declared_zones()))
-print(zones_already_on_the_graph(["/cite/cell_b/picker/move_to"], ["cell_b"], declared_zones()))'
-```
-
-The first prints `['cell_a']` — refused. The second prints `[]`, which is residual 2.
-
-**Nothing is known to be wrong today**, and the invariant was enforced by nothing at all before
-this: exactly one of the collisions ADR-0056 lists was loud, and only with `line:=true`.
-
+### #68 — The one-zone-at-a-time refusal is sound and incomplete, in two named ways
+Removed — subject left the main tree (ADR-0069): L0 declares one zone; residual 2, the same zone twice, is #69; full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #69 — A second bring-up from one checkout destroys the first, whatever zone either is
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 **Measured 3 of 3 on 2026-09-17 at `4f29761`, one run per configuration.** This is a defect in
 its own right, it is **pre-existing**, and it needs neither a second zone nor
 `cite_facility/occupancy.py` to happen — which is why it is filed apart from
@@ -2227,28 +1465,8 @@ pgrep -af twin_boundary.py                     # still there
 
 **Not observed; read from the allocation and the stop path on 2026-09-18.**
 
-### #77 — CLOSED 2026-10-01, moved with the line to projects/01: `--pair --line` puts three commanders on the same arms
-**Closed 2026-10-01: moved with the line to `projects/01`** ([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). Everything this item is about —
-`line:=true` and the L4 coordinator it started on each side — `pair.py`'s `_LAUNCH_STYLE` maps only `zone:=`, `headless:=` and `ceiling:=` now, so `./scripts/sim --pair line:=true` is refused as an unknown launch argument — left the main tree on that date, and nothing in the main tree can reproduce it or close it.
-It still describes the frozen snapshot, where the line runs. **The heading read *"`--pair --line` puts three commanders on the same arms"*
-until that date. Nothing below is rewritten.**
-
-`pair.py` forwards `line:=true` to **both** sides, so each side starts its own L4 coordinator,
-which takes exclusive hold of that side's skills — and the boundary dispatches the operator's
-goals to both sides' L3 servers at the same time. Three processes command the same arm names.
-
-**It is bounded and it is not guarded.** `cite_skills`' `exclusive_goal` gate refuses a second
-concurrent goal per arm (`skill_server.cpp`'s `claim`), so two commanders cannot overlap **within
-one goal** — but nothing owns the arm **between** L4's goals, so an operator goal lands in the gap
-between two line steps and the coordinator's next step follows it. Whether that is acceptable is a
-decision about who owns an arm in a paired line, and no record takes it.
-
-`./scripts/sim --pair --line` is reachable today (`_LAUNCH_STYLE` maps `line:=`), and **nothing
-refuses the combination**.
-
-**Not observed**: the combination is runnable on a clean checkout since `cell_b` was paired
-(**ADR-0059**, 2026-09-18) — until then the model was `single` and it could not be run at all —
-and no run of it is recorded here.
+### #77 — `--pair --line` puts three commanders on the same arms
+Closed: moved with the line to snapshot 01; `line:=true` is refused as an unknown launch argument (ADR-0069); full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #78 — The readiness token proves the plant's executor is running, not that the pair is complete
 `twin_boundary` announces from a timer callback on **`self._plant`'s** executor, which is the
@@ -2289,6 +1507,8 @@ grep -n "NODE_NAME\|node_name" workspace/src/cite_twin/cite_twin/boundary.py
 ```
 
 ### #71 — The refusals and the verdict are tested; the join between them is not
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 `./scripts/scenario --zone` gained nine shell-gate cases on 2026-09-17 covering its **refusals**
 (`--zone` swallowing the next token, `--zone=` empty), and `scenario_verdict` is covered on
 synthetic reports including the advisory branch. **Nothing asserts that a well-formed
@@ -2420,6 +1640,8 @@ would not prevent the stall but would name it.
 byte-identically by all three scenarios, or `--pair`'s readiness-token chain.
 
 ### #73 — `skill_server` and `move_group` hung through `SIGTERM` at teardown and were `SIGKILL`ed
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 One observation, `continuous_line` against `cell_b` on 2026-09-17, in a run whose **cycle passed
 3 of 3 work-pieces** and whose post-shutdown check then failed:
 
@@ -2448,6 +1670,20 @@ process in the same phase. **Whether that is related is unestablished and was no
 The second run of the same scenario at the same commit tore down cleanly, so it is intermittent
 rather than a systematic regression. **One occurrence, one host, nothing registered in advance.**
 
+
+### #91 — The program client has L4's job and lives in a composition package that L5 imports
+Recorded 2026-10-02. `cite_bringup.program` runs the real robot's program through the L5
+boundary, so it sits **above** L5 and does what L4 is for — it decides what work is done
+([`architecture/README.md`](architecture/README.md)'s diagram). There is no L4 package
+([ADR-0069](adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)), so it lives in
+`cite_bringup`, which is **also** a lower-layer library `cite_twin` imports (`cite_bringup.plan`,
+`cite_bringup.readiness`). **Correct today**: nothing under `cite_bringup` imports `cite_twin`
+(`grep -rn cite_twin workspace/src/cite_bringup --include=*.py | grep import` returns nothing),
+so no dependency points upward. **Wrong on the next change**: the first time the program client
+needs a `cite_twin` symbol, the import is upward within one package and no package boundary
+catches it. **Done means** `cite_bringup/program/` moves to an L4 package of its own — it is the
+first candidate for one ([`architecture/repository-layout.md`](architecture/repository-layout.md))
+— by a decision recorded in an ADR.
 
 ## 4. Instrument honesty
 
@@ -2529,51 +1765,8 @@ and is not taken here; `./scripts/audit-deps` and `requirements/README.md` are w
 Reported by `tester` on 2026-09-08 (T-02) and re-reproduced the same day by the change that
 files it.
 
-### #52 — WITHDRAWN 2026-09-01: the verdict line distinguishes three states, and CI's teardown is read and clean
-**This item was wrong in both of its claims, and it is left here rather than deleted because how
-it was wrong is the transferable part.** It said the verdict line *"answers the cycle and says
-nothing about teardown"*, and that teardown for the newer CI rows was *"unread, not clean"*.
-
-**What is actually true, read off `scripts/scenario` and off all nineteen CI runs.** The script
-prints **three** distinguishable strings, not two:
-
-| String | Means |
-|---|---|
-| `Scenario 'X' passed` | `launch_test` itself exited 0 — every assertion passed, **including the post-shutdown teardown check**. `scenario_verdict` was never consulted. |
-| `Scenario 'X' passed its cycle assertions` | The advisory branch: the cycle passed, teardown did not, `--teardown-advisory` was given. |
-| `Scenario 'X' failed — …` | A cycle failure, or a failure the JUnit report does not explain. |
-
-**The middle string appeared in none of the nineteen tabled CI runs**
-(`gh run view <id> --log | grep -o "Scenario '[a-z_]*'[^\"]*"`, run over every one of them on
-2026-09-01), so every one of the fifteen bare `passed` verdicts carried its teardown with it, and
-only the four whose cycle failed left teardown masked and genuinely unread. The four were
-`33158091922`, `33208064683`, `33261637940` and `33343317444` — the same four CLAUDE.md §2's
-table named, arrived at independently.
-
-**Amended 2026-09-07: this paragraph said "the advisory branch has never fired in CI", and that
-has expired.** It fired at `f6a3779` (run `34085965578`), for `bringup` and not for
-`continuous_line`: one of that run's two `bringup` invocations printed `Scenario 'bringup' passed
-its cycle assertions`, its cycle having passed and its post-shutdown check having failed on
-`parameter_bridge-2 exited with -11`. Re-read over all twenty-two tabled runs on 2026-09-07 with
-the same grep, anchored at both ends: `continuous_line` is 16 bare `passed`, 6 `failed`, 0
-advisory; `bringup` is 43 bare `passed`, 1 advisory, 0 failed; `pick_and_place` is 22 bare
-`passed`. **The item's own lesson repeats itself here** — this was a claim about what has never
-happened, and only re-running caught it.
-
-**`--teardown-advisory` never reaches the scenario Python.** `scripts/scenario` puts it in
-`TEARDOWN_POLICY` and not in `LAUNCH_TEST_ARGS`, so the post-shutdown assertions always run; the
-flag decides only how a failure is reported.
-
-**`scripts/scenario` is not to be changed on the strength of this item.** The instrument is
-correct as written. What was wrong was the reading of it — the item inferred the verdict's
-behaviour from `scenario_verdict()` alone without noticing that the function is called **only
-after `launch_test` has already failed**, which is stated in its own header comment in
-`scripts/_lib.sh`. **Reading one branch of a two-branch caller is how this item was written**, and
-that is the lesson worth keeping in a section about instrument honesty.
-
-**One sub-claim survives and is now recorded where it belongs:** the hull promotion was merged on
-a CI run reporting scenario passes, and a scenario pass is evidence about one run. That is in the
-state table above, with its strength stated.
+### #52 — The verdict line and CI teardown
+Withdrawn: this item was wrong in both of its claims; `scripts/scenario` distinguishes three verdict states; full text in git history (`git show 911ba08:docs/open-work.md`).
 
 ### #53 — MARKED 2026-09-01: two ADRs asserted `cite_twin` does not exist, inside verification tables marked "still true"
 `docs/adr/0041-*.md` lines 31, 66 and 139 — line 139 inside a **verification table** marked
@@ -2603,6 +1796,8 @@ moved? A row verified once and never re-read is a count with a date on it. **Not
 this**, and a survey on 2026-09-01 covered only the two records this item names.
 
 ### #57 — ADR-0045's gripper-deadline launch rig passes with no controller ever activated
+**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
+
 `workspace/src/cite_bringup/test/test_gripper_deadline_launch.py` starts a real
 `controller_manager` and a `spawner` for the three real generated controllers (`:284-290`). In the
 runs observed, the spawner's `load_controller` call timed out three times about 10 s apart, the
@@ -2656,6 +1851,11 @@ A guard turning the premise into a check is cheap and was deliberately deferred 
 that created the need for it. **This is a small code item, not a documentation one.**
 
 ### #56 — Charter §7 lists four packages that do not exist, and §8 does not know `cite_twin` landed
+**Parts 1 and 2 are resolved by charter v1.17 (2026-10-02)**: §8's Phase 2.A now states what
+exists, including the L5 twin boundary and what starts it, and §7's tree moved to
+[`architecture/repository-layout.md`](architecture/repository-layout.md). **Part 3 remains
+open.**
+
 Reported by the charter v1.12 agent and **not edited** — the owner's authorization covered two
 corrections and not these. Each needs its own owner decision under CLAUDE.md §12.
 

@@ -300,13 +300,6 @@ Both installations are legitimate and neither is known to be wrong, so **this en
 fact and a hazard, not a bug.** Whether the image should carry one Gazebo or two is a decision
 and has not been taken.
 
-### `line_orchestrator` exits with "no LineTopology arrived"
-
-The line coordinator and the topology server left the main tree on 2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). This
-entry — capture-first instructions and three candidate causes — is kept, unchanged, in the
-frozen copy of this document inside the `projects/01` snapshot
-(`docs/operations/troubleshooting.md` there), which is where the line still runs.
-
 ### Bring-up fails on the second attempt
 
 Orphaned processes from the first.
@@ -320,36 +313,27 @@ the cause.
 
 ### Two `/clock` publishers, or two `/cite/facility/*` nodes with the same name
 
-Two cells are up on one ROS graph. **Exactly one is meant to be**
-([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
-decision 3, superseded by [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which keeps the rule for any second zone). L0 declares one zone
-since 2026-10-01, so the likeliest way this happens now is the same cell started twice from one
-checkout — two terminals, or a run left up — or a second zone declared in a model edit.
-`ROS_DOMAIN_ID` is derived per checkout and per side, never per zone, so both land on one
-graph.
+Two cells are up on one ROS graph, and exactly one is meant to be. L0 declares one zone, so
+the likely cause is the same cell started twice from one checkout — two terminals, or a run
+left up. `ROS_DOMAIN_ID` is derived per checkout and per side, never per zone, so both land on
+one graph.
 
 ```bash
 ros2 topic info /clock                     # more than one publisher is the symptom
 ros2 node list | grep /cite/facility/      # each name should appear once
-ros2 topic list | grep -o '^/cite/[a-z0-9_]*' | sort -u   # one zone scope, plus facility/line/twin
+ros2 topic list | grep -o '^/cite/[a-z0-9_]*' | sort -u   # one zone scope, plus facility/twin
 ```
 
-**None of the collisions is loud** in the main tree since the line coordinator — which
-`RCLCPP_FATAL`ed on a zone mismatch from a second latched `/cite/line/topology` — left it with
-ADR-0069. They are silent, and the consequences are not subtle — one `/cite/facility/get_model_version`
-answered by whichever server got there first, two `/robot_description` publishers describing
-**different robots**, so a bring-up can spawn the other cell's furniture into this cell's
-world, and a `/clock` fed by two independent simulators, which is CLAUDE.md §10's
-plausible-and-wrong mixed-time system.
+None of the collisions is loud: one `/cite/facility/get_model_version` answered by whichever
+server got there first, two `/robot_description` publishers, and a `/clock` fed by two
+independent simulators — CLAUDE.md §10's plausible-and-wrong mixed-time system.
 
-**The fix is to stop one of them**, not to work around it. Bring the second cell up from
-another checkout if you need both at once: the domain base is hashed per checkout, so a second
-clone gets its own graph. `./scripts/doctor` prints the domain a shell is on.
-
-A bring-up started *after* another zone is already on the graph is refused by `model_info`,
-naming the zone that is already there. That refusal is a graph-cache query and does not wait,
-so it cannot see a zone DDS has not discovered yet and says nothing about the same zone twice
-— which is why the symptom above is still worth knowing.
+**The fix is to stop one of them**, not to work around it. Bring a second cell up from another
+checkout if you need both at once: the domain base is hashed per checkout, so a second clone
+gets its own graph. `./scripts/doctor` prints the domain a shell is on. **Nothing refuses
+the second bring-up**: `model_info`'s zone-occupancy check refuses only a *different* zone
+already on the graph, so with one zone declared it refuses nothing, and it never sees the same
+zone started twice (`cite_facility/occupancy.py`).
 
 ## When none of this helps
 

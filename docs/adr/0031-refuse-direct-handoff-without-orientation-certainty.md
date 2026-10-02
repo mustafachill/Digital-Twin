@@ -21,7 +21,7 @@
   [ADR-0026](0026-joint-space-goals-on-under-six-dof-arms.md),
   [ADR-0029](0029-simulated-grasping-by-friction.md),
   [ADR-0032](0032-index-the-belt.md) (timing, **not** orientation — see the correction),
-  [L3](../architecture/L3-capabilities.md), [L4](../architecture/L4-orchestration.md),
+  [L3](../architecture/L3-capabilities.md), L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`),
   [`../measurements/2026-08-25-grasp-plane-offset/`](../measurements/2026-08-25-grasp-plane-offset/ANALYSIS.md)
 - **Evidence for the correction:**
   [`../measurements/2026-08-26-conveyor-yaw-transfer/`](../measurements/2026-08-26-conveyor-yaw-transfer/ANALYSIS.md)

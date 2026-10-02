@@ -1,8 +1,8 @@
 # ADR-0016: Align the architecture with ISO 23247
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-02 — the mapping document is not in `docs/`; see the amendment at the end)
 - **Date:** 2026-08-24
-- **Related:** ADR-0011, `docs/architecture/standards-alignment.md`, `docs/reference/standards.md`
+- **Related:** ADR-0011, `docs/architecture/standards-alignment.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`), `docs/reference/standards.md`
 
 ## Context
 
@@ -92,3 +92,19 @@ claim that we are ISO 23247 certified.
 When Phase 4 brings external integration, reconsider Option D — the Asset Administration
 Shell becomes genuinely useful at that boundary. Revisit the mapping itself whenever a
 layer's responsibility changes.
+
+## Amendment — 2026-10-02: the mapping is not in `docs/` until L6 and L7 are built
+
+**The decision is unchanged; where its mapping lives is not.** The layer-by-layer mapping this
+record placed in `docs/architecture/standards-alignment.md` was removed from `docs/` on
+2026-10-02, together with the target-layer documents it mapped (L4, L6, L7), by the project
+owner's decision that `docs/` describes only what the main tree is. It survives verbatim in the
+snapshots' `docs/architecture/standards-alignment.md` (see `projects/README.md`); those copies
+are records, not sources, and are not maintained.
+
+**It is to be rewritten for the main tree when L6 and L7 are built**, against the layers that
+then exist. Until then the alignment this repository states is charter §2's statement and
+[`docs/reference/standards.md`](../reference/standards.md), which describes the standard and
+its domains; **no document in `docs/` carries a layer-to-domain mapping**, and none may cite one
+as present. The cost this record names under *What this costs us* — a mapping that drifts
+becomes a lie — is what the removal avoids while the layers it would map do not exist.

@@ -9,14 +9,12 @@
   program calls `MoveTo` and `Grasp`; `Pick`, `Place` and `Transfer` have no in-tree caller
   outside tests and the twin boundary's forwarding — an
   [L3](../architecture/L3-capabilities.md) gap, not an interface gap.
-  **It held ten more until 2026-10-01**, when [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
-  removed the ten that only the event-driven line used — `LineState`, `LineTopology`,
-  `StationTopology`, `StationEdge`, `StationState`, `DetectionEvent`, `Detection`,
-  `Detect.action`, `ResetStation.srv` and `ConveyorState`. They run, frozen, in
-  `projects/01`. `ConveyorState` was the typed contract reserved
-  for a measured belt speed and was published by nothing; belts are commanded over a bare
-  `std_msgs/Float64` and give no confirmation back, and a closed-loop belt now needs a contract
-  of its own (ADR-0069, "What this costs us").
+  **Two command paths are not typed `cite_interfaces` contracts, and both are deliberate.** A
+  belt is commanded over a bare `std_msgs/Float64` (m/s) and gives no confirmation back; a
+  closed-loop belt needs a contract of its own
+  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), "What
+  this costs us"). A track is commanded with a `trajectory_msgs/JointTrajectory` on its
+  controller's own topic ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)).
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a
@@ -72,14 +70,13 @@ string asset_id             # the L0 asset this concerns
 
 A measurement without a timestamp cannot be correlated. A measurement without an asset
 identity cannot be attributed. Both are required for L6 recording to be interpretable
-later ([L6](../architecture/L6-data-and-telemetry.md)).
+later.
 
 This binds messages that are **published**. A message that only ever appears nested inside
 another carries neither, because it inherits both from its container, and stamping it twice
-would be the same fact in two places. *(The four nested messages this paragraph named —
-`StationState`, `StationTopology`, `StationEdge`, `Detection` — and `LineTopology`, which
-carried a `header` and a `zone` rather than an `asset_id`, left the package on 2026-10-01 with
-ADR-0069; none of the 13 definitions left is nested-only.)*
+would be the same fact in two places. One of the package's definitions is nested-only today:
+`ResultCode`, which carries no header and is never published on its own — it appears only
+inside the action results and `SetMode`'s response.
 
 ## Enumerations are constants, not strings
 
@@ -98,7 +95,7 @@ impossible, and the valid set is discoverable rather than folklore.
 
 ## Failure is structured
 
-`ResultCode.msg`, as shipped:
+`ResultCode.msg`, as shipped, without its per-constant comments:
 
 ```
 uint8 SUCCESS=0
@@ -111,13 +108,14 @@ uint8 TIMEOUT=6
 uint8 HARDWARE_FAULT=7
 uint8 NOT_IMPLEMENTED=8
 uint8 UNREACHABLE=9
+uint8 MOTION_INTERRUPTED=10
 uint8 code
 string detail                 # human-readable context, never the machine-readable part
 ```
 
-`code` drives recovery; `detail` explains it to a person. L4 chooses a recovery
-strategy from the code — which is impossible if failure is a free-text string, and is why
-v1's orchestration could only ever retry generically.
+`code` drives recovery; `detail` explains it to a person. A caller chooses what to do from
+the code — which is impossible if failure is a free-text string, and is why v1's
+orchestration could only ever retry generically.
 
 ## Compatibility and versioning
 
@@ -144,61 +142,15 @@ string. The container stays typed even when the contents vary.
 
 ## A field a sensor cannot fill says so
 
-*This section records a convention whose message, writer, reader and consumer all left the
-main tree on 2026-10-01 with the event-driven line (ADR-0069): `Detection`,
-`cite_skills/observation.hpp` and `cite_orchestration`'s `PickAt` run only in
-`projects/01`. It is kept because the rule binds the next message
-that carries a pose a sensor cannot fill.*
-
-A message declares the shape of an answer; it does not promise that every sensor can give
-one. `Detection` carries a `geometry_msgs/PoseStamped pose`, and the only pose sensor in
-`cell_a` is a through-beam, which reports **occupancy**. It knows something crossed it, not
-where along the beam and not how it is turned.
-
-`PoseStamped` has no absent state, so absence has to be spelled out. The convention is
-written once, in `cite_skills/include/cite_skills/observation.hpp`, as a writer
-(`mark_pose_unobserved`) and the matching reader (`pose_is_observed`) side by side:
-
-- **`header.frame_id` empty** — the semantic marker, and the field to test. `tf2` refuses an
-  empty frame rather than resolving it, and `cite_orchestration`'s `PickAt` already reads it
-  as "no observation, fall back to the station frame".
-- **`header.stamp` zero** — stamping it would date an observation nobody made.
-- **every position and orientation component `NaN`** — the guard against a consumer that
-  ignores the frame and reads the numbers. NaN fails loudly in TF and in IK; zeroes and an
-  identity rotation are a perfectly real pose in whatever frame is later attached, and
-  identity in particular asserts "square to the frame", which is the assumption
-  [ADR-0029](../adr/0029-simulated-grasping-by-friction.md) records as unsafe after a grasp.
-
-**This is not "the pose is uncertain".** A beam constrains the axes across it and leaves the
-third unconstrained along its whole length, and `Detection` has no covariance and no field
-separating a measured axis from an inferred one. Reporting a constrained pose without the
-shape of its uncertainty puts a number that *looks* measured back into the field, which is
-the defect the convention replaces — see the correction in
-[ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), where a
-decision was justified by a pose that was only ever the sensor's own mounting transform.
-
-A consumer that needs the uncertainty needs new fields in `cite_interfaces`, not a
-convention improvised at the call site.
-
-**That gap is closed as of 2026-08-27, and how it closed is worth more than the fact.**
-`pose_is_observed` is the test a consumer should make, and for a while no consumer could
-call it: `cite_skills` declared no `ament_export_*`, so `find_package(cite_skills)` succeeded
-and contributed no include directory. `cite_orchestration`'s `PickAt` fell back to testing
-`header.frame_id.empty()` directly — which catches every unobserved pose the detector
-actually produces, and does **not** catch a pose that carries a frame over NaN components.
-That pose went to the planner as an object pose.
-
-`cite_skills` now exports `include/${PROJECT_NAME}` and its `geometry_msgs` dependency, and
-`PickAt` **calls** `cite_skills::pose_is_observed`. The predicate is not restated at the call
-site, and now it cannot be: the call is a compile dependency rather than a comment asserting
-another package's build state. Depending on an L3 header from L4 is downward and legal
-(CLAUDE.md §5).
-
-**The lesson is the one this section is about.** The convention had a writer and a reader in
-one header precisely so they could not drift, and the reader was unreachable, so a consumer
-wrote a weaker test that agreed with it on every input the system produced. Two rules that
-agree on all observed inputs are not one rule. **A convention is only single-sourced when the
-consumer can link against it.**
+A message declares the shape of an answer; it does not promise that every sensor can give one.
+When a sensor cannot fill a field — a through-beam reports **occupancy**, not a pose — the
+message must say the field is absent rather than fill it with something that looks measured,
+such as the sensor's own mounting transform. A type with no absent state (`PoseStamped`) needs
+its absence spelled out: an empty `header.frame_id` as the marker, a zero stamp, and `NaN`
+components so a consumer that ignores the marker fails loudly. The writer and the reader of
+such a convention live side by side in one header that consumers link against — **a convention
+is only single-sourced when the consumer can link against it.** A consumer that needs the
+uncertainty needs new fields, not a convention improvised at the call site.
 
 ## Documenting an interface
 

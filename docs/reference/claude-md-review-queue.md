@@ -2497,6 +2497,8 @@ checkpoint.
 
 ### Q60
 
+> **2026-10-02 (charter and docs cleanup):** the "a hull adds no clearance and may never be cited as margin" rule and the `self_collide` hazard now stand in `docs/architecture/cross-cutting-safety.md`'s status block and in `docs/architecture/L1-description-and-assets.md`. The rest of this item is still the owner's to decide.
+
 - **Class:** B+
 - **Source:** `CLAUDE.md` lines 2439-2531 at `960e6b4`
 - **Summary:** Convex-hull collision meshes (ADR-0028): selection, promotion on a restated clause (ADR-0051), the 50 mm bound, residuals, count history of hull CI runs, a hull adds no clearance, the `self_collide` hazard.
@@ -2973,6 +2975,8 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 
 ### Q78
 
+> **2026-10-02 (charter and docs cleanup):** unchanged in CLAUDE.md. `docs/` no longer documents any L4; the target layer stack is described only in the charter (§5).
+
 - **Class:** X
 - **Source:** `CLAUDE.md` lines 2867-2868 at `960e6b4`
 - **Summary:** Section 3, P9: "A new robot type must not touch orchestration" names a layer (L4 behaviour trees) the main tree no longer has.
@@ -2986,6 +2990,8 @@ Full charter — identity, scope, architecture rationale, roadmap: **`what-we-ar
 </details>
 
 ### Q79
+
+> **2026-10-02 (charter and docs cleanup):** CLAUDE.md §5's layer stack is unchanged, but its link list now names only L0, L1, L2, L3 and L5 and says L4, L6 and L7 are target architecture in the charter. `docs/architecture/README.md` draws only the layers the main tree builds and no `Detect`.
 
 - **Class:** X
 - **Source:** `CLAUDE.md` lines 2886-2895 at `960e6b4`
@@ -3008,6 +3014,8 @@ L0 FACILITY MODEL      the single declarative source of truth
 </details>
 
 ### Q80
+
+> **2026-10-02 (charter and docs cleanup):** unchanged; still needs an ADR. `docs/` no longer describes BehaviorTree.CPP orchestration.
 
 - **Class:** X
 - **Source:** `CLAUDE.md` lines 2932 at `960e6b4`

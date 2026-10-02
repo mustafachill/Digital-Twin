@@ -18,15 +18,16 @@ matching `scripts/`, a broken link) go through normal review; new content does n
 
 The **CITE Digital Twin** — a facility-scale digital twin of the Center for Innovation,
 Technology and Entrepreneurship at Sam Houston State University, built on ROS 2 and
-Gazebo, whose first instrument is a multi-robot xArm work cell.
+Gazebo, whose first instrument is an xArm 5 work cell on a linear track.
 
 It is a *twin*, not a simulation: real hardware and the virtual model share one control
 interface, and the system continuously measures how far the model is from reality.
 
-**The main tree's current scope is one signal, two arms, the same code.** One command drives one
-real xArm 5 and one virtual xArm 5 in Gazebo, both running the real robot's own program with
-the arm on a linear track, as the two sides of the paired zone `cell_b`. Both sides are digital
-today; replacing one with the physical cell is Phase 2.B (charter §8).
+**The main tree's current scope is one signal, two arms, the same code.** It is built so that
+one command will drive one real xArm 5 and one virtual xArm 5 in Gazebo, both running the real
+robot's own program with the arm on a linear track, as the two sides of the paired zone
+`cell_b`. Today both sides are digital and one command drives both; replacing one with the
+physical cell is Phase 2.B (charter §8).
 
 It is also a **rebuild**. A first iteration (v1) was archived under `legacy/` and deleted at
 the end of Phase 1; it survives only in version control, and **its patterns are not
@@ -46,7 +47,8 @@ used to hold is in the [review queue](docs/reference/claude-md-review-queue.md);
 "CLAUDE.md §2" citation names a paragraph now in one of those places
 (`git show 960e6b4:CLAUDE.md`).
 
-- **Phase 1 is closed** (charter §8: what closed it and what that does not cover). **Phase 2.A
+- **Phase 1 is closed** (charter §8; the evidence that closed it, and what that does not
+  cover, is in snapshot 01's `MEASUREMENTS.md`, reached via [`projects/README.md`](projects/README.md)). **Phase 2.A
   is in progress**: the plant paired with a virtual counterpart, a second simulation of the same
   cell. It produces no fidelity number, since both sides run one model and one solver; 2.B
   replaces the counterpart with the physical cell.
@@ -84,8 +86,10 @@ used to hold is in the [review queue](docs/reference/claude-md-review-queue.md);
 - **Runs are not deterministic**: the seed does not reach the physics solver, and
   `./scripts/sim` passes none.
 - **ADR-0043's real-time requirement is not shown met**, and neither of ADR-0049's two
-  thresholds is set; charter §8 states what the capacity campaigns did show and at what
-  strength. The recorded real-time factor holds only on about one CPU core
+  thresholds is set. With the throttle lifted, a pair clears the 1.0 floor in
+  [`2026-09-01-capacity-on-shipped-main`](docs/measurements/2026-09-01-capacity-on-shipped-main/ANALYSIS.md)
+  (taken on the three-arm cell), with three qualifications: every figure is a lower bound, a
+  bare floor cleared is not a margin, and every cell was idle at home pose. The recorded real-time factor holds only on about one CPU core
   ([`2026-08-29-real-time-factor-conditions`](docs/measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)),
   and every scenario ceiling is wall clock.
 - **The belts are open-loop**, and `Transfer`, `Pick` and `Place` have servers that no program
@@ -176,15 +180,14 @@ L0 FACILITY MODEL      the single declarative source of truth
 **A layer may depend only on layers below it.** An upward dependency is an architectural
 defect and an `ESCALATE`, not a finding.
 
-Each layer has a design document in [`docs/architecture/`](docs/architecture/README.md) —
+Each layer the main tree builds has a design document in
+[`docs/architecture/`](docs/architecture/README.md) —
 [L0](docs/architecture/L0-facility-model.md),
 [L1](docs/architecture/L1-description-and-assets.md),
 [L2](docs/architecture/L2-control-and-hal.md),
 [L3](docs/architecture/L3-capabilities.md),
-[L4](docs/architecture/L4-orchestration.md),
-[L5](docs/architecture/L5-twin-synchronization.md),
-[L6](docs/architecture/L6-data-and-telemetry.md),
-[L7](docs/architecture/L7-presentation.md).
+[L5](docs/architecture/L5-twin-synchronization.md). L4, L6 and L7 are in the target
+architecture only (charter §5, §8) and have no document in `docs/`.
 
 Cross-cutting: [safety and interlocks](docs/architecture/cross-cutting-safety.md),
 [lifecycle management](docs/architecture/cross-cutting-lifecycle.md),
@@ -193,7 +196,9 @@ Cross-cutting: [safety and interlocks](docs/architecture/cross-cutting-safety.md
 security.
 
 The architecture is aligned with the ISO 23247 reference architecture for manufacturing
-digital twins — see [standards-alignment.md](docs/architecture/standards-alignment.md).
+digital twins — charter §2 and [`docs/reference/standards.md`](docs/reference/standards.md).
+The layer-by-layer mapping is not in `docs/` until L6/L7 are built
+([ADR-0016](docs/adr/0016-iso-23247-alignment.md)'s 2026-10-02 amendment).
 
 ## 6. Technology baseline
 

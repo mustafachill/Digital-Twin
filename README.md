@@ -156,7 +156,8 @@ orchestration.
 
 The architecture is mapped onto **ISO 23247**, the international reference architecture for
 manufacturing digital twins — see
-[standards alignment](./docs/architecture/standards-alignment.md). We are aligned with it;
+[ADR-0016](./docs/adr/0016-iso-23247-alignment.md) and the
+[standards reference](./docs/reference/standards.md). We are aligned with it;
 we are not certified, and no document here claims otherwise.
 
 ## Commands
@@ -216,13 +217,13 @@ no third-party source copied into the tree, and nothing marked complete without 
 
 | Question | Go to |
 |---|---|
-| What are we building, and why? | [`what-we-are-doing.md`](./what-we-are-doing.md) — the charter |
+| What are we building, why, and how did we get here? | [`what-we-are-doing.md`](./what-we-are-doing.md) — the charter |
 | What rules apply to my change? | [`CLAUDE.md`](./CLAUDE.md) |
 | How do I get set up? | [`docs/onboarding/getting-started.md`](./docs/onboarding/getting-started.md) |
 | Why was *X* chosen over *Y*? | [`docs/adr/`](./docs/adr/README.md) |
 | How does layer *N* work? | [`docs/architecture/`](./docs/architecture/README.md) |
 | What shape is this interface? | [`docs/interfaces/`](./docs/interfaces/README.md) |
-| How do I bring up or calibrate the cell? | [`docs/operations/`](./docs/operations/README.md) |
+| How do I bring up or recover the cell? | [`docs/operations/`](./docs/operations/README.md) |
 | What number backs that claim? | [`docs/measurements/`](./docs/measurements/README.md) |
 | Where do I read more? | [`docs/reference/`](./docs/reference/README.md) |
 | What does this term mean here? | [`docs/onboarding/glossary.md`](./docs/onboarding/glossary.md) |
@@ -244,7 +245,7 @@ Every row has an ADR recording why it was chosen and what it cost.
 ## Repository layout
 
 ```
-what-we-are-doing.md   the charter — what we are building and why
+what-we-are-doing.md   the charter — what we are building, why, and how we got here
 CLAUDE.md              the rulebook — how to work here
 model/                 L0: the facility model — the single source of truth
 workspace/src/         the ROS 2 workspace — first-party packages and imported sources
@@ -257,7 +258,9 @@ docs/                  architecture · ADRs · interfaces · operations · measu
 projects/              frozen, runnable snapshots of earlier milestones — records, not sources
 ```
 
-The charter's [§7](./what-we-are-doing.md) describes the target structure in full.
+What is on disk, package by package, is
+[`docs/architecture/repository-layout.md`](./docs/architecture/repository-layout.md);
+the charter's [§7](./what-we-are-doing.md) describes the target structure.
 
 ## The iteration before this one
 

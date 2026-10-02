@@ -5,12 +5,10 @@
   **Built:** `tools/cite_tools/model/ids.py` is the single place a name is formed, and
   `./scripts/scenario bringup` asserts the result — controller and joint names, the
   `/cite/facility/` scope, and station frames resolving against the world.
-  **Not exercised:** of the reserved scopes, only `/cite/facility/` and `/cite/line/topology`
-  have a publisher **in a bring-up anyone runs**. `/cite/twin/` gained one when `cite_twin`
-  landed — mode, divergence and one action endpoint per skill, all under it, with a test
-  asserting that no L5 name collides with a name a side owns — but no bring-up starts that
-  node and it refuses a single-sided zone, so nothing publishes there in the shipped
-  configuration. The rest of `/cite/line/` is Phase 2 and later.
+  **In use:** `/cite/facility/` (model version, frames) on every bring-up, and `/cite/twin/`
+  (mode, divergence, one action endpoint per skill, the belt and track operator endpoints)
+  whenever the pair supervisor starts the twin boundary; a `cite_twin` test asserts that no L5
+  name collides with a name a side owns. `/cite/line/` is reserved and unused.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [L0](L0-facility-model.md)
 
 Naming looks like a style question. In this project it is a correctness question: P2 says
@@ -39,7 +37,7 @@ hardware.
 ```
 
 These are read from `workspace/src/cite_generated/bringup/cell_b_plan.yaml`, the plan of the
-one zone L0 declares; the examples named `cell_a` until that zone left L0 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
+one zone L0 declares.
 Note that the controller name carries the instance prefix too — see *Prefixes* below.
 
 ## Frames
@@ -47,7 +45,7 @@ Note that the controller name carries the instance prefix too — see *Prefixes*
 There are **two** frame forms, and which one applies depends on where the frame comes from.
 Both are formed in `tools/cite_tools/model/ids.py` and neither is ever written by hand.
 
-**Frames the model declares** — a conveyor's infeed, a table's surface, a pedestal's top —
+**Frames the model declares** — a conveyor's infeed, a table's surface —
 use the full identity, flattened because TF has no hierarchy:
 
 ```
@@ -75,8 +73,6 @@ editing the vendor description, which P1 and L1 both forbid. A frame name in thi
 therefore either `<zone>__<asset_id>__<link>` or `<asset_id>_<link>`, and reading one form
 where the other applies is a `frame does not exist` at runtime.
 
-The facility root frame is `cite_world` and takes neither form.
-
 The facility root frame is `cite_world`, and it is tied to the **surveyed physical origin**
 — see [L5](L5-twin-synchronization.md). This is the frame in which a measurement in the
 model corresponds to a measurement in the building.
@@ -91,7 +87,8 @@ picker_joint1 … picker_joint5
 picker_joint_trajectory_controller
 ```
 
-Two arms of the same type instantiate the same component definition with different
+The track is prefixed the same way (`picker_track_trajectory_controller`). Two arms of the
+same type instantiate the same component definition with different
 prefixes and never collide.
 
 ## The rules that matter
@@ -124,29 +121,19 @@ costs a few characters and buys both.
 |---|---|
 | `/cite/facility/...` | Facility-scope state that belongs to no single asset |
 | `/cite/twin/...` | L5 mode, divergence metrics, registration |
-| `/cite/line/...` | L4 line state, throughput, work-piece tracking — **reserved, and unused in the main tree** since [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) removed L4 from it |
+| `/cite/line/...` | Reserved for line-level state (charter §5's L4); **unused in the main tree** ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) |
 | `cite_world` | The facility root frame, tied to the survey origin |
 
 **The first three are FACILITY-SINGULAR, and that is what bounds a deployment to one
-zone.** They are deliberately not zone-scoped: there is one `/cite/facility/get_model_version`,
-one `/cite/line/topology`, one `/cite/twin/mode`, whichever cell is running. Meanwhile
-`ROS_DOMAIN_ID` is derived per checkout and per *side* and never per zone
-([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)). Put those two together
-and two zones started from one checkout share one ROS graph and one set of these names.
-
-So the invariant is not a preference: **exactly one zone is up at a time**
-([ADR-0056](../adr/0056-keep-the-three-arm-cell-as-a-zone-and-run-one-zone-at-a-time.md)
-decision 3). *(ADR-0056 is superseded by [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), which removed the second zone; L0 declares
-one zone today, so the invariant holds trivially, and the reasoning here is what a second zone
-would have to answer.)* Zone-scoping these three is one of the four ADR-sized changes that record
-declines, and rule 6 above already requires an ADR for the first of them — it changes every
-name in the system.
-
-What a second zone actually collides with, if one is started anyway: two servers on the fixed
-`/cite/facility/get_model_version`; two latched publishers on `/cite/line/topology`, on which
-`line_orchestrator` `RCLCPP_FATAL`s at a zone mismatch, and only with `line:=true` *(both the
-topology publisher and the line left the main tree with ADR-0069)*; two
-`/robot_description` publishers describing **different robots**; and two `/clock` publishers
-from two independent simulators, which is the mixed-time system CLAUDE.md §10 warns about.
-ADR-0056 decision 3 records what refuses that, and — just as importantly — what the refusal
-cannot see.
+zone.** They are deliberately not zone-scoped: there is one `/cite/facility/get_model_version`
+and one `/cite/twin/mode`, whichever cell is running. Meanwhile `ROS_DOMAIN_ID` is derived per
+checkout and per *side* and never per zone
+([ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md)), so two zones started from
+one checkout would share one ROS graph and one set of these names. L0 declares one zone, so
+**exactly one zone is up at a time** holds trivially; a second zone would have to answer this
+first, and zone-scoping these names changes every name in the system, which rule 6 already
+says needs an ADR. What would collide: two servers on `/cite/facility/get_model_version`, two
+`/robot_description` publishers describing **different robots**, and two `/clock` publishers
+from two independent simulators — the mixed-time system CLAUDE.md §10 warns about.
+`cite_facility/occupancy.py` refuses a second zone on one graph and documents what it cannot
+see.

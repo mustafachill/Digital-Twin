@@ -31,7 +31,7 @@
   [ADR-0032](0032-index-the-belt.md),
   [ADR-0037](0037-classify-an-abort-before-any-recovery-motion.md) (**amended by this
   change** — see "The amendment ADR-0037 is owed" below),
-  [L4](../architecture/L4-orchestration.md),
+  L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`),
   [cross-cutting-safety.md](../architecture/cross-cutting-safety.md),
   charter §3.2 and §4 (P2, P4, P5, P7)
 
@@ -180,7 +180,7 @@ owned it — ADR-0024 rule 3's outcome, reached by not doing anything.
 
 The same report pairs `AwaitReArm` with `OnFault` as a leaf the built branch has and the
 design does not. **That is true of the diagram in
-[`L4-orchestration.md`](../architecture/L4-orchestration.md) and it is not true of this
+`L4-orchestration.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) and it is not true of this
 record.** Decision 1's own diagram lists `AwaitReArm`, and decision 3 is nothing but the
 argument for it. There is no text here to amend, and no decision was reversed.
 
@@ -256,7 +256,7 @@ coordination properties.
 - The root tree the orchestrator generates is a bare `Parallel`
   (`line_tree.hpp:226-233`). **None of `EmergencyHandling`, `OnFault`, `StopAll` or
   `AwaitReset` exists anywhere in the repository**, though the design at
-  [`L4-orchestration.md:104-113`](../architecture/L4-orchestration.md) draws all four. A
+  `L4-orchestration.md:104-113` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) draws all four. A
   grep for those four identifiers over `workspace/` and `tools/` on 2026-08-27 returned
   exactly one hit, and it is a comment: `line_station.xml:209`.
 - `Recovery::ESCALATE` sets `STATE_BLOCKED` and returns `BT::NodeStatus::FAILURE`
@@ -353,7 +353,7 @@ nominal branch after a reset, and stopped there would convert **a process that e
 2. The belt setpoint, 2026-08-26 to 2026-08-27. The publishers were created in the topology
    callback and the start-up command was published from that same callback, before any
    subscriber had matched — *"so a reliable profile delivered it to nobody and a test harness
-   was starting the belts"* ([`L4-orchestration.md:27-32`](../architecture/L4-orchestration.md),
+   was starting the belts"* (`L4-orchestration.md:27-32`, removed from `docs/` on 2026-10-02 and kept by the snapshots under `projects/` — see `projects/README.md`;
    and the 2026-08-27 correction on [ADR-0032](0032-index-the-belt.md), which is where the
    measurement lives and is not restated here).
 
@@ -473,7 +473,7 @@ into the exit status at all. `OnFault` latches it and `main` reads the latch.]**
 `FAILURE` *is* the fault event; a separate condition leaf would have to observe the same
 station states the tree has just acted on, and would be a second author for the fact that a
 station escalated. The diagram at
-[`L4-orchestration.md:104-113`](../architecture/L4-orchestration.md) is the design; this is
+`L4-orchestration.md:104-113` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) is the design; this is
 the shape to build, and the difference is one node.
 **[Amended 2026-08-27 — see the Amendment section above. `OnFault` is built, by the project
 owner's decision. The objection stated here stands against a *condition* leaf and does not

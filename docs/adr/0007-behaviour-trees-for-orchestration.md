@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Related:** ADR-0006, `docs/architecture/L4-orchestration.md`, `docs/reference/literature.md`
+- **Related:** ADR-0006, `docs/architecture/L4-orchestration.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`), `docs/reference/literature.md`
 
 ## Context
 

@@ -5,10 +5,11 @@ that taught it was deleted. [ADR-0001](../adr/0001-rebuild-rather-than-migrate.m
 scheduled that deletion — its chosen option ends *"delete `legacy/` at the end of Phase 1"*
 — and its decision is *"we carry forward knowledge, not code"*. This page is what was
 carried forward. The deletion happened on 2026-08-27 in commit `f16ea98`, which removed 952
-files; charter §7 records it and §14 dates it (v1.6).
+files; [`charter-history.md`](charter-history.md) keeps the charter's record of it (§7 and the
+v1.6 entry of §14), and ADR-0001 is the decision it carried out.
 
 - **Related:** [ADR-0001](../adr/0001-rebuild-rather-than-migrate.md),
-  [`../../CLAUDE.md`](../../CLAUDE.md) §1, charter §7
+  [`../../CLAUDE.md`](../../CLAUDE.md) §1, [`charter-history.md`](charter-history.md)
 
 This is not a list of v1's mistakes. It is a list of **what to do instead**, each one
 anchored to the code that proves the problem was real. The test a section has to pass is
@@ -107,56 +108,16 @@ does not read Turkish loses nothing, which is what ADR-0015 asks for when it lis
 passage of non-English prose on this page, and it is quoted data rather than something this
 project wrote.
 
-### Which half of it is built
+### What the rebuild delivered against it
 
-*Overtaken 2026-10-01: everything this section calls built — `cell_a`, its flow document, the
-line coordinator, `line_plan.hpp` and `./scripts/scenario continuous_line` — left the main tree
-with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) and runs,
-frozen, in `projects/01`, where the paths below resolve. The section
-is kept as the record of what Phase 1.D delivered against this requirement.*
-
-The resemblance between this sentence and what Phase 1.D produced is close enough to be
-worth recording and close enough to overclaim, so both halves are stated.
-
-**Built: the belt, the pick, and the next robot taking it.** The generated process topology
-`workspace/src/cite_generated/topology/cell_a_flow.yaml` describes this line and nothing
-else — `station_transfer_1` (actor `arm_1`) picks at `cell_a__table_pick__surface` and
-places at `cell_a__conveyor_1__infeed`; `station_transfer_2` (`arm_2`) picks at
-`cell_a__conveyor_1__outfeed` and places at `conveyor_2`'s infeed; `station_transfer_3`
-(`arm_3`) does the same again into `conveyor_3`. Every transfer station carries a beam
-trigger, and every edge between two robots is declared `via` a conveyor.
-`./scripts/scenario continuous_line` is the test of that claim. Material travelling on a
-belt, one robot picking it up, the next robot taking it: the requirement's first clause and
-its last are the same thing the topology declares. Note that the requirement itself opens
-with a belt — the conveyor is not a substitution introduced by the rebuild.
-
-**Not built: the crossing, if it was meant to be arm to arm.** Every edge in the model is
-conveyor-mediated, and L4 refuses a direct one at plan time rather than leaving it
-unimplemented. `plan_line`, in
-`workspace/src/cite_orchestration/include/cite_orchestration/line_plan.hpp`, records a
-refusal for any outbound edge whose receiving station has a robot actor and whose
-`via_asset_id` is empty. [ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md)
-carries the decision and its 2026-08-26 correction, and the correction is the part that
-matters here: what makes the *permitted* conveyor edge safe is the receiving gripper
-squaring a free part up as it closes on it, and a direct handoff denies precisely that,
-because a part still clamped by the giving gripper cannot rotate into alignment with the
-receiving one. Read that ADR before writing anything about either topology; its numbers are
-not restated here.
-
-**"Synchronously" is the least settled word in the sentence.** The three arms are
-coordinated by `line_orchestrator`, which instantiates one behaviour subtree per station
-from that same generated topology. What that has been *measured* to do — over how many
-runs, on whose machine, under what CI status, and what its own tests do and do not prove
-about motion — is recorded in the three-arm snapshot's `MEASUREMENTS.md`, reached through
-[`../../projects/README.md`](../../projects/README.md), where the line completing is the
-least-settled claim. It is not copied here (P1). Read it there before treating this clause
-as delivered.
-
-**Nothing in this section signs anything off.** The belt, the picks and the next robot
-taking the part exist and are exercised by a scenario. The crossing between two arms is
-*answered* rather than delivered — refused, deliberately, with the reason written down. The
-synchrony is measured rather than settled. The charter, not this note, is the authority on
-what 1.D must deliver — [`../../what-we-are-doing.md`](../../what-we-are-doing.md) §8.
+Phase 1 built this as a three-arm, beam-triggered line — belt, pick, the next robot taking
+the part, every arm-to-arm edge mediated by a conveyor — and it is kept, runnable, as a frozen
+milestone under `projects/` ([`../../projects/README.md`](../../projects/README.md)), with its
+own documents and measurements. The main tree has since scoped down to one arm per side driven
+by the real robot's program
+([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). The
+charter, not this note, is the authority on what each phase delivers —
+[`../../what-we-are-doing.md`](../../what-we-are-doing.md) §8.
 
 **On the four links above the note.** Three point at ROS 2 Humble documentation, which
 [ADR-0002](../adr/0002-ros2-jazzy.md) supersedes; [toolchain.md](toolchain.md) carries the
@@ -310,8 +271,8 @@ lines 161-167, `legacy/fleet_manager/launch/fleet.launch.py` lines 184-196,
 
 **Where the rebuild put the answer:** `workspace/src/cite_generated/control/` holds one
 file per arm, and its names are prefixed at generation —
-`/cite/cell_a/arm_1/controller_manager`, `arm_1_joint_trajectory_controller`,
-`arm_1_joint1`…`arm_1_joint5`. The generated header states the reason plainly: "these are
+`/cite/cell_b/picker/controller_manager`, `picker_joint_trajectory_controller`,
+`picker_joint1`…`picker_joint5`. The generated header states the reason plainly: "these are
 the same controller and joint names the physical arm will use, because there is nowhere
 else for them to come from." That is P2 made structural rather than promised.
 
@@ -340,7 +301,7 @@ keep the limit *values* only in the description.
 `enforce_command_limits` returned no occurrences. `ros2_control` defaults it to false, so
 every limit v1's descriptions declared was inert, and nothing said so. The rebuild's
 generated controller configuration sets it and explains why the numbers must not be
-repeated beside the flag — `workspace/src/cite_generated/control/cell_a_arm_1_controllers.yaml`,
+repeated beside the flag — `workspace/src/cite_generated/control/cell_b_picker_controllers.yaml`,
 the `enforce_command_limits` block.
 
 *That v1's limits were consequently unenforced follows from the default; `not observed`.*
@@ -554,9 +515,8 @@ What went over the wire instead was `std_msgs/String` carrying `str()` of a Pyth
 `robot_node.py` lines 245-253 and `handoff_coordinator.py` lines 276-289. That wire format
 is Python's `repr`: single-quoted, rejected by `json.loads`, and recoverable only with a
 Python-literal parser such as `ast.literal_eval`. A consumer in another language has to
-reimplement one. See [ADR-0010](../adr/0010-typed-ros-interfaces.md) and
-[`../architecture/L7-presentation.md`](../architecture/L7-presentation.md); they already
-carry this and it is not restated here.
+reimplement one. See [ADR-0010](../adr/0010-typed-ros-interfaces.md), which already carries
+this; it is not restated here.
 
 **Do this:** a design document describes a design. Only the tree says what exists. When the
 two disagree, the tree is right — and a work log that records intentions in the past tense
@@ -633,8 +593,7 @@ publishers on `/{robot}/handoff/execute`; a search on 2026-08-26 for that topic 
 negotiation completed, the command went out, and no arm was listening.
 [ADR-0007](../adr/0007-behaviour-trees-for-orchestration.md) and
 [ADR-0024](../adr/0024-handoff-split-between-l3-and-l4.md) carry the design conclusions;
-[`../architecture/L4-orchestration.md`](../architecture/L4-orchestration.md) carries the
-architecture.
+charter §5 carries the target architecture.
 
 Two smaller things in the same package are worth naming because they will bite again.
 `robot_interface.yaml` has a `timing:` block — `pick_duration: 2.0`, `place_duration: 2.0`

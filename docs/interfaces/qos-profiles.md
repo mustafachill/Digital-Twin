@@ -24,7 +24,7 @@ profiles explicitly and using the named set below rather than improvising per pu
 | Profile | Reliability | Durability | History | Depth | Use for |
 |---|---|---|---|---|---|
 | `SENSOR` | Best effort | Volatile | Keep last | 5 | High-rate sensor streams where the newest value is what matters |
-| `STATE` | Reliable | Volatile | Keep last | 10 | Periodic state — joint state, divergence metrics (and `LineState`, until it left with the line, ADR-0069) |
+| `STATE` | Reliable | Volatile | Keep last | 10 | Periodic state — joint state, divergence metrics |
 | `COMMAND` | Reliable | Volatile | Keep last | 10 | Commands that must arrive |
 | `LATCHED` | Reliable | Transient local | Keep last | 1 | Configuration a late joiner must receive — model version, mode, robot description |
 | `EVENT` | Reliable | Volatile | Keep all | 100 | Discrete events that must not be dropped — faults, transitions, handoffs |
@@ -58,7 +58,7 @@ never match.
 ## Diagnosing a suspected mismatch
 
 ```bash
-ros2 topic info /cite/cell_a/arm_1/joint_states --verbose
+ros2 topic info /cite/cell_b/picker/joint_states --verbose
 ```
 
 Compare reliability, durability, and history on both sides. If the topic exists, both
@@ -75,23 +75,19 @@ happily against a QoS mismatch — which is the shape of the v1 handoff defect, 
 coordinator published commands to a topic with no subscriber and every transaction timed
 out forever.
 
-## Reliable is a promise to *matched* subscribers, and this cost the project a working line
+## Reliable is a promise to *matched* subscribers
 
 Compatibility is not the only way a reliable message reaches nobody. **Reliability is
 retransmission to endpoints the publisher has already been matched with**, and matching is a
 discovery event. Publish before it happens and the message is delivered to zero subscribers,
 with no incompatibility to find and nothing wrong on either side of `ros2 topic info`.
 
-The measured case was in this repository, and is now in
-`projects/01`, since `cite_orchestration` left the main tree on
-2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)).
-`ConveyorIndex` creates its belt command publishers
-inside `line_orchestrator`'s topology callback and publishes the start-up setpoint from the
-same callback. With the scenario's own publisher removed, **a subscriber that had been up for
-a hundred seconds received nothing for the following three hundred.** The bridge had been
-running the whole time; the profile was `COMMAND`, reliable; nothing was misconfigured. L4's
-belt command had never once arrived, and a test harness had been starting the belts.
-See the 2026-08-27 correction on [ADR-0032](../adr/0032-index-the-belt.md).
+This cost the project a belt setpoint that was never once delivered: a publisher created
+inside a callback published its start-up value from the same callback, and a subscriber that
+had been up for a hundred seconds received nothing — while a test harness, publishing on its
+own, had been starting the belts. The program client in the main tree waits for the belt's
+subscriber before it publishes a setpoint for exactly this reason
+(`cite_bringup/program/cell.py`).
 
 **Tell the two apart before reaching for a profile change:**
 
@@ -116,11 +112,9 @@ See the 2026-08-27 correction on [ADR-0032](../adr/0032-index-the-belt.md).
 - Never fix it by publishing on a timer until something answers. That is a guessed duration
   in the shape of a workaround, and it fails silently again the day discovery is slower.
 
-**The test has to be ordered the way production is.** Every pre-existing case against
-`ConveyorIndex` subscribed first and then commanded, and not one of them could see this. The
-two that catch it are ordered index, command, subscribe — the production order. A delivery
-test that sets up its subscriber first is testing a scenario the running system never
-executes.
+**The test has to be ordered the way production is.** A delivery test that sets up its
+subscriber first and then commands is testing a scenario the running system never executes,
+and cannot see this failure.
 
 ## Latching and late joiners
 

@@ -99,17 +99,46 @@ follow-up", which is where documentation goes to die.
 
 ## Definition of Done
 
-From charter §9. All of it, no partial credit:
+The Definition of Done is the charter's §9
+([`what-we-are-doing.md`](../../what-we-are-doing.md)), which `CLAUDE.md` §9 carries as
+the rulebook's form of it. Read it there; it is not restated here. All of it holds, and there
+is no partial credit.
 
-1. Generated from or declared in the L0 model, where applicable.
-2. Interfaces typed and in an interface package.
-3. Tested at the right level, passing in CI.
-4. Runs headlessly in CI on a clean container, no manual step.
-5. Works identically in simulation and on hardware — or its hardware path is explicitly
-   marked unimplemented.
-6. Documented: what it does, its interfaces, how to run it, how it fails.
-7. Reviewed by a human and by the relevant agents.
-8. Startup and shutdown event-driven, no timing guesses.
+## The agents
+
+AI agents are first-class participants here, with defined roles and defined limits.
+`CLAUDE.md` is the rulebook every session and every agent loads; `AGENTS.md` points to it;
+the pipeline and its dispatch routing are defined in `.claude/orchestration.md`.
+
+**`.claude/` is local tooling and is not committed to this repository.** A fresh clone does
+not contain it, and every reference to it here describes a directory the reader may have to
+obtain separately. The rules the agents enforce are in `CLAUDE.md`, which *is* committed — so
+the standards survive without the tooling, and a contributor working without agents is held
+to exactly the same bar.
+
+The active roster is ten roles in `.claude/agents/`:
+
+- **Core pipeline** — `coder`, `reviewer`, `tester`, `fixer`.
+- **Domain auditors** — `model-validator` (the L0 model and everything generated from it:
+  schema, kinematic trees, inertia tensors, collision geometry, interface matching) and
+  `safety-auditor` (every path that can produce motion: safety-layer bypass, E-stop
+  propagation, limit enforcement, watchdogs, mode transitions).
+- **Conditional specialists** — `architect-reviewer`, `debugger`, `performance-engineer`,
+  `dependency-auditor`.
+
+**Documentation is written by the orchestrating session**, when it needs writing, and is
+reviewed like any other change; there is no documentation agent.
+
+The two domain auditors exist because this project's most expensive failures are not
+ordinary bugs. A wrong inertia tensor produces a simulation that runs confidently and is
+wrong; an unguarded command path produces a physical arm that moves when nobody expected it.
+Neither is caught by ordinary code review.
+
+Two roles are deliberately **absent** until a historian and remote access give them a real
+domain: database and telemetry-schema review, and security auditing. They will be written
+then, against the domain they actually have to audit, rather than carried as dormant files —
+an agent with no live domain still competes for description-based routing and degrades
+dispatch accuracy for every other role.
 
 ## Writing an ADR
 
