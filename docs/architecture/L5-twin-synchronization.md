@@ -1,61 +1,35 @@
 # L5 — Twin synchronization
 
 - **Status:** `PARTIAL` — `cite_twin` exists and implements
-  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md). This line said **"nothing has ever
-  run it against a pair"** until 2026-09-18, and a tester has: `./scripts/sim --pair` brought
-  both sides and this node up and `SetMode` was called on the running boundary
-  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)). **One machine,
-  with the model flipped to `pair` for the run and reverted, no thresholds registered in
-  advance, and nothing automated does it** — so what moved is that it has been run, not that
-  anything holds it. That flip is no longer needed on `cell_b`, which the model pairs as of
-  2026-09-18 ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)); still nothing
-  automated does it.
+  [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md).
   **Built:** one process per zone holding one `rclpy` context per side
-  (`cite_twin/twin_boundary.py`), a `SetMode` server that applies the hardware opt-in **at the
-  transition** and publishes `TwinMode` latched on `/cite/twin/mode`, an action server per arm
-  per skill under `/cite/twin/...` that dispatches the L3 **goal** to each side's own server
-  in the modes ADR-0050's table gives a command flow, and a per-asset `DivergenceMetrics`
-  publisher on `/cite/twin/divergence`. Each rule is held by a test in that package, and a
-  launch test drives the node itself.
-  **A goal crosses the boundary in a test, and two operands reach the monitor**, as of
-  2026-08-31: `cite_twin/test/test_twin_boundary_paired_launch.py` runs each side as its own
-  process on its own `ROS_DOMAIN_ID`, serving an arm's L3 action names and moving nothing,
-  while the test process holds one context on the plant's domain. **This document said no
-  goal had crossed "in any run or any test" and that nothing automated could show one**; the
-  second half was overstated — the impossibility is about `launch_test` with
-  `IncludeLaunchDescription` hosting a whole cell, not about any automated test at all.
-  **The pair supervisor starts it, as of 2026-09-18** ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)).
-  `./scripts/sim --pair` starts both sides, joins them on their readiness tokens, and starts
-  this node on that event, handing it the zone and the plan path and nothing else; it announces
-  itself on **stdout** from inside the plant's executor, and the supervisor joins on that line.
-  A tester brought a pair and a boundary up and **called** `SetMode` on it — one machine, no
-  thresholds registered in advance, not a campaign.
-  **This bullet said "No bring-up starts it — not `simulation.launch.py`, not `./scripts/sim`,
-  not any scenario" until that date, and two thirds of that is still true.** It is in **no**
-  launch file, so `simulation.launch.py` and `./scripts/sim` **without `--pair`** start no L5
-  at all, and **no scenario starts one** — `launch_test` holds one context on one domain, so a
-  paired scenario cannot take today's shape, which is ADR-0057's unmet promotion clause 4.
-  **Not built, and read this before believing either line above.** `cell_b` declares
-  `twin: {sides: pair}` as of 2026-09-18
-  ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so a boundary now comes up
-  from a clean checkout on that zone, which since 2026-10-01 is the only zone L0 declares
-  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). **A declaration
-  is not a gate**: **nothing automated brings a boundary up**, no scenario and no CI step
-  reaches one, and what CI drives on `cell_b` is the plant alone, which is ADR-0057's unmet
-  promotion clause 4 and is now a wider gap rather than a narrower one. **No goal has
-  crossed the boundary into a running cell**, in any run: the rig above brings no cell up, so
-  it is evidence about the boundary and about nothing that moves. **[Overtaken — that clause
-  is stale: [ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md) records one `MoveTo`
-  sent through the boundary to both arms of a running pair, and `./scripts/program` sends the
-  real program through it (`--via twin`, ADR-0067). Neither is automated; the rest of the
-  sentence stands.]** **State mirroring is not
-  implemented at all** — the monitor consumes each side's joint state and nothing follows
-  anything. Registration is Phase 3: every asset instance in L0 carries a `registration`
-  block, `unregistered` for `cell_b`'s one arm (it said "all three arms" while `cell_a` was in
-  L0).
+  (`cite_twin/twin_boundary.py`); a `SetMode` server that applies the hardware opt-in **at the
+  transition** and publishes `TwinMode` latched on `/cite/twin/mode`; an action server per arm
+  per skill under `/cite/twin/...` that dispatches the L3 goal to each side's own server in the
+  modes ADR-0050's table gives a command flow; the belt and track routes below; and a
+  per-asset `DivergenceMetrics` publisher on `/cite/twin/divergence`. Each rule is held by a
+  test in that package; `cite_twin/test/test_twin_boundary_paired_launch.py` runs each side as
+  its own process on its own `ROS_DOMAIN_ID` and sends a goal across.
+  **Started by the pair supervisor**
+  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)):
+  `./scripts/sim --pair` and `./scripts/program` start both sides of `cell_b`, join them on
+  their readiness tokens, and start this node on that event; it announces itself on stdout
+  from inside the plant's executor, and the supervisor joins on that line. It is in no launch
+  file, so `./scripts/sim` without `--pair` starts no L5.
+  **The real program runs through it**: `./scripts/program` sends every `MoveTo`, `Grasp` and
+  track command of the real robot's program to `/cite/twin/...`, and both arms act
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)).
+  **Not built:** an automated gate. **Nothing in CI brings a boundary up** — CI drives the
+  plant alone (`bringup`, `program_cycle`) — because `launch_test` holds one context on one
+  domain, so a paired scenario cannot take today's shape; that is ADR-0057's unmet promotion
+  clause 4. **State mirroring is not implemented** — the monitor reads each side's joint state
+  and nothing follows anything. Cell registration is Phase 2 and is not built: every asset
+  instance carries a `registration` block, `unregistered` for `cell_b`'s arm, and the procedure
+  is [calibration-and-registration.md](../operations/calibration-and-registration.md)
+  (`DESIGNED`). Registering the scanned building is Phase 3.
   **`valid` is false in every sample the package can produce**, by construction, and that is
   the deliverable rather than a defect — see *Divergence measurement is the point* below.
-- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [standards-alignment.md](standards-alignment.md)
+- **Related:** [ADR-0011](../adr/0011-twin-maturity-model-and-modes.md) (amended 2026-08-29), [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md), [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md), [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)
 
 ## Responsibility
 
@@ -75,13 +49,13 @@ how the two coordinate frames correspond, and — most importantly — how far a
 ## Does not own
 
 - Control. L5 routes and observes; L2 executes.
-- Deciding what work to do — L4.
-- Storing history. L5 publishes metrics; L6 records them.
+- Deciding what work to do — the program client (`cite_bringup.program`) or an operator.
+- Storing history. L5 publishes metrics; nothing in the main tree records them yet.
 
 ## Interfaces
 
-**Consumes:** joint and controller state from L2 on both paths; L4 line state for
-event-level comparison.
+**Consumes:** joint and controller state from L2 on both sides; L3 goals, belt setpoints
+and track commands from the program client or an operator.
 
 **Exposes:** current mode, mode-transition service, divergence metrics, registration
 transform, and twin health.
@@ -115,8 +89,9 @@ that name the validation gate, and ADR-0011's amendment and ADR-0041 Decision 2 
 exactly those two. **Neither record surveyed the other three, and all three defined L3 by
 data flow alone:** [`docs/onboarding/glossary.md`](../onboarding/glossary.md), which said
 *"gates **or** commands"* while its own opening claims that when it conflicts with any other
-use in the repository, **it** wins; [`standards-alignment.md`](standards-alignment.md),
-whose table classifies on Kritzinger's flow-automation axis; and ADR-0011's own level table,
+use in the repository, **it** wins; the standards-alignment document (since removed from
+`docs/`), whose table classified on Kritzinger's flow-automation axis; and ADR-0011's own
+level table,
 which that record already names as not closing the argument. The first two were corrected on
 2026-08-29 and now cite charter §2 instead of paraphrasing it.
 
@@ -151,9 +126,8 @@ criterion the three share is stated once, in
 physical actuation under an authority that was not previously commanding it — and this list
 cites it rather than restating it, so that a fourth candidate can be judged against a
 criterion instead of compared to these three.
-**Every mode that would place physical actuation under a new authority is now refused at
-the point of transition by the L5 mode server — computed and not listed — and no deployment
-anyone has run starts that server.** The three above are three examples of the criterion.
+**Every mode that would place physical actuation under a new authority is refused at the
+point of transition by the L5 mode server — computed and not listed.** The three above are three examples of the criterion.
 The server applies the criterion: which sides the requested mode commands, and whether any of
 them loads something other than a simulation. Transcribing the three left `VALIDATED`
 ungated until 2026-08-31, and `VALIDATED` dispatches an operator's goal to both sides by
@@ -176,30 +150,37 @@ what that refusal does and does not amount to.
 ### What crosses the boundary
 
 Decided in [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) and deliberately not
-restated here (P1), and implemented in `cite_twin` — with the caveat in this document's
-status bullet — though since 2026-09-28 goals and belt setpoints have crossed on a running pair,
-once, by `./scripts/program` (ADR-0066). The things a reader of
-this document needs to know it says, each with the clause that carries it:
+restated here (P1), and implemented in `cite_twin`. The things a reader of this document needs
+to know it says, each with the clause that carries it:
 
 - **L5 is one process per zone holding one ROS context per side**, and **nothing is
   republished across the boundary** — what crosses, crosses in L5's own memory. `domain_bridge`
   is refused for everything L5 does today, on the criterion
   [ADR-0044](../adr/0044-one-ros-domain-per-side-identical-names.md) clause 3 set: a bridge
   copies, and cannot refuse, transform, timestamp or gate.
-- **The command that crosses is an L3 goal**, at the action boundary. Nothing below L3 ever
-  crosses — no trajectory, no controller setpoint — and `/clock` never crosses in any mode.
+- **The command that crosses is an L3 goal**, at the action boundary — with the two declared
+  exceptions below, a belt setpoint and a track command. `/clock` never crosses in any mode.
 - **In `VIRTUAL_LEAD` the operator's command enters L5**, under `/cite/twin/`, and is
   dispatched to both sides' L3. Both sides then plan independently, so the operator is not on
   present evidence watching the path the far arm will take; ADR-0050 carries the argument and
   the rejected alternative.
-- **A belt setpoint crosses too, since [ADR-0066](../adr/0066-run-the-cell-from-a-fixed-program.md).**
-  For each conveyor in the plan L5 subscribes, on the plant's domain, to
-  `/cite/twin/<zone>/<belt>/command` (`std_msgs/Float64`, m/s, the `COMMAND` profile) and
-  publishes each value on each side's own `/cite/<zone>/<belt>/command`, under the same routing
-  table as the skills: dropped with a log line in `SIM`, `REAL` and `SHADOW`, sent to both sides
-  in `VALIDATED` and `VIRTUAL_LEAD`. It is a command, like a goal; the belt's state does not
-  cross. This is what lets the fixed program (`cite_bringup.program`) run both belts from one
-  client. Tested against fake sides in `cite_twin/test/test_twin_boundary_paired_launch.py`.
+- **A belt setpoint crosses** (kept by [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)
+  on the project owner's decision). For each conveyor in the plan L5 subscribes, on the
+  plant's domain, to `/cite/twin/<zone>/<belt>/command` (`std_msgs/Float64`, m/s, the
+  `COMMAND` profile) and publishes each value on each side's own `/cite/<zone>/<belt>/command`,
+  under the same routing table as the skills: a non-zero setpoint is dropped with a log line in
+  `SIM`, `REAL` and `SHADOW`, refused in `CLOSED_LOOP` (its gate is undecided, so `routing.py`
+  answers `NOT_IMPLEMENTED`), and sent to both sides in `VALIDATED` and `VIRTUAL_LEAD`. **A zero
+  setpoint — a stop — is never gated**: it is sent to every side in every mode, because a
+  physical belt's setpoint persists (`twin_boundary.py`'s `_on_belt_command`). The belt's state
+  does not cross. The real program drives no belt — `./scripts/program` starts each side's belt on that
+  side — so only `cite_twin`'s own tests hold this route.
+- **A track command crosses**
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)). For each linear
+  track L5 subscribes to the operator endpoint of the track controller's trajectory topic and
+  forwards each `JointTrajectory` to each side's own controller topic under the same table. A
+  track holds the last position it was sent, so a refused command is dropped and logged and no
+  stop is carried. What comes back is each side's own joint state.
 - **Which side is which is a derivation, not a choice.** On a paired zone the plant is always
   `sim`, so the mode table's *physical* side is the `counterpart` and its *virtual* side is the
   `plant`.
@@ -216,8 +197,9 @@ P8: *the twin measures itself.* An unmeasured claim of fidelity is not a claim.
 | Cycle-time delta | Systematic timing and throughput mismatch |
 | Event-timing deviation | Sensor and orchestration mismatch |
 
-Each is published continuously, recorded by L6, and trended by L7. **"Our twin is
-accurate" is not a sentence this project is allowed to write without a number next to it.**
+Each is meant to be published continuously and recorded; nothing records or trends them in
+the main tree yet (*Recording divergence*, below). **"Our twin is accurate" is not a sentence
+this project is allowed to write without a number next to it.**
 
 **A published number is not a readable one, and the difference is decided in
 [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md).** A divergence sample compares two
@@ -235,14 +217,44 @@ by the message's own rule, and the six condition terms are not, because they are
 learns which conjunct failed. Its `test_divergence.py` asserts that `valid` is false *for that
 named term*, so a change which makes it true has to confront the term rather than flip a
 boolean. **Four of the six comparison fields are additionally not computed at all** — TCP pose
-error needs one TF buffer per side and forward kinematics, and the two timing terms need L4
-line state from both sides — and while `valid` is false for every sample their zero is
+error needs one TF buffer per side and forward kinematics, and the two timing terms need an
+event source on both sides that the main tree does not have — and while `valid` is false for every sample their zero is
 indistinguishable from the rule's zero.
 
 **Nothing above is a fidelity measurement.** Both sides of a Phase 2.A pair run the same L0
 model and the same solver, so what a sample would compare is a thing with itself;
 `far_side_physical` is the field that answers whether a number could ever be one, and in 2.A
 it is false for every asset (P8, [ADR-0041](../adr/0041-virtual-counterpart-is-a-second-full-simulation.md)).
+
+### Recording divergence
+
+- **Status:** `DESIGNED` — nothing records `/cite/twin/divergence` in the main tree.
+
+The Phase 2 exit criterion asks that the twin monitor **publish and record** a quantified
+fidelity error (charter §8), so publishing alone does not close it. A recording is a
+`rosbag2` bag in **MCAP** storage ([ADR-0017](../adr/0017-mcap-recording-format.md)), taken on
+the **plant's** domain, which is where the boundary publishes `/cite/twin/divergence` and
+`/cite/twin/mode`:
+
+```bash
+ros2 bag record -s mcap -o runs/$(date +%Y%m%d-%H%M%S) \
+  /cite/twin/divergence \
+  /cite/twin/mode
+```
+
+**Record deliberately.** Recording every topic at full rate perturbs the system it observes,
+and then the recording is of a different system than the one meant.
+
+**A divergence sample without its context is not comparable to any other**, so a recording
+carries, beside the bag: the facility model version (a sample against another layout compares
+nothing), the commit, the operating mode in force (it decides what the numbers *are*, and it is
+not a maturity level, §2 of the charter), the physics seed if one was given (`./scripts/sim`
+passes none, and a seed is not a reproducibility guarantee), and — once a physical side exists
+— the registration of each asset, without which a divergence number is meaningless (below).
+
+Long-horizon trending of divergence belongs to a historian, which is Phase 4 and has no design
+document in `docs/` (charter §5, §8). **Diagnose from the bag; downsampling hides transients**,
+so when a trend and a bag disagree, the bag is right.
 
 ### Registration is what makes measurements transferable
 
@@ -253,7 +265,9 @@ Registration establishes the transform between the surveyed physical origin and 
 origin, ties scanned geometry ([L1](L1-description-and-assets.md)) to that frame, and is
 **re-verified**, not assumed permanent — floors settle, fixtures get bumped, robots get
 remounted. A drifted registration presents as a slowly growing divergence with no software
-cause, and is one of the harder faults to diagnose without this metric.
+cause, and is one of the harder faults to diagnose without this metric. The procedure, the
+frames and the drift triggers are
+[calibration-and-registration.md](../operations/calibration-and-registration.md).
 
 ### Time
 
@@ -277,7 +291,7 @@ clock to the other's and
 | Registration drift | Divergence grows with no software change | Trend monitoring; periodic re-survey |
 | Clock skew | Divergence metrics plausible but wrong | Explicit time-base check in the monitor |
 | Mirroring lag treated as divergence | Model blamed for a network problem | Latency measured and reported separately |
-| Divergence published but never watched | The twin is "accurate" because nobody looked | L7 trending; alert thresholds |
+| Divergence published but never watched | The twin is "accurate" because nobody looked | Nothing today; alert thresholds are an open question |
 | Fidelity claimed without a metric | The project's core claim becomes unfounded | P8; review |
 
 ## Open questions
@@ -291,7 +305,7 @@ clock to the other's and
   its Q5). What is still open is 2.B's question: whether a physical cell on the far side of a
   lab network needs its own QoS and latency budget, which nothing has measured.
 - **What `CLOSED_LOOP` validation actually checks** before permitting physical execution.
-  This is the crux of L3-level maturity and deserves its own ADR when Phase 5 approaches.
+  This is the crux of L3-level maturity and deserves its own ADR before `CLOSED_LOOP` is built.
 - ~~**Whether divergence is defined under `VIRTUAL_LEAD`.**~~ **Decided** by
   [ADR-0050](../adr/0050-what-crosses-the-twin-boundary.md) decision 3: `valid` is false, and
   the reason is structural rather than semantic — the mode is *defined* by there being no
@@ -308,7 +322,7 @@ clock to the other's and
   tell "the arm is driving a second simulation" from "the arm is about to move a physical
   arm". This is filed, not decided: whether the backend belongs on `TwinMode`, on a separate
   topic, or nowhere is open. What is **not** open is that the `SetMode` server, when it
-  exists, must resolve the far side's backend per asset before it decides the transition —
+  resolves the far side's backend per asset before it decides the transition —
   and for a facility-wide request that means every asset. See
   [cross-cutting-safety.md](cross-cutting-safety.md) and `SetMode.srv`'s header.
   **One half of this is now decided and the other half is not.**

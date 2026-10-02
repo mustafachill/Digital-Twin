@@ -942,3 +942,173 @@ _This section resumes mid-sentence. The sentence it continues opens with the les
   "sixteen" until 2026-09-08 and "seventeen" for part of that day. See
   the `continuous_line` bullet above, including that a
   harness had been starting the belts and that the best local figure is a single run.
+
+## Phase 1 closure evidence, moved from the charter (2026-10-02)
+
+On 2026-10-02 the main repository's charter, `what-we-are-doing.md`, stopped holding
+measurements and decision records (its §0, v1.17). The evidence it carried for Phase 1 — the
+phase this line closed — came here, **verbatim**, from charter v1.16. The charter still
+carries each sub-phase's original text and the exit criterion itself, so those are not
+repeated; what is below is every note and status paragraph around them.
+
+- **This is a CLOSED RECORD**, true at the dates and commits it names. Do not append to it.
+- **"This section", "below" and "the clause table" refer to the charter's §8**, and
+  "`CLAUDE.md` §2" to that file as it stood before 2026-10-01; its figures are the sections
+  above in this file.
+
+### How Phase 1's status was stated
+
+_Source: `what-we-are-doing.md` lines 417-428 at main-repository commit `911ba08`._
+
+**All five sub-phases are complete, and the exit criterion is MET as of 2026-08-28.** Those
+were two separate claims for most of this phase and this section still keeps them apart: a
+sub-phase closes when its work exists and has been measured; the phase closes when the exit
+criterion is demonstrated. The last clause to close was "CI is green", which had been blocked
+at the account level rather than by anything in the code. **The clause table below records
+what closed it and what that green run contains — including a scenario that failed inside
+it.** Read both halves; a run that is green and a system that works are not the same
+statement, and this phase has been wrong in that exact way before. Each sub-phase below keeps
+its original text — that is the record of what the phase reached for — with a note beneath it
+stating what was actually delivered wherever the two differ. Where a note gives a figure, it
+also gives who measured it and over how many runs, because this phase repeatedly had "it
+passes" overturned by measurement.
+
+### 1.A — what was delivered
+
+_Source: `what-we-are-doing.md` lines 433-440 at main-repository commit `911ba08`._
+
+> *Delivered as written.* `xarm_ros2` is pinned to a commit SHA and was built and driven
+> against this stack rather than inspected — the verification table is in
+> `docs/reference/toolchain.md`. **The qualification this note used to carry is discharged.**
+> It said that "CI pipeline building and testing headlessly" meant the workflow was written
+> and its jobs defined, not that it had been observed to pass. The workflow has now been
+> observed: run `33158091922` on 2026-08-28 executed every job to completion and all three
+> concluded `success`. What that run contains, and what it does not cover, is the CI clause
+> below.
+
+### 1.C — what was delivered
+
+_Source: `what-we-are-doing.md` lines 453-457 at main-repository commit `911ba08`._
+
+> *Delivered.* The grasp is held by friction alone, with no simulation aid: **ADR-0029**
+> removed the attachment plugin because it produced silent successes. The evidence is the
+> friction-grasp campaign in `docs/measurements/`, which is also where the finding lives that
+> the grasp is repeatable in **position and not in orientation** — a limitation that shapes
+> 1.D and Phase 2 rather than being resolved here.
+
+### 1.D — what was and was not delivered
+
+_Source: `what-we-are-doing.md` lines 462-490 at main-repository commit `911ba08`._
+
+> ***"Real handoff negotiation between robots" was not delivered in the sense the phrase
+> reaches for, and this is not being redefined to match what was built.*** Read the sentence
+> as it stands: it puts two robots in direct negotiation over a part. What exists is
+> **conveyor-mediated**. Every edge in the L0 topology passes through a belt, and L4 does not
+> merely leave the direct arm-to-arm case unimplemented — it **refuses** such an edge at plan
+> time, so a topology containing one will not start.
+>
+> **ADR-0031** carries that decision and its 2026-08-26 correction, and the correction is the
+> part to read: what makes the permitted conveyor edge safe is that the *receiving* gripper
+> squares the part up as it closes on a free part, and a direct handoff denies exactly that,
+> because a part still clamped by the giving gripper cannot rotate into alignment with the
+> receiving one. The mechanism that rescues one case is the one the other forecloses. A direct
+> handoff has never been attempted or measured in this cell. `Transfer` and its behaviour-tree
+> leaf remain built and tested against their contract, with no caller.
+>
+> **What *was* delivered:** three arms, three belts and four beams instantiated from L0 and not
+> hand-placed; real motion under MoveIt; a friction grasp; and sensor-triggered transitions —
+> a beam edge becomes a typed `DetectionEvent`, L4 stops the belt on it and restarts it on
+> completion (**ADR-0032**, **ADR-0033**). The line runs a continuous cycle without
+> intervention, which is the sub-phase's last sentence and is met.
+>
+> **How well it runs is measured thinly and must be read that way.** The counts that exist are
+> single-machine run sets by the implementing agent and by the project owner — a handful of
+> runs each, with no thresholds registered in advance. They are recorded, with their
+> qualifications, in `CLAUDE.md` §2 and are deliberately not copied here (P1). **The line
+> completing is not the same as the line being reliable**, and no campaign in
+> `docs/measurements/` measures its reliability. Two known open items go to Phase 2: the belts
+> are commanded open-loop with nothing publishing `ConveyorState`, and the release-orientation
+> residual's accumulation across three stations is explicitly unmeasured.
+
+### 1.E — what was delivered
+
+_Source: `what-we-are-doing.md` lines 495-502 at main-repository commit `911ba08`._
+
+> *Delivered.* Every architecture and interface document carries a `DESIGNED` / `PARTIAL` /
+> `BUILT` marker, which `./scripts/doctor` checks for presence, so a specification cannot be
+> read as a description. The onboarding guide was walked from a fresh clone rather than
+> reviewed — see the exit criterion's first clause. **"Enforced" now means enforced by an
+> observed CI run and not only by the local quality gate:** run `33158091922` ran the build,
+> the ROS linters, the tests and all three simulation-in-the-loop scenarios on a runner that
+> had never seen this project. **One run, taken three commits back on `main`** — the CI
+> clause below states both limits.
+
+### The exit criterion: clause by clause, and the run that closed it
+
+_Source: `what-we-are-doing.md` lines 506-570 at main-repository commit `911ba08`._
+
+**Exit criterion status — MET, as of 2026-08-28.** Phase 1 is **closed**. Its clauses stay
+broken out below so that what was measured remains distinguishable from what was inferred,
+and so that closing the phase does not quietly upgrade any single clause's evidence. **Every
+clause is carried at the strength of the evidence that closed it, and none of that evidence
+is a campaign.** The fifth clause is not closable as stated and is recorded that way rather
+than waved through; the phase is closed on the four that are answerable.
+
+| Clause | Status | On what evidence |
+|---|---|---|
+| Clean machine; clone plus one bootstrap command; a running line | **Demonstrated — by the CI run, not by the manual walk** | Two pieces of evidence, and they are not the same claim. **The manual walk** (project owner, 2026-08-27, one machine) went from a fresh clone of the remote — not a worktree — with no deviation from the documented steps: `./scripts/doctor` 23 passed / 0 failed, both vendor patches verified present in the imported vendor tree, `./scripts/build` 19 packages, `./scripts/test` clean, in-container `./scripts/lint` clean across all eight linter labels. **That walk stopped at `lint` and never launched the cell**, so what it demonstrates is clone-to-green, not a running line — this row used to cite it for the whole clause and that overstated it. **What demonstrates the clause is CI run `33158091922`:** on a runner that had never seen this project, `actions/checkout` → image build → `./scripts/bootstrap` → `./scripts/build` reporting `Summary: 20 packages finished` → ROS linters → tests → `./scripts/scenario bringup` twice, both reporting `ok Scenario 'bringup' passed`, unattended and headless. That is a clean machine to a running three-arm cell in Gazebo Harmonic. **One run**; its limits are in the CI row below. |
+| A continuous, sensor-driven pick-and-transfer cycle | **Demonstrated; not characterised** | 3 of 4 runs completed. The run that did not failed when `ros2 run ros_gz_sim create` timed out spawning a work-piece — a harness failure. **No run failed for a line defect.** A further verification was in flight when this was written and its result is not recorded here. Four runs on one machine with no pre-registered thresholds is a demonstration, **not a reliability figure**. **The CI run that closed the clause below did not reproduce this one:** its `continuous_line` carried 1 of 3 work-pieces and failed. **When this clause closed, that was the only time this cycle had ever run on a machine nobody prepared, and it failed** — which is why this row says *not characterised* and must not be read as more. **It is no longer the only such run.** CI has run the scenario repeatedly since, on `main`, with both passes and failures; the log-derived tally, its runs and its qualifications are `CLAUDE.md` §2's and are cited rather than copied (P1) — including the instrument problem it records, that `gh run view --json jobs` reports this `continue-on-error` step as `success` even when the scenario failed, so only the log answers. **None of that reopens or upgrades this clause:** it closed on the evidence available then, a later run neither adds to nor subtracts from that closure, and the row still reads *not characterised* because nothing since has been a campaign. |
+| The entire cell layout is changeable by editing the facility model alone | **Demonstrated** | A pedestal was moved 50 mm in L0 and the tree regenerated: five generated artifacts changed, the arm anchored to that pedestal followed it, and **nothing outside `model/` and `workspace/src/cite_generated/` changed at all**. This is P1 and **ADR-0004** exercised rather than asserted. |
+| **CI is green** | **MET — and the green run contains a failed scenario** | Run `33158091922`, on `main`, 2026-08-28: conclusion `success`, all three jobs `success`. Inside it, the advisory `continuous_line` step **failed**. Both halves are the record; see below. |
+| Every architectural decision is written down | **Cannot be closed as stated** | The record is complete and self-consistent — `./scripts/doctor` checks that every ADR on disk is indexed and every ADR reference resolves. But "every decision" is a universal that no check establishes, and there is a known counter-instance: **ADR-0031 records that its own decision existed only in a commit message until the documentation pass after the fact.** Read this clause as *the decisions we know of are recorded*, which is what the evidence supports. |
+
+**How the CI clause was met, and what its meeting contains.** Both paragraphs below are the
+clause. Neither is the whole of it.
+
+**The run.** `33158091922`, triggered by a push to `main` on 2026-08-28, 42 minutes,
+conclusion **`success`**. `Host tooling (lint, types, model)` and `Supply chain` had each
+executed once before, earlier the same day; **`ROS workspace (build, test)` had never run at
+all**, and it did — image build, `./scripts/bootstrap`, a 20-package build, the ROS linters,
+the tests, and all three simulation-in-the-loop scenarios, on a runner that had never seen
+this project. That is what
+the clause asked for, and what the earlier account-level block had made unattemptable rather
+than failing. Of the eight runs preceding it, **seven were refused before any step executed**
+— for failed payments or a spending limit — and recorded zero steps; the eighth, earlier the
+same day, executed and failed in host tooling, which skipped the ROS job by `needs:`. So
+`33158091922` is the **only run in this repository's history in which the ROS workspace job
+has executed a step at all**. The repository is public at the time of writing; that its
+visibility is what lifted the block is the project owner's account and is not verified here.
+
+**And the green run contains a failed scenario.** Inside it, `continuous_line` failed:
+
+> `piece 1: complete, 10/10` — `piece 2: STOPPED after 2/10 milestones, waiting on
+> on_link(station_transfer_1: cell_a__conveyor_1__infeed) for 420s` — `pieces 3..3 were not
+> fed: the line had already stalled` — `error Scenario 'continuous_line' failed — 1 cycle
+> assertion(s) failed`
+
+That step carries `continue-on-error: true`, so it reported success to the job and the
+workflow passed. **The workflow's green is therefore honest about what it gates and silent
+about what it does not**, and the clause is met exactly as it reads and not one word further:
+the blocking steps passed, and one advisory step failed on a real stall. The last `LineState`
+of that run read `state=1` with `stall_reasons=none` while `station_transfer_1` held
+`occupancy=1/1, workpiece=wp_000002` — a station stopped, and a line reporting itself
+healthy. **That silence is the blind spot ADR-0039 records at exactly that station**, which
+is measured. What stopped the piece was not established when this clause closed, and until
+2026-08-30 this paragraph attributed it to the failed-grasp dead end **ADR-0038** records as
+deliberately unfixed. **That attribution was false, and this run's own data falsifies it:**
+the piece passed the `lifted` milestone at `station_transfer_1`, and that milestone is
+*measured* — a sampled pose compared against the pick frame — rather than reported by the
+arm, so the grasp held. **The cause has since been established, and it is recorded in
+ADR-0045 and ADR-0046**; **ADR-0038**'s 2026-08-29 amendment records that the same dead end
+is reached through a second door. Read those records rather than this paragraph: the
+mechanism is theirs, it carries their status, and it is deliberately not repeated here.
+**None of this reopens the clause** — it closed on evidence that never contained a cause,
+and a cause does not add a run.
+
+**What this run does not carry.** It ran at commit `60eb4a5`. Three commits have landed on
+`main` since, and they add a ninth package, `cite_test_hardware` (§7, **ADR-0040**), which no
+completed CI run has yet built — a run against `a90b05f` was in flight when this was written
+and its result is **not** recorded here. And it is **one run**: no thresholds were registered
+in advance, nothing about it is a reliability figure, and a second green run would be worth
+more than any sentence in this paragraph. The clause is "CI is green", not "CI is green
+repeatably" — closing the first does not close the second, and Phase 2 inherits it.

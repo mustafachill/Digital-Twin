@@ -37,7 +37,7 @@
   table-fed blind spot for one failure shape and not for the class**),
   [ADR-0045](0045-measure-a-gripper-deadline-in-the-simulated-clock.md) (**the L3 half of the
   same failure**),
-  [L4](../architecture/L4-orchestration.md),
+  L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`),
   charter §4 (P1, P3, P4, P5, P7)
 
 ## Correction — 2026-08-30: decision 2 gave the wrong reason for a right conclusion, and decision 1 closes ADR-0038's door

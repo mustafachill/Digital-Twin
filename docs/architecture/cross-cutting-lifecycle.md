@@ -9,25 +9,14 @@
   `configure` and `activate` by a program that asks and confirms rather than by a transition
   event ([ADR-0058](../adr/0058-drive-lifecycle-transitions-by-request-and-confirmation.md));
   everything downstream of them waits on that program's exit.
-- **How many handlers there are, and why this line names the command instead of a number.**
-  This entry said "sequences on **7** registered event handlers" from 2026-08-27 to
-  2026-09-17, and 7 was not a count of anything: `grep -c "RegisterEventHandler(" ` over that
-  file reads **6** call sites, three of them inside loops, so the runtime figure follows the
-  plan rather than the source. Built from `_bring_up` and counted, on 2026-09-17 at this
-  commit: **23** for `cell_a` and **17** for `cell_b`, each **12** `OnStateTransition` and
-  **11** or **5** `OnProcessExit`. ADR-0058 moved all three figures itself — before it they
-  were 6 call sites, 25 and 19, with 15 `OnStateTransition`: it removed one activation
-  handler per managed node and added one process gate. **Count it rather than quoting this
-  paragraph**, by building the description and filtering it for
-  `launch.actions.RegisterEventHandler`; a number in prose about a generated graph is one
-  zone away from being wrong again. **Both figures predate 2026-10-01**: ADR-0069 removed
-  `cite_facility`'s `topology_server` (a third managed node), the detection server and the line
-  coordinator from the launch, and `cell_a` from L0, so the `cell_b` figure may have moved and **was
-  not re-counted for this edit** (unverified).
+- **How many handlers there are is not stated here.** The runtime figure follows the plan
+  rather than the source, because several `RegisterEventHandler(` call sites sit inside loops.
+  Count it by building the description from `_bring_up` and filtering it for
+  `launch.actions.RegisterEventHandler`; a number in prose about a generated graph goes stale.
   **Not built:** "every node that participates in bring-up is a managed node" is not true
-  today. `cite_skills`' skill server is a plain `rclcpp::Node` with no lifecycle interface; the
-  line coordinator this line also named left the main tree with `cite_orchestration` on
-  2026-10-01 ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)). The pattern below remains binding on them.
+  today. `cite_skills`' skill server is a plain `rclcpp::Node` with no lifecycle interface, and
+  so are the planning-scene loader and the grasp-hold bridge. The pattern below remains
+  binding on them.
   **Nor is shutdown symmetric with startup**: on SIGINT the Python lifecycle nodes are
   destroyed without transitioning, so `on_deactivate` and `on_cleanup` never run — see
   *Lifecycle callbacks do not run on SIGINT* below, which records it as a gap.
@@ -152,8 +141,8 @@ been demonstrated. A convention would be written for a defect nobody has shown t
 
 ### Lifecycle callbacks do not run on SIGINT — this is a gap
 
-Three of the four `cite_facility` Python nodes are `LifecycleNode`s. All three implement
-`on_cleanup`; `frame_server` also implements `on_deactivate`. **On SIGINT, none of them
+Two of the three `cite_facility` Python nodes are `LifecycleNode`s, `frame_server` and
+`model_info`. Both implement `on_cleanup`; `frame_server` also implements `on_deactivate`. **On SIGINT, none of them
 runs.** `main()` calls `destroy_node()` directly, so the process goes from `active` to gone
 without passing through `deactivate` or `cleanup`.
 

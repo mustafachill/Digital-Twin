@@ -40,7 +40,7 @@
   this, and itself unresolved — see the costs below; **as of 2026-08-26 it is resolved and
   corrected**, and the update in that cost bullet says how),
   [L1](../architecture/L1-description-and-assets.md),
-  [L4](../architecture/L4-orchestration.md), charter §4 (P2, P4, P8)
+  L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`), charter §4 (P2, P4, P8)
 
 ## Correction — 2026-08-27: the setpoint had an owner and no delivery, and a harness was covering for it
 

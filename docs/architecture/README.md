@@ -3,32 +3,40 @@
 The system is a strict layer stack. **A layer may depend only on layers below it.** An
 upward dependency is an architectural defect and an `ESCALATE`, not a code-review finding.
 
+This directory documents **what the main tree builds**: the paired zone `cell_b`, one xArm 5
+on a linear track on each side, the real robot's own program driven through the twin boundary
+by one client — one signal, two arms, the same code. Layers the charter plans but the main tree
+does not build (L4, L6, L7) have no document here; they are described as target architecture in
+the charter (`what-we-are-doing.md` §5 and §8).
+
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│  L7  PRESENTATION            Operator HMI · remote access · reporting     │
+│  program client              cite_bringup.program: runs the real robot's  │
+│  (L4 role, no L4 package)    Blockly program, step by step, through L5    │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  L6  DATA & TELEMETRY        Telemetry schema · recording · historian ·   │
-│                              replay · external protocol bridges           │
+│  L5  TWIN SYNCHRONIZATION    cite_twin: mode control · command routing to │
+│                              both sides · divergence measurement          │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  L5  TWIN SYNCHRONIZATION    Mode control · state mirroring · command     │
-│                              routing · divergence measurement · calib.    │
-├───────────────────────────────────────────────────────────────────────────┤
-│  L4  ORCHESTRATION           Line coordinator · behaviour trees · task    │
-│                              scheduling · handoff protocol · recovery     │
-├───────────────────────────────────────────────────────────────────────────┤
-│  L3  CAPABILITY (SKILLS)     MoveTo · Pick · Place · Transfer · Grasp ·   │
-│                              Detect  — robot-agnostic action interfaces   │
+│  L3  CAPABILITY (SKILLS)     MoveTo · Grasp (driven by the program) ·     │
+│                              Pick · Place · Transfer (served, not called) │
 ├───────────────────────────────────────────────────────────────────────────┤
 │  L2  CONTROL & HAL           ros2_control · controllers · MoveIt 2 ·      │
 │                              hardware interfaces (sim plugin | real arm)  │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  L1  DESCRIPTION & ASSETS    URDF/Xacro · SDF · meshes · materials ·      │
-│                              scanned geometry · generated worlds          │
+│  L1  DESCRIPTION & ASSETS    URDF/Xacro · SDF · meshes · generated world  │
+│                              · simulation plugins                         │
 ├───────────────────────────────────────────────────────────────────────────┤
 │  L0  FACILITY MODEL          The single declarative source of truth:      │
-│                              assets · layout · topology · capabilities    │
+│                              assets · layout · topology · the program     │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+The program client sits **above** L5 and fills L4's role — it decides what work is done — but
+there is no L4 package in the main tree
+([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)): it lives in
+`cite_bringup` and sends L3 goals and track setpoints through the L5 boundary, the way an
+operator would. Where it lives, and why that is a debt, is
+[repository-layout.md](repository-layout.md) and `docs/open-work.md` #91.
 
 ## The layers
 
@@ -39,24 +47,15 @@ is the one that is wrong.
 | Layer | Document | Owns | Status |
 |---|---|---|---|
 | L0 | [Facility model](L0-facility-model.md) | The single source of truth, and generation from it | `BUILT` |
-| L1 | [Description and assets](L1-description-and-assets.md) | Geometry, kinematics, meshes, generated worlds | `PARTIAL` |
+| L1 | [Description and assets](L1-description-and-assets.md) | Geometry, kinematics, meshes, generated worlds, simulation plugins | `PARTIAL` |
 | L2 | [Control and HAL](L2-control-and-hal.md) | `ros2_control`, controllers, MoveIt 2, hardware interfaces | `PARTIAL` |
 | L3 | [Capabilities](L3-capabilities.md) | Robot-agnostic skills as actions | `PARTIAL` |
-| L4 | [Orchestration](L4-orchestration.md) | Behaviour trees, line coordination, handoff | `DESIGNED` |
-| L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, mirroring, divergence, calibration | `PARTIAL` |
-| L6 | [Data and telemetry](L6-data-and-telemetry.md) | Telemetry schema, recording, historian, replay | `DESIGNED` |
-| L7 | [Presentation](L7-presentation.md) | Operator HMI, remote access | `DESIGNED` |
+| L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, routing to both sides, divergence | `PARTIAL` |
 
 `DESIGNED` means the contract the code must satisfy, with nothing built. `PARTIAL` says
 which part is real; read the document's status block, which names it. `BUILT` means tested.
 
-**Not in the main tree:** [L4 — the event-driven line](L4-event-driven-line.md) (`DESIGNED`).
-It records the beam-triggered line end to end: how it works and what it does not do. Its code
-was removed from the main tree on 2026-10-01
-([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and runs,
-frozen, as `projects/01`; it said `BUILT — parked` until then.
-The L3 box in the diagram above is the target vocabulary: `Detect` left the main tree with the
-line and has no action definition there today.
+Where the main tree's files are: [repository-layout.md](repository-layout.md).
 
 ## Cross-cutting
 
@@ -66,20 +65,21 @@ line and has no action definition there today.
 | Safety and interlocks | [cross-cutting-safety.md](cross-cutting-safety.md) |
 | Lifecycle and bring-up | [cross-cutting-lifecycle.md](cross-cutting-lifecycle.md) |
 | Testing strategy | [cross-cutting-testing.md](cross-cutting-testing.md) |
-| Standards alignment | [standards-alignment.md](standards-alignment.md) |
 
 ## The dependency rule, concretely
 
 An upward dependency usually appears as an import or a `package.xml` entry, so those are
 where reviewers look first. Some real examples of violations:
 
-- An orchestration package (L4) importing a hardware interface (L2) to "just check whether
-  the arm is connected". It must ask through a skill (L3) or read published state.
+- The program client or the twin boundary (L5) importing a hardware interface (L2) to "just
+  check whether the arm is connected". It must ask through a skill (L3) or read published
+  state.
 - A skill (L3) reading a controller's internal parameters instead of using its interface.
 - A description package (L1) importing the facility model loader (L0) at runtime.
   Descriptions are *generated from* L0 ahead of time; they do not consult it while running.
-- A layer reaching around its neighbour — L4 talking directly to L2 — which is not upward
-  but is still a boundary violation, and hides a missing skill at L3.
+- A layer reaching around its neighbour — L5 talking directly to L2 for anything but the two
+  declared routes, the track setpoint and the belt setpoint — which is not upward but is still
+  a boundary violation, and hides a missing skill at L3.
 
 If a layer needs something from above, the design is wrong: either the responsibility is
 in the wrong layer, or an interface is missing at the boundary.

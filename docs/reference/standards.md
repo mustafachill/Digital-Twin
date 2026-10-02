@@ -1,6 +1,6 @@
 # Standards
 
-- **Related:** [ADR-0016](../adr/0016-iso-23247-alignment.md), [`../architecture/standards-alignment.md`](../architecture/standards-alignment.md)
+- **Related:** [ADR-0016](../adr/0016-iso-23247-alignment.md)
 
 > **How the designations on this page were verified — 2026-08-24.** `iso.org` returns 403
 > to scripted requests, so every part number, title, publication date, and lifecycle stage
@@ -37,16 +37,16 @@ relevant and are flagged here rather than quietly omitted:
   model version, software version, mode, and registration that produced it.
 - **Part 6 (digital twin composition)** concerns building a larger twin from constituent
   twins. That is precisely our facility-scale question: a CITE twin composed of cell twins,
-  which is the open question at the bottom of
-  [`../architecture/L4-orchestration.md`](../architecture/L4-orchestration.md).
+  which is an open question of the target architecture (charter §5).
 
-Reviewing both, and updating the mapping if they change it, is outstanding work.
+Reviewing both, and taking them into the mapping when it is rewritten, is outstanding work.
 
 **Why it matters here:** it gives the architecture an external, tested structure rather
 than only our own reasoning, and a shared vocabulary with the manufacturing digital-twin
-literature. Its four domains — OME, Data Collection and Device Control, Core (Digital
-Twin), and User — map onto our layer stack; see
-[`../architecture/standards-alignment.md`](../architecture/standards-alignment.md).
+literature. Its four domains are OME, Data Collection and Device Control, Core (Digital
+Twin), and User. **No layer-to-domain mapping is in `docs/` today**: it was removed with the
+target-layer documents on 2026-10-02 and is to be rewritten when L6 and L7 are built — see
+[ADR-0016](../adr/0016-iso-23247-alignment.md)'s amendment of that date.
 
 **Access:** paywalled. The catalogue entries are
 [Part 1 — 75066](https://www.iso.org/standard/75066.html),

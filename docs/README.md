@@ -2,6 +2,13 @@
 
 Everything written down about the CITE Digital Twin, and where to find it.
 
+**These documents describe the main project and nothing else**: the paired zone `cell_b`, in
+which one signal — the real xArm 5's own program, sent once through the twin boundary — drives
+one arm on a linear track on each side with the same code; one side is to become the physical
+cell. Layers the charter plans but the main tree does not build are described in the charter
+(§5, §8), not here. Past milestones keep their own documents inside their snapshots under
+[`../projects/`](../projects/README.md).
+
 ## The three anchors
 
 | Document | Answers | Changes |
@@ -22,11 +29,14 @@ disagreement is a defect in the loser — fix it, do not leave both standing.
 | What does this word mean here? | [`onboarding/glossary.md`](onboarding/glossary.md) |
 | Why was *X* chosen over *Y*? | [`adr/`](adr/README.md) |
 | How does layer *N* work? | [`architecture/`](architecture/README.md) |
-| How does this relate to ISO 23247? | [`architecture/standards-alignment.md`](architecture/standards-alignment.md) |
+| Where is *X* in the repository? | [`architecture/repository-layout.md`](architecture/repository-layout.md) |
+| How does this relate to ISO 23247? | Charter §2, [`reference/standards.md`](reference/standards.md) and [ADR-0016](adr/0016-iso-23247-alignment.md)'s 2026-10-02 amendment |
 | What shape is this interface? | [`interfaces/`](interfaces/README.md) |
-| How do I bring up / calibrate / recover the cell? | [`operations/`](operations/README.md) |
+| How do I bring up / run / recover the cell? | [`operations/`](operations/README.md) |
+| How will the real cell be tied to the model? | [`operations/calibration-and-registration.md`](operations/calibration-and-registration.md) — Phase 2, `DESIGNED` |
 | What number backs that claim? | [`measurements/`](measurements/README.md) for the main tree; a past milestone's measurements are in its snapshot's `MEASUREMENTS.md` (see [`../projects/`](../projects/README.md)) |
 | Where do I read more? | [`reference/`](reference/README.md) |
+| What did earlier charter versions say? | [`reference/charter-history.md`](reference/charter-history.md) |
 | Where did the old `CLAUDE.md` §2 go? | [`reference/claude-md-review-queue.md`](reference/claude-md-review-queue.md) — everything cut from it on 2026-10-01 that is not a snapshot's measurement, numbered, awaiting the project owner's review |
 | How do I run an earlier milestone? | [`../projects/`](../projects/README.md) — frozen, runnable snapshots, each recording its own verification in its `PROVENANCE.md` and its own measurements in its `MEASUREMENTS.md`. Records, not sources: nothing there is maintained or copied back ([ADR-0068](adr/0068-keep-proven-milestones-as-frozen-snapshots.md)) |
 | What is still open? | [`open-work.md`](open-work.md) — a **dated snapshot**, not a tracker. Charter §11 names the issue tracker as the home of live work; none is configured, so this file carries the list between sessions and goes stale the moment work resumes. Check the command each item names, never the file. |
@@ -63,10 +73,10 @@ same severity as a broken test. Reviewers check this.
 - **English only**, without exception (P10).
 - **Ground every claim in code**, a test, a published measurement, or a cited source. Mark
   anything else `unverified` rather than stating it plainly.
-- **A claim about physical behaviour needs a measurement, not an argument.** Five ADRs
-  carry a correction section at this commit — a sixth, since superseded, carries one too —
-  because a plausible sentence about physics was written down as a fact and relied upon.
-  Cite [`measurements/`](measurements/README.md) or say that nothing has been run.
+- **A claim about physical behaviour needs a measurement, not an argument.** Several ADRs
+  carry a correction section because a plausible sentence about physics was written down as
+  a fact and relied upon. Cite [`measurements/`](measurements/README.md) or say that nothing
+  has been run.
 - **Carry a quantity's units *and its axis* wherever you carry its magnitude.** A published
   18.7° residual travelled through this repository detached from the axis it was measured
   about, was read as a yaw when it is a roll, and reached an ADR's arithmetic where only a

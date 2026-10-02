@@ -35,7 +35,7 @@
   [ADR-0029](0029-simulated-grasping-by-friction.md),
   [ADR-0031](0031-refuse-direct-handoff-without-orientation-certainty.md),
   [cross-cutting-safety.md](../architecture/cross-cutting-safety.md),
-  [L3](../architecture/L3-capabilities.md), [L4](../architecture/L4-orchestration.md),
+  [L3](../architecture/L3-capabilities.md), L4 (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`),
   charter §3.2 and §4 (P2, P4, P7, P9)
 
 ## The decision, in one line
@@ -473,7 +473,7 @@ preemption is `setAborted` (`jazzy:1832`), so it arrives as `CONTROL_FAILED` and
 
 #### Why it is part of this change and not a follow-up
 
-[`L4-orchestration.md:89`](../architecture/L4-orchestration.md) lists `reset` among the
+`L4-orchestration.md:89` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) lists `reset` among the
 control services L4 exposes, and the tree in the same document at `:106` contains
 `Sequence: OnFault → StopAll → AwaitReset`. **There is an `AwaitReset` step in the design
 with nothing to await.** `cite_interfaces/srv/` contains exactly `GetModelVersion.srv` and

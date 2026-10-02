@@ -4,101 +4,60 @@
   **Built:** one `ros2_control` controller manager per arm, hosted in Gazebo by
   `gz_ros2_control`, with every controller the zone's bring-up plan declares active —
   asserted by `./scripts/scenario bringup`, which derives the set from the plan rather than
-  counting to a number. `cell_b`'s one arm, `picker`, declares **four**: the joint-state
-  broadcaster, the gripper, the arm's trajectory controller and the linear track's
+  counting to a number. `cell_b`'s one arm, `picker`, declares the joint-state broadcaster,
+  the gripper, the arm's trajectory controller and the linear track's
   ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md); read
   `workspace/src/cite_generated/bringup/cell_b_plan.yaml` rather than this sentence).
-  **The 9-across-three-arms figure is `cell_a`'s and is a CLOSED RECORD.** `cell_a` left the
-  main tree on 2026-10-01
-  ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); it last
-  asserted 9 across three arms at the commits the three-arm snapshot's `MEASUREMENTS.md` names
-  (see [`projects/README.md`](../../projects/README.md)), and the
-  three-arm cell is checked now only from `projects/01`.
-  Controller configuration, MoveIt configuration and the
-  planning scene are all generated from L0; `cite_facility/planning_scene_loader.py` applies
-  the scene per arm and reads it back rather than trusting the service result. The gripper
-  runs as a `ros2_control` controller ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md))
-  and its stall is now the sole evidence that a part is held, no simulation plugin having
-  survived to forge it ([ADR-0029](../adr/0029-simulated-grasping-by-friction.md)).
-  **Built:** the planning pipelines. Each arm's `move_group` loads Pilz and OMPL from a
-  generated `<zone>_<arm>_planning_pipelines.yaml` — today only
-  `cell_b_picker_planning_pipelines.yaml` — and plans with Pilz PTP by default
+  Controller configuration, MoveIt configuration and the planning scene are generated from
+  L0; `cite_facility/planning_scene_loader.py` applies the scene per arm and reads it back
+  rather than trusting the service result. The gripper runs as a `ros2_control` controller
+  ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md)) and its stall is what L3
+  judges a grasp by; on the simulated side a plugin then holds the part still while L3 says
+  it is held ([L1](L1-description-and-assets.md), ADR-0061/0065).
+  **Built: the planning pipelines.** Each arm's `move_group` loads Pilz and OMPL from a
+  generated `<zone>_<arm>_planning_pipelines.yaml` and plans with Pilz PTP by default
   ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). A launch test drives the real
   `move_group` against the real generated files and requires both pipelines to load, PTP to
-  plan, an identical request to return a byte-identical trajectory, and — the assertion this
-  layer's safety rests on — a PTP path through a **named** object in the real generated
-  planning scene to be refused, with its complement proving the refusal came from the scene.
-  Mutation-checked, and observed refusing a real path during `continuous_line` on `cell_a`,
-  before that scenario left the main tree (ADR-0069).
+  plan, an identical request to return a byte-identical trajectory, and a PTP path through a
+  **named** object in the real generated planning scene to be refused, with its complement
+  proving the refusal came from the scene.
   **Built with a stated residual:** that gate checks trajectory **waypoints** and
-  interpolates nothing between them, at Pilz's fixed 0.1 s sampling. An object thinner than
-  one waypoint step can lie between two checked states. The step, the arithmetic and the two
-  ways it can grow are in the ADR's 2026-08-27 correction; the number is not repeated here.
-  **Built, and narrower than its name:** an execution-side mistracking detector. Every
-  generated `JointTrajectoryController` now carries a `constraints:` block — `goal_time`,
-  and per-joint `trajectory` and `goal` tolerances — from the arm type in L0
-  ([ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md)). Until it existed the
-  controller ran any trajectory to the end and reported `SUCCEEDED` however badly it
-  tracked, because every tolerance defaults to `0.0` and `0.0` disables the check; that
-  silence reached `Pick` as a successful pick. A launch test drives two real controller
-  managers over mock hardware and requires a tracked trajectory to succeed, a held joint to
-  abort as `PATH_TOLERANCE_VIOLATED`, and an error between the two thresholds to abort as
-  `GOAL_TOLERANCE_VIOLATED` — which is what shows the two are read as two numbers.
-  **It is a detector, not a protective measure**, and it must not be cited as one: it
-  reports after the fact, and what stops an arm driving into a fixture remains the vendor
-  controller's torque limiting and physical guarding (charter §3.2).
-  **Four residuals are stated rather than implied.** The tolerance values are UFACTORY's own
-  for the xArm 5, *copied* from the vendor configuration at the pinned commit and **not
-  measured on this stack** — no healthy-run following error has been sampled, because that
-  is observable only under Gazebo; ADR-0036's 2026-08-27 correction derives an expected
-  figure from the `gz_ros2_control` command conversion and that derivation is not a
-  measurement either. The provenance is also one step weaker than "the vendor's
-  configuration": the vendor block commands `[position, velocity]` and this cell commands
-  `[position]`. And the path tolerance detects a joint that is *held*, not a graze that
-  deflects the arm and lets it continue; that case is still invisible.
-  **`stopped_velocity_tolerance` cannot fire here at all**, and this document said nothing
-  about it while three other places said the opposite. `compute_error_for_joint` writes a
-  velocity error only when a velocity or effort *command* interface is present, so on this
-  cell the tolerance is compared against a hard zero whatever `goal_time` is. Adding such an
-  interface arms it for the first time, and the generated comment now follows the model
-  rather than asserting it — see ADR-0036's 2026-08-27 correction.
-  **What the detector reports still cannot be told apart from a transport fault by its code,
-  and L3 stopped asking the code.** `PATH_TOLERANCE_VIOLATED` lives only in the
-  `FollowJointTrajectory` result, `moveit_simple_controller_manager` drops it into
-  `ExecutionStatus::ABORTED`, and L3 sees `CONTROL_FAILED` — the same value a malformed goal
-  or a stale header produces. That collapse is unchanged and unfixed upstream. What changed is
-  the discriminator: [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md)
-  makes [L3](L3-capabilities.md) ask the **arm** where it is, so a mistracked trajectory that
-  left the arm part-way is `MOTION_INTERRUPTED` and L4 answers `ESCALATE`, while an abort at
-  either endpoint stays `EXECUTION_FAILED` and keeps `RETRY_SAME`. Read `recovery_policy.hpp`
-  on both branches, not on `EXECUTION_FAILED` alone. **This document said L4 answers the case
-  with `RETRY_SAME`; that was true before ADR-0037 and is no longer.**
+  interpolates nothing between them, at Pilz's fixed 0.1 s sampling, so an object thinner than
+  one waypoint step can lie between two checked states (ADR-0027's 2026-08-27 correction).
+  **Built, and narrower than its name: an execution-side mistracking detector.** Every
+  generated `JointTrajectoryController` carries a `constraints:` block — `goal_time`, and
+  per-joint `trajectory` and `goal` tolerances — from the arm type in L0
+  ([ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md)); without it every tolerance
+  is `0.0`, which disables the check. A launch test over mock hardware requires a tracked
+  trajectory to succeed, a held joint to abort as `PATH_TOLERANCE_VIOLATED`, and an error
+  between the two thresholds to abort as `GOAL_TOLERANCE_VIOLATED`.
+  **It is a detector, not a protective measure**, and must not be cited as one: what stops an
+  arm driving into a fixture is the vendor controller's torque limiting and physical guarding
+  (charter §3.2). Its residuals are ADR-0036's: the values are UFACTORY's, copied and not
+  measured on this stack; the path tolerance detects a *held* joint, not a graze; and
+  `stopped_velocity_tolerance` cannot fire on a position-only command interface.
+  **The detector's abort reaches L3 as `CONTROL_FAILED`**, the same value a malformed goal
+  produces, so [L3](L3-capabilities.md) does not read the code: it asks the arm where it is
+  ([ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md)). A trajectory that
+  left the arm part-way is `MOTION_INTERRUPTED`; an abort at either endpoint is
+  `EXECUTION_FAILED`.
   **Not built:** the safety layer. Its enforcement point in the diagram below does not exist
   — see [cross-cutting-safety.md](cross-cutting-safety.md).
-  **Still enforced at planning only:** the acceleration and deceleration ceilings. ADR-0036
-  bounds position error, not the rates that produced it, and `enforce_command_limits` builds
-  its limiter from the URDF `<limit>` element, which has no acceleration or deceleration
-  field. A deceleration ceiling the physical arm cannot honour is caught by nothing here, on
-  either backend.
-  **Not exercised:** the physical hardware path (Phase 2). The backend is declared per
-  instance in L0, and a plan on which some (asset, side) declares that its backend reaches a
-  physical machine is refused at the ROS boundary unless `CITE_ALLOW_HARDWARE=1` is set
-  (`cite_bringup/cite_bringup/plan.py`). It is that declared fact — L0's
-  `commands_physical_hardware`, carried into the plan per (asset, side) — and not the
-  backend's id that the refusal reads, so an id says nothing about whether the plan is gated
+  **Enforced at planning only:** the acceleration and deceleration ceilings. ADR-0036 bounds
+  position error, not the rates that produced it, and `enforce_command_limits` builds its
+  limiter from the URDF `<limit>` element, which has no acceleration field.
+  **Not exercised: the physical hardware path** — the main tree's next step (Phase 2.B). The
+  backend is declared per instance in L0, and a plan on which some (asset, side) declares that
+  its backend reaches a physical machine is refused at the ROS boundary unless
+  `CITE_ALLOW_HARDWARE=1` is set (`cite_bringup/cite_bringup/plan.py`). The refusal reads L0's
+  `commands_physical_hardware`, not the backend's id
   ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It binds at
-  bring-up: it does not gate an individual command, and it cannot stop an arm already moving.
-  **Held, and this document said otherwise until 2026-08-29:** the configured rate. The model
-  asks for 150 Hz and `joint_states` was measured at or above it on an idle cell — the world
-  was unthrottled when that was measured, so the rate ran slightly above the configured one.
-  **The world is throttled to real time as of
-  [ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)**, which is a ceiling on how
-  fast the server may run; what the rate is under it has not been re-measured, and nobody
-  should assume it is either the same or lower without taking the figure again. The roughly 21 Hz this
-  entry recorded as a capability gap is the same host **confined to about one CPU core**, a
-  condition neither this document nor ADR-0028 stated; it is a fact about a starved machine
-  and not about the control stack. Figures:
-  [`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md).
+  bring-up: it does not gate an individual command and cannot stop an arm already moving.
+  **The `joint_states` rate** is configured at 150 Hz; what it holds under the real-time
+  throttle ([ADR-0043](../adr/0043-hold-both-sides-to-the-wall-clock.md)) is not measured, and
+  a much lower figure taken on a host confined to about one CPU core is a fact about a starved
+  machine
+  ([`2026-08-29-real-time-factor-conditions`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)).
 - **Related:** [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [ADR-0006](../adr/0006-moveit2-motion-planning.md), [ADR-0027](../adr/0027-pilz-planning-pipeline.md), [ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md), [ADR-0037](../adr/0037-classify-an-abort-before-any-recovery-motion.md), [cross-cutting-safety.md](cross-cutting-safety.md)
 
 ## Responsibility
@@ -124,7 +83,8 @@ critically — **the boundary between simulation and physical hardware.**
 - **What to move, or why.** L2 executes; L3 decides.
 - Which hardware backend is loaded. That is configuration generated from L0 and selected
   by L5's mode.
-- Task sequencing, handoff, recovery policy — all L4.
+- Task sequencing and recovery policy. The program client sequences; there is no recovery
+  policy in the main tree — a program step that does not succeed stops the program.
 
 ## Interfaces
 
@@ -179,12 +139,12 @@ Three defences:
    assumption can be reached on the hardware path.
 3. **`tester`.** Verifies interface parity as a standing guarantee on every run.
 
-### Mixed fleets are ordinary
+### A real arm and a simulated one are ordinary
 
-Hardware arrives incrementally, so one physical arm and two simulated ones must be a
-configuration rather than a special case. Because the backend is selected per robot
-instance from L0, it is. Nothing above L2 changes, and nothing in L2 knows the fleet is
-mixed.
+The twin pairs one physical xArm 5 with one simulated one, so a side whose arm is physical
+must be a configuration rather than a special case. Because the backend is selected per
+robot instance — and per side — from L0, it is. Nothing above L2 changes, and nothing in L2
+knows which side it is on.
 
 ### MoveIt's planning scene comes from L0
 
@@ -207,9 +167,8 @@ before assuming a Cartesian path is available.
 
 Two consequences land in this layer.
 
-- **A refusal is a normal outcome to design for**, not an exception. L2 reports it; L4's
-  recovery has to tell "Pilz refused this straight path" from "the pose is unreachable",
-  and those are different result codes ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
+- **A refusal is a normal outcome to design for**, not an exception. L2 reports it, and
+  "Pilz refused this straight path" and "the pose is unreachable" are different result codes ([ADR-0026](../adr/0026-joint-space-goals-on-under-six-dof-arms.md)).
 - **Nothing above L2 knows which planner answered.** The pipeline is named in the request
   and resolved inside `move_group`, so the identical call plans in simulation and on
   hardware. P2 is untouched by this, and any change that makes a skill branch on the

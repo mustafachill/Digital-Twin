@@ -590,7 +590,7 @@ learns **which conjunct failed**.
 `LineTopology` already carry theirs, so the name exists once and a consumer reads it off the
 message. `/cite/twin/mode` and `/cite/twin/divergence` are today written in prose in
 [`bring-up.md`](../operations/bring-up.md) and
-[`recording-and-replay.md`](../operations/recording-and-replay.md) and nowhere in the contract —
+`recording-and-replay.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`) and nowhere in the contract —
 one value in two documents, waiting for a third.
 
 ## What this record does not claim

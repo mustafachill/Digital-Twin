@@ -80,9 +80,8 @@ other components service-oriented and delegating decisions to it. Matches our L3
 ## Reading order
 
 New to digital twins as a field: Kritzinger first — it is short and it fixes the
-vocabulary. Then the NIST overview for the standards landscape. Then our own
-[`../architecture/standards-alignment.md`](../architecture/standards-alignment.md), which
-is where the two meet this project.
+vocabulary. Then the NIST overview for the standards landscape. Then charter §2 and
+[ADR-0016](../adr/0016-iso-23247-alignment.md), which is where the two meet this project.
 
 New to behaviour trees: the BehaviorTree.CPP documentation before the comparative paper.
 The paper is more useful once you have seen a tree.

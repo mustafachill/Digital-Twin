@@ -26,7 +26,7 @@ does **not** close on its own level table - it closes on charter §2's L3 row an
 sentences in two documents. If either is ever read as putting the direction alone
 at L3, the mode has to be re-argued. Nothing was watching them.
 
-Asserting a protected document's text is not editing it. Charter §12's protection
+Asserting a protected document's text is not editing it. Charter §0's protection
 is exactly why a silent drift there would be the worst case: a document that
 changes only by explicit decision is a document nobody re-reads.
 
@@ -350,7 +350,7 @@ def test_the_charters_l3_row_still_carries_the_validation_gate() -> None:
         "and then commands the physical system'. That sentence is quoted by §2's own "
         "mode-is-not-a-level paragraph, by ADR-0011's amendment, by ADR-0041 Decision 2 and "
         "by the glossary's L3 row, and it is where the whole maturity argument for "
-        "VIRTUAL_LEAD closes. Changing it is a charter change under §12, not an edit."
+        "VIRTUAL_LEAD closes. Changing it is a charter change under §0, not an edit."
     )
 
 
@@ -370,7 +370,7 @@ def test_the_charter_sites_are_a_deliberate_pair() -> None:
     by accident. It names the modes Phase 2 delivers and deliberately omits
     `CLOSED_LOOP`, because §8 places L3 - and therefore the validation gate - in
     Phase 5. Putting it in `SITES` would demand the charter assert something false
-    about its own roadmap, and it is protected under §12 besides.
+    about its own roadmap, and it is protected under §0 besides.
     """
     phase_2 = "\n".join(_section(_read(CHARTER), CHARTER_PHASE_2))
     declared = set(declared_modes())

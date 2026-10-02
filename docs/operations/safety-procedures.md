@@ -44,8 +44,9 @@ Every session. Not once per week.
    has not been measured recently.
 3. **Cell clear**, confirmed by a person with eyes on it — not by a sensor, not by
    assumption.
-4. **Registration current** — [calibration-and-registration.md](calibration-and-registration.md).
-   A drifted registration means the robot's model of where things are is wrong.
+4. **Registration current** — the real cell's frame tied to the model's, by
+   [calibration-and-registration.md](calibration-and-registration.md) (Phase 2, charter §8;
+   not built yet). A drifted registration means the robot's model of where things are is wrong.
 5. **A human at the stop**, watching, for the whole session.
 6. **Reduced speed** for the first execution of any motion that has not run on this
    hardware before.

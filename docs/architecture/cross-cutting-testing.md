@@ -1,41 +1,22 @@
 # Testing strategy
 
 - **Status:** `PARTIAL` — `./scripts/test`, `./scripts/scenario` and the two-stage CI
-  workflow exist and run real tests. The unit level is populated: `tools/tests/` holds **822**
-  host tests at this commit, counted by collection
-  (`.venv/bin/python -m pytest tools/tests --collect-only -q`, this checkout, 2026-08-31),
-  plus shell self-tests for the gate logic
-  in `scripts/_lib.sh`. **This line said 236 until 2026-08-30, and where the interface count
-  sat below it, 22 where the package held 23**; both were numbers in prose that nothing
-  re-ran, which is the defect
-  [`test_interface_counts.py`](../../tools/tests/test_interface_counts.py) was written for
-  and did not reach here — it held the two READMEs that open by counting the package, and not
-  this status line. **The interface count has since been deleted from this line rather than
-  corrected a second time.** Its canonical home is
-  [`../interfaces/README.md`](../interfaces/README.md), which is guarded; a second copy here
-  could only ever go stale, and that test now fails on any document that states an interface
-  count and gets it wrong. The test count stays because this line is its only home and it
-  names the command that reproduces it. **Read that number as files as well as behaviours.**
-  Two guards added on 2026-08-31 parametrise over every tracked file — the superseded
-  real-time wording and the interface-count scan — so each file is one case, and between them
-  they are **394** of the 822. A count that moves when the repository grows is the price of a
-  guard that reaches every document instead of a named list; it is not 394 new behaviours.
-  The contract level is populated: every interface definition in `cite_interfaces` is frozen
-  against a stored baseline.
-  The scenario level has two, both blocking CI gates on `cell_b`, the one zone L0 declares:
-  `bringup`, run twice per run, and `program_cycle`, which runs the real robot's program
-  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)) on the plant for
-  one cycle and asserts where the work-piece ends. **It said three until 2026-10-01**:
-  `pick_and_place` (blocking since `c1e9e03`) and `continuous_line` (advisory) left the main
-  tree with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); both still run, frozen, from
-  `projects/01`, and the weekly, non-blocking
-  `.github/workflows/projects.yml` is what checks them there. Their figures are a closed
-  record, kept in the three-arm snapshot's `MEASUREMENTS.md` (see
-  [`projects/README.md`](../../projects/README.md)).
-  Both are run with `--teardown-advisory`, which splits the two questions a scenario
-  answers in one exit code: **the cycle gates, the post-shutdown teardown is reported and
-  does not gate.** It exempts no process and deletes no assertion — see the phase-split block
-  in `scripts/_lib.sh`.
+  workflow exist and run real tests. The unit level is populated — host tests under
+  `tools/tests/` and `tests/`, and shell self-tests for the gate logic in `scripts/_lib.sh` —
+  and so is the contract level: every interface definition in `cite_interfaces` is frozen
+  against a stored baseline. **Ask the command for a count**
+  (`.venv/bin/python -m pytest tools/tests --collect-only -q`); three host test files
+  parametrise over every tracked file, so the count grows with the repository and measures
+  the tree as well as the suite.
+  The scenario level has two, both blocking CI gates on `cell_b`'s plant: `bringup`, run twice
+  per run, and `program_cycle`, which runs the real robot's program
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)) for one cycle and
+  asserts where the work-piece ends. Both run with `--teardown-advisory`, which splits the two
+  questions a scenario answers in one exit code: **the cycle gates, the post-shutdown teardown
+  is reported and does not gate.** It exempts no process and deletes no assertion — see the
+  phase-split block in `scripts/_lib.sh`. **No scenario brings the pair up**; the twin boundary
+  is held only by `cite_twin`'s own tests
+  ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md) clause 4).
   One gap below is still open and is called out where it occurs: **scenarios are not
   deterministic.** Everything else below the status line is design, not description.
 - **Related:** charter §9, [`../onboarding/development-workflow.md`](../onboarding/development-workflow.md),
@@ -122,24 +103,18 @@ than it sounds and must not be read as more.** `gz sim --seed N` reaches
 `ServerConfig::SetSeed()`, whose body is `math::Rand::Seed(_seed)` — so it seeds
 `gz::math::Rand`, which is what sensor noise and the comms systems draw from. It does not
 seed the physics solver: no library under `gz_physics_vendor` or `gz_dartsim_vendor`
-references `gz::math::Rand` at all. And it reaches no planner at all. Measured before the
-seed was plumbed, and **not repeated since the planner changed**: `pick_and_place` run four
-times under an identical seed produced **two distinct failure modes**, each twice, both
-under domain isolation.
+references `gz::math::Rand` at all, and `libdart` keeps its own generator. And it reaches no
+planner at all.
 
-**It has now been repeated, under Pilz, with thresholds registered before the first trial, and
-the cell did not reproduce.**
-[`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md)
-ran `pick_and_place` on `cell_b` twice under one seed, at one commit, minutes apart, and the
-work-piece ended up in two different places — **while both runs passed**, both answered by Pilz
-alone with no OMPL motion in either. So *"scenarios are not deterministic"* is no longer only a
-reading of what the seed reaches; there is a measurement of what the cell does. **Read it at the
-size of its evidence — two runs on one machine, which is not a rate** — and **do not read a
-cause into it**: the campaign's own control did not clear, so where the irreproducibility enters
-is **UNRESOLVED** there and may not be attributed to the solver, to the coupling or to the
-planner from here. Its figures stay in that directory (P1). The same campaign is the first
-record of the symbol scan ADR-0027's seed argument rests on, run on x86_64, which confirms that
-record and narrows it; ADR-0027's amendment of 2026-09-22 is where that is kept.
+**A run under one seed has been repeated, with thresholds registered before the first trial,
+and the cell did not reproduce**
+([`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md),
+taken on a pick-and-place scenario that has since left the main tree). Both runs passed and
+put the work-piece in two different places. Two runs on one machine is not a rate, and the
+campaign's own control did not clear, so where the irreproducibility enters is **UNRESOLVED**
+and may not be attributed to the solver, the coupling or the planner. The simulated grasp
+hold ([ADR-0061](../adr/0061-hold-the-box-while-the-jaws-are-shut.md)) has since removed one
+source of spread; nothing has re-measured the cell.
 
 **Which part is stochastic has changed; that scenarios are not reproducible has not.**
 [ADR-0027](../adr/0027-pilz-planning-pipeline.md) is the single record of both — the
@@ -161,8 +136,7 @@ people to re-run until green.
 **This is the one place in the tree that states the development host's real-time factor with
 its condition; everywhere else cites the campaign.** Every ceiling in `tests/scenarios/` is
 wall clock — the scenario observer nodes deliberately do not set `use_sim_time`, and
-`bringup.py`'s comment at its first wait gives the reason (so did the removed
-`continuous_line.Sample`'s docstring) — so every one of them scales inversely
+`bringup.py`'s comment at its first wait gives the reason — so every one of them scales inversely
 with real-time factor, and a timeout is as much a statement about the host as about the code.
 
 The figure those ceilings were written against — real-time factor about **0.14**, with
@@ -176,14 +150,11 @@ the CPU curve they sit on, and the measured margin of each ceiling are in
 [`../measurements/2026-08-29-real-time-factor-conditions/`](../measurements/2026-08-29-real-time-factor-conditions/ANALYSIS.md)
 and are cited rather than copied (P1).
 
-**The flake class this creates, which nothing in the tree named before.** That campaign found
-no ceiling too tight and none too loose at a full allocation — but the margins are wall clock,
-so they shrink with the host. `pick_and_place`'s `CYCLE_CEILING_S` falls to a margin of about
-**1.2 under the one-core condition and fails below it**: below roughly 1.2 cores
-`pick_and_place` times out **with nothing broken**. *(`pick_and_place` left the main tree on
-2026-10-01, ADR-0069; `program_cycle`'s ceilings were sized after that campaign and **have not
-been measured against any allocation** — the point about a starved host applies to them
-unchanged.)* Before looking for a motion bug, check
+**The flake class this creates.** The margins are wall clock, so they shrink with the host:
+that campaign found a cycle ceiling of its day that timed out **with nothing broken** below
+roughly 1.2 cores. `program_cycle`'s ceilings were sized after it and **have not been measured
+against any allocation**; the point applies to them unchanged. Before looking for a motion bug,
+check
 what the container was allocated and what else was holding the host. **Never answer such a
 timeout by widening a ceiling** — a ceiling sized for a starved machine can no longer catch a
 hang on a healthy one, and that is the signal being spent.
@@ -204,11 +175,10 @@ This follows from the paragraphs above rather than softening them — the cell i
 reproducible, and nothing here should be read as saying otherwise. It is about how to
 compare two configurations *given* that it is not.
 
-**Some of what this cell does is bimodal, not continuous.** The grasp twist is the worked
-example: a trial lands in a high state or a low one, and the physics timestep changes how
-often the high state is entered rather than moving a magnitude. The two **grasp** campaigns
-in [`../measurements/`](../measurements/README.md) turn on this, and the second one had to
-withdraw a published "×24.5 median scaling" from the first because of it.
+**Some of what this cell does is bimodal, not continuous.** The grasp twist under friction
+alone was the worked example: a trial lands in a high state or a low one, and the physics
+timestep changes how often the high state is entered rather than moving a magnitude. The two
+**grasp** campaigns in [`../measurements/`](../measurements/README.md) turn on this.
 
 Two rules come out of that, and they apply to any comparison run against this cell.
 
@@ -239,8 +209,8 @@ having gone well is the planner's own launch test — see
 [ADR-0027](../adr/0027-pilz-planning-pipeline.md), which is where that distinction is
 argued.
 
-Good: *the work-piece reaches station 2 within 30 seconds, the arm never exceeds its
-workspace bounds, no collision is reported.*
+Good: *the work-piece ends on the belt's outfeed within the cycle ceiling, the arm never
+exceeds its workspace bounds, no collision is reported.*
 
 ### Contract
 
@@ -304,9 +274,9 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
 | Sim/hardware interface parity | P2 — the project's central claim. Asserted in simulation only; no hardware path has been run |
 | Deterministic bring-up | P4 — no timing assumptions |
 | Clean shutdown, no orphans | The next run's failure is this run's fault |
-| Cycle completion | The cell actually works — **partly met**: one cycle of the real program on `cell_b`'s plant completes and gates the build (`program_cycle` carries no `continue-on-error` in `ci.yml`, checked 2026-10-01). Reported from runs rather than from a campaign. It said "one arm's pick-and-place cycle … and the three-arm line" until 2026-10-01; both left the main tree with ADR-0069 and run only from `projects/01`. See [L3](L3-capabilities.md), [L4](L4-orchestration.md) and the status block in [CLAUDE.md §2](../../CLAUDE.md) |
+| Cycle completion | The cell actually works — **partly met**: one cycle of the real program on `cell_b`'s plant completes and gates the build. The pair is not driven by any gate. See [L3](L3-capabilities.md) and [L5](L5-twin-synchronization.md) |
 | Twin divergence within bound (Phase 2+) | P8 |
-| Scenario determinism | Same seed, same outcome — **not met today, and moving to Pilz did not meet it. Since 2026-09-22 the outcome half is measured rather than inferred**: two runs of one scenario under one seed put the part in two different places, and both passed ([`2026-09-22-is-a-run-reproducible`](../measurements/2026-09-22-is-a-run-reproducible/ANALYSIS.md) — two runs on one machine, not a rate, and **where it comes from is UNRESOLVED**). One `move_group` returns a byte-identical trajectory to an identical request; **same seed, same *trajectory* across runs is still unmeasured** — that campaign recorded final positions and durations, not trajectories — and physics is unseeded either way. See Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md) |
+| Scenario determinism | Same seed, same outcome — **not met** (see Scenario above and [ADR-0027](../adr/0027-pilz-planning-pipeline.md)). One `move_group` returns a byte-identical trajectory to an identical request; physics is unseeded |
 
 ## What tests are not allowed to do
 
@@ -324,10 +294,9 @@ The `tester` agent verifies these on **every** run, regardless of what changed:
   claims the velocity *command*, so the loopback leaves it at its initial value and it reads
   0.0 from the first cycle. A gripper controller stood up over that backend therefore
   satisfies the stall threshold unconditionally and reports a successful grasp on empty air.
-  Since [ADR-0029](../adr/0029-simulated-grasping-by-friction.md) removed the attachment
-  plugin, `stalled=true, reached_goal=false -> holding` is the **only** evidence anywhere in
-  this project that a part is held, so this is the one place with no independent check to
-  catch it. Under Gazebo the velocity is real and the cell is fine. **No test does this
+  The stall is what `cite_skills::gripper_is_holding` judges, and on the simulated side its
+  verdict is what the grasp-hold plugin acts on, so nothing independent would catch it. Under
+  Gazebo the velocity is real and the cell is fine. **No test does this
   today, and none may**; the mechanism is in
   [ADR-0040](../adr/0040-stop-a-joint-part-way-with-a-test-only-hardware-plugin.md)'s
   2026-08-28 correction.
@@ -351,53 +320,21 @@ container stage can run the C++, CMake and package linters. A green `./scripts/l
 laptop means the Python, YAML, shell and documentation checks passed — it says nothing
 about the C++.
 
-**No** scenario step is marked `continue-on-error` since 2026-10-01; the one that was,
-`continuous_line`, left the main tree with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md). The only `continue-on-error` step left in
-`ci.yml` is the supply-chain job's CVE scan. The history below is kept because the promotions
-it records still explain the shape of the gates.
+No scenario step is marked `continue-on-error`. The ROS package lint step blocks: it selects
+linters by the `linter` **label** ament sets, not by test name, and `./scripts/lint` refuses to
+answer unless the build tree's fingerprint matches the first-party `package.xml` and
+`CMakeLists.txt` on disk, so a stale tree produces a diagnosis rather than a confident wrong
+linter set.
 
-The other two that used to be here were promoted at `c1e9e03`, against their own recorded
-conditions rather than by decree:
-
-- **The ROS package lint step blocks.** The reason it did not was that the gate selected
-  linters by test *name* and ran 3 of 8 per package. It selects by the `linter` **label**
-  now, which is what ament actually sets — 41 linter tests, measured across the seven
-  first-party packages that existed at `c1e9e03`. `cite_runtime` has been added since and
-  registers linters of its own, so the current number is higher and is not re-measured here.
-  `./scripts/lint` additionally refuses to answer at all unless the build tree's
-  fingerprint matches the first-party `package.xml` and `CMakeLists.txt` on disk, so a stale
-  tree produces a diagnosis rather than a confident wrong linter set.
-- **`pick_and_place` blocks.** Its remaining condition had narrowed to reproducibility, and
-  its **seeding** condition was deliberately not carried forward: ADR-0027 establishes that
-  OMPL cannot be seeded through MoveIt, and a gate held behind an unmeetable condition never
-  gates. What replaced it is the pass count plus the phase split — not a determinism claim.
-  Read `ci.yml`'s block above that step for what would **retract** the promotion.
-
-`continuous_line`'s promotion condition was re-decided at the same commit and is now **one
-rather than four**: it passes repeatably in an isolated, freshly built tree, measured against
-thresholds written down before the runs. Three of its four original conditions were closed by
-ADR-0032, ADR-0033 and the milestone ladder going from 4 of 10 to 10 of 10. Not a tolerance
-change, and not a teardown allowance — the teardown half is already reported rather than
-gated.
-
-The teardown question is separate from all of this and is **half resolved**. A scenario's
-cycle can pass and its post-shutdown check still fail, and this paragraph said until
-2026-08-27 that the failures spread over four processes with no predictor but run duration.
-That was wrong. Split by exit status the failures are **two families**, and within the split
+The teardown question is separate and is **half resolved**. A scenario's cycle can pass and
+its post-shutdown check still fail. Split by exit status the failures are **two families**, and within the split
 process identity predicts the family exactly: an **exit-1 family** of `rclpy` nodes, whose
 cause is established and fixed in
 [ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md); and a **signal
-family** that is **still unexplained**, one member of which is outside the single narrow
-exemption that exists. Run duration is retired as a predictor. The figures, their provenance
-and what remains unaccounted for are in the campaign
-[`../measurements/2026-08-27-teardown-signal-family/`](../measurements/2026-08-27-teardown-signal-family/results.md)
-and, for the occurrences in CI on the three-arm cell, in that snapshot's `MEASUREMENTS.md`
-(see [`projects/README.md`](../../projects/README.md)), rather than here, so that one number has one home (P1).
-
-**The signal family was described here as "MoveIt-linked C++ processes" until 2026-08-28, and
-that is withdrawn.** `parameter_bridge` links no MoveIt code and has been observed exiting on
-SIGSEGV at teardown. What replaced the description is a measurement rather than a better
-guess: [`../measurements/2026-08-27-teardown-signal-family/`](../measurements/2026-08-27-teardown-signal-family/results.md),
+family** that is **still unexplained** — `move_group`, `skill_server` and `parameter_bridge`
+have each exited on a signal at teardown, and only `move_group` at -11 is exempted. The
+measurement is
+[`../measurements/2026-08-27-teardown-signal-family/`](../measurements/2026-08-27-teardown-signal-family/results.md),
 whose thresholds were registered before its first trial. **Read its primary result before
 citing it — it is an inconclusive**, because the arm that had to reproduce the defect never
 did, so nothing there evidences a fix. Its `gdb` captures are the closest thing this project

@@ -3,8 +3,14 @@
 - **Status:** `DESIGNED` — **the safety layer described here does not exist.** No node
   enforces any row of the table below, and the enforcement point in the diagram is not in
   the command path. Binding from the first line of Phase 2 code.
-  One rule it states *is* enforced today, and only one: nothing reaches a hardware backend
-  without a deliberate opt-in. `CITE_ALLOW_HARDWARE=1` is required by
+  Two things it relies on *are* enforced today, and nothing else.
+  **First, a paired zone cannot reach a physical machine by any edit to L0**: the validator
+  refuses a physical plant on a paired zone (`physical-plant-on-paired-zone`) and an asset whose
+  two sides name different backends (`divergent-counterpart-backend`,
+  [ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1), both as
+  ERRORs in `tools/cite_tools/validate/referential.py`, so such a model does not generate. That
+  is a validate-time refusal, not a safety layer, and lifting it is Phase 2.B's work.
+  **Second, nothing reaches a hardware backend without a deliberate opt-in.** `CITE_ALLOW_HARDWARE=1` is required by
   `require_explicit_hardware_opt_in` in `scripts/_lib.sh` for `./scripts/enter hardware`,
   and independently by `require_hardware_opt_in` in `cite_bringup/cite_bringup/plan.py` for
   any bring-up plan on which some (asset, side) **declares** that it reaches a physical
@@ -15,7 +21,7 @@
   it compared the id against the literal `sim`, and a type declaring the vendor's physical
   `ros2_control` plugin under that id passed the gate without it ever consulting the opt-in.
   Both are covered by tests.
-  **That one rule is not a guarantee about the cell, and this document is the last place that
+  **That opt-in is not a guarantee about the cell, and this document is the last place that
   should read as though it were.** The refusal rests on a **self-declaration that nothing
   verifies**, and it fails in two directions rather than one: L0 can state `false` beside the
   vendor's physical plugin, and — the sharper one — L0 can be **entirely honest** and the
@@ -26,6 +32,23 @@
   fix for the second and does not choose its shape. **State the rule with its residual or do
   not state it here** — this paragraph was corrected once already for stating a guarantee that
   no code provided.
+  **The track is a motion path no planner checks.** A track step is one `JointTrajectory`
+  point sent straight to the track's trajectory controller, forwarded to both sides by the
+  twin boundary ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)); no
+  planner checks a track move against the scene, so what bounds it is the controller's limits
+  and, on hardware, the vendor's. The physical track's hardware path is not implemented: the
+  track type declares a simulation backend only, so a physical track is refused by the
+  validator.
+  **What stops a physical arm is not in this repository.** The vendor controller's torque
+  limiting and physical guarding stop an arm driving into something; the execution-side
+  trajectory tolerances ([ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md)) are a
+  **detector** that reports a mistracked trajectory after the fact, and must never be cited as a
+  protective measure.
+  **Collision geometry is no safety margin.** The arms collide against derived convex hulls, and
+  a hull adds no clearance — every gram it adds is inside a concavity — so hulls may never be
+  cited as margin in a safety case; and enabling SDFormat `<self_collide>` under hulls would
+  stall the simulated gripper at spawn, a P2 divergence the generator refuses to emit
+  ([L1](L1-description-and-assets.md), [ADR-0028](../adr/0028-convex-hull-collision-meshes.md)).
 - **Related:** [L2](L2-control-and-hal.md), [L5](L5-twin-synchronization.md), [`../operations/safety-procedures.md`](../operations/safety-procedures.md), [`../reference/standards.md`](../reference/standards.md)
 
 ## What this covers, and what it does not
@@ -56,11 +79,13 @@ why `safety-auditor` reviews motion paths in Phase 1, long before a real arm is 
 ## The enforcement point
 
 ```
-        L4 orchestration
+   program client / operator
                │
-        L3 skills
-               │
-        L2 MoveIt / controllers
+        L5 twin boundary (one goal, both sides)
+               │                      │
+        L3 skills                     │  track and belt setpoints
+               │                      │  (declared L5 → L2 routes,
+        L2 MoveIt / controllers ◄─────┘   no planner on them)
                │
         ┌──────▼──────┐
         │ SAFETY      │  ◄── every command passes through, without exception
@@ -156,9 +181,8 @@ simulated deployment was reporting a check that was structurally a no-op.
 facility-wide transition is not that question asked once.** Where *a given asset's* far
 side is a simulated counterpart, entering the mode moves nothing physical **for that
 asset** — which is what makes the mode reachable in Phase 2.A at all. But `TwinMode`
-carries `asset_id` with *empty for facility-wide*, and charter §8 states that the system
-runs with one physical arm and two simulated ones, so a **mixed cell is the planned state
-and not an edge case**. **A facility-wide `SetMode(VIRTUAL_LEAD)` is dangerous if any
+carries `asset_id` with *empty for facility-wide*, and a facility with more than one asset
+may have some far sides physical and some simulated. **A facility-wide `SetMode(VIRTUAL_LEAD)` is dangerous if any
 single asset's far side is real**, and two assets answering "simulated" is not an answer
 for the third. Never read this mode's safety off the cell as a whole.
 
@@ -195,26 +219,17 @@ arm is mid-motion under L5's own command would be a statement no reader could ch
 refusal names the goals; cancelling them is the operator's remedy, and L5 does not cancel
 an arm's goal as a side effect of a mode change.
 
-**What that does not amount to:** it is one refusal in one server, it is not the safety
-layer, and **no bring-up starts that server** — nothing in `simulation.launch.py`,
-`./scripts/sim` or any scenario, and it refuses a single-sided zone, which is the only kind
-this repository ships. So in every deployment anyone has run, nothing refuses a mode
-transition, because nothing serves one. Do not read anything above as saying a transition
-is gated in a deployment somebody has run.
+**What that does not amount to:** it is one refusal in one server, and it is not the safety
+layer. It is in force whenever the pair supervisor starts the twin boundary
+(`./scripts/sim --pair`, `./scripts/program`); a single-sided bring-up starts no L5 and so
+serves no mode transition at all.
 
-## Multi-robot workspaces
+## Shared workspaces
 
-When two arms can occupy the same volume, something must prevent it. Two mechanisms, and
-they must not be confused:
-
-| Mechanism | Layer | Prevents |
-|---|---|---|
-| Workspace arbitration | L4 | Deadlock and thrash |
-| Collision checking and limits | L2 safety layer | **Collision** |
-
-**L4 is not a safety mechanism.** If a coordination bug can cause a collision, the safety
-layer is missing something. Relying on orchestration for collision avoidance is a Critical
-finding.
+Each side of the main tree has one arm on one track, so no two arms share a volume today. If
+a cell ever holds two, preventing them from meeting is the safety layer's job — collision
+checking and limits at L2 — and never the job of whatever sequences their work. **Sequencing
+is not a safety mechanism**; relying on it for collision avoidance is a Critical finding.
 
 ## Gripper behaviour on fault
 

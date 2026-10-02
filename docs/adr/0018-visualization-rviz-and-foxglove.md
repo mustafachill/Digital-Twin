@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
-- **Related:** [ADR-0009](0009-docker-primary-environment.md), [ADR-0017](0017-mcap-recording-format.md), [`../architecture/L7-presentation.md`](../architecture/L7-presentation.md)
+- **Related:** [ADR-0009](0009-docker-primary-environment.md), [ADR-0017](0017-mcap-recording-format.md), `../architecture/L7-presentation.md` (removed from `docs/` on 2026-10-02; the snapshots under `projects/` keep it — see `projects/README.md`)
 
 ## Context
 
