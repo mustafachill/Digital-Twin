@@ -61,6 +61,7 @@ Nothing else is edited.
 | 2 | `run` (new) | The top-level entry point: a thin wrapper over `./scripts/program --zone cell_b`, every other argument passed through. |
 | 3 | `PROVENANCE.md` (new) | This record. |
 | 4 | `README.md` (replaced) | The source commit's README described the whole repository as it stood at that commit and pointed at `CLAUDE.md` and the charter, which are not in this folder. It is replaced by one describing this snapshot: what the milestone achieved, how to run and check it, how to take the folder out, and its known limits, drawn from the ADRs in `docs/adr/`. The source commit's README is still readable with `git show e90d230:README.md` in the main repository. |
+| 5 | `MEASUREMENTS.md` (new, 2026-10-01) | This snapshot's measurement point. No measurement of this milestone has been recorded in it yet (the two main-repository counts first placed here when the main repository's `CLAUDE.md` was cut back on 2026-10-01 were moved out the same day), and any later measurement of this snapshot is added here rather than anywhere in the main tree. Verification runs stay in this file's verification log. Allowed by the main repository's ADR-0068 amendment of 2026-10-01. |
 
 Not patched, checked instead: the Compose project name and `ROS_DOMAIN_ID` are both derived
 from the checkout's absolute path (`cite_project_name` and `cite_domain_id` in
@@ -95,6 +96,7 @@ diff -ru source/03-real-program-twin-on-track/infra/docker/docker-compose.yml sn
    working_dir: /workspace
    volumes:
      # The repository, mounted rather than copied: edits on the host are visible
+Only in snapshot/03-real-program-twin-on-track/: MEASUREMENTS.md
 Only in snapshot/03-real-program-twin-on-track/: run
 diff -ru source/03-real-program-twin-on-track/scripts/audit-deps snapshot/03-real-program-twin-on-track/scripts/audit-deps
 --- source/03-real-program-twin-on-track/scripts/audit-deps

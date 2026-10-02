@@ -12,7 +12,7 @@ repository, because the prose is full of em dashes, box-drawing diagrams and `°
 looked for instead is characters specific to one natural language, which cannot be
 typography or mathematics. ADR-0035 records the four candidates that were measured, what
 each fired on, and why this one was chosen — **cite it rather than copying its figures
-here**, which is `CLAUDE.md` §2's "cite a campaign; do not copy its numbers around" and the
+here**, which is `CLAUDE.md` §2's "cite it, do not copy its numbers" and the
 rule ADR-0027's own correction was written to establish. `.english-only.yaml` holds the
 signal itself, because a list of what exists is configuration and this module is mechanism
 (P5).

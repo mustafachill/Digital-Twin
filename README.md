@@ -35,8 +35,9 @@ against reality yet. Saying so plainly is a project rule, not modesty.
   weekly, non-blocking workflow checks; main CI no longer drives `pick_and_place` or
   `continuous_line`.
 
-The detailed, dated state — every count with the command that reproduces it — is
-[`CLAUDE.md`](./CLAUDE.md) §2. Each layer's design document in
+The current state, stated without counts, is [`CLAUDE.md`](./CLAUDE.md) §2; every count
+comes from the `./scripts/*` command that reports it, and what a past milestone measured is
+kept with that milestone (see [`projects/README.md`](./projects/README.md)). Each layer's design document in
 [`docs/architecture/`](./docs/architecture/README.md) carries a `DESIGNED`, `PARTIAL` or
 `BUILT` marker; read it before believing the body.
 

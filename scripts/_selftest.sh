@@ -907,8 +907,9 @@ expect_ok   "a teardown failure is advisory under the advisory policy" \
 # exactly like the upstream one: still asserted, still reported, and gating
 # whenever the caller has not explicitly asked for advisory teardown. What must
 # never happen is the two being told apart by name, which is what "exempt
-# parameter_bridge" would have meant and what CLAUDE.md §2 records as
-# unsupportable — process identity does not predict these failures.
+# parameter_bridge" would have meant and what is unsupportable — process
+# identity does not predict these failures in advance (ADR-0034 and
+# docs/measurements/2026-08-27-teardown-signal-family/).
 expect_fail "a first-party teardown failure gates under the blocking policy" \
             scenario_verdict "${JUNIT_TMP}/teardown-ours.xml" blocking
 expect_eq "a first-party teardown failure is reported with its process named" \

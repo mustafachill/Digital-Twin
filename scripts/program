@@ -60,8 +60,9 @@ fi
 # ---------------------------------------------------------------- on the host
 if ! in_container; then
     # Refused on a dirty host: a cell left up answers on the same domain, and
-    # `compose exec` into a running container does not run the image's entrypoint
-    # (CLAUDE.md §2), so a run attached to it is not a run of this checkout.
+    # `compose exec` into a running container does not run the image's entrypoint,
+    # which is what sources ROS and the overlay, so a run attached to it is not a
+    # run of this checkout.
     stop_this_checkouts_containers
     if [ "$(docker ps -q 2>/dev/null | wc -l)" -ne 0 ]; then
         die "a container of another checkout is running, and this would share its ROS

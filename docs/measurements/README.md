@@ -132,8 +132,9 @@ carry that, and neither disturbs the verdicts.
 - **What is not here is not measured.** The table above is the list; count it there rather
   than trusting a number in this sentence, which was wrong within a day of being written. In
   particular, **nothing here measures the three-arm continuous line**: that it now completes
-  is reported from scenario runs, with no thresholds registered in advance, and the status
-  block in [CLAUDE.md §2](../../CLAUDE.md) says so. Nothing here measures the parked index
+  is reported from scenario runs, with no thresholds registered in advance, and the
+  three-arm snapshot's `MEASUREMENTS.md` (see [`projects/README.md`](../../projects/README.md))
+  says so. Nothing here measures the parked index
   position either, or whether the release-orientation residual accumulates over three
   stations — the conveyor-yaw campaign names that last one as explicitly unmeasured. And
   **nothing here explains a teardown signal death**: the fourth campaign measured the rate

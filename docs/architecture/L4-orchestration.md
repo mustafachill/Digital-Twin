@@ -59,8 +59,8 @@
   server are started by `simulation.launch.py` (the coordinator behind `line:=true`), and
   the reported milestone ladder is full. That is reported from runs rather than from a
   campaign, and it runs in CI as `continue-on-error`; the count, its qualifications and what
-  still stalls are in the status block in [CLAUDE.md §2](../../CLAUDE.md) and are not
-  restated here (P1).
+  still stalls are in the three-arm snapshot's `MEASUREMENTS.md`, reached through
+  [`projects/README.md`](../../projects/README.md), and are not restated here (P1).
   **Not built:** parallel stations — stations tick one at a time — Groot2 integration, and
   any confirmation that a belt did what it was told: nothing publishes `ConveyorState`, so a
   belt that fails to stop or fails to restart is a stalled or a spilling line that L4 would

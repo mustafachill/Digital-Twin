@@ -28,8 +28,10 @@ locations and coverage are in
 [`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)'s Status bullet and are
 not repeated here. What that bullet does not say, and what an operator needs: **both refuse
 before the stack starts — one at the shell, one at bring-up — and neither refuses a mode
-transition.** No server implements `SetMode` yet (CLAUDE.md §2), so nothing in the
-repository refuses one. That gap must be closed before the first Phase 2 motion, and it is
+transition.** The one `SetMode` server is the twin boundary, `cite_twin/twin_boundary.py`,
+which `./scripts/sim --pair` starts; its own refusal (`cite_twin/mode.py`) applies at the
+transition only while it runs, and it is not the safety layer
+[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md) describes. That gap must be closed before the first Phase 2 motion, and it is
 not a reason to treat the rule as optional in the meantime.
 
 ## Before any physical motion

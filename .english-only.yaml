@@ -19,7 +19,7 @@
 # file in the repository is a gate that gets switched off.
 #
 # The figures for all of this live in ADR-0035 and are cited rather than copied, per
-# CLAUDE.md §2: "cite a campaign; do not copy its numbers around".
+# CLAUDE.md §2 on where a measurement goes: "cite it, do not copy its numbers".
 #
 # What is listed instead is characters that are specific to one natural language and cannot
 # be typography or mathematics. Each entry gives either an explicit list of `code_points` or
@@ -85,7 +85,8 @@ signals:
 # globs, no directory prefixes, and no inline suppression comment — an inline marker is the
 # easiest possible hatch to reach, and a rule whose hatch is easy to reach is not a rule.
 # The precedent is the scenarios' teardown exemption (`tests/scenarios/bringup.py`), kept at
-# "one signal, one process name" and recorded in CLAUDE.md §2 as never having been widened.
+# "one signal, one process name" and never widened (CLAUDE.md §2's binding rules forbid
+# widening one to absorb a failure; docs/measurements/2026-08-27-teardown-signal-family/).
 #
 # Two things keep this list from becoming a blanket. An entry whose file no longer contains
 # anything to exempt FAILS the gate and asks to be deleted, so the list cannot accumulate

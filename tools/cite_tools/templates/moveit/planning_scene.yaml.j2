@@ -15,12 +15,12 @@
 # the two differ by half a height and the difference is applied here rather than
 # left for a consumer to remember.
 #
-# Two omissions, on purpose:
+# One omission, on purpose, and the file's reader:
 #   * Neighbouring arms are not listed. An articulated robot frozen at one pose
 #     is confidently wrong wherever it actually is; coordinating arms needs the
 #     live scene and is L4's problem.
-#   * Nothing reads this file yet. The node that publishes these objects lives
-#     in cite_facility or cite_bringup, and neither exists (CLAUDE.md §2).
+#   * One node reads this file: cite_facility/planning_scene_loader.py applies
+#     these objects to each arm's move_group and reads them back.
 planning_scene:
   zone: {{ cell.zone }}
   frame_id: {{ world_frame }}
