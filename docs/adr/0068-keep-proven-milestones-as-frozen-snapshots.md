@@ -1,8 +1,8 @@
 # ADR-0068: Keep each proven milestone as a frozen, runnable snapshot
 
-- **Status:** Proposed — its P1 exception **ratified by the project owner on 2026-09-29** and
-  recorded in the charter at **v1.14** (`what-we-are-doing.md` §7 and §14). Ratification is
-  not promotion: the promotion condition below is unchanged.
+- **Status:** Proposed (amended 2026-10-01) — its P1 exception **ratified by the project owner
+  on 2026-09-29** and recorded in the charter at **v1.14** (`what-we-are-doing.md` §7 and §14).
+  Ratification is not promotion: the promotion condition below is unchanged.
 - **Date:** 2026-09-29
 - **Deciders:** Project owner
 - **Related:** [ADR-0001](0001-rebuild-rather-than-migrate.md),
@@ -13,6 +13,34 @@
   [ADR-0066](0066-run-the-cell-from-a-fixed-program.md),
   [ADR-0067](0067-the-real-program-drives-the-twin-on-a-track.md),
   [`../reference/v1-lessons.md`](../reference/v1-lessons.md), CLAUDE.md §3 (P1, P6)
+
+## Amendment — 2026-10-01: each snapshot has a measurement point, `MEASUREMENTS.md`
+
+**Decided by the project owner** as part of cutting `CLAUDE.md` back to the project's
+identity, goal and working discipline.
+
+- **Change.** Decision 2's list of permitted patches gains one file per snapshot,
+  `MEASUREMENTS.md`, listed in that snapshot's `PROVENANCE.md` like every other patch and
+  shown in its "Diff against a clean extract" block.
+- **What it holds.** From 2026-10-01 on, the measurements of that milestone; earlier campaigns
+  whose subject is that milestone remain under [`docs/measurements/`](../measurements/README.md),
+  frozen where they are (the review queue's Q84,
+  [`../reference/claude-md-review-queue.md`](../reference/claude-md-review-queue.md), sorts
+  them). On 2026-10-01 it received, verbatim,
+  the measurements `CLAUDE.md` §2 held whose subject had left the main tree — the three-arm
+  line and `cell_a`, the `pick_and_place` and `continuous_line` scenarios, the fixed program.
+  A measurement taken of a snapshot from now on is added there, dated, with the hash bump
+  decision 2 already requires; it does not go into the main tree.
+- **What it does not hold.** Whether the snapshot builds and runs is verification, not
+  measurement, and stays in `PROVENANCE.md`'s verification log. A main-tree measurement is
+  still a campaign under [`docs/measurements/`](../measurements/README.md).
+- **Why a file in the snapshot rather than a directory in the main tree.** The figures
+  describe the snapshot's code, and the snapshot is what is handed over as one folder; a
+  record kept outside it would not travel with it. Decision 3's one-way rule — nothing is
+  copied from `projects/` into the main tree, and the main tree never imports or builds from
+  it — is untouched: the figures stay in the snapshot and nothing in the main tree reads them.
+- **Cost.** Each such addition edits a frozen record and bumps its tree hash, which is the
+  friction decision 2 chose deliberately.
 
 ## Context
 
@@ -81,7 +109,8 @@ Each milestone is kept permanently as a frozen, self-contained, runnable snapsho
    a per-project image tag, `cite-digital-twin:<name>` in place of `:dev`, so snapshots do not
    overwrite each other's image; for project 01 only, `DRIVEN_ZONE = "cell_a"` in
    `tests/scenarios/_cell.py`; and a top-level `run` wrapper, `README.md` and `PROVENANCE.md` in
-   each. Nothing else is edited. `.github/` is **not** a patch: it was removed by hand when the
+   each. Nothing else is edited. **[Amended 2026-10-01 — a fourth file, `MEASUREMENTS.md`, is
+  now a listed patch in each snapshot; see the amendment above.]** `.github/` is **not** a patch: it was removed by hand when the
    snapshots were first made and has since become one of the script's exclusions, and
    re-running the script against each source commit reproduces the unpatched extract at
    `3f475a3` exactly, less that directory. **A snapshot is a record, not a source.**

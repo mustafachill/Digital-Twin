@@ -32,7 +32,8 @@ is about `launch_test` with `IncludeLaunchDescription` hosting a whole cell's
 launch inside the test process, which is true and is not the only shape a test
 can take. What neither rig does is bring a cell up: **a comparison over two real
 arms is still shown by nothing**, no paired scenario exists, and
-`./scripts/scenario` addresses the plant (CLAUDE.md §2).
+`./scripts/scenario` addresses the plant only (the automated paired scenario
+is ADR-0057's unmet clause 4).
 
 **The plan is the zone's generated paired plan, with its far side made mixed.**
 `cell_b` is paired (ADR-0059), so its generated plan already carries both sides

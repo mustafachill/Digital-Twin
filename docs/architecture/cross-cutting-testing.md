@@ -30,7 +30,8 @@
   tree with the event-driven line ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)); both still run, frozen, from
   `projects/01`, and the weekly, non-blocking
   `.github/workflows/projects.yml` is what checks them there. Their figures are a closed
-  record, kept in CLAUDE.md §2.
+  record, kept in the three-arm snapshot's `MEASUREMENTS.md` (see
+  [`projects/README.md`](../../projects/README.md)).
   Both are run with `--teardown-advisory`, which splits the two questions a scenario
   answers in one exit code: **the cycle gates, the post-shutdown teardown is reported and
   does not gate.** It exempts no process and deletes no assertion — see the phase-split block
@@ -388,8 +389,10 @@ cause is established and fixed in
 [ADR-0034](../adr/0034-process-lifecycle-mechanism-in-cite-runtime.md); and a **signal
 family** that is **still unexplained**, one member of which is outside the single narrow
 exemption that exists. Run duration is retired as a predictor. The figures, their provenance
-and what remains unaccounted for are in [CLAUDE.md §2](../../CLAUDE.md) rather than here, so
-that one number has one home (P1).
+and what remains unaccounted for are in the campaign
+[`../measurements/2026-08-27-teardown-signal-family/`](../measurements/2026-08-27-teardown-signal-family/results.md)
+and, for the occurrences in CI on the three-arm cell, in that snapshot's `MEASUREMENTS.md`
+(see [`projects/README.md`](../../projects/README.md)), rather than here, so that one number has one home (P1).
 
 **The signal family was described here as "MoveIt-linked C++ processes" until 2026-08-28, and
 that is withdrawn.** `parameter_bridge` links no MoveIt code and has been observed exiting on

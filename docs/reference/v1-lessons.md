@@ -147,9 +147,10 @@ not restated here.
 coordinated by `line_orchestrator`, which instantiates one behaviour subtree per station
 from that same generated topology. What that has been *measured* to do — over how many
 runs, on whose machine, under what CI status, and what its own tests do and do not prove
-about motion — is recorded in [`../../CLAUDE.md`](../../CLAUDE.md) §2, which calls the line
-completing the newest and least-settled claim in that file. It is not copied here (P1).
-Read it there before treating this clause as delivered.
+about motion — is recorded in the three-arm snapshot's `MEASUREMENTS.md`, reached through
+[`../../projects/README.md`](../../projects/README.md), where the line completing is the
+least-settled claim. It is not copied here (P1). Read it there before treating this clause
+as delivered.
 
 **Nothing in this section signs anything off.** The belt, the picks and the next robot
 taking the part exist and are exercised by a scenario. The crossing between two arms is
@@ -439,8 +440,10 @@ cannot see it — after which the script prints `All conveyors started successfu
 **Two rules fall out.** A typed, unit-bearing contract would have made the first bug
 unrepresentable — [ADR-0010](../adr/0010-typed-ros-interfaces.md). And a success flag that
 nothing checks is not error handling: assert the postcondition, not the call. The rebuild
-carries `ConveyorState` in `cite_interfaces` for exactly the first reason, and
-[`../../CLAUDE.md`](../../CLAUDE.md) §2 records honestly that nothing publishes it yet.
+carried `ConveyorState` in `cite_interfaces` for exactly the first reason, nothing ever
+published it, and it left with the event-driven line
+([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)), which
+records that a future closed-loop belt re-introduces a contract by its own decision.
 
 For what a belt is *for* in this architecture — stopping on a sensor edge rather than
 running open-loop — see [ADR-0032](../adr/0032-index-the-belt.md) and

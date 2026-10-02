@@ -62,6 +62,7 @@ Nothing else is edited.
 | 3 | `run` (new) | The top-level entry point: brings `cell_a` up with `./scripts/sim --zone cell_a line:=true [--headless]`, waits for the cell's readiness token and then, as `tests/scenarios/continuous_line.py` does, for the first `LineState` on `LineState.TOPIC`, then feeds work-pieces onto the pick table one at a time, watches each reach the sink beam and confirms its removal from a pose snapshot, reusing `cite_bringup.demo`, `cite_bringup.gz` and `cite_bringup.workpiece` unedited. `./scripts/demo` at this commit drives a pair on `cell_b`, not this line. The cell's log is written under `workspace/log/run/`, this snapshot's log volume, so it outlives the container. Every wait in it is bounded by a ceiling and ends on its condition; the 900 s per-piece ceiling is stated, not measured. |
 | 4 | `PROVENANCE.md` (new) | This record. |
 | 5 | `README.md` (replaced) | The source commit's README described the whole repository as it stood at that commit and pointed at `CLAUDE.md` and the charter, which are not in this folder. It is replaced by one describing this snapshot: what the milestone achieved, how to run and check it, how to take the folder out, and its known limits, drawn from the ADRs in `docs/adr/`. The source commit's README is still readable with `git show b5a0bc9:README.md` in the main repository. |
+| 6 | `MEASUREMENTS.md` (new, 2026-10-01) | This snapshot's measurement point. The measurements the main repository's `CLAUDE.md` held whose subject is this milestone were moved here, verbatim, when that file was cut back on 2026-10-01, and any later measurement of this snapshot is added here rather than anywhere in the main tree. Verification runs stay in this file's verification log. Allowed by the main repository's ADR-0068 amendment of 2026-10-01. |
 
 Not patched, checked instead: the Compose project name and `ROS_DOMAIN_ID` are both derived
 from the checkout's absolute path (`cite_project_name` and `cite_domain_id` in
@@ -96,6 +97,7 @@ diff -ru source/01-three-arm-event-driven-line/infra/docker/docker-compose.yml s
    working_dir: /workspace
    volumes:
      # The repository, mounted rather than copied: edits on the host are visible
+Only in snapshot/01-three-arm-event-driven-line/: MEASUREMENTS.md
 Only in snapshot/01-three-arm-event-driven-line/: run
 diff -ru source/01-three-arm-event-driven-line/scripts/audit-deps snapshot/01-three-arm-event-driven-line/scripts/audit-deps
 --- source/01-three-arm-event-driven-line/scripts/audit-deps

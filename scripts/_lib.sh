@@ -474,8 +474,10 @@ assert_shellcheck_pinned() {
 # grounds. Exempting the offending process would be a guess dressed as a
 # discriminator: teardown failures here have landed on at least four distinct
 # processes with three distinct exits — `parameter_bridge` (-6), `gz` (-9) and
-# `topology_server.py` (1) among them — and CLAUDE.md §2 records the conclusion
-# drawn from that set, which is that PROCESS IDENTITY DOES NOT PREDICT IT.
+# `topology_server.py` (1) among them — and PROCESS IDENTITY DOES NOT PREDICT A
+# FAILURE IN ADVANCE: it sorts the set into two families, the exit-1 one ours
+# (ADR-0034) and the signal one unexplained
+# (docs/measurements/2026-08-27-teardown-signal-family/).
 # `topology_server.py` is ours, so even "exempt the upstream processes" has no
 # boundary to draw. There is no signature to key on. Widening the allowlist in
 # `TestCleanShutdown` would therefore not target the upstream defect at all; it
@@ -933,8 +935,10 @@ stop_own_group() {
 # "unknown key" errors against a branch whose model was valid, because the errors
 # came from an older schema in another tree; the same mechanism reports a broken
 # model as valid whenever the foreign tree is the older one. This is the
-# shared-Docker-volume contamination CLAUDE.md §2 records, wearing a different
-# hat and worse: there is no build artifact left behind to notice.
+# shared-Docker-volume contamination that once made a pass count report
+# another worktree's binaries (each checkout is now isolated for exactly that
+# reason), wearing a different hat and worse: there is no build artifact left
+# behind to notice.
 #
 # The check is a refusal, not a correction. Prepending PYTHONPATH does work
 # against the finder setuptools installs today — it is appended to sys.meta_path,

@@ -69,7 +69,8 @@ CANCEL_CEILING_S = 30.0
 #: in wall time so that a stalled simulator fails the step (and the belt is
 #: stopped) instead of hanging the program. Generous on purpose: a windowed
 #: pair on a busy host runs far below real time, and a starved one has been
-#: measured at a twenty-fifth of it (CLAUDE.md §2), so 50x plus a minute
+#: measured at a twenty-fifth of it
+#: (docs/measurements/2026-08-29-real-time-factor-conditions/), so 50x plus a minute
 #: catches a clock that has STOPPED and never one that is merely slow.
 WAIT_WALL_FACTOR = 50.0
 WAIT_WALL_MARGIN_S = 60.0

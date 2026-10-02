@@ -93,9 +93,9 @@ speak to that, and the re-asking that measurement condemned is not what ships.
 
 ## What this does NOT evidence
 
-`Transfer` carries the identical call and is **not** covered here: L4 refuses a
-direct arm-to-arm edge at plan time, so that skill has a server and no caller
-(ADR-0031, CLAUDE.md §2) and no rig in this repository drives it. Its call site is
+`Transfer` carries the identical call and is **not** covered here: that skill
+has a server and no program calls it (CLAUDE.md §2), and no rig in this
+repository drives it. Its call site is
 the same one line and is left as it is.
 """
 

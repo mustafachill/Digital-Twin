@@ -7,7 +7,7 @@ Everything written down about the CITE Digital Twin, and where to find it.
 | Document | Answers | Changes |
 |---|---|---|
 | [`../what-we-are-doing.md`](../what-we-are-doing.md) | **What** we are building and **why** | Only by explicit decision of the project owner |
-| [`../CLAUDE.md`](../CLAUDE.md) | **How** to work here — rules, commands, quality gates | When a working rule changes |
+| [`../CLAUDE.md`](../CLAUDE.md) | **How** to work here — rules, commands, quality gates | Only by explicit decision of the project owner; it is near read-only and holds no measurement, count or dated history (its §12) |
 | `docs/` | **How it works** in detail, and **why each choice was made** | Continuously, alongside the code |
 
 If any two disagree, the charter wins, then `CLAUDE.md`, then these documents. A
@@ -25,9 +25,10 @@ disagreement is a defect in the loser — fix it, do not leave both standing.
 | How does this relate to ISO 23247? | [`architecture/standards-alignment.md`](architecture/standards-alignment.md) |
 | What shape is this interface? | [`interfaces/`](interfaces/README.md) |
 | How do I bring up / calibrate / recover the cell? | [`operations/`](operations/README.md) |
-| What number backs that claim? | [`measurements/`](measurements/README.md) |
+| What number backs that claim? | [`measurements/`](measurements/README.md) for the main tree; a past milestone's measurements are in its snapshot's `MEASUREMENTS.md` (see [`../projects/`](../projects/README.md)) |
 | Where do I read more? | [`reference/`](reference/README.md) |
-| How do I run an earlier milestone? | [`../projects/`](../projects/README.md) — frozen, runnable snapshots, each recording its own verification in its `PROVENANCE.md`. Records, not sources: nothing there is maintained or copied back ([ADR-0068](adr/0068-keep-proven-milestones-as-frozen-snapshots.md)) |
+| Where did the old `CLAUDE.md` §2 go? | [`reference/claude-md-review-queue.md`](reference/claude-md-review-queue.md) — everything cut from it on 2026-10-01 that is not a snapshot's measurement, numbered, awaiting the project owner's review |
+| How do I run an earlier milestone? | [`../projects/`](../projects/README.md) — frozen, runnable snapshots, each recording its own verification in its `PROVENANCE.md` and its own measurements in its `MEASUREMENTS.md`. Records, not sources: nothing there is maintained or copied back ([ADR-0068](adr/0068-keep-proven-milestones-as-frozen-snapshots.md)) |
 | What is still open? | [`open-work.md`](open-work.md) — a **dated snapshot**, not a tracker. Charter §11 names the issue tracker as the home of live work; none is configured, so this file carries the list between sessions and goes stale the moment work resumes. Check the command each item names, never the file. |
 
 ## Reading order for a new contributor

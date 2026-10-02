@@ -144,8 +144,10 @@ jobs:
       # Allowing the offending process its exit code would be the obvious fix and
       # it does not work: teardown failures here have landed on at least four
       # distinct processes with three distinct exits — `parameter_bridge` (-6),
-      # `gz` (-9) and `topology_server.py` (1) among them — and CLAUDE.md §2
-      # records the conclusion that process identity does not predict them.
+      # `gz` (-9) and `topology_server.py` (1) among them. Process identity
+      # sorts them into two families and predicts no failure: the exit-1 one
+      # was ours (ADR-0034), the signal one is unexplained
+      # (docs/measurements/2026-08-27-teardown-signal-family/).
       # `topology_server.py` is ours, so even "exempt the upstream processes"
       # has no boundary to draw. There is no signature to key on, and the
       # existing one-process one-signal `move_group`/-11 allowance is already on

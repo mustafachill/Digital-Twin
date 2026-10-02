@@ -21,8 +21,9 @@
   not start the line. `cite_orchestration`'s own tests (`test_line_logic`, `test_line_nodes`,
   `test_conveyor_index`, `test_indexed_belts`, `test_recovery_ordering`, `test_station_reset`
   and others) use fake arms, so they prove sequence, ownership and the stop, and not motion.
-  **How strong that evidence is lives in [CLAUDE.md §2](../../CLAUDE.md)** (the
-  `continuous_line` and `bringup` bullets and the separate `cell_b` CI record). Read it there;
+  **How strong that evidence is lives in the three-arm snapshot's `MEASUREMENTS.md`**, reached
+  through [`projects/README.md`](../../projects/README.md) (the `continuous_line` and `bringup` sections and `cell_b`'s first two CI
+  runs). Read it there;
   the counts are not copied here. Nothing automated runs the **paired** line that
   `./scripts/demo` shows.
 - **Related:** [L4](L4-orchestration.md), [L3](L3-capabilities.md),

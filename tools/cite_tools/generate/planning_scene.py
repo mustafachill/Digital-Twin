@@ -10,17 +10,16 @@ the scene URDF, taken through the same `_body_view`, so the planner's idea of th
 cell and the simulator's cannot drift apart. That sharing is the point of the
 module; recomputing the geometry here would be the second place a value lives.
 
-Two deliberate omissions, stated rather than left to be discovered:
+One deliberate omission, stated rather than left to be discovered, and its reader:
 
 * **Neighbouring arms are not here.** An articulated robot is not a static
   collision object, and freezing one at a pose would be worse than omitting it —
   it would be confidently wrong wherever the other arm actually is. Coordinating
   arms against each other is L4's problem and needs the live scene, not this.
-* **Nothing reads this file yet.** The node that publishes these objects onto
-  `/monitored_planning_scene` belongs in `cite_facility` or `cite_bringup`, and
-  neither exists (CLAUDE.md §2). Until it does, this artifact is generated and
-  unread: the geometry is available and correct, and the planner still cannot
-  see it.
+* **One node reads this file.** `cite_facility/planning_scene_loader.py`
+  applies these objects to each arm's `move_group` through
+  `apply_planning_scene` and reads them back; bring-up gates the skill
+  servers on its exit.
 """
 
 from __future__ import annotations

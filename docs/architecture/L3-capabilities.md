@@ -15,7 +15,7 @@
   `./scripts/scenario pick_and_place`, a blocking CI gate from `c1e9e03` until that scenario
   left the main tree with [ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) on 2026-10-01; **no scenario in main CI exercises them now**, which
   ADR-0069 lists under "Coverage given up". The figures are a closed record in
-  [CLAUDE.md §2](../../CLAUDE.md). `Transfer` never had a caller: the line's L0 topology was
+  the three-arm snapshot's `MEASUREMENTS.md`, reached through [`projects/README.md`](../../projects/README.md). `Transfer` never had a caller: the line's L0 topology was
   conveyor-mediated and [L4](L4-orchestration.md) refused a direct arm-to-arm edge at plan time
   ([ADR-0031](../adr/0031-refuse-direct-handoff-without-orientation-certainty.md), now
   deprecated).

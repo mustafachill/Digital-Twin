@@ -127,7 +127,7 @@ def _may_name_it(relative: str) -> bool:
 
 
 #: Directories that are not this repository's to answer for: build products, the
-#: superseded v1 tree (CLAUDE.md §2), third-party source imported by vcstool, and
+#: superseded v1 tree (CLAUDE.md §1), third-party source imported by vcstool, and
 #: the frozen milestone snapshots under `projects/` (ADR-0068), which are records of
 #: past commits and each carry their own copy of this package. Stated here rather
 #: than taken from `cite_tools.tree.in_a_snapshot` because this test runs under
