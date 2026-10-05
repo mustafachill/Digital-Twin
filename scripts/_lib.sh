@@ -1042,13 +1042,34 @@ stop_this_checkouts_containers() {
     docker rm -f $ids >/dev/null
 }
 
+#
+# The repository-root `.env` is handed over with `--env-file`, because compose
+# reads only the `.env` in its PROJECT directory, which is the compose file's
+# (infra/docker/), and so never saw the one `.env.example` tells people to fill
+# in: CITE_XARM_IP set there never reached a container (ADR-0070 item 6). Shell
+# values outrank the file in compose's interpolation, so everything this file
+# derives and exports - ROS_DOMAIN_ID, CITE_DOMAIN_BASE - still wins over a
+# value written in `.env`.
+#
+# CITE_ALLOW_HARDWARE is pinned from the shell for the same reason: the opt-in
+# is a deliberate act for one command (ADR-0054), and a `1` left in a file would
+# turn it on for every container this checkout starts. Unset means 0, and a
+# value in `.env` is not read.
 compose() {
+    local env_file=()
+    if [ -f "${REPO_ROOT}/.env" ]; then
+        env_file=(--env-file "${REPO_ROOT}/.env")
+    fi
     if have docker && docker compose version >/dev/null 2>&1; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+            CITE_ALLOW_HARDWARE="${CITE_ALLOW_HARDWARE:-0}" \
+            docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            ${env_file[@]+"${env_file[@]}"} "$@"
     elif have docker-compose; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker-compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+            CITE_ALLOW_HARDWARE="${CITE_ALLOW_HARDWARE:-0}" \
+            docker-compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            ${env_file[@]+"${env_file[@]}"} "$@"
     else
         die "Docker Compose not found. Install Docker Desktop (macOS) or docker-compose-plugin (Linux)."
     fi

@@ -479,6 +479,33 @@ else
            "$C_RED" "$C_RST" >&2
 fi
 
+# R-03 (ADR-0070 item 6): compose() hands the repository-root `.env` over, because
+# compose reads only the `.env` in the compose file's directory and so never saw
+# it. And the opt-in is pinned from the shell, so a value in that file is not
+# read. `docker` is stubbed to print what it was given; nothing is started.
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+compose_given() { # compose_given <repo root> [VAR=value...]
+    local root="$1"; shift
+    env -u CITE_ALLOW_HARDWARE "$@" bash -c '
+        source "$1"
+        docker() { printf "%s\n" "$@"; printf "ALLOW=%s\n" "${CITE_ALLOW_HARDWARE-unset}"; }
+        REPO_ROOT="$2"
+        compose config
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$root"
+}
+ENV_ROOT="$(mktemp -d)"
+: > "${ENV_ROOT}/.env"
+expect_ok "compose() passes the repository-root .env with --env-file" \
+    grep -qxF -- "${ENV_ROOT}/.env" <(compose_given "$ENV_ROOT")
+expect_ok "compose() passes --env-file when the root .env exists" \
+    grep -qxF -- "--env-file" <(compose_given "$ENV_ROOT")
+expect_ok "compose() pins an unset opt-in to 0, so .env cannot turn it on" \
+    grep -qxF -- "ALLOW=0" <(compose_given "$ENV_ROOT")
+rm -f "${ENV_ROOT}/.env"
+expect_fail "compose() passes no --env-file when there is no root .env" \
+    grep -qxF -- "--env-file" <(compose_given "$ENV_ROOT")
+rmdir "$ENV_ROOT"
+
 # container_name pins a host-global identifier and collides between checkouts
 # exactly as the volumes did. It must stay out of the compose file.
 if ! grep -q "container_name" "${REPO_ROOT}/infra/docker/docker-compose.yml"; then
