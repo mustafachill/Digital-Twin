@@ -150,6 +150,20 @@ GRASP_ATTACH = "grasp/attach"
 GRASP_DETACH = "grasp/detach"
 
 
+#: The nodes a PHYSICAL side runs beside its controller manager, in the asset's
+#: namespace (ADR-0070 items 3-5). Their parameters are keyed by these names in
+#: the side's generated adapter configuration, and the side's launch starts each
+#: under the fully qualified name the plan states, so a name is made here and
+#: nowhere else.
+DEADMAN_NODE = "deadman"
+TRACK_ADAPTER_NODE = "track_adapter"
+GRIPPER_RELAY_NODE = "gripper_relay"
+
+#: Where a physical side's deadman publishes its `DeadmanState`, under the asset
+#: it guards (CLAUDE.md §8). A leaf, formed into a name by :func:`interface`.
+DEADMAN_STATE = "deadman/state"
+
+
 def scope(reserved: str, name: str) -> str:
     """`/cite/<reserved>/<name>` — facility-, twin-, or line-scope state."""
     if reserved not in RESERVED_SCOPES:

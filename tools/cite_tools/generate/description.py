@@ -496,21 +496,24 @@ def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorN
     )
 
 
-def environment_arguments(asset: ResolvedAsset, side: str) -> tuple[tuple[str, str], ...]:
+def environment_arguments(asset: ResolvedAsset, side: str) -> tuple[tuple[str, str, str], ...]:
     """The xacro arguments ``side``'s description takes from the environment.
 
-    `(argument, variable)` pairs, sorted: one for every parameter the backend
-    selected on that side declares and the asset supplies as an `EnvReference`.
-    The bring-up plan carries exactly these, so a launch knows which variables
-    to resolve and which arguments to hand xacro (ADR-0070 item 2). Empty for a
-    side that reads nothing from the environment, which is every simulated side.
+    `(argument, variable, kind)` triples, sorted: one for every parameter the
+    backend selected on that side declares and the asset supplies as an
+    `EnvReference`. The kind is what the reference declares the value to be
+    (ADR-0070 item 2), so bring-up checks an address as an address because L0
+    said so, never because of what the argument is called. The bring-up plan
+    carries exactly these, so a launch knows which variables to resolve and
+    which arguments to hand xacro. Empty for a side that reads nothing from the
+    environment, which is every simulated side.
     """
     selected = asset.asset_type.hardware_backends.get(asset.backend_on(side))
     if selected is None:
         return ()
     supplied = asset.instance.hardware.supplied_params(asset.backend_on(side))
     return tuple(
-        (env_argument(key), value.env)
+        (env_argument(key), value.env, value.kind)
         for key in sorted(selected.instance_params)
         if isinstance(value := supplied.get(key), EnvReference)
     )

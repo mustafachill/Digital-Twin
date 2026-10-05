@@ -16,6 +16,7 @@ from xml.etree import ElementTree
 
 import pytest
 import yaml
+from conftest import paired_twin
 
 from cite_tools import generate as gen
 from cite_tools.model import ids
@@ -1411,7 +1412,7 @@ class TestTwinSidesAndTheGazeboPartition:
     def _pair(model: Path, edit_yaml: Callable) -> None:
         edit_yaml(
             model / "facility/zones.yaml",
-            lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+            lambda d: d["zones"][0].__setitem__("twin", paired_twin()),
         )
 
     def test_writing_the_counterpart_backend_it_already_has_changes_nothing(
@@ -1587,18 +1588,19 @@ class TestTwinSidesAndTheGazeboPartition:
         differing = sorted(path for path in before if before[path] != after[path])
         assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
 
-    def test_a_differing_counterpart_adds_its_two_artifacts_and_moves_no_other(
+    def test_a_differing_counterpart_adds_its_three_artifacts_and_moves_no_other(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        """ADR-0048 clause 2 as a diff: the description and the controller config, nothing else.
+        """ADR-0048 clause 2 as a diff: that side's own files, and nothing else.
 
         From a paired zone whose sides load one backend, make the counterpart
-        physical, as the shipped model does. Exactly two files appear — that
-        side's description and controller configuration, under the side's
-        directory — and of the files that already existed only the plan (which
-        names them) and `MODEL_HASH` change. Every plant artifact is
-        byte-identical: making the far side physical moves nothing the plant
-        loads.
+        physical, as the shipped model does. Exactly three files appear — that
+        side's description, its controller configuration and, because it is
+        physical, the configuration of the nodes it runs beside its controller
+        manager (ADR-0070 item 6), all under the side's directory — and of the
+        files that already existed only the plan (which names them) and
+        `MODEL_HASH` change. Every plant artifact is byte-identical: making the
+        far side physical moves nothing the plant loads.
         """
         self._pair(real_model, edit_yaml)
         before = artifacts(real_model)
@@ -1606,6 +1608,7 @@ class TestTwinSidesAndTheGazeboPartition:
         after = artifacts(real_model)
 
         assert sorted(set(after) - set(before)) == [
+            gen.adapters_path("cell_b", ARM, ids.COUNTERPART_SIDE),
             gen.controllers_path("cell_b", ARM, ids.COUNTERPART_SIDE),
             gen.arm_description_path("cell_b", ARM, ids.COUNTERPART_SIDE),
         ]
@@ -1656,7 +1659,9 @@ class TestTwinSidesAndTheGazeboPartition:
             f"package://cite_generated/{gen.controllers_path('cell_b', ARM, 'counterpart')}"
         )
         # The reference, never a value (ADR-0070 item 2).
-        assert manager["counterpart_description_args"] == {"robot_ip": {"env": "CITE_XARM_IP"}}
+        assert manager["counterpart_description_args"] == {
+            "robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}
+        }
         assert "description_args" not in manager
 
     def test_a_counterpart_on_an_untwinned_zone_generates_nothing(

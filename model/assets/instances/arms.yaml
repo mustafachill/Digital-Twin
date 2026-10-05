@@ -53,7 +53,7 @@ assets:
       counterpart_backend: real
       params:
         real:
-          robot_ip: {env: CITE_XARM_IP}
+          robot_ip: {env: CITE_XARM_IP, kind: ip_address}
     configuration:
       kind: robot
       # A retracted, collision-free pose the arm returns to between cycles.

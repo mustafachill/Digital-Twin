@@ -69,8 +69,23 @@ zones:
     # declaring it refuses to start without CITE_ALLOW_HARDWARE=1 (ADR-0054),
     # and its address is an environment reference to CITE_XARM_IP, never
     # committed, which the physical side's launch is to resolve.
-    # The side launch, the track adapter, the gripper relay and the deadman
-    # that ADR-0070 items 3-6 require are NOT built yet, so nothing in this
-    # tree can bring the physical side up.
+    # `cite_bringup`'s hardware launch brings that side up with the track
+    # adapter, the gripper relay and the deadman (ADR-0070 items 3-6), and no
+    # physical arm has been driven through it.
     twin:
       sides: pair
+      # How often the twin boundary tells each side it is alive (ADR-0070 item
+      # 5). The physical side's deadman trips after several missed periods.
+      heartbeat_period_s: 0.1
+      # The physical counterpart's timing, steady-clock seconds. The deadman
+      # timeout is five heartbeat periods: above the Wi-Fi link's round trips
+      # probed on 2026-10-05 (a few 150 Hz controller periods at the 99th
+      # percentile; a probe, not a campaign), and at least three periods by
+      # rule (`deadman-timeout-below-three-heartbeats`). The state age bounds
+      # how stale a deadman state a relay acts on, and how stale a joint the
+      # boundary counts as fresh; above the tick and every poll period.
+      physical_side:
+        deadman_timeout_s: 0.5
+        deadman_tick_period_s: 0.05
+        call_deadline_s: 0.25
+        state_max_age_s: 0.25

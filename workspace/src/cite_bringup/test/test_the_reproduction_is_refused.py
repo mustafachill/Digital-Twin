@@ -189,7 +189,9 @@ def _reproduction_model(destination: Path) -> Path:
             # A reference and not a literal: this backend declares itself
             # physical, and `literal-param-on-physical-backend` refuses a
             # committed value for it (ADR-0070 item 2).
-            asset["hardware"]["params"] = {"sim": {"robot_ip": {"env": "CITE_XARM_IP"}}}
+            asset["hardware"]["params"] = {
+                "sim": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
+            }
     arms.write_text(yaml.safe_dump(instances, sort_keys=False))
     tracks = scratch / "assets/instances/tracks.yaml"
     carried = yaml.safe_load(tracks.read_text())

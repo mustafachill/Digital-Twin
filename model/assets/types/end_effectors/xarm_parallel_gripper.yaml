@@ -374,6 +374,17 @@ asset_type:
     # declaring a second, much wider part fail rather than degrade quietly.
     stall_band_narrow_m: 0.002385
     stall_band_wide_m: 0.002385
+    # The vendor driver's own units, for the physical side, where a relay
+    # forwards GripperCommand to the vendor's action instead of a controller
+    # (ADR-0070 item 4). The action takes 0.0 open to 0.85 closed; its
+    # `get_gripper_position` service reports pulses, about 850 open and 0
+    # closed (xarm_api/src/xarm_driver.cpp:507-515, `max_pos` 850).
+    vendor:
+      action_open_position: 0.0
+      action_closed_position: 0.85
+      state_open_position: 850.0
+      state_closed_position: 0.0
+      poll_period_s: 0.1
 
   controllers:
     - suffix: gripper_controller

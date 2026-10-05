@@ -21,6 +21,8 @@ from cite_tools.model.loader import FacilityModel
 from cite_tools.model.resolve import program_steps
 from cite_tools.model.schema import (
     PLUGIN_BINDING,
+    VENDOR_SERVICE_SWITCH_FOR_ALL,
+    VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS,
     EnvReference,
     FlowEdge,
     xacro_would_evaluate,
@@ -55,6 +57,9 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _plugin_less_backends_are_not_bound(model)
     findings += _configuration_matches_category(model)
     findings += _an_arm_rides_its_track_on_one_backend(model)
+    findings += _vendor_services_are_least_privilege(model)
+    findings += _a_physical_side_states_how_it_is_served(model)
+    findings += _a_physical_side_states_its_timing(model)
     findings += _programs_fit_the_arm(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
@@ -757,6 +762,231 @@ def _an_arm_rides_its_track_on_one_backend(model: FacilityModel) -> list[Finding
                 )
             )
     return findings
+
+
+def _vendor_services_are_least_privilege(model: FacilityModel) -> list[Finding]:
+    """A vendor driver switches on exactly the services the physical side calls (ADR-0070).
+
+    The driver creates a service only where its switch is true, so the list in
+    L0 is a grant. A name beyond the allow-list grants a vendor call nothing in
+    this repository makes - reachable by any client on the side's domain - and
+    `debug` grants every service the driver has. A name missing from it leaves
+    a node of the physical side calling a service that does not exist, which
+    the generator could not wire.
+    """
+    findings: list[Finding] = []
+    allowed = set(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
+    for asset_type in model.types:
+        for backend_id, backend in sorted(asset_type.hardware_backends.items()):
+            driver = backend.vendor_driver
+            if driver is None:
+                continue
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}.vendor_driver.services"
+            for name in driver.services:
+                if name == VENDOR_SERVICE_SWITCH_FOR_ALL:
+                    findings.append(
+                        error(
+                            "vendor-service-not-allowed",
+                            where,
+                            f"lists {name!r}, which is not a service: the vendor driver reads "
+                            "it as the switch that creates EVERY service it has",
+                            "Remove it. List only the services the physical side calls.",
+                        )
+                    )
+                elif name not in allowed:
+                    findings.append(
+                        error(
+                            "vendor-service-not-allowed",
+                            where,
+                            f"lists {name!r}, which no node of the physical side calls, so "
+                            "switching it on grants a vendor call nothing here makes",
+                            f"The allowed services are {sorted(allowed)}.",
+                        )
+                    )
+            missing = sorted(allowed - set(driver.services))
+            if missing:
+                findings.append(
+                    error(
+                        "vendor-service-missing",
+                        where,
+                        f"does not list {missing}, which the physical side's nodes call; "
+                        "the driver would not create them",
+                        "List every service in VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS.",
+                    )
+                )
+    return findings
+
+
+def _a_physical_side_states_how_it_is_served(model: FacilityModel) -> list[Finding]:
+    """What the physical side's adapters translate with is declared, not defaulted.
+
+    A plugin-less physical axis is served by the track adapter, which needs the
+    vendor's units and read rate (`VendorAxis`); a gripper the vendor driver
+    serves through its own action is relayed, which needs the vendor's two
+    ranges (`VendorGripperUnits`). Either missing would leave a node of the
+    physical side with no configuration to start on.
+    """
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        for backend_id, backend in sorted(asset_type.hardware_backends.items()):
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}"
+            served_by_vendor = (
+                asset_type.axis is not None
+                and backend.ros2_control_plugin is None
+                and backend.commands_physical_hardware
+            )
+            if served_by_vendor and backend.vendor_axis is None:
+                findings.append(
+                    error(
+                        "vendor-axis-unstated",
+                        where,
+                        "is a physical axis no `ros2_control` component serves, and states "
+                        "no `vendor_axis`, so its track adapter has no units or read rate",
+                        "Add `vendor_axis: {position_scale, poll_period_s, "
+                        "position_max_age_s, auto_enable}`.",
+                    )
+                )
+            if backend.vendor_axis is not None and not served_by_vendor:
+                findings.append(
+                    error(
+                        "vendor-axis-unstated",
+                        where,
+                        "states a `vendor_axis` on a backend a `ros2_control` component "
+                        "serves, or that commands no physical machine; nothing reads it",
+                        "Remove it, or declare the backend plugin-less and physical.",
+                    )
+                )
+    for asset in model.assets:
+        arm_type = model.asset_type(asset.type)
+        effector = asset.end_effector
+        if arm_type is None or effector is None or not effector.vendor_integrated:
+            continue
+        effector_type = model.asset_type(effector.type)
+        if effector_type is None or effector_type.grasp is None:
+            continue
+        for backend_id in sorted(
+            {asset.hardware.backend, asset.hardware.effective_counterpart_backend}
+        ):
+            selected = arm_type.hardware_backends.get(backend_id)
+            driver = None if selected is None else selected.vendor_driver
+            if driver is None or driver.gripper_action is None:
+                continue
+            if effector_type.grasp.vendor is None:
+                findings.append(
+                    error(
+                        "vendor-gripper-units-unstated",
+                        f"types.{effector_type.id}.grasp",
+                        f"asset {asset.id!r} loads backend {backend_id!r}, whose vendor "
+                        "driver serves this gripper through its own action, and the type "
+                        "states no `grasp.vendor` units for the relay that forwards to it",
+                        "Add `grasp.vendor: {action_open_position, action_closed_position, "
+                        "state_open_position, state_closed_position, poll_period_s}`.",
+                    )
+                )
+    return findings
+
+
+def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
+    """A zone with a physical counterpart states its deadman's timing, coherently (ADR-0070).
+
+    Each relation is a property of two declarations, so it is here rather than
+    on a field: the deadman must not trip on a single late heartbeat (three
+    periods at least), must check its timeout more often than the timeout, and a
+    state a relay or the boundary counts as current must be older than one tick
+    and one poll before it is stale, or a live publisher reads as a dead one.
+    """
+    findings: list[Finding] = []
+    for zone in model.zones:
+        twin = zone.twin
+        physical = [
+            asset
+            for asset in model.assets_in(zone.id)
+            if (asset_type := model.asset_type(asset.type)) is not None
+            and (
+                backend := asset_type.hardware_backends.get(
+                    asset.hardware.effective_counterpart_backend
+                )
+            )
+            is not None
+            and backend.commands_physical_hardware
+            and twin.sides == "pair"
+        ]
+        if not physical:
+            continue
+        where = f"zones.{zone.id}.twin"
+        timing = twin.physical_side
+        if timing is None:
+            findings.append(
+                error(
+                    "physical-side-timing-unstated",
+                    where,
+                    f"the counterpart of {sorted(a.id for a in physical)} commands physical "
+                    "hardware, and the zone states no `physical_side` timing for its deadman",
+                    "Add `physical_side: {deadman_timeout_s, deadman_tick_period_s, "
+                    "call_deadline_s, state_max_age_s}`.",
+                )
+            )
+            continue
+        heartbeat = twin.heartbeat_period_s or 0.0
+        if timing.deadman_timeout_s < 3.0 * heartbeat:
+            findings.append(
+                error(
+                    "deadman-timeout-below-three-heartbeats",
+                    f"{where}.physical_side.deadman_timeout_s",
+                    f"{timing.deadman_timeout_s:g} s is less than three heartbeat periods "
+                    f"({heartbeat:g} s each), so one or two late heartbeats trip the deadman",
+                    "Raise the timeout or shorten the heartbeat period.",
+                )
+            )
+        if timing.deadman_tick_period_s >= timing.deadman_timeout_s:
+            findings.append(
+                error(
+                    "deadman-tick-not-below-timeout",
+                    f"{where}.physical_side.deadman_tick_period_s",
+                    f"{timing.deadman_tick_period_s:g} s is not below the timeout "
+                    f"{timing.deadman_timeout_s:g} s, so the timeout is checked too rarely "
+                    "to hold",
+                )
+            )
+        if timing.state_max_age_s <= timing.deadman_tick_period_s:
+            findings.append(
+                error(
+                    "state-max-age-not-above-tick",
+                    f"{where}.physical_side.state_max_age_s",
+                    f"{timing.state_max_age_s:g} s is not above the deadman's tick "
+                    f"{timing.deadman_tick_period_s:g} s, so a live deadman's state reads as "
+                    "stale between two ticks",
+                )
+            )
+        for period, what in _poll_periods(model, physical):
+            if timing.state_max_age_s <= period:
+                findings.append(
+                    error(
+                        "state-max-age-not-above-a-poll-period",
+                        f"{where}.physical_side.state_max_age_s",
+                        f"{timing.state_max_age_s:g} s is not above {what}'s poll period "
+                        f"{period:g} s, so its joint reads as stale between two reads",
+                    )
+                )
+    return findings
+
+
+def _poll_periods(model: FacilityModel, assets: list) -> list[tuple[float, str]]:
+    """The read periods of every adapter the physical side of ``assets`` runs."""
+    periods: list[tuple[float, str]] = []
+    for asset in assets:
+        effector = asset.end_effector
+        effector_type = None if effector is None else model.asset_type(effector.type)
+        if effector_type is not None and effector_type.grasp is not None:
+            vendor = effector_type.grasp.vendor
+            if vendor is not None:
+                periods.append((vendor.poll_period_s, f"{effector_type.id}'s relay"))
+        asset_type = model.asset_type(asset.type)
+        if asset_type is not None and asset_type.axis is not None:
+            backend = asset_type.hardware_backends.get(asset.hardware.effective_counterpart_backend)
+            if backend is not None and backend.vendor_axis is not None:
+                periods.append((backend.vendor_axis.poll_period_s, f"{asset.id}'s adapter"))
+    return periods
 
 
 def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:

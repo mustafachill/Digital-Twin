@@ -15,6 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cite_tools.generate import Artifact, arm_description_path, controllers_path
+from cite_tools.generate.adapters import (
+    PhysicalSideView,
+    controller_action,
+    joint_state_topic,
+    physical_side,
+)
 from cite_tools.generate.description import (
     VendorNames,
     described_sides,
@@ -131,7 +137,7 @@ class _ManagerView:
     #: as `(argument, variable)` pairs; empty — and so not emitted — on every
     #: simulated side (ADR-0070 item 2). The plan carries the variable's NAME and
     #: never its value.
-    description_args: tuple[tuple[str, str], ...] = ()
+    description_args: tuple[tuple[str, str, str], ...] = ()
     #: The description and controller configuration the COUNTERPART loads, as
     #: package URIs, or `None` where it loads the plant's: on an untwinned zone,
     #: and on a paired one whose counterpart names the plant's backend, because
@@ -140,7 +146,7 @@ class _ManagerView:
     counterpart_description: str | None = None
     counterpart_parameters: str | None = None
     #: `description_args` for the counterpart's description.
-    counterpart_description_args: tuple[tuple[str, str], ...] = ()
+    counterpart_description_args: tuple[tuple[str, str, str], ...] = ()
     #: The controllers the COUNTERPART's own configuration defines, emitted
     #: exactly where `counterpart_parameters` is: a side loading the plant's
     #: configuration spawns the plant's list, and a side loading its own spawns
@@ -150,6 +156,9 @@ class _ManagerView:
     #: `ros2_control` - the track's and the stop services, the gripper action -
     #: or `None` where that side embeds no driver (ADR-0070 items 3-5).
     counterpart_vendor: VendorNames | None = None
+    #: What the counterpart runs beside its controller manager where it is
+    #: physical, and how the twin boundary watches it (ADR-0070 items 4-6).
+    counterpart_physical: PhysicalSideView | None = None
 
 
 def _package_uri(path: str) -> str:
@@ -410,12 +419,10 @@ def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
 
     The skill server receives this as a parameter rather than constructing it,
     which is what keeps the number of places a name is made at exactly one.
+    Formed by `generate.adapters.controller_action`, which the physical side's
+    deadman and relay read too.
     """
-    name = ids.controller(asset.id, suffix)
-    if not any(c.name == name for c in asset.controllers):
-        return None
-    action = "follow_joint_trajectory" if "trajectory" in suffix else "gripper_cmd"
-    return ids.interface(asset.zone, asset.id, f"{name}/{action}")
+    return controller_action(asset, suffix)
 
 
 def _skills(cell: ResolvedCell, asset: ResolvedAsset) -> _SkillView | None:
@@ -572,7 +579,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             # manager per model is what keeps a manager from claiming hardware
             # that belongs to another arm.
             description_topic=f"{asset.namespace}/robot_description",
-            joint_state_topic=f"{asset.namespace}/joint_states",
+            joint_state_topic=joint_state_topic(asset),
             description=_package_uri(arm_description_path(cell.zone, asset.id, ids.PLANT_SIDE)),
             spawn_xyz_m=" ".join(fmt(v) for v in asset.world_pose.xyz_m),
             spawn_rpy_rad=" ".join(fmt(v) for v in asset.world_pose.rpy_rad),
@@ -633,6 +640,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                 if ids.COUNTERPART_SIDE in described_sides(cell, asset)
                 else None
             ),
+            counterpart_physical=(
+                physical_side(cell, asset, ids.COUNTERPART_SIDE) if cell.is_paired else None
+            ),
         )
         for asset in cell.assets
         if asset.controllers
@@ -689,6 +699,8 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             sensors=sensors,
             programs=_programs(cell),
             workpiece_models=_workpiece_models(cell),
+            twin=cell.twin if cell.is_paired else None,
+            package_uri=_package_uri,
         )
     )
     return [Artifact(f"bringup/{cell.zone}_plan.yaml", text)]

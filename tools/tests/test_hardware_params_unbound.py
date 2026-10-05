@@ -64,7 +64,7 @@ BACKEND_WITH_PARAMS = "real"
 #: The parameter as a physical backend's block must write it: a reference to the
 #: environment, never a literal (`literal-param-on-physical-backend`, ADR-0070
 #: item 2). What reaches a description is the xacro argument it becomes.
-PARAMS = {"robot_ip": {"env": "CITE_XARM_IP"}}
+PARAMS = {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
 #: Unmistakable in a text search: the argument a selected block becomes, and
 #: the parameter's and the variable's names, none of which an unselected block
 #: may put in any description.

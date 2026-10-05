@@ -306,21 +306,32 @@ asset_type:
         # (xarm_description/urdf/xarm5/xarm5.ros2_control.xacro:17).
         namespace_arg: hw_ns
         # Each is created only where `services.<name>` is true, default false
-        # (xarm_api/src/xarm_driver_service.cpp:19). The track adapter's five and
-        # the watchdog's two stops (`set_state`, `set_linear_motor_stop`). The
-        # gripper needs none: its action is created unconditionally and enables
-        # the gripper itself (xarm_driver.cpp:485, 570 and 582).
+        # (xarm_api/src/xarm_driver_service.cpp:19), and exactly the services
+        # the physical side's own nodes call are listed - least privilege, held
+        # by `vendor-service-not-allowed` and `vendor-service-missing`: the
+        # deadman's `set_state` and `set_mode`, the track adapter's position
+        # read, move and stop (the stop is the deadman's too), and the gripper
+        # relay's position read. The gripper's action needs none: it is created
+        # unconditionally and enables the gripper itself (xarm_driver.cpp:485,
+        # 570 and 582).
         services:
-          - get_linear_motor_is_enabled
+          - get_gripper_position
           - get_linear_motor_pos
-          - set_linear_motor_enable
           - set_linear_motor_pos
-          - set_linear_motor_speed
           - set_linear_motor_stop
+          - set_mode
           - set_state
         # `prefix + "xarm_gripper/gripper_action"` on the driver node
         # (xarm_api/src/xarm_driver.cpp:486).
         gripper_action: xarm_gripper/gripper_action
+        # The mode the plugin streams in, by `velocity_control` above: SERVO (1)
+        # for position, VELO_JOINT (4) for velocity
+        # (uf_robot_system_hardware.cpp:252 and :487). The deadman enables the
+        # arm in this mode and no other.
+        streaming_mode:
+          argument: velocity_control
+          when_false: 1
+          when_true: 4
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

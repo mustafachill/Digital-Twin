@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from conftest import paired_twin
 
 from cite_tools.model.loader import ModelError, load
 from cite_tools.validate import Severity, referential
@@ -357,7 +358,11 @@ def test_a_block_for_a_declared_backend_nobody_selects_is_clean(
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
         lambda d: _hardware(
-            d, {"backend": "sim", "params": {"real": {"robot_ip": {"env": "CITE_XARM_IP"}}}}
+            d,
+            {
+                "backend": "sim",
+                "params": {"real": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}},
+            },
         ),
     )
     assert referential.check(load(minimal_model)) == []
@@ -459,7 +464,7 @@ def test_the_real_model_resolves_its_workpieces(real_model: Path) -> None:
 def _pair_the_zone(model: Path, edit_yaml: Callable) -> None:
     edit_yaml(
         model / "facility/zones.yaml",
-        lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+        lambda d: d["zones"][0].__setitem__("twin", paired_twin()),
     )
 
 
@@ -602,7 +607,9 @@ def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
 
 #: The counterpart's address as the shipped model writes it: a reference to the
 #: environment, never a value (ADR-0070 item 2).
-_ADDRESS_FROM_THE_ENVIRONMENT = {"real": {"robot_ip": {"env": "CITE_XARM_IP"}}}
+_ADDRESS_FROM_THE_ENVIRONMENT = {
+    "real": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
+}
 
 
 def test_a_physical_counterpart_on_a_paired_zone_is_accepted(

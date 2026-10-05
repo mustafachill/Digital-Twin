@@ -27,17 +27,16 @@ schema: cite/asset_type/v1
 # this installation, derived from the real program's pick pose (see
 # model/assets/instances/tracks.yaml).
 #
-# THE HARDWARE PATH IS DECLARED AND GENERATED, AND ITS ADAPTER IS NOT BUILT. The
-# vendor serves the real track only as `xarm_api` services of the arm's own
-# driver (`set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop`)
-# and never as a `ros2_control` joint, so the `real` backend below declares no
-# plugin (ADR-0070 item 3). What that buys today: on a side selecting it the
-# generator emits the track's joint into the arm's description with no
-# `<ros2_control>` block claiming it, and loads no track controller there.
-# What it does NOT buy yet: nothing serves the controller's `joint_trajectory`
-# topic or publishes the joint's position on that side. The track adapter that
-# does both is ADR-0070 item 3's second half, and until it exists a real track
-# does not move and reports no position (DoD item 5 stays open).
+# THE HARDWARE PATH. The vendor serves the real track only as `xarm_api`
+# services of the arm's own driver (`set_linear_motor_pos`,
+# `get_linear_motor_pos`, `set_linear_motor_stop`) and never as a `ros2_control`
+# joint, so the `real` backend below declares no plugin (ADR-0070 item 3): on a
+# side selecting it the generator emits the track's joint into the arm's
+# description with no `<ros2_control>` block claiming it, and loads no track
+# controller there. `cite_hardware`'s track adapter serves the controller's
+# `joint_trajectory` topic and publishes the joint's position on that side,
+# configured from `vendor_axis` below and from the axis's own travel and speed.
+# No physical track has been driven through it.
 asset_type:
   id: ufactory_linear_motor
   category: linear_axis
@@ -110,6 +109,17 @@ asset_type:
       # None: the track is reached through the ARM's controller connection, so
       # the address is the arm's `robot_ip` and is not stated twice.
       instance_params: []
+      # How the physical side's track adapter serves this axis (ADR-0070 item
+      # 3). The travel and the speed limit are the axis's own, above.
+      vendor_axis:
+        # The vendor takes and reports millimetres (`LinearMotorSetPos`,
+        # `get_linear_motor_pos`).
+        position_scale: 1000.0
+        poll_period_s: 0.1
+        position_max_age_s: 0.5
+        # Enabling the track motor is an operator's act, never a command's side
+        # effect.
+        auto_enable: false
 
   controllers:
     - suffix: trajectory_controller

@@ -51,8 +51,9 @@ def per_side_path(directory: str, filename: str, side: str) -> str:
     it. The filename is the same on both sides because it is built from names,
     and no name differs by a byte between the sides (ADR-0044 clause 1).
 
-    Only the description and the controller configuration are ever per-side;
-    every other artifact contains no backend term and stays one file.
+    Only the description, the controller configuration and a physical side's
+    adapter configuration are ever per-side; every other artifact contains no
+    backend term and stays one file.
     """
     if side not in ids.SIDES:
         raise ValueError(f"{side!r} is not a side of a twin pair. Expected one of {ids.SIDES}.")
@@ -69,6 +70,15 @@ def arm_description_path(zone: str, asset_id: str, side: str) -> str:
 def controllers_path(zone: str, asset_id: str, side: str) -> str:
     """The controller configuration ``side`` loads; see `per_side_path`."""
     return per_side_path("control", f"{zone}_{asset_id}_controllers.yaml", side)
+
+
+def adapters_path(zone: str, asset_id: str, side: str) -> str:
+    """The physical-side node configuration ``side`` loads; see `per_side_path`.
+
+    Only ever emitted for a side that is not the plant: a physical plant on a
+    paired zone is refused (ADR-0048), and a simulated side runs no adapter.
+    """
+    return per_side_path("control", f"{zone}_{asset_id}_adapters.yaml", side)
 
 
 def model_hash(model: FacilityModel) -> str:
@@ -105,6 +115,7 @@ def model_hash(model: FacilityModel) -> str:
 def generate(model: FacilityModel) -> list[Artifact]:
     """Every artifact, in a stable order."""
     from cite_tools.generate import (
+        adapters,
         bringup,
         control,
         description,
@@ -128,6 +139,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         artifacts += world.generate(cell)
         artifacts += gui.generate(cell)
         artifacts += control.generate(cell)
+        artifacts += adapters.generate(cell)
         artifacts += moveit.generate(cell)
         artifacts += planning_scene.generate(cell)
         artifacts += frames.generate(cell)

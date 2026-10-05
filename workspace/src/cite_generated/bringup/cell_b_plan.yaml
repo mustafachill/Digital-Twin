@@ -111,6 +111,16 @@ plan:
       gz_partition: cite/cell_b/counterpart
       domain_offset: 1
 
+  # The twin boundary's timing, from the zone's `twin:` block (ADR-0070 item 5).
+  # `heartbeat_period_s` is how often the boundary tells each side it is alive;
+  # a physical side's deadman times out on several of them. `state_max_age_s`,
+  # where a side is physical, is the oldest joint, controller or deadman state
+  # the boundary counts as current before a mode may command that side - the
+  # same number that side's relays apply to the deadman's state.
+  twin:
+    heartbeat_period_s: 0.1
+    state_max_age_s: 0.25
+
   controller_managers:
     - asset: picker
       node: /cite/cell_b/picker/controller_manager
@@ -139,12 +149,12 @@ plan:
       counterpart_description: package://cite_generated/description/counterpart/cell_b_picker.urdf.xacro
       counterpart_parameters: package://cite_generated/control/counterpart/cell_b_picker_controllers.yaml
       # What the counterpart's description reads from the ENVIRONMENT at launch:
-      # xacro argument -> variable. The plan names the variable and never holds
-      # its value (ADR-0070 item 2). `cite_bringup.plan.resolve_description_args`
-      # resolves it and refuses when it is unset - provided for the physical
-      # side's launch (ADR-0070 item 6), which is not built yet.
+      # xacro argument -> variable, and what kind of value it is. The plan names
+      # the variable and never holds its value (ADR-0070 item 2). The physical
+      # side's launch resolves it through `cite_bringup.plan.resolve_description_args`,
+      # which refuses an unset variable and checks the value by its kind.
       counterpart_description_args:
-        robot_ip: {env: CITE_XARM_IP}
+        robot_ip: {env: CITE_XARM_IP, kind: ip_address}
       description_topic: /cite/cell_b/picker/robot_description
       joint_state_topic: /cite/cell_b/picker/joint_states
       description: package://cite_generated/description/cell_b_picker.urdf.xacro
@@ -292,14 +302,29 @@ plan:
         driver_node: /cite/cell_b/picker/ufactory_driver
         service_namespace: /cite/cell_b/picker/picker_picker
         services:
-          get_linear_motor_is_enabled: /cite/cell_b/picker/picker_picker/get_linear_motor_is_enabled
+          get_gripper_position: /cite/cell_b/picker/picker_picker/get_gripper_position
           get_linear_motor_pos: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
-          set_linear_motor_enable: /cite/cell_b/picker/picker_picker/set_linear_motor_enable
           set_linear_motor_pos: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
-          set_linear_motor_speed: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
           set_linear_motor_stop: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
+          set_mode: /cite/cell_b/picker/picker_picker/set_mode
           set_state: /cite/cell_b/picker/picker_picker/set_state
         gripper_action: /cite/cell_b/picker/picker_xarm_gripper/gripper_action
+      # What the counterpart runs beside its controller manager because its
+      # hardware is physical (ADR-0070 items 3-6): the deadman, and the adapters
+      # that serve the simulated side's names through the vendor driver. Each
+      # node is started under the name stated here with the one generated
+      # `parameters` file, which carries every value it takes. The last three
+      # keys are what the twin boundary reads before a mode may command this
+      # side: the deadman's state, the arm controller's state (published only
+      # while that controller is active), and every joint the side publishes.
+      counterpart_physical:
+        parameters: package://cite_generated/control/counterpart/cell_b_picker_adapters.yaml
+        deadman: /cite/cell_b/picker/deadman
+        track_adapter: /cite/cell_b/picker/track_adapter
+        gripper_relay: /cite/cell_b/picker/gripper_relay
+        deadman_state_topic: /cite/cell_b/picker/deadman/state
+        arm_controller_state_topic: /cite/cell_b/picker/picker_joint_trajectory_controller/controller_state
+        joints: [picker_drive_joint, picker_joint1, picker_joint2, picker_joint3, picker_joint4, picker_joint5, picker_track_joint]
       moveit:
         group: picker_xarm5
         base_link: picker_link_base

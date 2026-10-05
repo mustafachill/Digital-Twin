@@ -587,6 +587,51 @@ class DescriptionSpec(Strict):
         )
 
 
+#: The vendor driver services the physical side's own nodes call (ADR-0070):
+#: the deadman's `set_state` and `set_mode`, the track adapter's three linear
+#: motor services (its stop is the deadman's too), and the gripper relay's
+#: position read. THE ALLOW-LIST, and least privilege by construction: the
+#: driver creates a service only where `services.<name>` is true, and a name a
+#: model lists here beyond these switches on a vendor call nothing in this
+#: repository makes. `vendor-service-not-allowed` refuses any other name, and
+#: `vendor-service-missing` refuses a list without one of these.
+#:
+#: Each name is the vendor's own, read from the pinned
+#: `xarm_api/src/xarm_driver_service.cpp`; which node calls which is stated once,
+#: by the generator that wires them (`generate.adapters`).
+VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS = (
+    "get_gripper_position",
+    "get_linear_motor_pos",
+    "set_linear_motor_pos",
+    "set_linear_motor_stop",
+    "set_mode",
+    "set_state",
+)
+
+#: The vendor driver's switch that creates EVERY service it has, whatever each
+#: one's own switch says (`xarm_driver_service.cpp`, `service_debug_`). Refused
+#: by name, with its own message, because it is not a service: listing it would
+#: turn the allow-list above into all of the vendor's services at once.
+VENDOR_SERVICE_SWITCH_FOR_ALL = "debug"
+
+
+class StreamingMode(Strict):
+    """The vendor mode a physical arm's plugin streams commands in (ADR-0070 item 5).
+
+    The xArm plugin streams only in SERVO (1) for position control or VELO_JOINT
+    (4) for velocity control, chosen by the description argument
+    `velocity_control` (`uf_robot_system_hardware.cpp:252`, `:487`). The deadman
+    enables the arm in that same mode, so the mode is read from the argument the
+    description is generated from and cannot disagree with it.
+    """
+
+    #: The description argument that selects the mode.
+    argument: Identifier
+    #: The vendor mode when that argument is false, and when it is true.
+    when_false: int
+    when_true: int
+
+
 class VendorDriver(Strict):
     """The vendor driver a physical backend's plugin embeds, and what it serves outside it.
 
@@ -617,6 +662,31 @@ class VendorDriver(Strict):
     #: node and before the instance prefix; ``None`` where the driver serves no
     #: gripper. Named only for an asset whose end effector is vendor-integrated.
     gripper_action: str | None = None
+    #: The vendor mode the plugin streams in; see `StreamingMode`.
+    streaming_mode: StreamingMode
+
+
+class VendorAxis(Strict):
+    """How a physical axis served by vendor services is read and commanded (ADR-0070 item 3).
+
+    Declared on a plugin-less `real` backend of a `linear_axis` type: no
+    `ros2_control` component serves its joint there, and the physical side's
+    track adapter translates between the trajectory controller's names and the
+    vendor's services with these facts. The travel and the speed limit are not
+    here: they are the axis's own (`LinearAxisSpec`), the same numbers the
+    simulated controller is limited by.
+    """
+
+    #: Vendor position units per metre. The xArm linear motor reports and takes
+    #: millimetres (`xarm_msgs/LinearMotorSetPos`, `GetInt16`).
+    position_scale: Annotated[float, Field(gt=0.0)]
+    #: How often the adapter reads the vendor position and publishes it.
+    poll_period_s: Annotated[float, Field(gt=0.0)]
+    #: The oldest position a speed is derived from, and the deadline of a read.
+    position_max_age_s: Annotated[float, Field(gt=0.0)]
+    #: Whether a position command may enable a disabled track motor. `false`:
+    #: enabling the motor is an operator's act, not a side effect of a command.
+    auto_enable: bool
 
 
 class HardwareBackend(Strict):
@@ -719,6 +789,11 @@ class HardwareBackend(Strict):
     #: is served by that driver rather than as `ros2_control` joints; see
     #: `VendorDriver`. ``None`` for every simulated backend.
     vendor_driver: VendorDriver | None = None
+
+    #: How the physical side's track adapter serves this backend's axis, where
+    #: no `ros2_control` component does; see `VendorAxis`. ``None`` on every
+    #: backend that declares a plugin.
+    vendor_axis: VendorAxis | None = None
 
 
 class ControlSpec(Strict):
@@ -988,6 +1063,33 @@ class GripperLinkage(Strict):
         return math.acos(max(-1.0, min(1.0, cosine))) - self._phase_rad
 
 
+class VendorGripperUnits(Strict):
+    """The vendor driver's units for a gripper it serves outside `ros2_control` (ADR-0070 item 4).
+
+    The xArm driver's `GripperCommand` action and its `get_gripper_position`
+    service use DIFFERENT units: the action takes 0.0 open to 0.85 closed and
+    converts it as `pulses = |850 - position * 1000|`; the service reports the
+    pulses themselves, about 850 open and 0 closed
+    (`xarm_api/src/xarm_driver.cpp:507-515`). So each has its own pair. The
+    drive joint's own range is `GraspSpec.open_position`/`closed_position`.
+    """
+
+    action_open_position: float
+    action_closed_position: float
+    state_open_position: float
+    state_closed_position: float
+    #: How often the relay reads the gripper position and publishes it.
+    poll_period_s: Annotated[float, Field(gt=0.0)]
+
+    @model_validator(mode="after")
+    def _neither_range_is_empty(self) -> VendorGripperUnits:
+        if self.action_open_position == self.action_closed_position:
+            raise ValueError("the vendor action's open and closed positions are one value")
+        if self.state_open_position == self.state_closed_position:
+            raise ValueError("the vendor state's open and closed positions are one value")
+        return self
+
+
 class GraspSpec(Strict):
     """How this end effector grasps: the stroke it has, and what a skill commands.
 
@@ -1178,6 +1280,11 @@ class GraspSpec(Strict):
     #: than `widest part + this` reports empty. Any positive value is
     #: unevidenced, and ADR-0052 §A.10's campaign is what sets it.
     stall_band_wide_m: Annotated[float, Field(gt=0.0)]
+    #: The vendor's own units for this gripper, where a physical side relays its
+    #: commands to the vendor driver rather than to a `ros2_control` joint
+    #: (ADR-0070 item 4); see `VendorGripperUnits`. ``None`` where no physical
+    #: side drives it through a vendor action.
+    vendor: VendorGripperUnits | None = None
 
     @property
     def max_width_m(self) -> float:
@@ -1524,6 +1631,13 @@ class EnvReference(Strict):
     """
 
     env: EnvName
+    #: What the value IS, which decides how bring-up checks it before handing
+    #: it to the vendor (ADR-0070 item 2). Required, and one kind today: an
+    #: address the vendor opens a socket to, which must parse as an IPv4 or IPv6
+    #: address. A reference whose kind nobody stated is refused at load, so
+    #: there is no list of argument names anywhere that says which is an
+    #: address.
+    kind: Literal["ip_address"]
 
 
 #: One value in a backend's ``params`` block: a literal, or a reference to the
@@ -1820,6 +1934,29 @@ class ZoneBounds(Strict):
     max_m: Triple
 
 
+class PhysicalSideTiming(Strict):
+    """How a physical side's deadman and relays keep time (ADR-0070 item 5).
+
+    Steady-clock seconds, every one. The relations between them and the
+    heartbeat are checked by `cite_tools.validate.referential`
+    (`deadman-timeout-*`, `deadman-tick-*`, `state-max-age-*`), because each
+    is a relation between two declarations rather than a range of one.
+    """
+
+    #: How long without a fresh heartbeat before the deadman trips. Several
+    #: heartbeat periods, and above the link's observed spikes.
+    deadman_timeout_s: Annotated[float, Field(gt=0.0)]
+    #: How often the deadman checks the timeout, republishes its state and
+    #: re-asserts every stop. Below the timeout.
+    deadman_tick_period_s: Annotated[float, Field(gt=0.0)]
+    #: When an unanswered vendor or cancel call is abandoned.
+    call_deadline_s: Annotated[float, Field(gt=0.0)]
+    #: The oldest deadman state a relay may still act on, and the oldest joint
+    #: or controller state the twin boundary counts as fresh before it lets a
+    #: mode command this side. Above the tick and above every poll period.
+    state_max_age_s: Annotated[float, Field(gt=0.0)]
+
+
 class TwinSpec(Strict):
     """Whether this zone is modelled as one cell or as a twinned pair.
 
@@ -1850,6 +1987,32 @@ class TwinSpec(Strict):
     #: must not appear because a key was omitted. The churn that costs is one
     #: line in one file, which is what moving the fact to zone scope bought.
     sides: Literal["single", "pair"]
+    #: How often the twin boundary says it is alive on each side, seconds
+    #: (ADR-0070 item 5). Required on a pair, which is what runs a boundary, and
+    #: refused on a single side, which runs none. Read by the boundary from the
+    #: plan; a physical side's deadman times out on several of these.
+    heartbeat_period_s: Annotated[float, Field(gt=0.0)] | None = None
+    #: The timing a PHYSICAL side's deadman and relays run on, stated once for
+    #: the zone (ADR-0070 item 5); see `PhysicalSideTiming`. Required where an
+    #: asset's counterpart commands physical hardware
+    #: (`physical-side-timing-unstated`).
+    physical_side: PhysicalSideTiming | None = None
+
+    @model_validator(mode="after")
+    def _a_heartbeat_only_where_a_boundary_runs(self) -> TwinSpec:
+        if self.sides == "pair" and self.heartbeat_period_s is None:
+            raise ValueError(
+                "a pair runs a twin boundary, and its heartbeat period is a fact of the "
+                "zone with no default: state `heartbeat_period_s`"
+            )
+        if self.sides == "single" and (
+            self.heartbeat_period_s is not None or self.physical_side is not None
+        ):
+            raise ValueError(
+                "a single-sided zone runs no twin boundary and no physical counterpart; "
+                "`heartbeat_period_s` and `physical_side` belong to a pair"
+            )
+        return self
 
 
 class Zone(Strict):

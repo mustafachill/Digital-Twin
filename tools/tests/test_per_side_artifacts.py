@@ -54,7 +54,9 @@ class TestTheAddressIsAReference:
     ) -> None:
         picker = load(real_model).asset(ARM)
         assert picker is not None
-        assert picker.hardware.params["real"]["robot_ip"] == EnvReference(env="CITE_XARM_IP")
+        assert picker.hardware.params["real"]["robot_ip"] == EnvReference(
+            env="CITE_XARM_IP", kind="ip_address"
+        )
 
     def test_a_reference_counts_as_supplied(self, real_model: Path) -> None:
         # Whether the variable is SET is a fact about the machine, decided at
@@ -103,7 +105,9 @@ class TestTheAddressIsAReference:
         assert 'robot_ip="$(arg robot_ip)"' in description
         plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
         (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
-        assert manager["counterpart_description_args"] == {"robot_ip": {"env": "CITE_XARM_IP"}}
+        assert manager["counterpart_description_args"] == {
+            "robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}
+        }
 
     def test_the_plan_names_exactly_the_arguments_the_description_takes(
         self, real_model: Path
@@ -357,12 +361,11 @@ class TestVendorNames:
             "services": {
                 name: f"{service_namespace}/{name}"
                 for name in (
-                    "get_linear_motor_is_enabled",
+                    "get_gripper_position",
                     "get_linear_motor_pos",
-                    "set_linear_motor_enable",
                     "set_linear_motor_pos",
-                    "set_linear_motor_speed",
                     "set_linear_motor_stop",
+                    "set_mode",
                     "set_state",
                 )
             },

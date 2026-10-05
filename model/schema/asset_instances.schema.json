@@ -196,10 +196,19 @@
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
           "title": "Env",
           "type": "string"
+        },
+        "kind": {
+          "const": "ip_address",
+          "enum": [
+            "ip_address"
+          ],
+          "title": "Kind",
+          "type": "string"
         }
       },
       "required": [
-        "env"
+        "env",
+        "kind"
       ],
       "title": "EnvReference",
       "type": "object"

@@ -111,6 +111,20 @@ plan:
       gz_partition: {{ side.gz_partition }}
       domain_offset: {{ side.domain_offset }}
 {% endfor %}
+{% if twin %}
+
+  # The twin boundary's timing, from the zone's `twin:` block (ADR-0070 item 5).
+  # `heartbeat_period_s` is how often the boundary tells each side it is alive;
+  # a physical side's deadman times out on several of them. `state_max_age_s`,
+  # where a side is physical, is the oldest joint, controller or deadman state
+  # the boundary counts as current before a mode may command that side - the
+  # same number that side's relays apply to the deadman's state.
+  twin:
+    heartbeat_period_s: {{ twin.heartbeat_period_s | f }}
+{% if twin.physical_side %}
+    state_max_age_s: {{ twin.physical_side.state_max_age_s | f }}
+{% endif %}
+{% endif %}
 
   controller_managers:
 {% for manager in managers %}
@@ -145,13 +159,13 @@ plan:
 {% endif %}
 {% if manager.counterpart_description_args %}
       # What the counterpart's description reads from the ENVIRONMENT at launch:
-      # xacro argument -> variable. The plan names the variable and never holds
-      # its value (ADR-0070 item 2). `cite_bringup.plan.resolve_description_args`
-      # resolves it and refuses when it is unset - provided for the physical
-      # side's launch (ADR-0070 item 6), which is not built yet.
+      # xacro argument -> variable, and what kind of value it is. The plan names
+      # the variable and never holds its value (ADR-0070 item 2). The physical
+      # side's launch resolves it through `cite_bringup.plan.resolve_description_args`,
+      # which refuses an unset variable and checks the value by its kind.
       counterpart_description_args:
-{% for argument, variable in manager.counterpart_description_args %}
-        {{ argument }}: {env: {{ variable }}}
+{% for argument, variable, kind in manager.counterpart_description_args %}
+        {{ argument }}: {env: {{ variable }}, kind: {{ kind }}}
 {% endfor %}
 {% endif %}
 {% endif %}
@@ -164,8 +178,8 @@ plan:
       # launch of a physical side (ADR-0070 item 6) and never stated here
       # (ADR-0070 item 2).
       description_args:
-{% for argument, variable in manager.description_args %}
-        {{ argument }}: {env: {{ variable }}}
+{% for argument, variable, kind in manager.description_args %}
+        {{ argument }}: {env: {{ variable }}, kind: {{ kind }}}
 {% endfor %}
 {% endif %}
       # Where this model is placed in the world. Stated here rather than inside
@@ -343,6 +357,28 @@ plan:
 {% if manager.counterpart_vendor.gripper_action %}
         gripper_action: {{ manager.counterpart_vendor.gripper_action }}
 {% endif %}
+{% endif %}
+{% if manager.counterpart_physical %}
+      # What the counterpart runs beside its controller manager because its
+      # hardware is physical (ADR-0070 items 3-6): the deadman, and the adapters
+      # that serve the simulated side's names through the vendor driver. Each
+      # node is started under the name stated here with the one generated
+      # `parameters` file, which carries every value it takes. The last three
+      # keys are what the twin boundary reads before a mode may command this
+      # side: the deadman's state, the arm controller's state (published only
+      # while that controller is active), and every joint the side publishes.
+      counterpart_physical:
+        parameters: {{ package_uri(manager.counterpart_physical.parameters) }}
+        deadman: {{ manager.counterpart_physical.deadman.node }}
+{% if manager.counterpart_physical.track_adapter %}
+        track_adapter: {{ manager.counterpart_physical.track_adapter.node }}
+{% endif %}
+{% if manager.counterpart_physical.gripper_relay %}
+        gripper_relay: {{ manager.counterpart_physical.gripper_relay.node }}
+{% endif %}
+        deadman_state_topic: {{ manager.counterpart_physical.deadman_state_topic }}
+        arm_controller_state_topic: {{ manager.counterpart_physical.arm_controller_state_topic }}
+        joints: [{{ manager.counterpart_physical.joints | join(', ') }}]
 {% endif %}
 {% if manager.planning_group %}
       moveit:

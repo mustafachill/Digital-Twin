@@ -26,6 +26,8 @@ from cite_tools.model.schema import (
     HardwareBackend,
     Material,
     TrajectoryConstraints,
+    TwinSpec,
+    VendorAxis,
 )
 from cite_tools.model.workpieces import WorkpieceWidths, workpiece_types, workpiece_widths
 
@@ -103,10 +105,18 @@ class ResolvedAxis:
     plugins: tuple[tuple[str, str | None], ...]
     controller: str
     command_topic: str
+    #: How the physical side's track adapter serves the track on each side,
+    #: keyed by side name like `plugins`; `None` where a `ros2_control`
+    #: component serves it (ADR-0070 item 3).
+    vendor_axes: tuple[tuple[str, VendorAxis | None], ...] = ()
 
     def plugin_on(self, side: str) -> str | None:
         """The track's plugin on ``side``; see `plugins`."""
         return dict(self.plugins)[side]
+
+    def vendor_axis_on(self, side: str) -> VendorAxis | None:
+        """How the track adapter serves the track on ``side``; see `vendor_axes`."""
+        return dict(self.vendor_axes).get(side)
 
 
 @dataclass(frozen=True)
@@ -286,6 +296,10 @@ class ResolvedCell:
     #: artifact emits the library itself — so the join happens at each emitter and
     #: the colour is stated once here.
     materials: tuple[Material, ...] = ()
+    #: The zone's twin declaration: how many sides, and the heartbeat and
+    #: physical-side timing a pair carries (ADR-0070 item 5). `None` only for a
+    #: cell built by hand in a test.
+    twin: TwinSpec | None = None
 
     @property
     def is_paired(self) -> bool:
@@ -423,6 +437,7 @@ def _axis(
         return None
     spec = track_type.axis
     plugins: list[tuple[str, str | None]] = []
+    vendor_axes: list[tuple[str, VendorAxis | None]] = []
     for side, backend_id in (
         (ids.PLANT_SIDE, track.hardware.backend),
         (ids.COUNTERPART_SIDE, track.hardware.effective_counterpart_backend),
@@ -434,6 +449,7 @@ def _axis(
                 f"{track_type.id!r} does not declare"
             )
         plugins.append((side, backend.ros2_control_plugin))
+        vendor_axes.append((side, backend.vendor_axis))
     track_world = _resolve_world_pose(model, track.id)
     rotation = np.asarray(world.to_matrix())[:3, :3].T @ np.asarray(track_world.to_matrix())[:3, :3]
     direction = rotation @ np.asarray(spec.direction, dtype=float)
@@ -454,6 +470,7 @@ def _axis(
             carriage_size_m=spec.carriage_size_m,
             goal_tolerance_m=spec.goal_tolerance_m,
             plugins=tuple(plugins),
+            vendor_axes=tuple(vendor_axes),
             controller=ids.controller(track.id, controller.suffix),
             command_topic=ids.interface(
                 instance.zone,
@@ -777,4 +794,5 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         unplaced_types=tuple(sorted(model.types, key=lambda t: t.id)),
         workpiece_models=tuple(sorted(model.facility.workpiece_models)),
         materials=model.materials,
+        twin=zone.twin,
     )

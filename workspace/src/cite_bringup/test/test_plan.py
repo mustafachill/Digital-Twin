@@ -37,6 +37,7 @@ from cite_bringup.plan import (
     DOMAIN_BASE_ENV,
     DOMAIN_ENV,
     DomainUnresolvedError,
+    EnvironmentArgument,
     EnvironmentValueInvalidError,
     EnvironmentValueMissingError,
     GazeboPartitionMissingError,
@@ -44,6 +45,7 @@ from cite_bringup.plan import (
     GZ_PARTITION_ENV,
     HARDWARE_OPT_IN_ENV,
     HardwareNotPermittedError,
+    IP_ADDRESS_KIND,
     load,
     PHYSICAL_FIELD_BY_SIDE,
     PhysicalSideNotSimulatedError,
@@ -75,7 +77,7 @@ def _generated() -> Path:
 #: call it. Named rather than spelled inside the guard below, so that the guard
 #: cannot drift from the thing it guards.
 _LIVE_READER = "_live_document"
-_SHAPE_HELPERS = ("_paired_document", "_solo_document")
+_SHAPE_HELPERS = ("_paired_document", "_solo_document", "_physical_counterpart_document")
 
 #: The path accessor underneath that reader, and the URI constant underneath
 #: that. Guarding only `_live_document` guards a WRAPPER: its whole body is
@@ -1667,6 +1669,8 @@ def _solo_document() -> dict:
     for manager in document["plan"]["controller_managers"]:
         for field in _COUNTERPART_MANAGER_KEYS:
             manager.pop(field, None)
+    # An untwinned zone runs no boundary, so its plan states no boundary timing.
+    document["plan"].pop("twin", None)
     return document
 
 
@@ -2355,7 +2359,9 @@ def test_a_relative_vendor_name_is_refused(tmp_path: Path, field: str) -> None:
 
 def test_the_generated_plan_carries_a_reference_and_never_a_value() -> None:
     picker = _the_generated_counterpart()
-    assert dict(picker.description_args_on(COUNTERPART_SIDE)) == {"robot_ip": "CITE_XARM_IP"}
+    assert dict(picker.description_args_on(COUNTERPART_SIDE)) == {
+        "robot_ip": EnvironmentArgument(variable="CITE_XARM_IP", kind=IP_ADDRESS_KIND)
+    }
     assert dict(picker.description_args_on(PLANT_SIDE)) == {}
 
 
@@ -2407,7 +2413,13 @@ def test_counterpart_files_on_an_untwinned_zone_are_refused(tmp_path: Path) -> N
 
 @pytest.mark.parametrize(
     "reference",
-    [_TEST_ADDRESS, {"env": ""}, {"env": "CITE_XARM_IP", "default": _TEST_ADDRESS}, ["x"]],
+    [
+        _TEST_ADDRESS,
+        {"env": "", "kind": IP_ADDRESS_KIND},
+        {"env": "CITE_XARM_IP", "kind": IP_ADDRESS_KIND, "default": _TEST_ADDRESS},
+        {"env": "CITE_XARM_IP"},
+        ["x"],
+    ],
 )
 def test_a_description_argument_that_is_not_a_reference_is_refused(
     tmp_path: Path, reference: object
@@ -2516,3 +2528,108 @@ def test_asking_about_a_side_the_plan_does_not_declare_gates_nothing(tmp_path: P
     require_hardware_opt_in(plan, {}, sides=(COUNTERPART_SIDE,))
     with pytest.raises(HardwareNotPermittedError):
         require_hardware_opt_in(plan, {}, sides=(PLANT_SIDE,))
+
+
+# --- The physical side's wiring, as the plan carries it (ADR-0070 item 6) ----
+
+
+def _physical_counterpart_document() -> dict:
+    """Return a paired plan whose first manager's counterpart is physical and wired.
+
+    Built from the generated plan's own counterpart keys, so every name in it
+    is one the generator emitted.
+    """
+    live = _live_document()
+    (shipped,) = live["plan"]["controller_managers"]
+    document = _paired_document()
+    manager = document["plan"]["controller_managers"][0]
+    for key in COUNTERPART_ARTIFACT_KEYS + (
+        "counterpart_backend",
+        "counterpart_commands_physical_hardware",
+    ):
+        if key in shipped:
+            manager[key] = copy.deepcopy(shipped[key])
+    document["plan"]["twin"] = copy.deepcopy(live["plan"]["twin"])
+    return document
+
+
+def test_the_generated_plan_wires_its_physical_counterpart() -> None:
+    picker = _the_generated_counterpart()
+    physical = picker.physical_on(COUNTERPART_SIDE)
+    assert physical is not None
+    assert physical.parameters.is_file()
+    assert physical.deadman_state_topic.startswith("/cite/cell_b/picker/")
+    assert physical.track_adapter is not None and physical.gripper_relay is not None
+    assert picker.track.joint in physical.joints
+    assert picker.physical_on(PLANT_SIDE) is None
+
+
+def test_the_generated_plan_states_the_boundary_timing() -> None:
+    twin = load(_generated()).twin
+    assert twin is not None
+    assert twin.heartbeat_period_s > 0.0
+    assert twin.state_max_age_s is not None and twin.state_max_age_s > 0.0
+
+
+def test_an_untwinned_plan_states_no_boundary_timing(tmp_path: Path) -> None:
+    assert load(_written(tmp_path, _solo_document())).twin is None
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, float("nan")])
+def test_a_heartbeat_that_is_not_a_period_is_refused(tmp_path: Path, value: float) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["twin"]["heartbeat_period_s"] = value
+    with pytest.raises(PlanError, match="heartbeat_period_s"):
+        load(_written(tmp_path, document))
+
+
+def test_a_physical_wiring_without_a_vendor_driver_is_refused(tmp_path: Path) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["controller_managers"][0].pop("counterpart_vendor")
+    with pytest.raises(PlanError, match="counterpart_vendor"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("field", ["deadman", "deadman_state_topic", "track_adapter"])
+def test_a_relative_physical_side_name_is_refused(tmp_path: Path, field: str) -> None:
+    document = _physical_counterpart_document()
+    physical = document["plan"]["controller_managers"][0]["counterpart_physical"]
+    physical[field] = physical[field].lstrip("/")
+    with pytest.raises(PlanError, match="absolute"):
+        load(_written(tmp_path, document))
+
+
+def test_a_physical_side_naming_no_joint_is_refused(tmp_path: Path) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["controller_managers"][0]["counterpart_physical"]["joints"] = []
+    with pytest.raises(PlanError, match="joints"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("kind", ["hostname", None])
+def test_an_environment_value_of_no_known_kind_is_refused(tmp_path: Path, kind) -> None:
+    """R-NEW-2: an unclassified value never reaches the vendor unchecked."""
+    document = _physical_counterpart_document()
+    manager = document["plan"]["controller_managers"][0]
+    reference = {"env": "CITE_XARM_IP"}
+    if kind is not None:
+        reference["kind"] = kind
+    manager["counterpart_description_args"] = {"robot_ip": reference}
+    with pytest.raises(PlanError, match="kind"):
+        load(_written(tmp_path, document))
+
+
+def test_an_address_is_checked_by_its_kind_and_not_by_its_name(tmp_path: Path) -> None:
+    """R-NEW-2: the argument's name is not what makes it an address."""
+    document = _physical_counterpart_document()
+    manager = document["plan"]["controller_managers"][0]
+    manager["counterpart_description_args"] = {
+        "controller_host": {"env": "CITE_XARM_IP", "kind": IP_ADDRESS_KIND}
+    }
+    plan = load(_written(tmp_path, document))
+    arm = plan.controller_managers[0]
+    with pytest.raises(EnvironmentValueInvalidError):
+        resolve_description_args(arm, COUNTERPART_SIDE, {"CITE_XARM_IP": "robot.local"})
+    assert resolve_description_args(
+        arm, COUNTERPART_SIDE, {"CITE_XARM_IP": _TEST_ADDRESS}
+    ) == {"controller_host": _TEST_ADDRESS}
