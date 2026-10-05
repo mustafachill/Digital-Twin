@@ -112,7 +112,7 @@ class TestVendorServicesAreLeastPrivilege:
         assert sorted(driver.services) == sorted(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
         assert rules(REAL_MODEL) == set()
 
-    @pytest.mark.parametrize("name", ["set_linear_motor_speed", "clean_error", "set_tcp_load"])
+    @pytest.mark.parametrize("name", ["set_linear_motor_enable", "clean_error", "set_tcp_load"])
     def test_a_service_nothing_calls_is_refused(
         self, real_model: Path, edit_yaml: Callable, name: str
     ) -> None:

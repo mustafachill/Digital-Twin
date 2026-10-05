@@ -135,9 +135,9 @@ class Harness:
 
 
 class FakeTrack:
-    """`set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop`.
+    """`set_linear_motor_pos`, `_speed`, `get_linear_motor_pos`, `set_linear_motor_stop`.
 
-    ``serve`` names which of the three to advertise. A fake is never withdrawn
+    ``serve`` names which of the four to advertise. A fake is never withdrawn
     mid-test: measured in this image, a service whose callback has run once
     under a `MultiThreadedExecutor` stays advertised after
     `Node.destroy_service`, so "the service went away" is tested as a service
@@ -145,20 +145,26 @@ class FakeTrack:
     """
 
     SET = "set_linear_motor_pos"
+    SPEED = "set_linear_motor_speed"
     GET = "get_linear_motor_pos"
     STOP = "set_linear_motor_stop"
 
     def __init__(
-        self, harness: Harness, namespace: str, serve: tuple[str, ...] = (SET, GET, STOP)
+        self, harness: Harness, namespace: str, serve: tuple[str, ...] = (SET, SPEED, GET, STOP)
     ) -> None:
         self.namespace = namespace
         self.position_mm = 100
         self.position_ret = 0
         self.set_ret = 0
         self.set_requests: list[LinearMotorSetPos.Request] = []
+        #: Every speed written, in vendor units per second, and the `ret` it is
+        #: answered with.
+        self.speeds: list[int] = []
+        self.speed_ret = 0
         self.stops = 0
-        #: "set" when a move's answer is sent and "stop" when a stop arrives,
-        #: in that order: what a stop overtaken by a move looks like.
+        #: "set" when a move's answer is sent, "speed" when a speed write
+        #: arrives and "stop" when a stop arrives, in that order: what a stop
+        #: overtaken by a move looks like, and a move before its speed.
         self.calls: list[str] = []
         #: How many of the next stops answer with a vendor error (ret 1).
         self.stop_failures = 0
@@ -172,6 +178,7 @@ class FakeTrack:
         self.answer_get.set()
         handlers = {
             self.SET: (LinearMotorSetPos, self._on_set),
+            self.SPEED: (SetInt16, self._on_speed),
             self.GET: (GetInt16, self._on_get),
             self.STOP: (Call, self._on_stop),
         }
@@ -189,6 +196,13 @@ class FakeTrack:
         response.ret = self.set_ret
         response.message = "fake"
         self.calls.append("set")
+        return response
+
+    def _on_speed(self, request, response):
+        self.calls.append("speed")
+        self.speeds.append(request.data)
+        response.ret = self.speed_ret
+        response.message = "fake"
         return response
 
     def _on_get(self, _request, response):

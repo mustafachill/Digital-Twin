@@ -45,6 +45,7 @@ _DEADMAN_SERVICES = {
 }
 _TRACK_SERVICES = {
     "set_position_service": "set_linear_motor_pos",
+    "speed_service": "set_linear_motor_speed",
     "get_position_service": "get_linear_motor_pos",
     "stop_service": "set_linear_motor_stop",
 }

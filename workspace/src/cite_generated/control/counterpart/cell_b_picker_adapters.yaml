@@ -41,6 +41,7 @@
     segment_s: 0.5
     auto_enable: false
     set_position_service: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
+    speed_service: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
     get_position_service: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
     stop_service: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
     deadman_state_topic: /cite/cell_b/picker/deadman/state

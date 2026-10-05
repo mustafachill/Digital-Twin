@@ -126,6 +126,7 @@
       get_gripper_position: true
       get_linear_motor_pos: true
       set_linear_motor_pos: true
+      set_linear_motor_speed: true
       set_linear_motor_stop: true
       set_mode: true
       set_state: true

@@ -30,6 +30,14 @@ presents the simulated names on the physical side and translates:
   where this carriage stands (SA2c-S-02 b); a command with one point names no
   speed and is refused. A trajectory with no points is refused, as the
   simulated controller refuses it (`joint_trajectory_controller` 4.x).
+- **Speed.** The commanded speed is written with `set_linear_motor_speed`
+  before a move at a speed the vendor has not ACKNOWLEDGED since this adapter
+  was activated, and the move is sent only once that write answered 0. The
+  vendor SDK's `set_linear_motor_pos` writes a speed only when it differs from
+  the one it cached, and ignores whether that write succeeded
+  (`xarm_sdk/cxx/src/xarm/wrapper/xarm_linear_motor.cc:208-210`), so a speed
+  passed only with the move could be silently not the speed the carriage
+  runs at (SA-S-03).
 - **Segments.** A move is sent as `set_linear_motor_pos` to a point at most
   `segment_s` of travel at the commanded speed ahead of the carriage, and the
   next segment is sent on every fresh position read while the gate is open,
@@ -110,7 +118,7 @@ from rclpy.parameter import Parameter
 from rclpy.task import Future
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
-from xarm_msgs.srv import Call, GetInt16, LinearMotorSetPos
+from xarm_msgs.srv import Call, GetInt16, LinearMotorSetPos, SetInt16
 
 NODE_NAME = "track_adapter"
 
@@ -173,6 +181,12 @@ SPECS: tuple[Spec, ...] = (
         "the vendor's set_linear_motor_pos service (xarm_msgs/LinearMotorSetPos)",
     ),
     Spec(
+        "speed_service",
+        Parameter.Type.STRING,
+        "the vendor's set_linear_motor_speed service (xarm_msgs/SetInt16, units/s), "
+        "written before a move at a speed not yet acknowledged",
+    ),
+    Spec(
         "get_position_service",
         Parameter.Type.STRING,
         "the vendor's get_linear_motor_pos service (xarm_msgs/GetInt16)",
@@ -209,6 +223,7 @@ class TrackAdapter(LifecycleNode):
         self._group = ReentrantCallbackGroup()
         self._steady = Clock(clock_type=ClockType.STEADY_TIME)
         self._set_client = None
+        self._speed_client = None
         self._get_client = None
         self._stop_client = None
         self._state_publisher = None
@@ -229,6 +244,10 @@ class TrackAdapter(LifecycleNode):
         self._get_future = None
         self._get_deadline_ns = 0
         self._pending: LinearMotorSetPos.Request | None = None
+        #: The vendor speed `set_linear_motor_speed` last answered 0 for, since
+        #: activation; `None` before the first and after a failed write, so the
+        #: next move writes its speed first (SA-S-03).
+        self._acked_speed: int | None = None
         #: A position command may have been sent since the last ACKNOWLEDGED
         #: stop: the carriage may be moving. Set before the move is sent and
         #: cleared only by a stop the vendor answered with success, sent after
@@ -275,6 +294,9 @@ class TrackAdapter(LifecycleNode):
         self._set_client = self.create_client(
             LinearMotorSetPos, config["set_position_service"], callback_group=self._group
         )
+        self._speed_client = self.create_client(
+            SetInt16, config["speed_service"], callback_group=self._group
+        )
         self._get_client = self.create_client(
             GetInt16, config["get_position_service"], callback_group=self._group
         )
@@ -317,6 +339,9 @@ class TrackAdapter(LifecycleNode):
         assert self._config is not None
         with self._lock:
             self._active = True
+            # The vendor's speed is not taken on trust across an inactive
+            # period: the first move after activation writes it.
+            self._acked_speed = None
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
@@ -382,10 +407,12 @@ class TrackAdapter(LifecycleNode):
         if self._state_publisher is not None:
             self.destroy_lifecycle_publisher(self._state_publisher)
             self._state_publisher = None
-        for client in (self._set_client, self._get_client, self._stop_client):
+        for client in (
+            self._set_client, self._speed_client, self._get_client, self._stop_client
+        ):
             if client is not None:
                 self.destroy_client(client)
-        self._set_client = self._get_client = self._stop_client = None
+        self._set_client = self._speed_client = self._get_client = self._stop_client = None
         self._position_m = None
         self._get_future = None
         self._get_in_flight = False
@@ -501,6 +528,54 @@ class TrackAdapter(LifecycleNode):
         self._send(request)
 
     def _send(self, request: LinearMotorSetPos.Request) -> None:
+        """Send one move, its speed written first unless the vendor acknowledged it (SA-S-03)."""
+        with self._lock:
+            acknowledged = self._acked_speed
+        if request.speed != acknowledged:
+            self._send_speed(request)
+        else:
+            self._send_position(request)
+
+    def _send_speed(self, request: LinearMotorSetPos.Request) -> None:
+        """Write ``request``'s speed; the move follows only once the vendor answers 0."""
+        client = self._speed_client
+        assert client is not None
+        if not client.service_is_ready():
+            self._drop_in_flight(f"{client.srv_name} is not available", request)
+            return
+        with self._lock:
+            active = self._active
+            if active:
+                future = client.call_async(SetInt16.Request(data=request.speed))
+        if not active:
+            self._drop_in_flight("the adapter is not active", request)
+            return
+        future.add_done_callback(lambda done: self._on_speed_answered(request, done))
+
+    def _on_speed_answered(self, request: LinearMotorSetPos.Request, future) -> None:
+        error = future.exception()
+        response = None if error is not None else future.result()
+        if response is None or response.ret != 0:
+            with self._lock:
+                self._acked_speed = None
+                self._target = None
+            why = error if error is not None else (
+                f"vendor code {response.ret}: {response.message}"
+            )
+            self._drop_in_flight(f"set_linear_motor_speed({request.speed}) failed ({why})", request)
+            return
+        with self._lock:
+            self._acked_speed = request.speed
+        self._send_position(request)
+
+    def _drop_in_flight(self, why: str, request: LinearMotorSetPos.Request) -> None:
+        """Release the reserved send without moving anything, and drop what was held."""
+        with self._lock:
+            self._set_in_flight = False
+            self._pending = None
+        self.get_logger().error(f"track target {request.pos} not sent: {why}")
+
+    def _send_position(self, request: LinearMotorSetPos.Request) -> None:
         """Send one move, with the last word on the gate taken under the lock.
 
         `_move_possible` is set BEFORE that last look (N-04): a closure that

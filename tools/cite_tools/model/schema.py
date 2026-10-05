@@ -588,8 +588,10 @@ class DescriptionSpec(Strict):
 
 
 #: The vendor driver services the physical side's own nodes call (ADR-0070):
-#: the deadman's `set_state` and `set_mode`, the track adapter's three linear
-#: motor services (its stop is the deadman's too), and the gripper relay's
+#: the deadman's `set_state` and `set_mode`, the track adapter's four linear
+#: motor services (its stop is the deadman's too; its speed write is explicit
+#: because the vendor's `set_linear_motor_pos` caches the last speed it set and
+#: ignores whether a write succeeded, SA-S-03), and the gripper relay's
 #: position read. THE ALLOW-LIST, and least privilege by construction: the
 #: driver creates a service only where `services.<name>` is true, and a name a
 #: model lists here beyond these switches on a vendor call nothing in this
@@ -603,6 +605,7 @@ VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS = (
     "get_gripper_position",
     "get_linear_motor_pos",
     "set_linear_motor_pos",
+    "set_linear_motor_speed",
     "set_linear_motor_stop",
     "set_mode",
     "set_state",

@@ -68,6 +68,7 @@ PARAMETERS = {
     "segment_s": 100.0,
     "auto_enable": False,
     "set_position_service": f"{VENDOR}/set_linear_motor_pos",
+    "speed_service": f"{VENDOR}/set_linear_motor_speed",
     "get_position_service": f"{VENDOR}/get_linear_motor_pos",
     "stop_service": f"{VENDOR}/set_linear_motor_stop",
     "deadman_state_topic": DEADMAN,
@@ -98,6 +99,7 @@ SEGMENTED_PARAMETERS = dict(
     command_topic="/test/segmented/joint_trajectory",
     joint_state_topic="/test/segmented/joint_states",
     set_position_service=f"{SEGMENTED_VENDOR}/set_linear_motor_pos",
+    speed_service=f"{SEGMENTED_VENDOR}/set_linear_motor_speed",
     get_position_service=f"{SEGMENTED_VENDOR}/get_linear_motor_pos",
     stop_service=f"{SEGMENTED_VENDOR}/set_linear_motor_stop",
     segment_s=0.5,
@@ -197,6 +199,7 @@ class TestTrackAdapter(unittest.TestCase):
         self.track.answer_get.set()
         self.track.answer_set.set()
         self.track.set_ret = 0
+        self.track.speed_ret = 0
         self.track.stop_failures = 0
         self.track.position_mm = 100
 
@@ -273,6 +276,30 @@ class TestTrackAdapter(unittest.TestCase):
         )
         self.assertEqual(self.track.set_requests[-1].pos, 400)
         self.assertEqual(self.track.set_requests[-1].speed, 100)
+
+    def test_the_speed_is_written_before_the_move_it_is_for(self, proc_output):
+        """SA-S-03: the vendor caches its speed and ignores the write's result."""
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        before = len(self.track.set_requests)
+        # 0.25 m in 1.25 s: 200 mm/s, a speed no other test here commands.
+        self._send_until_count(_command([0.35], 1.25), before + 1, "set_linear_motor_pos")
+        self.assertEqual(self.track.speeds[-1], 200)
+        calls = self.track.calls
+        last = {name: len(calls) - 1 - calls[::-1].index(name) for name in ("speed", "set")}
+        self.assertLess(last["speed"], last["set"], f"the move before its speed: {calls}")
+
+    def test_a_refused_speed_write_sends_no_move(self, proc_output):
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        self.track.speed_ret = 1
+        sets = len(self.track.set_requests)
+        # 0.25 m in 0.625 s: 400 mm/s, written and refused.
+        self.commands.publish(_command([0.35], 0.625))
+        self.harness.wait_for(lambda: 400 in self.track.speeds, "set_linear_motor_speed(400)")
+        self.harness.hold_for(
+            lambda: len(self.track.set_requests) > sets, "a move after a refused speed", 0.75
+        )
 
     def test_a_command_without_a_start_point_is_refused(self, proc_output):
         """SA2c-S-02 b: one point names no speed, so nothing is sent."""

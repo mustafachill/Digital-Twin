@@ -305,6 +305,7 @@ plan:
           get_gripper_position: /cite/cell_b/picker/picker_picker/get_gripper_position
           get_linear_motor_pos: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
           set_linear_motor_pos: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
+          set_linear_motor_speed: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
           set_linear_motor_stop: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
           set_mode: /cite/cell_b/picker/picker_picker/set_mode
           set_state: /cite/cell_b/picker/picker_picker/set_state

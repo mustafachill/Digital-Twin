@@ -310,14 +310,18 @@ asset_type:
         # the physical side's own nodes call are listed - least privilege, held
         # by `vendor-service-not-allowed` and `vendor-service-missing`: the
         # deadman's `set_state` and `set_mode`, the track adapter's position
-        # read, move and stop (the stop is the deadman's too), and the gripper
-        # relay's position read. The gripper's action needs none: it is created
+        # read, speed write, move and stop (the stop is the deadman's too), and
+        # the gripper relay's position read. The speed write is explicit
+        # because the SDK's `set_linear_motor_pos` caches the last speed it set
+        # and ignores the result of the write (xarm_sdk/cxx/src/xarm/wrapper/
+        # xarm_linear_motor.cc:208-210). The gripper's action needs none: it is created
         # unconditionally and enables the gripper itself (xarm_driver.cpp:485,
         # 570 and 582).
         services:
           - get_gripper_position
           - get_linear_motor_pos
           - set_linear_motor_pos
+          - set_linear_motor_speed
           - set_linear_motor_stop
           - set_mode
           - set_state

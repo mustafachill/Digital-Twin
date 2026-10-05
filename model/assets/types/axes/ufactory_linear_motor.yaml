@@ -29,8 +29,9 @@ schema: cite/asset_type/v1
 #
 # THE HARDWARE PATH. The vendor serves the real track only as `xarm_api`
 # services of the arm's own driver (`set_linear_motor_pos`,
-# `get_linear_motor_pos`, `set_linear_motor_stop`) and never as a `ros2_control`
-# joint, so the `real` backend below declares no plugin (ADR-0070 item 3): on a
+# `set_linear_motor_speed`, `get_linear_motor_pos`, `set_linear_motor_stop`)
+# and never as a `ros2_control` joint, so the `real` backend below declares no
+# plugin (ADR-0070 item 3): on a
 # side selecting it the generator emits the track's joint into the arm's
 # description with no `<ros2_control>` block claiming it, and loads no track
 # controller there. `cite_hardware`'s track adapter serves the controller's

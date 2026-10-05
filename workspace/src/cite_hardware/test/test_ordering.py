@@ -57,11 +57,17 @@ HOOK_WAIT_S = 1.0
 class FakeClient:
     """A vendor client: records each call in a shared log and answers on demand."""
 
-    def __init__(self, name: str, log: list) -> None:
+    def __init__(
+        self, name: str, log: list, answer: int | None = None, service_type=None
+    ) -> None:
         self.srv_name = name
         self.log = log
         self.futures: list[Future] = []
         self.ready = True
+        #: When set, every call is answered at once with this `ret`, in a
+        #: ``service_type`` response.
+        self.answer = answer
+        self.service_type = service_type
         #: Run once, inside `service_is_ready()`: after the caller decided to
         #: send and before `call_async`.
         self.before_send = None
@@ -76,6 +82,10 @@ class FakeClient:
         self.log.append((self.srv_name, getattr(request, "data", getattr(request, "pos", None))))
         future = Future()
         self.futures.append(future)
+        if self.answer is not None:
+            response = self.service_type.Response()
+            response.ret = self.answer
+            future.set_result(response)
         return future
 
     def remove_pending_request(self, _future) -> None:
@@ -224,10 +234,13 @@ def _command(position: float, seconds: int) -> JointTrajectory:
     return message
 
 
-def _track(gate: StubGate):
+def _track(gate: StubGate, speed_answer: int | None = 0):
     node = _build(TrackAdapter, "track_adapter")
     log: list = []
     node._set_client = FakeClient("set_linear_motor_pos", log)
+    # Answered at once unless a test answers it: the speed write precedes every
+    # move at a speed not yet acknowledged (SA-S-03).
+    node._speed_client = FakeClient("set_linear_motor_speed", log, speed_answer, SetInt16)
     node._get_client = FakeClient("get_linear_motor_pos", log)
     node._stop_client = FakeClient("set_linear_motor_stop", log)
     node._gate = gate
@@ -314,5 +327,57 @@ def test_a_second_poll_in_the_send_window_sends_no_second_read():
         node._poll()
         reads = [entry for entry in log if entry[0] == "get_linear_motor_pos"]
         assert len(reads) == 1, f"two reads in flight: {log}"
+    finally:
+        node.destroy_node()
+
+
+# ---------------------------------------------------------------------- #
+# The track adapter: SA-S-03, the speed is written and acknowledged first
+# ---------------------------------------------------------------------- #
+
+
+def _sent(log: list) -> list[str]:
+    return [service for service, _ in log if service != "get_linear_motor_pos"]
+
+
+def test_the_speed_is_written_and_acknowledged_before_the_move():
+    """SA-S-03: the vendor caches its speed and ignores the write's result."""
+    node, log = _track(StubGate(), speed_answer=None)
+    try:
+        node._on_command(_command(0.3, 2))
+        assert _sent(log) == ["set_linear_motor_speed"], "no move before the speed is acked"
+        assert log[0][1] == 100, "the commanded speed, 0.2 m / 2 s, in mm/s"
+        _answer(node._speed_client.futures[-1], 0, SetInt16)
+        assert _sent(log) == ["set_linear_motor_speed", "set_linear_motor_pos"]
+        # The same speed again: acknowledged, so not written again.
+        _answer(node._set_client.futures[-1], 0, LinearMotorSetPos)
+        node._on_command(_command(0.5, 4))
+        assert _sent(log)[-1] == "set_linear_motor_pos"
+        assert _sent(log).count("set_linear_motor_speed") == 1
+    finally:
+        node.destroy_node()
+
+
+def test_a_refused_speed_write_sends_no_move():
+    node, log = _track(StubGate(), speed_answer=1)
+    try:
+        node._on_command(_command(0.3, 2))
+        assert _sent(log) == ["set_linear_motor_speed"]
+        assert node._target is None and not node._set_in_flight
+    finally:
+        node.destroy_node()
+
+
+def test_the_first_move_after_activation_writes_its_speed_again():
+    node, log = _track(StubGate())
+    try:
+        node._on_command(_command(0.3, 2))
+        _answer(node._set_client.futures[-1], 0, LinearMotorSetPos)
+        node.on_deactivate(None)
+        node.on_activate(None)
+        node._position_at_ns = node._steady.now().nanoseconds
+        node._on_command(_command(0.3, 2))
+        assert _sent(log).count("set_linear_motor_speed") == 2
+        assert _sent(log)[-2:] == ["set_linear_motor_speed", "set_linear_motor_pos"]
     finally:
         node.destroy_node()

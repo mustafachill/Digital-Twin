@@ -364,6 +364,7 @@ class TestVendorNames:
                     "get_gripper_position",
                     "get_linear_motor_pos",
                     "set_linear_motor_pos",
+                    "set_linear_motor_speed",
                     "set_linear_motor_stop",
                     "set_mode",
                     "set_state",
