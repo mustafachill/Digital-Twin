@@ -19,7 +19,12 @@ from cite_tools.model import blockly
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.resolve import program_steps
-from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge, xacro_would_evaluate
+from cite_tools.model.schema import (
+    PLUGIN_BINDING,
+    EnvReference,
+    FlowEdge,
+    xacro_would_evaluate,
+)
 from cite_tools.validate import Finding, error
 
 #: Which configuration kind each category expects. `None` means the category
@@ -305,9 +310,15 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       of it: that id is cited as meaning a quote, and the generator treats the two
       differently. The predicate is `schema.xacro_would_evaluate`, which the
       generator's raise reads too.
-    * Nothing at all for a block naming a declared backend nobody selects. That is
-      deliberate and it is what makes flipping an arm to hardware a one-field
-      edit.
+    * `literal-param-on-physical-backend` — a literal value, in any block, for
+      a parameter a backend declaring `commands_physical_hardware: true`
+      declares. Such a parameter says how to reach a machine, and the owner
+      decided on 2026-10-05 that no such value is committed (ADR-0070 item 2):
+      it is written `{env: <VARIABLE>}` and read at launch. Any block, selected
+      or not, for the reason the quote rule gives.
+    * Nothing else for a block naming a declared backend nobody selects. That
+      is deliberate and it is what makes flipping an arm to hardware a
+      one-field edit.
     """
     paired = {z.id for z in model.zones if z.twin.sides == "pair"}
     findings: list[Finding] = []
@@ -369,6 +380,21 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         # a block asks is about its own backend and is answerable either way.
         for name in sorted(set(params) & set(backends)):
             allowed = set(backends[name].instance_params)
+            if backends[name].commands_physical_hardware:
+                for key in sorted(set(params[name]) & allowed):
+                    if isinstance(params[name][key], EnvReference):
+                        continue
+                    findings.append(
+                        error(
+                            "literal-param-on-physical-backend",
+                            f"assets.{asset.id}.hardware.params.{name}.{key}",
+                            f"backend {name!r} of type {asset_type.id!r} commands physical "
+                            f"hardware, and parameter {key!r} is written as a literal value",
+                            "A parameter of a physical backend says how to reach a machine "
+                            "and is never committed (ADR-0070 item 2). Write it "
+                            "`{env: <VARIABLE>}` and set the variable in your local .env.",
+                        )
+                    )
             for key in sorted(set(params[name]) - allowed):
                 findings.append(
                     error(

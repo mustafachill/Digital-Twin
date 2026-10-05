@@ -267,7 +267,10 @@ def reproduction_model(destination: Path) -> Path:
             # whose `instance_params` declares the key. Without it,
             # `missing-hardware-param` refuses the model and clause 6 would be
             # measuring that refusal rather than the hardware gate.
-            asset["hardware"]["params"] = {"sim": {"robot_ip": "203.0.113.7"}}
+            # A reference and not a literal: this backend declares itself
+            # physical, and `literal-param-on-physical-backend` refuses a
+            # committed value for it (ADR-0070 item 2).
+            asset["hardware"]["params"] = {"sim": {"robot_ip": {"env": "CITE_XARM_IP"}}}
     arms.write_text(yaml.safe_dump(instances, sort_keys=False))
     return scratch
 

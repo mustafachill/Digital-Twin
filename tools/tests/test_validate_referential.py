@@ -356,9 +356,32 @@ def test_a_block_for_a_declared_backend_nobody_selects_is_clean(
     unexercised block is indistinguishable from a deliberate pre-declaration."""
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
-        lambda d: _hardware(d, {"backend": "sim", "params": {"real": {"robot_ip": "203.0.113.7"}}}),
+        lambda d: _hardware(
+            d, {"backend": "sim", "params": {"real": {"robot_ip": {"env": "CITE_XARM_IP"}}}}
+        ),
     )
     assert referential.check(load(minimal_model)) == []
+
+
+@pytest.mark.parametrize("backend", ["sim", "real"])
+def test_a_literal_parameter_of_a_physical_backend_is_an_error(
+    minimal_model: Path, edit_yaml: Callable, backend: str
+) -> None:
+    """R-05 (ADR-0070 item 2): a physical backend's parameter is a reference, never a value.
+
+    Selected or not: an unselected block is committed all the same.
+    """
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(d, {"backend": backend, "params": {"real": {"robot_ip": "203.0.113.7"}}}),
+    )
+    findings = [
+        f for f in referential.check(load(minimal_model)) if f.rule == "literal-param-on-physical-backend"
+    ]
+    assert [(f.severity, f.where) for f in findings] == [
+        (Severity.ERROR, "assets.arm_1.hardware.params.real.robot_ip")
+    ]
+    assert "203.0.113.7" not in findings[0].message, "the value is not repeated"
 
 
 def test_station_references_a_missing_asset(minimal_model: Path, edit_yaml: Callable) -> None:

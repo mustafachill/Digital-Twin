@@ -128,23 +128,27 @@ class TestTheAddressIsAReference:
                 taken = set(re.findall(r"\$\(arg ([A-Za-z_][A-Za-z0-9_]*)\)", text))
                 assert taken == set(manager.get(key, {})), (side, taken)
 
-    def test_a_literal_value_is_still_emitted_as_written(
+    def test_a_literal_value_on_a_physical_backend_is_refused(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        # The reference is an option, not the only form: a literal stays legal
-        # for a model that wants one, and reaches the description unchanged.
+        """R-05: the reference is the only form a physical backend's parameter may take.
+
+        This test used to assert the opposite - that a literal stayed legal and
+        reached the description unchanged - which left one edit between the
+        model and a committed robot address (ADR-0070 item 2).
+        """
         edit_yaml(
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0]["hardware"]["params"]["real"].__setitem__(
                 "robot_ip", TEST_ADDRESS
             ),
         )
-        generated = artifacts(real_model)
-        description = generated[gen.arm_description_path(ZONE, ARM, ids.COUNTERPART_SIDE)]
-        assert f'robot_ip="{TEST_ADDRESS}"' in description
-        plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
-        (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
-        assert "counterpart_description_args" not in manager
+        assert "literal-param-on-physical-backend" in errors(real_model)
+
+    def test_the_shipped_model_writes_no_literal_on_a_physical_backend(
+        self, real_model: Path
+    ) -> None:
+        assert "literal-param-on-physical-backend" not in errors(real_model)
 
 
 class TestABackendWithNoPlugin:
