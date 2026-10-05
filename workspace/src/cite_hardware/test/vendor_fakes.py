@@ -46,7 +46,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from xarm_msgs.srv import Call, GetInt16, LinearMotorSetPos, SetInt16
+from xarm_msgs.srv import Call, GetFloat32, GetInt16, LinearMotorSetPos, SetInt16
 
 #: How long a test waits for something that should already be on its way.
 SETTLE_S = 20.0
@@ -209,10 +209,16 @@ class FakeArmState:
 class FakeGripper:
     """The vendor's `GripperCommand` server, as `xarm_driver.cpp` behaves."""
 
-    def __init__(self, harness: Harness, name: str) -> None:
+    def __init__(self, harness: Harness, name: str, state_service: str = "") -> None:
         self.goals: list[float] = []
         self.cancels = 0
+        #: What `get_gripper_position` reports, in the vendor's pulses.
+        self.pulses = 850.0
         self._release = threading.Event()
+        if state_service:
+            self._state = harness.node.create_service(
+                GetFloat32, state_service, self._on_position, callback_group=harness.group
+            )
         self._server = ActionServer(
             harness.node,
             GripperCommand,
@@ -222,6 +228,11 @@ class FakeGripper:
             cancel_callback=self._on_cancel,
             callback_group=harness.group,
         )
+
+    def _on_position(self, _request, response):
+        response.ret = 0
+        response.data = self.pulses
+        return response
 
     def release_held(self) -> None:
         """Let every held vendor goal finish, as the jaws eventually would."""

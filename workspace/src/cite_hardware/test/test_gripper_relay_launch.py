@@ -28,7 +28,7 @@ import unittest
 
 from action_msgs.msg import GoalStatus
 from cite_interfaces.msg import DeadmanState
-from cite_interfaces.qos import LATCHED
+from cite_interfaces.qos import LATCHED, STATE
 from control_msgs.action import GripperCommand
 import launch
 from launch_ros.actions import Node
@@ -37,6 +37,7 @@ import launch_testing.actions
 import launch_testing.markers
 import pytest
 from rclpy.action import ActionClient
+from sensor_msgs.msg import JointState
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vendor_fakes import FakeGripper, Harness, HOLD, SETTLE_S, STALL, SUCCEED  # noqa: E402
@@ -46,6 +47,9 @@ ACTION = "/test/gripper_controller/gripper_cmd"
 VENDOR_ACTION = "/test_vendor/xarm_gripper/gripper_action"
 DEADMAN = "/test/deadman_state"
 RESULT_TIMEOUT_S = 4.0
+DRIVE_JOINT = "test_drive_joint"
+JOINT_STATES = "/test/joint_states"
+GET_POSITION = "/test_vendor/xarm/get_gripper_position"
 
 PARAMETERS = {
     "action_name": ACTION,
@@ -56,6 +60,13 @@ PARAMETERS = {
     "vendor_closed_position": 0.0,
     "result_timeout_s": RESULT_TIMEOUT_S,
     "deadman_state_topic": DEADMAN,
+    "drive_joint": DRIVE_JOINT,
+    "joint_state_topic": JOINT_STATES,
+    "get_position_service": GET_POSITION,
+    # Pulses: open at 850, closed at 0, as the vendor's state service reports.
+    "vendor_state_open_position": 850.0,
+    "vendor_state_closed_position": 0.0,
+    "poll_period_s": 0.05,
 }
 
 
@@ -80,7 +91,9 @@ class TestGripperRelay(unittest.TestCase):
     def setUpClass(cls):
         cls.harness = Harness("gripper_relay_test")
         node = cls.harness.node
-        cls.vendor = FakeGripper(cls.harness, VENDOR_ACTION)
+        cls.vendor = FakeGripper(cls.harness, VENDOR_ACTION, state_service=GET_POSITION)
+        cls.states: list[JointState] = []
+        node.create_subscription(JointState, JOINT_STATES, cls.states.append, STATE)
         cls.deadman = node.create_publisher(DeadmanState, DEADMAN, LATCHED)
         cls.client = ActionClient(node, GripperCommand, ACTION, callback_group=cls.harness.group)
         cls.harness.bring_up(NODE)
@@ -136,6 +149,21 @@ class TestGripperRelay(unittest.TestCase):
         # The vendor reports neither flag, and neither is invented.
         self.assertFalse(outcome.result.stalled)
         self.assertFalse(outcome.result.reached_goal)
+
+    def test_the_drive_joint_is_published_in_its_own_units(self):
+        """Pulses from the state service, mapped onto the drive joint's travel.
+
+        Not gated by the deadman: reporting where the jaws are moves nothing.
+        """
+        for pulses, expected in ((850.0, 0.0), (425.0, 0.425), (0.0, 0.85)):
+            self.vendor.pulses = pulses
+            self.harness.wait_for(
+                lambda expected=expected: any(
+                    s.name == [DRIVE_JOINT] and abs(s.position[0] - expected) < 1e-6
+                    for s in self.states[-5:]
+                ),
+                f"{DRIVE_JOINT} at {expected} on {JOINT_STATES}",
+            )
 
     def test_feedback_is_mapped_back_too(self, proc_output):
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)

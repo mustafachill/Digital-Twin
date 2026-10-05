@@ -56,6 +56,12 @@ GOOD = {
         "vendor_closed_position": 0.85,
         "result_timeout_s": 5.0,
         "deadman_state_topic": "/t/deadman",
+        "drive_joint": "drive_joint",
+        "joint_state_topic": "/t/joint_states",
+        "get_position_service": "/v/get_gripper_position",
+        "vendor_state_open_position": 850.0,
+        "vendor_state_closed_position": 0.0,
+        "poll_period_s": 0.1,
     },
     "deadman": {
         "zone": "cell_b",

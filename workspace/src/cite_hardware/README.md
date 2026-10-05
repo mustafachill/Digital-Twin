@@ -24,7 +24,7 @@ and 5).
 | Executable | Presents | Translates to (vendor) |
 |---|---|---|
 | `track_adapter.py` | the track controller's `joint_trajectory` topic in; the track joint's position on the arm's joint-state topic out | `set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop` (`xarm_msgs`) |
-| `gripper_relay.py` | `control_msgs/GripperCommand` at the plan's `gripper_action` | the vendor driver's `GripperCommand` at `<prefix>xarm_gripper/gripper_action` |
+| `gripper_relay.py` | `control_msgs/GripperCommand` at the plan's `gripper_action`; the drive joint's position on the arm's joint-state topic | the vendor driver's `GripperCommand` at `<prefix>xarm_gripper/gripper_action`; `get_gripper_position` (`xarm_msgs/GetFloat32`) |
 | `deadman.py` | `cite_interfaces/DeadmanState`, latched | `set_state` (stop), `set_linear_motor_stop`, a cancel of every goal on named actions, an empty trajectory on named controller topics |
 
 `track_adapter` and `gripper_relay` forward a motion command **only while ACTIVE and only while
@@ -51,7 +51,22 @@ meaning once the node is up.
 **`gripper_relay`** — `action_name`, `vendor_action_name` (strings, different),
 `open_position`, `closed_position`, `vendor_open_position`, `vendor_closed_position`
 (doubles; neither range empty), `result_timeout_s` (double, > 0), `deadman_state_topic`
-(string).
+(string), `drive_joint`, `joint_state_topic`, `get_position_service` (strings),
+`vendor_state_open_position`, `vendor_state_closed_position` (doubles, what the vendor's
+`get_gripper_position` reports open and closed, in pulses), `poll_period_s` (double, > 0).
+
+Every vendor service and action name is a parameter, never assembled here: with the
+generated description the vendor's `hw_ns` expands to `${prefix}${hw_ns}`, so the names are
+the generator's to emit.
+
+## Where the side's joint states come from
+
+On the physical side `joint_state_broadcaster` reports joint1..5 only. The track adapter
+publishes the track joint and the gripper relay the drive joint, **on the same arm
+joint-state topic**, each message naming only the joints its publisher owns. No merger node:
+`robot_state_publisher` and MoveIt's current-state monitor both update per joint name from
+partial messages. A consumer that takes one message as the whole state does not; see the
+twin boundary's divergence operand, which is recorded per message (`cite_twin`), and is the wiring task's to settle.
 
 **`deadman`** — `zone`, `asset_id`, `state_topic`, `set_state_service`,
 `linear_motor_stop_service` (strings), `timeout_s` (double, > 0), `cancel_actions`,

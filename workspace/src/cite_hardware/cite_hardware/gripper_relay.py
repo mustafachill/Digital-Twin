@@ -47,6 +47,19 @@ flight. rclpy cannot mark a goal cancelled that no client asked to cancel, so a
 preempted goal ends ABORTED here where the simulated controller ends it
 CANCELED; the vendor goal behind it is cancelled either way.
 
+**The drive joint's state** is published too, because on the physical side
+`joint_state_broadcaster` reports joint1..5 only and `robot_state_publisher`
+and MoveIt would otherwise lack it. It is POLLED from `get_gripper_position`
+rather than read from the vendor's own `<hw_ns>/joint_states`: the vendor
+publishes gripper states there only from a real-time report thread that needs
+firmware 2.7.101 and `add_gripper`, or from inside an action, and under six
+joint names the generated description need not carry (`xarm_driver.cpp`, the
+report loop and `_pub_xarm_gripper_joint_states`). The service reports PULSES,
+a different unit from the action's, so the state has its own pair of endpoints.
+It is published on the arm's joint-state topic beside `joint_state_broadcaster`
+and the track adapter, each with the joints it owns; `robot_state_publisher`
+and MoveIt's state monitor both merge partial messages by joint name.
+
 **Every goal is bounded** by `result_timeout_s` on the steady clock. The bound
 is not decoration: the vendor's error path calls `canceled()` on a goal no one
 asked to cancel, which `rclcpp_action` refuses with an exception the vendor
@@ -66,6 +79,7 @@ from cite_hardware.gate import DeadmanGate
 from cite_hardware.mapping import LinearMap
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.process import run
+from cite_interfaces.qos import STATE
 from control_msgs.action import GripperCommand
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -73,6 +87,8 @@ from rclpy.clock import Clock, ClockType
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from rclpy.parameter import Parameter
 from rclpy.task import Future
+from sensor_msgs.msg import JointState
+from xarm_msgs.srv import GetFloat32
 
 NODE_NAME = "gripper_relay"
 
@@ -109,6 +125,33 @@ SPECS: tuple[Spec, ...] = (
         "deadman_state_topic",
         Parameter.Type.STRING,
         "the deadman's DeadmanState topic for this side",
+    ),
+    Spec("drive_joint", Parameter.Type.STRING, "the gripper's drive joint name"),
+    Spec(
+        "joint_state_topic",
+        Parameter.Type.STRING,
+        "the arm's joint-state topic, on which the drive joint's position is published",
+    ),
+    Spec(
+        "get_position_service",
+        Parameter.Type.STRING,
+        "the vendor's get_gripper_position service (xarm_msgs/GetFloat32)",
+    ),
+    Spec(
+        "vendor_state_open_position",
+        Parameter.Type.DOUBLE,
+        "what get_gripper_position reports fully open, in its own unit (pulses)",
+    ),
+    Spec(
+        "vendor_state_closed_position",
+        Parameter.Type.DOUBLE,
+        "what get_gripper_position reports fully closed, in its own unit (pulses)",
+    ),
+    Spec(
+        "poll_period_s",
+        Parameter.Type.DOUBLE,
+        "how often the gripper position is read and published, seconds",
+        positive=True,
     ),
 )
 
@@ -151,6 +194,14 @@ class GripperRelay(LifecycleNode):
         self._vendor: ActionClient | None = None
         self._gate: DeadmanGate | None = None
         self._current: _Forwarded | None = None
+        #: Drive joint <-> what `get_gripper_position` reports. A second map,
+        #: because the vendor's state service and its action do not share a
+        #: unit: the service reports pulses, the action converts them.
+        self._state_map: LinearMap | None = None
+        self._state_client = None
+        self._state_publisher = None
+        self._poll_timer = None
+        self._poll_in_flight = False
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -164,6 +215,12 @@ class GripperRelay(LifecycleNode):
                 config["closed_position"],
                 config["vendor_open_position"],
                 config["vendor_closed_position"],
+            )
+            self._state_map = LinearMap(
+                config["open_position"],
+                config["closed_position"],
+                config["vendor_state_open_position"],
+                config["vendor_state_closed_position"],
             )
         except (ParameterError, ValueError) as error:
             self.get_logger().error(f"cannot configure: {error}")
@@ -190,20 +247,35 @@ class GripperRelay(LifecycleNode):
         self._gate = DeadmanGate(
             self, config["deadman_state_topic"], self._group, self._on_gate_closed
         )
+        self._state_client = self.create_client(
+            GetFloat32, config["get_position_service"], callback_group=self._group
+        )
+        # STATE is `joint_state_broadcaster`'s own profile on this topic.
+        self._state_publisher = self.create_lifecycle_publisher(
+            JointState, config["joint_state_topic"], STATE
+        )
         self.get_logger().info(
-            f"configured: {config['action_name']} -> {config['vendor_action_name']}"
+            f"configured: {config['action_name']} -> {config['vendor_action_name']}, "
+            f"{config['drive_joint']} published on {config['joint_state_topic']}"
         )
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
+        assert self._config is not None
         with self._lock:
             self._active = True
+        self._poll_timer = self.create_timer(
+            self._config["poll_period_s"], self._poll, callback_group=self._group
+        )
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
         with self._lock:
             self._active = False
             current = self._current
+        if self._poll_timer is not None:
+            self.destroy_timer(self._poll_timer)
+            self._poll_timer = None
         if current is not None:
             self._end(current, _INACTIVE, "the relay was deactivated")
         return super().on_deactivate(state)
@@ -222,6 +294,16 @@ class GripperRelay(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def _release(self) -> None:
+        if self._poll_timer is not None:
+            self.destroy_timer(self._poll_timer)
+            self._poll_timer = None
+        if self._state_client is not None:
+            self.destroy_client(self._state_client)
+            self._state_client = None
+        if self._state_publisher is not None:
+            self.destroy_lifecycle_publisher(self._state_publisher)
+            self._state_publisher = None
+        self._state_map = None
         if self._gate is not None:
             self._gate.destroy()
             self._gate = None
@@ -233,6 +315,49 @@ class GripperRelay(LifecycleNode):
             self._vendor = None
         self._config = None
         self._map = None
+
+    # ------------------------------------------------------------------ #
+    # The drive joint's state
+    # ------------------------------------------------------------------ #
+
+    def _poll(self) -> None:
+        with self._lock:
+            if not self._active or self._poll_in_flight:
+                return
+            self._poll_in_flight = True
+        client = self._state_client
+        if client is None or not client.service_is_ready():
+            with self._lock:
+                self._poll_in_flight = False
+            self.get_logger().warning(
+                "gripper position unread: the vendor's get_gripper_position is not available",
+                throttle_duration_sec=5.0,
+            )
+            return
+        client.call_async(GetFloat32.Request()).add_done_callback(self._on_position)
+
+    def _on_position(self, future) -> None:
+        with self._lock:
+            self._poll_in_flight = False
+        config, state_map, publisher = self._config, self._state_map, self._state_publisher
+        error = future.exception()
+        response = None if error is not None else future.result()
+        if response is None or response.ret != 0 or config is None or state_map is None:
+            detail = error if error is not None else (
+                f"vendor code {response.ret}" if response is not None else "unconfigured"
+            )
+            self.get_logger().error(
+                f"get_gripper_position failed ({detail}); no drive-joint position is "
+                "published rather than a stale one",
+                throttle_duration_sec=5.0,
+            )
+            return
+        message = JointState()
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.name = [config["drive_joint"]]
+        message.position = [state_map.inverse(float(response.data))]
+        if publisher is not None:
+            publisher.publish(message)
 
     # ------------------------------------------------------------------ #
     # The action server
