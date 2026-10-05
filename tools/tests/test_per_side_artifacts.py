@@ -438,3 +438,28 @@ class TestVendorServicesAreSwitchedOn:
         assert driver is not None
         for name in driver.services:
             assert re.search(rf'_create_service<[^>]+>\("{name}",', service_source), name
+
+
+class TestASideWithNoSimulatorCarriesNoGazeboText:
+    """M-07: the physical side's files say nothing that is about Gazebo.
+
+    Before the fix both counterpart files said they were loaded by the
+    `gz_ros2_control` plugin, and the description carried that plugin's block,
+    pointed at the physical side's own configuration.
+    """
+
+    def test_the_counterpart_names_no_gazebo_plugin(self, real_model: Path) -> None:
+        generated = artifacts(real_model)
+        for path in (
+            gen.arm_description_path(ZONE, ARM, ids.COUNTERPART_SIDE),
+            gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE),
+        ):
+            assert "gz_ros2_control" not in generated[path], path
+        controllers = generated[gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE)]
+        assert "Gazebo" not in controllers and "urdf.xacro" not in controllers
+
+    def test_the_plant_keeps_its_gazebo_plugin(self, real_model: Path) -> None:
+        generated = artifacts(real_model)
+        description = generated[gen.arm_description_path(ZONE, ARM, ids.PLANT_SIDE)]
+        assert description.count("gz_ros2_control::GazeboSimROS2ControlPlugin") == 1
+        assert "gz_ros2_control plugin" in generated[gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE)]

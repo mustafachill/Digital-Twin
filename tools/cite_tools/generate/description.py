@@ -80,6 +80,10 @@ class _ArmView:
     #: The linear track this arm rides, emitted between the mount and the arm's
     #: base (ADR-0067); `None` for an arm bolted in place.
     axis: _AxisView | None = None
+    #: Whether this side runs in Gazebo, which is what the `gz_ros2_control`
+    #: plugin block and the Gazebo-model comment are about. Keyed exactly as
+    #: `use_sim_time` is in the controller configuration (ADR-0070).
+    in_gazebo: bool = True
 
 
 @dataclass(frozen=True)
@@ -557,6 +561,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> _ArmView:
         args=tuple(sorted(args)),
         controllers_path=controllers_path(cell.zone, asset.id, side),
         axis=_axis_view(asset.axis, side),
+        in_gazebo=asset.backend_on(side) == ids.SIMULATION_BACKEND,
     )
 
 

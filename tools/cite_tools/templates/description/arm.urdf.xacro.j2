@@ -2,6 +2,7 @@
 {{ xml_banner() }}
 <robot xmlns:xacro="http://ros.org/wiki/xacro" name="{{ arm.id }}">
 
+{% if arm.in_gazebo %}
   <!-- One description per arm, spawned as its own Gazebo model.
        gz_ros2_control attaches to a MODEL, and the controller manager it creates
        claims every ros2_control component in that model's description. With a
@@ -9,6 +10,12 @@
        wrote to all of them each cycle. Splitting the arms into separate models
        gives each manager exactly its own hardware — and keeps the namespace
        /cite/<zone>/<asset_id> that the naming scheme requires. -->
+{% else %}
+  <!-- One description per arm, loaded by the controller manager of a side that
+       runs no simulator: the hardware component it names is the machine
+       (ADR-0070). Its names, and the namespace /cite/<zone>/<asset_id> it is
+       loaded in, are the simulated side's. -->
+{% endif %}
 
   <!-- The root. Placed in the world at spawn time, and tied to cite_world by the
        generated static transform table, so this description states no world
@@ -113,6 +120,7 @@
       <child>{{ arm.mount_link }}</child>
     </joint>
   </gazebo>
+{% if arm.in_gazebo %}
 
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
@@ -122,4 +130,5 @@
       </ros>
     </plugin>
   </gazebo>
+{% endif %}
 </robot>

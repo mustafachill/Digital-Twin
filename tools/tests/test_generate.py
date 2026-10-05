@@ -287,6 +287,46 @@ def _without_controllers(document: dict, names: set[str]) -> dict:
     return {key: block for key, block in trimmed.items() if key.rsplit("/", 1)[-1] not in names}
 
 
+#: How each kind of side's description opens: as a Gazebo model, or as the
+#: description a controller manager with no simulator loads (ADR-0070, M-07).
+_GAZEBO_HEADER = "<!-- One description per arm, spawned as its own Gazebo model."
+_NO_SIMULATOR_HEADER = (
+    "<!-- One description per arm, loaded by the controller manager of a side that"
+)
+
+
+def _run(lines: list[str], opening: str, closing: str) -> tuple[int, int]:
+    """The [start, end] of the one run of ``lines`` from ``opening`` to ``closing``."""
+    (start,) = [i for i, line in enumerate(lines) if opening in line]
+    end = next(i for i in range(start, len(lines)) if closing in lines[i])
+    return start, end
+
+
+def _without_simulator_text(lines: list[str], in_gazebo: bool) -> list[str]:
+    """``lines`` less what differs only because one side runs in Gazebo and one does not.
+
+    Two runs, each found by what it says and required to be there, so this
+    cannot hide one that went missing: the opening comment, which says what
+    loads the description, and - on a Gazebo side only - the
+    `gz_ros2_control` plugin block with the blank line before it. A side that
+    runs no simulator carries no plugin block at all (ADR-0070, M-07).
+    """
+    lines = list(lines)
+    header = _GAZEBO_HEADER if in_gazebo else _NO_SIMULATOR_HEADER
+    start, end = _run(lines, header, "-->")
+    del lines[start : end + 1]
+    plugins = [i for i, line in enumerate(lines) if "gz_ros2_control-system" in line]
+    if not in_gazebo:
+        assert not plugins, "a side that runs no simulator names the gz_ros2_control plugin"
+        return lines
+    (plugin,) = plugins
+    start = plugin - 1
+    assert lines[start].strip() == "<gazebo>" and not lines[start - 1].strip()
+    end = next(i for i in range(plugin, len(lines)) if "</gazebo>" in lines[i])
+    del lines[start - 1 : end + 1]
+    return lines
+
+
 #: The vendor driver's node, as the physical backend's plugin constructs it
 #: (`uf_robot_system_hardware.cpp:53`), in the asset's namespace.
 _DRIVER_NODE = "/cite/cell_b/picker/ufactory_driver"
@@ -382,8 +422,15 @@ class TestSimRealParity:
         # the arguments named here. The length equality is therefore asserted
         # explicitly as well, so that removing the keyword cannot quietly retire
         # it either.
-        sim_lines = sim["description/cell_b_picker.urdf.xacro"].splitlines()
-        real_lines = real["description/cell_b_picker.urdf.xacro"].splitlines()
+        # The Gazebo-only text, removed by name before anything is compared:
+        # a side that runs no simulator says so and loads no Gazebo plugin
+        # (ADR-0070, M-07). Neither run carries a controller, joint or frame.
+        sim_lines = _without_simulator_text(
+            sim["description/cell_b_picker.urdf.xacro"].splitlines(), in_gazebo=True
+        )
+        real_lines = _without_simulator_text(
+            real["description/cell_b_picker.urdf.xacro"].splitlines(), in_gazebo=False
+        )
 
         accounted = ("robot_ip",)
         surplus = [line for line in real_lines if _argument_name(line) in accounted]
@@ -442,9 +489,10 @@ class TestSideParity:
            data per backend because the vendor's own mesh root branches on the
            plugin (`CollisionSpec.root_uri_scheme`, ADR-0028). Same package, same
            root, same meshes.
-        4. **The `<parameters>` line of the Gazebo block** names the side's own
-           controller configuration. Inert on a side that starts no Gazebo, and
-           correct on one that does.
+        4. **The Gazebo-only text**: the physical side runs no simulator, so its
+           description opens with a comment saying what loads it and carries no
+           `gz_ros2_control` plugin block (ADR-0070, M-07). Removed by name by
+           `_without_simulator_text`, which requires both runs to be there.
         5. **The track's `<ros2_control>` block, absent**: the physical track's
            backend declares no plugin, because the vendor serves it only through
            `xarm_api` services (ADR-0070 item 3). The track's JOINT stays — the
@@ -462,8 +510,11 @@ class TestSideParity:
         generated = artifacts(real_model)
         plant_path = gen.arm_description_path(ZONE, ARM, ids.PLANT_SIDE)
         counterpart_path = gen.arm_description_path(ZONE, ARM, ids.COUNTERPART_SIDE)
-        plant = generated[plant_path].splitlines()
-        counterpart = generated[counterpart_path].splitlines()
+        # (4) the Gazebo-only text, by name.
+        plant = _without_simulator_text(generated[plant_path].splitlines(), in_gazebo=True)
+        counterpart = _without_simulator_text(
+            generated[counterpart_path].splitlines(), in_gazebo=False
+        )
 
         # (2) the argument the plant does not have, read from the environment.
         accounted = [line for line in counterpart if _argument_name(line) == "robot_ip"]
@@ -503,14 +554,13 @@ class TestSideParity:
             kind = next(
                 (
                     k
-                    for k in ("ros2_control_plugin", "collision_mesh_path", "<parameters>")
+                    for k in ("ros2_control_plugin", "collision_mesh_path")
                     if k in pair[0] and k in pair[1]
                 ),
                 "unaccounted",
             )
             by_kind.setdefault(kind, []).append(pair)
         assert sorted(by_kind) == [
-            "<parameters>",
             "collision_mesh_path",
             "ros2_control_plugin",
         ], differing
@@ -529,11 +579,6 @@ class TestSideParity:
         ((sim_line, real_line),) = by_kind["collision_mesh_path"]
         assert sim_line.replace("file://$(find cite_description)", "") == real_line.replace(
             "package://cite_description", ""
-        )
-        # (4) the side's own configuration and nothing else.
-        ((sim_line, real_line),) = by_kind["<parameters>"]
-        assert sim_line.replace(gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE), "") == (
-            real_line.replace(gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE), "")
         )
 
     def test_the_counterpart_loads_the_plants_controllers_less_the_unserved_ones(
@@ -1574,9 +1619,9 @@ class TestTwinSidesAndTheGazeboPartition:
         """The P2 answer ADR-0048 clause 2 fixes: a file a launch loads is not a name.
 
         The counterpart's two artifacts sit under `<kind>/counterpart/` with the
-        plant's filename, and neither contains the word `counterpart` except in
-        the one place a file names another file: the description's pointer to
-        its own controller configuration.
+        plant's filename, and neither contains the word `counterpart`. The one
+        place a file names another - the Gazebo plugin's pointer to its
+        controller configuration - is absent on a side that runs no simulator.
         """
         self._pair(real_model, edit_yaml)
         self._make_the_counterpart_physical(real_model, edit_yaml)
@@ -1586,8 +1631,9 @@ class TestTwinSidesAndTheGazeboPartition:
         assert description == f"description/counterpart/cell_b_{ARM}.urdf.xacro"
         assert controllers == f"control/counterpart/cell_b_{ARM}_controllers.yaml"
         assert "counterpart" not in after[controllers]
-        mentions = [line for line in after[description].splitlines() if "counterpart" in line]
-        assert mentions == [f"      <parameters>$(find cite_generated)/{controllers}</parameters>"]
+        # Not even a pointer to its own configuration: a side that runs no
+        # simulator has no Gazebo plugin block to name one (ADR-0070, M-07).
+        assert "counterpart" not in after[description]
 
     def test_the_plan_names_each_sides_files_only_where_they_differ(
         self, real_model: Path, edit_yaml: Callable

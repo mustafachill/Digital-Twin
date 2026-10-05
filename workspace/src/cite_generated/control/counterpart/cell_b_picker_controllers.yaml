@@ -5,8 +5,9 @@
 # A hand edit here is a Critical review finding (ADR-0004) and is detected by
 # ./scripts/validate-model, which diffs this tree against a fresh generator run.
 #
-# Controller configuration for picker, loaded by the gz_ros2_control plugin
-# in cell_b.urdf.xacro. Every name below is derived from the L0 model, which
+# Controller configuration for picker, loaded by the controller manager of
+# a side that runs no simulator (ADR-0070). Every name below is derived from the
+# L0 model, which
 # is what makes ADR-0005's guarantee structural: these are the same controller
 # and joint names the physical arm will use, because there is nowhere else for
 # them to come from.

@@ -247,6 +247,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                 use_sim_time=(
                     "true" if asset.backend_on(side) == ids.SIMULATION_BACKEND else "false"
                 ),
+                in_gazebo=asset.backend_on(side) == ids.SIMULATION_BACKEND,
                 controllers=[_view(c, asset) for c in asset.controllers_on(side)],
                 vendor=vendor_names(asset, cell, side),
             )

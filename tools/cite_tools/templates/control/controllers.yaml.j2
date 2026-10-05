@@ -1,8 +1,14 @@
 ---
 {{ hash_banner() }}
 #
+{% if in_gazebo %}
 # Controller configuration for {{ arm.id }}, loaded by the gz_ros2_control plugin
 # in {{ zone }}.urdf.xacro. Every name below is derived from the L0 model, which
+{% else %}
+# Controller configuration for {{ arm.id }}, loaded by the controller manager of
+# a side that runs no simulator (ADR-0070). Every name below is derived from the
+# L0 model, which
+{% endif %}
 # is what makes ADR-0005's guarantee structural: these are the same controller
 # and joint names the physical arm will use, because there is nowhere else for
 # them to come from.
