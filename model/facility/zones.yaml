@@ -67,7 +67,8 @@ zones:
     # (`physical-plant-on-paired-zone`), so the side every scenario addresses
     # stays simulated. The physical counterpart is gated at bring-up: a plan
     # declaring it refuses to start without CITE_ALLOW_HARDWARE=1 (ADR-0054),
-    # and its address is read from CITE_XARM_IP at launch and never committed.
+    # and its address is an environment reference to CITE_XARM_IP, never
+    # committed, which the physical side's launch is to resolve.
     # The side launch, the track adapter, the gripper relay and the deadman
     # that ADR-0070 items 3-6 require are NOT built yet, so nothing in this
     # tree can bring the physical side up.

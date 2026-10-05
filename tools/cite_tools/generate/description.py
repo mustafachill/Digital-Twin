@@ -263,9 +263,11 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell, side:
     # A value read FROM THE ENVIRONMENT (`EnvReference`) is emitted as the xacro
     # argument `$(arg <key>)` and never resolved here: the value is not the
     # model's, and the generated tree is committed. The plan names the variable,
-    # `cite_bringup.plan.resolve_description_args` reads it at launch and hands it
-    # to xacro, and a description expanded without it fails in xacro rather than
-    # reaching the vendor component with an empty address (ADR-0070 item 2).
+    # `cite_bringup.plan.resolve_description_args` reads it - provided for the
+    # physical side's launch ADR-0070 item 6 owes, which hands the value to xacro;
+    # no launch calls it yet - and a description expanded without it fails in
+    # xacro rather than reaching the vendor component with an empty address
+    # (ADR-0070 item 2).
     #
     # KEYED ON WHAT THE BACKEND DECLARES, AND ONLY VALUED FROM THE BLOCK. The
     # names come from `instance_params`, the field `_dropped_on_this_backend`

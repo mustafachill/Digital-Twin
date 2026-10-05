@@ -268,9 +268,11 @@ class RosDomainMismatchError(PlanError):
 class EnvironmentValueMissingError(PlanError):
     """A description argument the plan reads from the environment is unset.
 
-    A `PlanError`, so the launch reports it as a refusal and starts nothing. The
-    plan carries the variable's NAME and never its value (ADR-0070 item 2), so
-    this is the only point at which an absent robot address can be caught before
+    A `PlanError`, so a launch reports it as a refusal and starts nothing. Raised
+    by `resolve_description_args`, which is provided for the physical side's
+    launch ADR-0070 item 6 owes; no launch in this tree calls it yet. The plan
+    carries the variable's NAME and never its value (ADR-0070 item 2), so
+    that is the only point at which an absent robot address can be caught before
     a hardware component opens a socket to nothing: the vendor component answers
     an empty address with `exit(1)` inside a loaded plugin (ADR-0053).
     """
@@ -1686,8 +1688,13 @@ def resolve_description_args(
     generated description and the generated plan all carry the variable's name;
     the value — today, the physical xArm's address — exists only in the process
     environment, filled from the gitignored `.env`. This returns
-    `{xacro argument: value}` for the launch to hand xacro, and nothing else
+    `{xacro argument: value}` for a launch to hand xacro, and nothing else
     reads those variables.
+
+    **Provided for the physical side's launch, which is not built** (ADR-0070
+    item 6). No launch in this tree calls it today: `simulation.launch.py`
+    starts only simulated sides, which read nothing from the environment, and
+    refuses a physical one (`refuse_a_physical_side`).
 
     An unset variable, and one that is empty after stripping, are both refused:
     `HardwareSelection.supplied_params` treats an empty address as no address for

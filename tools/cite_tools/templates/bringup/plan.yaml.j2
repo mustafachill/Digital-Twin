@@ -146,8 +146,9 @@ plan:
 {% if manager.counterpart_description_args %}
       # What the counterpart's description reads from the ENVIRONMENT at launch:
       # xacro argument -> variable. The plan names the variable and never holds
-      # its value; bring-up resolves it, and refuses to start when it is unset
-      # (ADR-0070 item 2).
+      # its value (ADR-0070 item 2). `cite_bringup.plan.resolve_description_args`
+      # resolves it and refuses when it is unset - provided for the physical
+      # side's launch (ADR-0070 item 6), which is not built yet.
       counterpart_description_args:
 {% for argument, variable in manager.counterpart_description_args %}
         {{ argument }}: {env: {{ variable }}}
@@ -159,7 +160,8 @@ plan:
       description: {{ manager.description }}
 {% if manager.description_args %}
       # What this description reads from the ENVIRONMENT at launch: xacro
-      # argument -> variable, resolved by bring-up and never stated here
+      # argument -> variable, resolved by `resolve_description_args` for the
+      # launch of a physical side (ADR-0070 item 6) and never stated here
       # (ADR-0070 item 2).
       description_args:
 {% for argument, variable in manager.description_args %}

@@ -1515,7 +1515,9 @@ class EnvReference(Strict):
     (ADR-0070 item 2). It lives in the gitignored ``.env``.
 
     Exactly one place reads the variable: `cite_bringup.plan.resolve_description_args`,
-    at launch, and an unset or empty variable is a refusal there. The generator
+    where an unset or empty variable is a refusal. It is provided for the
+    physical side's launch that ADR-0070 item 6 owes; no launch in this tree
+    calls it yet, because `simulation.launch.py` refuses a physical side. The generator
     emits a xacro ``$(arg <parameter>)`` where the value would have gone, so a
     description expanded without the resolved value fails in xacro rather than
     handing the vendor component an empty address.
@@ -1600,9 +1602,10 @@ class HardwareSelection(Strict):
 
         A non-string value is supplied whatever it is: `False` and `0` are values
         somebody wrote, and the emptiness question has no meaning for them. An
-        `EnvReference` is supplied too: what it names is checked where it is read,
-        at launch, because whether a variable is set is a fact about the machine
-        and not about the model. The
+        `EnvReference` is supplied too: what it names is checked where it is read
+        (`cite_bringup.plan.resolve_description_args`, provided for the physical
+        side's launch, ADR-0070 item 6), because whether a variable is set is a
+        fact about the machine and not about the model. The
         value itself is returned unchanged — this decides presence, and stripping
         what is emitted would be a second, silent edit of a model value.
         """
