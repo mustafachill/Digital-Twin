@@ -2282,6 +2282,29 @@ def test_a_simulated_counterpart_is_not_refused(tmp_path: Path) -> None:
     refuse_a_physical_side(plan, COUNTERPART_SIDE)
 
 
+@pytest.mark.parametrize(
+    "sides",
+    (
+        COUNTERPART_SIDE,  # a str iterates as its letters, none of which is a side
+        (),
+        [],
+        ("countrepart",),
+        (PLANT_SIDE, "Counterpart"),
+    ),
+)
+def test_a_narrowing_that_names_no_real_side_is_refused_not_skipped(sides: object) -> None:
+    """S-01: the gate failed open on each of these, returning with a physical side unasked.
+
+    Before the fix `require_hardware_opt_in(plan, {}, sides=...)` returned None
+    for the first four cases on the shipped plan, whose counterpart is physical.
+    """
+    plan = load(_generated())
+    with pytest.raises(SideNotDeclaredError):
+        require_hardware_opt_in(plan, {}, sides=sides)
+    with pytest.raises(SideNotDeclaredError):
+        require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"}, sides=sides)
+
+
 def test_the_generated_counterpart_names_its_vendor_driver() -> None:
     """ADR-0070: the real side's adapters read every vendor name from the plan."""
     picker = _the_generated_counterpart()

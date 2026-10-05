@@ -1505,7 +1505,10 @@ def require_hardware_opt_in(
     refuses to start a physical side at all (`refuse_a_physical_side`, with no
     opt-in that answers it), and the hardware side launch ADR-0070 item 6 owes
     must ask this gate. A side named here that the plan does not declare is
-    skipped, exactly as an undeclared side is below.
+    skipped, exactly as an undeclared side is below; but a `str`, an empty
+    collection and a name that is no side at all are refused with
+    `SideNotDeclaredError` before anything is asked, because each would skip
+    every side.
 
     `cross-cutting-safety.md` requires that no command reaches a hardware
     interface without passing the safety layer. Until Phase 2 builds that layer,
@@ -1586,7 +1589,7 @@ def require_hardware_opt_in(
     # behind it to command. That is the accessor's judgement and not a second
     # one - an asset that stopped stating a side would stop being gated here only
     # because the accessor says the side is gone.
-    asked = None if sides is None else frozenset(sides)
+    asked = None if sides is None else _asked_sides(sides)
     hardware = []
     for manager in plan.controller_managers:
         for side, field in PHYSICAL_FIELD_BY_SIDE.items():
@@ -1614,6 +1617,35 @@ def require_hardware_opt_in(
         f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} deliberately — see "
         "docs/operations/safety-procedures.md."
     )
+
+
+def _asked_sides(sides: Iterable[str]) -> frozenset[str]:
+    """Validate a `sides` narrowing before it narrows anything; refuse rather than skip.
+
+    The gate skips every side not named, so a narrowing that names nothing it
+    can match turns it off: a bare string iterates as its letters, an empty
+    iterable names no side, and a misspelled side matches none. Each of those is
+    refused here, before the loop, because each would return without refusing
+    a physical side.
+    """
+    if isinstance(sides, str):
+        raise SideNotDeclaredError(
+            f"sides={sides!r} is a string, which would be read as its letters; pass a "
+            f"collection of side names such as ({sides!r},)."
+        )
+    asked = frozenset(sides)
+    if not asked:
+        raise SideNotDeclaredError(
+            "sides names no side, which would ask the hardware gate nothing; pass the "
+            "sides being started, or None for every side."
+        )
+    unknown = sorted(asked - set(PHYSICAL_FIELD_BY_SIDE))
+    if unknown:
+        raise SideNotDeclaredError(
+            f"sides names {', '.join(repr(name) for name in unknown)}, which is not a side; "
+            f"the sides are {', '.join(repr(name) for name in PHYSICAL_FIELD_BY_SIDE)}."
+        )
+    return asked
 
 
 def refuse_a_physical_side(plan: Plan, side: str) -> None:
