@@ -269,14 +269,22 @@ class TestDeadman(unittest.TestCase):
         self._state_is(DeadmanState.STATE_AWAITING, "AWAITING after a reset")
         self.assertEqual(len(self.arm.modes), modes, "enabled before a heartbeat")
         self._undone_within_a_tick("a START by another client undone after the reset")
-        # N-06: the vendor refuses the first set_mode; the enable is retried
+        # N-06: the vendor refuses the first set_modes; the enable is retried
         # on a later tick while HEALTHY, and only then is arm_enabled said.
-        self.arm.mode_failures = 1
+        # HW-S-04: never sooner than ENABLE_RETRY_TICKS ticks after a failure,
+        # because each set_mode stops the arm.
+        self.arm.mode_failures = 3
         boundary.beating.set()
         self._state_is(DeadmanState.STATE_HEALTHY, "HEALTHY again on a fresh heartbeat")
-        self._enabled(modes + 1, "the arm enabled again after a refused set_mode")
-        self.assertGreaterEqual(len(self.arm.modes), modes + 2, "set_mode retried")
+        self._enabled(modes + 3, "the arm enabled again after refused set_modes")
+        self.assertGreaterEqual(len(self.arm.modes), modes + 4, "set_mode retried")
         self.assertEqual(self.arm.mode_failures, 0)
+        retries = self.arm.mode_times[modes:]
+        gaps = [later - earlier for earlier, later in zip(retries, retries[1:])]
+        self.assertTrue(
+            all(gap >= 4 * TICK_S - 0.01 for gap in gaps),
+            f"an enable retried sooner than four ticks: gaps {gaps}",
+        )
         harness.wait_for(
             lambda: self.states[-1].arm_enabled, "arm_enabled after the retried enable"
         )

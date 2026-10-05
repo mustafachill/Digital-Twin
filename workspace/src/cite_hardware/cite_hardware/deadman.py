@@ -48,7 +48,10 @@ vendor's `set_mode` with the plugin's streaming mode, then, once that answered
 success and HEALTHY still stands, `set_state(0)`. That is the vendor plugin's
 own enable (`:252-254`) less `clean_error`, which is an operator's decision. An
 enable that fails or is abandoned at `call_deadline_s` is tried again on later
-ticks while HEALTHY lasts, one at a time; once `set_state(0)` is acknowledged
+ticks while HEALTHY lasts, one at a time and no sooner than
+`ENABLE_RETRY_TICKS` ticks after the failure: `set_mode` itself stops the arm,
+so a retry on every tick would cycle it between STOP and START (HW-S-04). Once
+`set_state(0)` is acknowledged
 in this HEALTHY epoch, `DeadmanState.arm_enabled` says so and it is not sent
 again. "HEALTHY in this epoch, so START" is decided and sent under the one lock
 every trip and every STOP takes, so no START is ever sent after the STOP a
@@ -123,6 +126,12 @@ NODE_NAME = "deadman"
 #: `XARM_STATE` (START = 0, STOP = 4).
 VENDOR_STATE_START = 0
 VENDOR_STATE_STOP = 4
+
+#: How many ticks a failed enable waits before it is tried again (HW-S-04). The
+#: vendor's `set_mode` stops the arm before it changes the mode, so an enable
+#: retried on every tick would cycle the arm between STOP and START at the tick
+#: rate. A mechanism constant, not a fact of the asset.
+ENABLE_RETRY_TICKS = 4
 
 #: The vendor modes in which the vendor plugin streams commands: SERVO (1) for
 #: position control, VELO_JOINT (4) for velocity control
@@ -236,6 +245,9 @@ class Deadman(LifecycleNode):
         #: The epoch in which `set_state(0)` was acknowledged. The arm is
         #: enabled only while this equals the current epoch and HEALTHY holds.
         self._enabled_epoch: int | None = None
+        #: After a failed enable in an epoch: that epoch, and the steady-clock
+        #: time before which it is not tried again (HW-S-04).
+        self._enable_backoff: tuple[int, int] | None = None
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -389,6 +401,7 @@ class Deadman(LifecycleNode):
         self._pending = []
         self._enable_in_flight = None
         self._enabled_epoch = None
+        self._enable_backoff = None
         if self._state_publisher is not None:
             self.destroy_publisher(self._state_publisher)
             self._state_publisher = None
@@ -533,11 +546,15 @@ class Deadman(LifecycleNode):
         assert self._config is not None
         request = SetInt16.Request()
         request.data = self._config["enable_mode"]
+        now = self._steady.now().nanoseconds
         with self._lock:
             if not self._current(epoch) or epoch in (
                 self._enable_in_flight,
                 self._enabled_epoch,
             ):
+                return
+            backoff = self._enable_backoff
+            if backoff is not None and backoff[0] == epoch and now < backoff[1]:
                 return
             self._enable_in_flight = epoch
             self._call(
@@ -565,6 +582,7 @@ class Deadman(LifecycleNode):
                 return
             if response is None or response.ret != 0:
                 self._enable_in_flight = None
+                self._back_off(epoch)
                 self.get_logger().error(
                     "enable failed: set_mode did not succeed, so the arm stays stopped; "
                     "tried again on the next tick while HEALTHY",
@@ -590,9 +608,17 @@ class Deadman(LifecycleNode):
             )
             if enabled:
                 self._enabled_epoch = epoch
+            else:
+                self._back_off(epoch)
         if enabled:
             self.get_logger().info("arm enabled: set_state(0) acknowledged while HEALTHY")
             self._publish_state(log=False)
+
+    def _back_off(self, epoch: int) -> None:
+        """Hold the next enable of ``epoch`` off for `ENABLE_RETRY_TICKS` ticks."""
+        assert self._config is not None
+        delay_ns = int(ENABLE_RETRY_TICKS * self._config["tick_period_s"] * 1e9)
+        self._enable_backoff = (epoch, self._steady.now().nanoseconds + delay_ns)
 
     def _call(self, label: str, client, request, then=None) -> None:
         """Send one call with a deadline; never wait on it.

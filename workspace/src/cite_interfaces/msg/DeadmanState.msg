@@ -37,6 +37,12 @@
 # trajectory must require `arm_enabled` as well. It says what the deadman's own
 # enable achieved: another client stopping the arm afterwards is not seen here.
 #
+# `arm_enabled` CAN BE TRUE WHILE THE CONTROLLER HOLDS AN ERROR (HW-S-03). The
+# vendor SDK maps several controller error codes to a return of 0 for
+# `set_state`, so an acknowledged set_state(0) does not prove the arm left its
+# error state. Whether the arm is following is read from its controller and
+# joints (the twin boundary also requires those fresh), not from this field.
+#
 # The topic name is generated per asset from L0 (CLAUDE.md §8), so it is not a
 # constant here.
 

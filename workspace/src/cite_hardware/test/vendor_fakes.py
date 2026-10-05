@@ -234,6 +234,8 @@ class FakeArmState:
         self.mode_held = threading.Event()
         #: Every call in arrival order, as ("set_state", n) or ("set_mode", n).
         self.calls: list[tuple[str, int]] = []
+        #: Steady-clock arrival time of every set_mode call.
+        self.mode_times: list[float] = []
         self.state = 0
         self.mode = 1
         self.failures = 0
@@ -282,6 +284,7 @@ class FakeArmState:
             self._on_call("set_mode", request.data)
         with self._lock:
             self.modes.append(request.data)
+            self.mode_times.append(time.monotonic())
             self.calls.append(("set_mode", request.data))
             # The vendor's service stops the arm before it changes the mode.
             self.state = 4

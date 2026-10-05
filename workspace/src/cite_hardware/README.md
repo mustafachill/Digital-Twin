@@ -145,6 +145,12 @@ refuses `use_sim_time`.
 
 ## How each one fails
 
+- **The vendor's gripper action is always served, and bypasses the relay's gate on the
+  physical domain** (SA2c-S-05, a residual, not fixed here). The driver creates
+  `<prefix>xarm_gripper/gripper_action` unconditionally (`xarm_driver.cpp:485-486`), so any
+  client on the physical side's domain can move the gripper without the deadman's gate. The
+  deadman cancels only the relay's action. What bounds this is who can reach that domain.
+
 - **A command it will not forward is refused and logged, never clamped into a different
   motion.** A track trajectory with no points or only one, naming any joint but the track's, a
   target outside the travel, a last point not after the first, a command while the carriage
