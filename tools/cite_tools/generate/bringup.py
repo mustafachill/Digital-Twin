@@ -136,10 +136,27 @@ class _ManagerView:
     counterpart_parameters: str | None = None
     #: `description_args` for the counterpart's description.
     counterpart_description_args: tuple[tuple[str, str], ...] = ()
+    #: The controllers the COUNTERPART's own configuration defines, emitted
+    #: exactly where `counterpart_parameters` is: a side loading the plant's
+    #: configuration spawns the plant's list, and a side loading its own spawns
+    #: what that file defines (`ResolvedAsset.controllers_on`, ADR-0070 item 1).
+    counterpart_controllers: tuple[_ControllerRef, ...] = ()
 
 
 def _package_uri(path: str) -> str:
     return f"package://cite_generated/{path}"
+
+
+def _counterpart_controllers(
+    cell: ResolvedCell, asset: ResolvedAsset
+) -> tuple[_ControllerRef, ...]:
+    """The counterpart's controller list where it loads a configuration of its own, else ()."""
+    if ids.COUNTERPART_SIDE not in described_sides(cell, asset):
+        return ()
+    return tuple(
+        _ControllerRef(name=c.name, stage=c.stage)
+        for c in asset.controllers_on(ids.COUNTERPART_SIDE)
+    )
 
 
 def _counterpart_artifact(cell: ResolvedCell, asset: ResolvedAsset, path: str) -> str | None:
@@ -601,6 +618,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             counterpart_description_args=(
                 environment_arguments(asset, ids.COUNTERPART_SIDE) if cell.is_paired else ()
             ),
+            counterpart_controllers=_counterpart_controllers(cell, asset),
         )
         for asset in cell.assets
         if asset.controllers

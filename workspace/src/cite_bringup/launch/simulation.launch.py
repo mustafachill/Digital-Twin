@@ -281,14 +281,14 @@ def _bring_up(context: LaunchContext) -> list:
     ]
     actions += _simulator(plan, headless=headless, seed=seed, gz_env=gz_env)
     actions += _scene(plan, gz_env)
-    actions += _arms(plan, gz_env)
+    actions += _arms(plan, side, gz_env)
 
     facility_actions, managed = _facility(plan)
     actions += facility_actions
     driver = _lifecycle_driver(managed)
     actions.append(driver)
 
-    controller_actions, first_spawner, last_spawner = _controllers(plan)
+    controller_actions, first_spawner, last_spawner = _controllers(plan, side)
 
     # Nothing downstream of `_facility` starts until every managed node has been
     # OBSERVED `active` (ADR-0058). Until this gate existed `_facility` was
@@ -652,7 +652,7 @@ def _scene(plan: Plan, gz_env: dict[str, str]) -> list:
     return [publisher, spawn]
 
 
-def _arms(plan: Plan, gz_env: dict[str, str]) -> list:
+def _arms(plan: Plan, side: str, gz_env: dict[str, str]) -> list:
     """Publish and spawn each arm as its own model.
 
     One Gazebo model per arm, because gz_ros2_control attaches to a model and the
@@ -665,11 +665,15 @@ def _arms(plan: Plan, gz_env: dict[str, str]) -> list:
     Each arm's own publisher lives in that arm's namespace, so its controller
     manager finds the description without a remapping, and TF stays at one
     publisher per transform.
+
+    ``side``'s own description, which names ``side``'s own controller
+    configuration (ADR-0048 clause 2); `_controllers` spawns what that
+    configuration defines.
     """
     actions: list = []
     for manager in plan.controller_managers:
         description = ParameterValue(
-            Command(["xacro ", str(manager.description)]), value_type=str
+            Command(["xacro ", str(manager.description_on(side))]), value_type=str
         )
         actions.append(
             Node(
@@ -705,7 +709,7 @@ def _arms(plan: Plan, gz_env: dict[str, str]) -> list:
     return actions
 
 
-def _controllers(plan: Plan) -> tuple[list, Node, Node]:
+def _controllers(plan: Plan, side: str) -> tuple[list, Node, Node]:
     """Spawn each manager's controllers, stage by stage, gated on the previous.
 
     Every step starts only when the one before it exits successfully. A non-zero
@@ -721,6 +725,9 @@ def _controllers(plan: Plan) -> tuple[list, Node, Node]:
     controller manager would be spawned into a cell whose facility nodes had
     never activated. The **last** is what the caller chains the planning scene
     onto.
+
+    ``side``'s controllers: what the configuration that side loads defines, and
+    no controller it does not (`ControllerManager.stages_on`, ADR-0070 item 1).
     """
     actions: list = []
     first: Node | None = None
@@ -734,7 +741,7 @@ def _controllers(plan: Plan) -> tuple[list, Node, Node]:
     # when the previous one exits, so bring-up remains as fast as the machine
     # allows. It is simply no longer racing itself.
     for manager in plan.controller_managers:
-        for stage, names in manager.stages():
+        for stage, names in manager.stages_on(side):
             spawner = Node(
                 package="controller_manager",
                 executable="spawner",

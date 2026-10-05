@@ -465,6 +465,7 @@ def _with_own_files(manager: dict) -> dict:
     """
     manager["counterpart_description"] = manager["description"]
     manager["counterpart_parameters"] = manager["parameters"]
+    manager["counterpart_controllers"] = copy.deepcopy(manager["controllers"])
     return manager
 
 
@@ -2201,6 +2202,65 @@ def test_the_generated_counterpart_loads_its_own_files() -> None:
     )
 
 
+def _controllers_defined_in(manager: ControllerManager, side: str) -> set[str]:
+    """The controllers ``side``'s configuration file defines: what its manager can load.
+
+    A controller is a key under the manager's `ros__parameters` whose value
+    states a `type`; the manager can load that one and no other. The file is
+    found beside the plant's description in the installed generated package,
+    which `load` has already resolved, rather than by resolving a second URI.
+    """
+    package = manager.description.parent.parent
+    relative = manager.parameters_on(side).split("/", 3)[3]
+    document = yaml.safe_load((package / relative).read_text())
+    (manager,) = (
+        block["ros__parameters"]
+        for node, block in document.items()
+        if node.endswith("/controller_manager")
+    )
+    return {name for name, value in manager.items() if isinstance(value, dict) and "type" in value}
+
+
+@pytest.mark.parametrize("side", (PLANT_SIDE, COUNTERPART_SIDE))
+def test_each_side_spawns_exactly_the_controllers_its_own_file_defines(side: str) -> None:
+    """ADR-0070 item 1: a side's stages name what that side's configuration defines.
+
+    Spawning the plant's list on the physical counterpart asks its controller
+    manager for the gripper and track controllers, which its configuration does
+    not define because no hardware there exports their joints; the spawner fails
+    and the side never comes up.
+    """
+    picker = _the_generated_counterpart()
+    spawned = {name for _, names in picker.stages_on(side) for name in names}
+    assert spawned == {c.name for c in picker.controllers_on(side)}
+    assert spawned == _controllers_defined_in(picker, side), side
+
+
+def test_the_counterpart_spawns_fewer_controllers_than_the_plant() -> None:
+    """The two lists differ on the shipped plan, so the test above is not vacuous."""
+    picker = _the_generated_counterpart()
+    plant = {c.name for c in picker.controllers_on(PLANT_SIDE)}
+    counterpart = {c.name for c in picker.controllers_on(COUNTERPART_SIDE)}
+    assert counterpart < plant
+    assert picker.stages() == picker.stages_on(PLANT_SIDE)
+
+
+def test_a_side_loading_the_plants_files_spawns_the_plants_controllers(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    for manager in plan.controller_managers:
+        assert manager.controllers_on(COUNTERPART_SIDE) == manager.controllers
+        assert manager.stages_on(COUNTERPART_SIDE) == manager.stages_on(PLANT_SIDE)
+
+
+def test_an_empty_counterpart_controller_list_is_refused(tmp_path: Path) -> None:
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    manager["counterpart_controllers"] = []
+    with pytest.raises(PlanError, match="lists no controllers"):
+        load(_written(tmp_path, document))
+
+
 def test_the_generated_plan_carries_a_reference_and_never_a_value() -> None:
     picker = _the_generated_counterpart()
     assert dict(picker.description_args_on(COUNTERPART_SIDE)) == {"robot_ip": "CITE_XARM_IP"}
@@ -2234,7 +2294,9 @@ def test_a_differing_counterpart_naming_no_files_of_its_own_is_refused(
         load(_written(tmp_path, document))
 
 
-@pytest.mark.parametrize("key", COUNTERPART_ARTIFACT_KEYS[:2])
+@pytest.mark.parametrize(
+    "key", ("counterpart_description", "counterpart_parameters", "counterpart_controllers")
+)
 def test_half_of_a_counterparts_files_is_refused(tmp_path: Path, key: str) -> None:
     document = _paired_document()
     manager = _with_own_files(document["plan"]["controller_managers"][1])

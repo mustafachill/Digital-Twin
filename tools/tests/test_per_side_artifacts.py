@@ -203,6 +203,35 @@ class TestABackendWithNoPlugin:
         assert set(counterpart) <= set(plant)
 
 
+class TestEachSideSpawnsWhatItsOwnFileDefines:
+    """ADR-0070 item 1: the plan's controller list is per side, not the plant's alone."""
+
+    @staticmethod
+    def _defined(text: str) -> set[str]:
+        document = yaml.safe_load(text)
+        (manager,) = (
+            block["ros__parameters"]
+            for node, block in document.items()
+            if node.endswith("/controller_manager")
+        )
+        return {name for name, value in manager.items() if isinstance(value, dict) and "type" in value}
+
+    def test_the_plan_lists_each_sides_controllers(self, real_model: Path) -> None:
+        generated = artifacts(real_model)
+        plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
+        (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
+        for side, list_key, file_key in (
+            (ids.PLANT_SIDE, "controllers", "parameters"),
+            (ids.COUNTERPART_SIDE, "counterpart_controllers", "counterpart_parameters"),
+        ):
+            listed = {c["name"] for c in manager[list_key]}
+            text = generated[manager[file_key].removeprefix("package://cite_generated/")]
+            assert listed == self._defined(text), side
+        assert {c["name"] for c in manager["counterpart_controllers"]} < {
+            c["name"] for c in manager["controllers"]
+        }
+
+
 class TestTheDeclaredPluginIsTheLoadedOne:
     """open-work #65, on the generated text: each side carries its own backend's plugin.
 

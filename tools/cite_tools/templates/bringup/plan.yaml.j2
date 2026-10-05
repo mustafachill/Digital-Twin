@@ -313,6 +313,17 @@ plan:
 {% for controller in manager.controllers %}
         - {name: {{ controller.name }}, stage: {{ controller.stage }}}
 {% endfor %}
+{% if manager.counterpart_controllers %}
+      # What the counterpart's OWN configuration defines, stated exactly where
+      # `counterpart_parameters` is. A side spawns the controllers its own file
+      # defines and no other: one whose joint no hardware on that side exports
+      # is absent there, and its names are served by something else (ADR-0070
+      # items 1, 3 and 4). Every name is the plant's.
+      counterpart_controllers:
+{% for controller in manager.counterpart_controllers %}
+        - {name: {{ controller.name }}, stage: {{ controller.stage }}}
+{% endfor %}
+{% endif %}
 {% if manager.planning_group %}
       moveit:
         group: {{ manager.planning_group }}

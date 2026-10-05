@@ -273,6 +273,14 @@ plan:
         - {name: picker_gripper_controller, stage: 1}
         - {name: picker_joint_trajectory_controller, stage: 1}
         - {name: picker_track_trajectory_controller, stage: 1}
+      # What the counterpart's OWN configuration defines, stated exactly where
+      # `counterpart_parameters` is. A side spawns the controllers its own file
+      # defines and no other: one whose joint no hardware on that side exports
+      # is absent there, and its names are served by something else (ADR-0070
+      # items 1, 3 and 4). Every name is the plant's.
+      counterpart_controllers:
+        - {name: picker_joint_state_broadcaster, stage: 0}
+        - {name: picker_joint_trajectory_controller, stage: 1}
       moveit:
         group: picker_xarm5
         base_link: picker_link_base

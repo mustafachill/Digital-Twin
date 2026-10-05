@@ -1578,6 +1578,7 @@ class TestTwinSidesAndTheGazeboPartition:
             assert "counterpart_description" not in manager
             assert "counterpart_parameters" not in manager
             assert "counterpart_description_args" not in manager
+            assert "counterpart_controllers" not in manager
 
         self._make_the_counterpart_physical(real_model, edit_yaml)
         plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]

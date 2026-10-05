@@ -193,6 +193,7 @@ COUNTERPART_ARTIFACT_KEYS = (
     "counterpart_description",
     "counterpart_parameters",
     "counterpart_description_args",
+    "counterpart_controllers",
 )
 
 
@@ -481,6 +482,10 @@ class ControllerManager:
     counterpart_description: Path | None = None
     counterpart_parameters: str | None = None
     counterpart_description_args: Mapping[str, str] = MappingProxyType({})
+    #: The controllers the counterpart's own configuration defines, or `None`
+    #: where it loads the plant's. Stated exactly where `counterpart_parameters`
+    #: is. Read through `controllers_on` and `stages_on`, never off this field.
+    counterpart_controllers: tuple[ControllerRef, ...] | None = None
 
     def description_on(self, side: str) -> Path:
         """Return the description ``side`` loads: its own where it has one, else the plant's."""
@@ -495,6 +500,20 @@ class ControllerManager:
         if side == COUNTERPART_SIDE and self.counterpart_parameters is not None:
             return self.counterpart_parameters
         return self.parameters
+
+    def controllers_on(self, side: str) -> tuple[ControllerRef, ...]:
+        """Return the controllers ``side`` spawns, by `description_on`'s rule.
+
+        A side loading a configuration of its own spawns what that file defines
+        and nothing else: a controller whose joint no hardware on that side
+        exports is absent from it, and spawning the plant's list there would ask
+        the controller manager for a controller it has no type for (ADR-0070
+        items 1, 3 and 4).
+        """
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_controllers is not None:
+            return self.counterpart_controllers
+        return self.controllers
 
     def description_args_on(self, side: str) -> Mapping[str, str]:
         """Return what ``side``'s description reads from the environment: argument -> variable.
@@ -630,7 +649,11 @@ class ControllerManager:
         return None
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
-        """Group the controllers by stage, in ascending order.
+        """The plant's stages: `stages_on(PLANT_SIDE)`."""
+        return self.stages_on(PLANT_SIDE)
+
+    def stages_on(self, side: str) -> list[tuple[int, tuple[str, ...]]]:
+        """Group the controllers ``side`` spawns by stage, in ascending order.
 
         Stage is a dependency ordering, not a schedule: a broadcaster must be
         active before the controllers that read the state it publishes. The
@@ -638,7 +661,7 @@ class ControllerManager:
         previous spawner exiting successfully — never on elapsed time (P4).
         """
         grouped: dict[int, list[str]] = {}
-        for controller in self.controllers:
+        for controller in self.controllers_on(side):
             grouped.setdefault(controller.stage, []).append(controller.name)
         return [(stage, tuple(sorted(names))) for stage, names in sorted(grouped.items())]
 
@@ -867,10 +890,10 @@ def load(path: Path) -> Plan:
     )
 
     for manager in managers:
-        if not manager.controllers:
+        if not manager.controllers or manager.counterpart_controllers == ():
             raise PlanError(
-                f"controller manager for {manager.asset!r} lists no controllers; "
-                "bring-up would report success having activated nothing"
+                f"controller manager for {manager.asset!r} lists no controllers on a "
+                "side; bring-up would report success having activated nothing"
             )
 
     _every_declared_side_states_a_backend(sides, managers, path)
@@ -1643,19 +1666,7 @@ def _manager(entry: object, index: int) -> ControllerManager:
         spawn_xyz_m=_triple(_require(entry, "spawn_xyz_m", where), "spawn_xyz_m", where),
         spawn_rpy_rad=_triple(_require(entry, "spawn_rpy_rad", where), "spawn_rpy_rad", where),
         parameters=_require(entry, "parameters", where),
-        controllers=tuple(
-            ControllerRef(
-                name=_require(controller, "name", f"{where}, controller {position}"),
-                stage=int(
-                    _number(
-                        _require(controller, "stage", f"{where}, controller {position}"),
-                        "stage",
-                        where,
-                    )
-                ),
-            )
-            for position, controller in enumerate(_sequence(entry, "controllers", where))
-        ),
+        controllers=_controller_refs(_sequence(entry, "controllers", where), where),
         moveit=_moveit(_optional(entry, "moveit"), where),
         trajectory_action=_optional(entry, "trajectory_action"),
         gripper_action=_optional(entry, "gripper_action"),
@@ -1665,6 +1676,22 @@ def _manager(entry: object, index: int) -> ControllerManager:
         track=_track(_optional(entry, "track"), where),
         description_args=_environment_args(entry, "description_args", where),
         **_counterpart_artifacts(entry, counterpart_backend, where),
+    )
+
+
+def _controller_refs(entries: list, where: str) -> tuple[ControllerRef, ...]:
+    return tuple(
+        ControllerRef(
+            name=_require(controller, "name", f"{where}, controller {position}"),
+            stage=int(
+                _number(
+                    _require(controller, "stage", f"{where}, controller {position}"),
+                    "stage",
+                    where,
+                )
+            ),
+        )
+        for position, controller in enumerate(entries)
     )
 
 
@@ -1707,14 +1734,15 @@ def _counterpart_artifacts(entry: object, counterpart_backend: object, where: st
     described as the other side's machine, which is open-work #38's defect
     arriving from a stale plan rather than from the generator.
     """
-    description_key, parameters_key, arguments_key = COUNTERPART_ARTIFACT_KEYS
+    description_key, parameters_key, arguments_key, controllers_key = COUNTERPART_ARTIFACT_KEYS
     description = _optional(entry, description_key)
     parameters = _optional(entry, parameters_key)
     arguments = _environment_args(entry, arguments_key, where)
-    if (description is None) != (parameters is None):
+    controllers = _optional(entry, controllers_key)
+    if not (description is None) == (parameters is None) == (controllers is None):
         raise PlanError(
-            f"{where}: states one of 'counterpart_description' and "
-            "'counterpart_parameters' without the other. They are emitted together."
+            f"{where}: states some of 'counterpart_description', 'counterpart_parameters' "
+            "and 'counterpart_controllers' without the other. They are emitted together."
         )
     if description is not None and counterpart_backend is None:
         raise PlanError(
@@ -1740,6 +1768,11 @@ def _counterpart_artifacts(entry: object, counterpart_backend: object, where: st
         "counterpart_description": None if description is None else resolve_uri(description),
         "counterpart_parameters": parameters,
         "counterpart_description_args": arguments,
+        "counterpart_controllers": (
+            None
+            if controllers is None
+            else _controller_refs(_sequence(entry, controllers_key, where), where)
+        ),
     }
 
 
