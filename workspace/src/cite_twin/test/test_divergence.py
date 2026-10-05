@@ -35,6 +35,7 @@ from cite_twin.divergence import (
     compare,
     Conditions,
     DEFICIT_BOUND_S,
+    JointMerge,
     MODES_THAT_DEFINE_THE_COMPARISON,
     Operand,
     PAIRING_WINDOW_S,
@@ -321,3 +322,25 @@ class TestTheComparison:
         result = compare(operand(), operand(positions={"arm_1_joint1": 0.5}))
         assert not conditions.valid
         assert result.joint_error_max_rad == pytest.approx(0.5)
+
+
+def test_partial_joint_states_merge_by_name_and_age_with_the_oldest_joint() -> None:
+    """R-05: three publishers share one joint-state topic, each with its own joints.
+
+    The operand is every joint heard, and its age is its oldest joint's: the
+    track publisher going quiet makes the operand old, rather than the arm's
+    broadcaster speaking last making it look fresh.
+    """
+    merge = JointMerge()
+    merge.update({"joint1": 0.1, "joint2": 0.2}, 100.0)  # the arm's broadcaster
+    merge.update({"track": 0.35}, 100.5)  # the track adapter
+    merge.update({"drive_joint": 0.4}, 101.0)  # the gripper relay
+    assert merge.positions() == {"joint1": 0.1, "joint2": 0.2, "track": 0.35, "drive_joint": 0.4}
+    assert merge.oldest_arrival() == 100.0
+
+    # The broadcaster and the relay keep speaking; the track adapter does not.
+    merge.update({"joint1": 0.11, "joint2": 0.21}, 102.0)
+    merge.update({"drive_joint": 0.41}, 102.0)
+    assert merge.positions()["joint1"] == 0.11
+    assert merge.positions()["track"] == 0.35
+    assert merge.oldest_arrival() == 100.5

@@ -124,6 +124,30 @@ class Operand:
     clock_deficit_s: float | None = None
 
 
+class JointMerge:
+    """One side's joints, merged by name from partial joint-state messages.
+
+    Each joint keeps its latest position and the wall time it arrived at L5.
+    The merged operand's age is its OLDEST joint's: a publisher that stopped
+    leaves its joints ageing, and the operand ages with them rather than being
+    reported fresh by whichever publisher spoke last. Not thread-safe; the
+    caller holds its own lock.
+    """
+
+    def __init__(self) -> None:
+        self._joints: dict[str, tuple[float, float]] = {}
+
+    def update(self, positions: Mapping[str, float], received_wall_s: float) -> None:
+        for name, position in positions.items():
+            self._joints[name] = (position, received_wall_s)
+
+    def positions(self) -> dict[str, float]:
+        return {name: position for name, (position, _at) in self._joints.items()}
+
+    def oldest_arrival(self) -> float:
+        return min(at for _position, at in self._joints.values())
+
+
 @dataclass(frozen=True)
 class Comparison:
     """The part of the sample that is arithmetic over two operands.

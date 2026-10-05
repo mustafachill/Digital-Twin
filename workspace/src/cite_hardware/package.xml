@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_hardware</name>
+  <version>0.1.0</version>
+  <description>
+    L2 — the physical side's adapters for an xArm 5 on its linear track (ADR-0070
+    items 3, 4 and 5): a track adapter, a gripper relay and a heartbeat deadman.
+
+    The vendor plugin drives the arm's joints through ros2_control; it serves the
+    track and the gripper only through its own driver's services and action. These
+    three managed nodes present the names the simulated side presents, translate to
+    the vendor's calls, and stop the side when the twin boundary's heartbeat stops.
+    Nothing here starts on any side yet: the real side's launch is a later task.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <!-- DeadmanState, TwinHeartbeat and the QoS profile library. -->
+  <depend>cite_interfaces</depend>
+  <!-- For one constant: which exceptions mean "the context went away". These
+       nodes command actuators, so they do NOT adopt its init/spin/shutdown;
+       see cite_hardware/process.py. -->
+  <depend>cite_runtime</depend>
+  <!-- The vendor's service types. Pinned through external/cite.repos and built in
+       this workspace; never vendored (CLAUDE.md §4). -->
+  <depend>xarm_msgs</depend>
+  <depend>control_msgs</depend>
+  <depend>action_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
+       registers no tests, and the lint gate reports success having checked
+       nothing. -->
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>lifecycle_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

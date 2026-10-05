@@ -318,6 +318,19 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             "the boundary announced and SetMode was never advertised",
         )
 
+    def test_each_side_hears_the_heartbeat_on_its_own_domain(self, proc_output):
+        """ADR-0070 item 5: the liveness a physical side's deadman stops on.
+
+        Read from each fake's stdout, because each side is on a domain of its
+        own and the counterpart's is one this process holds no context on. The
+        zone is the plan's and the sequence advances — a heartbeat that repeats
+        one sequence is not evidence the boundary is alive now, and the deadman
+        does not count it.
+        """
+        for side in ("plant", "counterpart"):
+            _wait_for_side(proc_output, f"{side}: heartbeat zone={ZONE}")
+            _wait_for_side(proc_output, f"{side}: heartbeat advancing")
+
     def test_an_accepted_transition_is_published(self):
         """Asserted here rather than on the mixed plan, where none is possible.
 
@@ -503,6 +516,25 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertFalse(sample.valid, "the clock-deficit term has no instrument")
         self.assertTrue(sample.counterpart_observed)
         self.assertFalse(sample.far_side_physical)
+
+    def test_a_quiet_joint_publisher_ages_the_operand(self, proc_output):
+        """R-05: partial joint states merge by name, and the oldest joint sets the age.
+
+        Each fake publishes joint1, joint2 and joint3 from three publishers on
+        one topic; joint3's goes quiet. Recorded per message, the operand would
+        stay as fresh as the last publisher to speak; merged per joint, it ages
+        with joint3, which is what a physical side whose track adapter died
+        must look like to the monitor.
+        """
+        _wait_for_side(proc_output, "plant: joint3 publisher quiet")
+        threshold_s = 2.0
+        self._spin_until(
+            lambda: any(
+                sample.asset_id == ASSET and sample.plant_sample_age_s > threshold_s
+                for sample in self.samples
+            ),
+            f"the plant operand aged past {threshold_s:g} s with joint3 quiet",
+        )
 
     def test_a_transition_is_refused_while_a_goal_is_in_flight(self, proc_output):
         """**S-06.** The mode must not be published ahead of the state it describes.

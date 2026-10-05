@@ -43,7 +43,7 @@ from cite_twin.boundary import (
     twin_endpoints,
     TWIN_SCOPE,
 )
-from cite_twin.twin_boundary import _refuse_sim_time
+from cite_twin.twin_boundary import _refuse_sim_time, heartbeat_period
 import pytest
 
 PLAN = load(default_plan_path("cell_b"))
@@ -485,3 +485,14 @@ def test_every_skill_the_plan_declares_is_routable() -> None:
     states the same thing where a reader looking for the guarantee will find it.
     """
     assert set(SKILL_ACTION_TYPES) == set(SkillActions.__dataclass_fields__)
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, float("nan"), float("inf")])
+def test_a_heartbeat_period_that_is_not_a_period_is_refused(value) -> None:
+    """S-12: a zero or negative period would never beat, and a deadman would never trip."""
+    with pytest.raises(BoundaryError, match="heartbeat_period_s"):
+        heartbeat_period(value)
+
+
+def test_a_positive_heartbeat_period_is_kept() -> None:
+    assert heartbeat_period(0.1) == 0.1
