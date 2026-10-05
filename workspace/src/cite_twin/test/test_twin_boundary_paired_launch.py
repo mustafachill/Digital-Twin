@@ -301,6 +301,19 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             "the boundary announced and SetMode was never advertised",
         )
 
+    def test_each_side_hears_the_heartbeat_on_its_own_domain(self, proc_output):
+        """ADR-0070 item 5: the liveness a physical side's deadman stops on.
+
+        Read from each fake's stdout, because each side is on a domain of its
+        own and the counterpart's is one this process holds no context on. The
+        zone is the plan's and the sequence advances — a heartbeat that repeats
+        one sequence is not evidence the boundary is alive now, and the deadman
+        does not count it.
+        """
+        for side in ("plant", "counterpart"):
+            _wait_for_side(proc_output, f"{side}: heartbeat zone={ZONE}")
+            _wait_for_side(proc_output, f"{side}: heartbeat advancing")
+
     def test_an_accepted_transition_is_published(self):
         """Asserted here rather than on the mixed plan, where none is possible.
 

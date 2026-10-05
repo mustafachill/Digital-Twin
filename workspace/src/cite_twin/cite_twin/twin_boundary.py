@@ -32,6 +32,10 @@ Three things, and they are the three ADR-0050 decides:
    measures. **So the monitor publishes self-describing invalid samples rather
    than nothing**, each carrying the terms that decide its own validity.
 
+Beside those, one thing ADR-0070 item 5 adds: a `TwinHeartbeat` on each side's
+own domain, from that side's own executor, which a physical side's deadman
+stops on when it ceases (`_Heartbeat`).
+
 **NOTHING HERE IS A FIDELITY MEASUREMENT.** Both sides of a Phase 2.A pair run
 the same L0 model, the same generated description, the same controllers and the
 same solver, so a comparison is a thing with itself. `far_side_physical` is the
@@ -88,7 +92,13 @@ from cite_bringup.plan import (
 # out of avoiding.
 from cite_bringup.readiness import boundary_announcement
 from cite_facility import model_info
-from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, TwinMode
+from cite_interfaces.msg import (
+    DivergenceMetrics,
+    ModelVersion,
+    ResultCode,
+    TwinHeartbeat,
+    TwinMode,
+)
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
@@ -218,6 +228,54 @@ DIVERGENCE_PERIOD_S = 1.0
 #: say the endpoints exist, which is a weaker fact than the supervisor joins on
 #: (ADR-0057, promotion clause 1).
 _ANNOUNCE_PERIOD_S = 0.05
+
+
+#: How often the boundary says it is alive on each side, in seconds.
+#:
+#: A publication rate and not a timing guess: nothing here waits for it and no
+#: transition is sequenced on it (P4). What it bounds is a physical side's
+#: deadman, whose timeout is declared in L0 above the link's observed spikes
+#: (ADR-0070 item 5) and has to be several of these periods long, or a single
+#: late heartbeat trips it. That relation is the wiring task's to check; a node
+#: parameter, like `divergence_period_s`, so a deployment can change it without
+#: a rebuild.
+HEARTBEAT_PERIOD_S = 0.1
+
+
+class _Heartbeat:
+    """`TwinHeartbeat` on one side's own domain, from that side's own executor.
+
+    One per side and never one shared, because what a heartbeat on a domain has
+    to mean is that the boundary is serving THAT side: a timer on the plant's
+    executor publishing onto the counterpart's domain would keep a physical
+    side's deadman satisfied while the executor serving that side was dead.
+
+    **Published before a subscriber may have matched, and that is harmless
+    here** (CLAUDE.md §10). A heartbeat is a stream, not a command: one that
+    reaches nobody is simply not counted, and a deadman starts timing only from
+    the first one it receives.
+    """
+
+    def __init__(
+        self, side: SideContext, zone: str, period_s: float, group: ReentrantCallbackGroup
+    ) -> None:
+        self._zone = zone
+        self._sequence = 0
+        self._node = side.node
+        # STATE: periodic, reliable, volatile — and the profile the deadman
+        # subscribes with.
+        self._publisher = side.node.create_publisher(
+            TwinHeartbeat, TwinHeartbeat.TOPIC, STATE
+        )
+        self._timer = side.node.create_timer(period_s, self._beat, callback_group=group)
+
+    def _beat(self) -> None:
+        self._sequence += 1
+        message = TwinHeartbeat()
+        message.header.stamp = self._node.get_clock().now().to_msg()
+        message.zone = self._zone
+        message.sequence = self._sequence
+        self._publisher.publish(message)
 
 
 @dataclass(frozen=True)
@@ -446,6 +504,19 @@ class TwinBoundary:
         self._timer = self._plant.node.create_timer(
             period, self._publish_divergence, callback_group=self._group
         )
+
+        # 6. The heartbeat (ADR-0070 item 5): one per side, on that side's own
+        # domain, from a timer that side's own executor runs.
+        self._plant.node.declare_parameter("heartbeat_period_s", HEARTBEAT_PERIOD_S)
+        heartbeat_period = (
+            self._plant.node.get_parameter("heartbeat_period_s")
+            .get_parameter_value()
+            .double_value
+        )
+        self._heartbeats = [
+            _Heartbeat(side, plan.zone, heartbeat_period, self._group)
+            for side in self._sides.values()
+        ]
 
     # ------------------------------------------------------------------ #
     # Lifetime

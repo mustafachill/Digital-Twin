@@ -51,7 +51,7 @@ import sys
 import threading
 
 from cite_interfaces.action import MoveTo, Pick
-from cite_interfaces.msg import ModelVersion, ResultCode
+from cite_interfaces.msg import ModelVersion, ResultCode, TwinHeartbeat
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -114,6 +114,15 @@ class FakeSide(Node):
         self._model = self.create_publisher(
             ModelVersion, "/cite/facility/model_version", LATCHED
         )
+        # The boundary's heartbeat on THIS side's domain (ADR-0070 item 5),
+        # printed twice and no more: the first one, and the first that shows
+        # the sequence advancing. Every heartbeat would flood the output the
+        # test reads.
+        self._heartbeat_first: int | None = None
+        self._heartbeat_advanced = False
+        self._heartbeats = self.create_subscription(
+            TwinHeartbeat, TwinHeartbeat.TOPIC, self._on_heartbeat, STATE
+        )
         self.create_timer(STATE_PERIOD_S, self._publish_state, callback_group=self._group)
         self.create_timer(0.5, self._publish_model, callback_group=self._group)
         print(f"{side}: up with {len(self._servers)} action server(s)", flush=True)
@@ -175,6 +184,14 @@ class FakeSide(Node):
             result.position_error_m = self._offset
             result.reached.header.frame_id = self._side
         return result
+
+    def _on_heartbeat(self, message: TwinHeartbeat) -> None:
+        if self._heartbeat_first is None:
+            self._heartbeat_first = message.sequence
+            print(f"{self._side}: heartbeat zone={message.zone}", flush=True)
+        elif not self._heartbeat_advanced and message.sequence > self._heartbeat_first:
+            self._heartbeat_advanced = True
+            print(f"{self._side}: heartbeat advancing", flush=True)
 
     def _publish_state(self) -> None:
         message = JointState()
