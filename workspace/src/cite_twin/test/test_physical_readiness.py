@@ -33,10 +33,14 @@ JOINTS = ("picker_joint1", "picker_track_joint", "picker_drive_joint")
 AGE = 0.25
 
 
-def _state(state: int) -> DeadmanState:
+def _state(state: int, arm_enabled: bool | None = None) -> DeadmanState:
+    """A deadman state; enabled exactly when HEALTHY unless the test says otherwise."""
     message = DeadmanState()
     message.state = state
     message.detail = "for the record"
+    message.arm_enabled = (
+        state == DeadmanState.STATE_HEALTHY if arm_enabled is None else arm_enabled
+    )
     return message
 
 
@@ -59,6 +63,14 @@ def _ready_watch(now: float = 10.0) -> PhysicalSideWatch:
 )
 def test_only_a_healthy_deadman_permits_motion(state: int, permits: bool) -> None:
     assert deadman_permits_motion(_state(state)) is permits
+
+
+def test_healthy_is_not_enough_until_the_arm_is_enabled() -> None:
+    """S-03: HEALTHY with the enable not yet acknowledged is an arm still at STOP."""
+    assert deadman_permits_motion(_state(DeadmanState.STATE_HEALTHY, arm_enabled=False)) is False
+    watch = _ready_watch()
+    watch.heard_deadman(_state(DeadmanState.STATE_HEALTHY, arm_enabled=False), 10.0)
+    assert "not yet enabled the arm" in watch.unready(10.0)
 
 
 def test_a_side_that_said_nothing_is_not_ready() -> None:
@@ -148,3 +160,24 @@ def test_a_simulated_far_side_never_waits() -> None:
         physical_side_unready=lambda: "should never be asked",
     )
     assert machine.request(TwinMode.MODE_VALIDATED, "", "go", force=False).accepted
+
+
+def test_reasserting_validated_checks_the_physical_side_again() -> None:
+    """R-04: a re-assertion is about to command the side, which may have tripped since."""
+    watch = _ready_watch()
+    machine = _authority(watch)
+    assert machine.request(TwinMode.MODE_VALIDATED, "", "go", force=False).accepted
+    watch.heard_deadman(_state(DeadmanState.STATE_TRIPPED), 10.0)
+    verdict = machine.request(TwinMode.MODE_VALIDATED, "", "again", force=False)
+    assert not verdict.accepted
+    assert waits_for_a_physical_side(verdict.detail)
+    assert machine.mode == TwinMode.MODE_VALIDATED  # refused, not left
+    watch.heard_deadman(_state(DeadmanState.STATE_HEALTHY), 10.0)
+    assert machine.request(TwinMode.MODE_VALIDATED, "", "again", force=False).accepted
+
+
+def test_reasserting_a_mode_that_commands_no_physical_side_never_waits() -> None:
+    watch = _ready_watch()
+    watch.heard_deadman(_state(DeadmanState.STATE_TRIPPED), 10.0)
+    machine = _authority(watch)
+    assert machine.request(TwinMode.MODE_SIM, "", "stay", force=False).accepted

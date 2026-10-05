@@ -430,8 +430,13 @@ class ModeAuthority:
 
         if mode == self._mode:
             # Not a transition: nothing enters an authority it was not already
-            # under, so there is nothing for the gate above to guard. The reason
-            # is still recorded, because a re-assertion is a decision too.
+            # under, so there is nothing for the opt-in above to guard. The
+            # physical side's readiness is another matter (R-04): a program that
+            # re-asserts VALIDATED is about to command that side, which may have
+            # tripped, gone stale or lost its enable since the mode was entered.
+            # So a mode commanding a physical side is re-checked here too.
+            self._require_physical_side_ready(mode, asset_id)
+            # The reason is still recorded, because a re-assertion is a decision too.
             self._reason = reason
             return Verdict(
                 accepted=True,
@@ -469,14 +474,7 @@ class ModeAuthority:
             # mode commanding it waits until it is enabled and publishing. A
             # PRECONDITION and not a safety refusal: it clears by itself, and a
             # caller may ask again.
-            if self._physical_side_unready is not None:
-                reason = self._physical_side_unready()
-                if reason is not None:
-                    raise ModeError(
-                        ResultCode.PRECONDITION_FAILED,
-                        f"{PHYSICAL_SIDE_NOT_READY}: entering {MODE_NAMES[mode]} would "
-                        f"command a physical side that is not ready - {reason}",
-                    )
+            self._require_physical_side_ready(mode, asset_id)
 
         previous = self._mode
         self._mode = mode
@@ -488,6 +486,20 @@ class ModeAuthority:
             detail=f"{MODE_NAMES[previous]} -> {MODE_NAMES[mode]}",
             commands_hardware=commands_hardware,
         )
+
+    def _require_physical_side_ready(self, mode: int, asset_id: str) -> None:
+        """Refuse ``mode`` while a physical side it commands is not ready (ADR-0070 item 6)."""
+        if self._physical_side_unready is None:
+            return
+        if not self._deployment.physical_sides_commanded(mode, asset_id):
+            return
+        unready = self._physical_side_unready()
+        if unready is not None:
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{PHYSICAL_SIDE_NOT_READY}: {MODE_NAMES[mode]} would command a physical "
+                f"side that is not ready - {unready}",
+            )
 
     def _commands_hardware(self, mode: int, asset_id: str) -> bool:
         """Whether entering ``mode`` places physical actuation under a new authority.

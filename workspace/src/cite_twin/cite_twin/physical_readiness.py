@@ -27,8 +27,8 @@ publishing.
 Three facts, each read on the physical side's own domain, each fresh within the
 plan's `state_max_age_s` on the boundary's steady clock:
 
-1. the deadman permits motion (`deadman_permits_motion`, the ONE predicate on
-   a `DeadmanState`);
+1. the deadman permits motion and has enabled the arm
+   (`deadman_permits_motion`, the ONE predicate on a `DeadmanState`);
 2. the arm trajectory controller is running: its `controller_state`, which it
    publishes only while active;
 3. every joint the side publishes - the arm's, the track's, the gripper's - has
@@ -49,12 +49,13 @@ from cite_interfaces.msg import DeadmanState
 def deadman_permits_motion(message: DeadmanState) -> bool:
     """Whether a deadman's state lets this side be commanded.
 
-    THE ONE PREDICATE ON A `DeadmanState` the boundary reads. HEALTHY is the
-    only state in which the deadman has enabled the arm. If `DeadmanState`
-    gains a field saying the enable was confirmed, it is required HERE and
-    nowhere else.
+    THE ONE PREDICATE ON A `DeadmanState` the boundary reads. HEALTHY says
+    motion is PERMITTED; `arm_enabled` says the deadman's own enable
+    (`set_state(0)`) was acknowledged in this HEALTHY period. Both are required
+    (S-03): HEALTHY alone is also the moment between the first heartbeat and an
+    enable that may still fail, when a goal would reach an arm held at STOP.
     """
-    return message.state == DeadmanState.STATE_HEALTHY
+    return message.state == DeadmanState.STATE_HEALTHY and message.arm_enabled
 
 
 @dataclass
@@ -87,6 +88,8 @@ class PhysicalSideWatch:
         if now - self.deadman_at > self.max_age_s:
             return f"{self.asset}: the deadman's last state is {now - self.deadman_at:.2f} s old"
         if not deadman_permits_motion(self.deadman):
+            if self.deadman.state == DeadmanState.STATE_HEALTHY:
+                return f"{self.asset}: the deadman has not yet enabled the arm"
             return (
                 f"{self.asset}: the deadman holds the arm "
                 f"(state {self.deadman.state}: {self.deadman.detail})"
