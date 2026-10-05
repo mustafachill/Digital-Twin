@@ -1458,6 +1458,14 @@
       "additionalProperties": false,
       "description": "The vendor driver a physical backend's plugin embeds, and what it serves outside it.\n\nSome vendors serve part of a machine only through a driver of their own that\nruns inside the `ros2_control` component: for the xArm, the plugin\n`uf_robot_hardware/UFRobotSystemHardware` constructs `xarm_api`'s driver on a\nnode of its own, and that driver serves the linear track only as services and\nthe gripper only as an action (ADR-0070 items 3-5). This block is what the\ngenerator needs to name those, and to switch the services on: it states\nfacts about the vendor's code, each read from the pinned source, and no name\na consumer writes by hand.\n\nThe NAMES are formed by `cite_tools.model.ids.vendor_interface`, once.",
       "properties": {
+        "controller_manager_services": {
+          "items": {
+            "pattern": "^(/[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Controller Manager Services",
+          "type": "array"
+        },
         "gripper_action": {
           "anyOf": [
             {
@@ -1497,7 +1505,8 @@
         "node",
         "namespace_arg",
         "services",
-        "streaming_mode"
+        "streaming_mode",
+        "controller_manager_services"
       ],
       "title": "VendorDriver",
       "type": "object"

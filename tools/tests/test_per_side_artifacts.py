@@ -370,6 +370,12 @@ class TestVendorNames:
                 )
             },
             "gripper_action": f"{namespace}/{prefix}xarm_gripper/gripper_action",
+            # The plugin's absolute controller manager clients, each onto this
+            # asset's own manager (SA2c-S-01).
+            "controller_manager_remaps": {
+                f"/controller_manager/{leaf}": f"{manager['node']}/{leaf}"
+                for leaf in ("list_controllers", "switch_controller")
+            },
         }
 
     def test_the_plan_names_what_the_vendor_creates(self, real_model: Path) -> None:

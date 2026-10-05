@@ -117,7 +117,9 @@ joint's (`cite_twin`).
 
 **While the deadman holds the arm at state 4, the vendor plugin deactivates every controller in
 its controller manager** — `joint_state_broadcaster` included — and on recovery activates every
-controller it lists (`uf_robot_system_hardware.cpp:398-424`, `:426-440`). So joint1..5 are not
+controller it lists (`uf_robot_system_hardware.cpp:398-424`, `:426-440`), through the
+manager's `list_controllers` and `switch_controller`, which it names absolutely and
+`hardware.launch.py` remaps onto the asset's own manager. So joint1..5 are not
 published while AWAITING, INACTIVE or TRIPPED; the track adapter and gripper relay keep
 publishing theirs.
 

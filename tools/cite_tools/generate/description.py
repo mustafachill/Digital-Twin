@@ -470,6 +470,9 @@ class VendorNames:
     #: ``(service, fully qualified name)``, sorted by service.
     services: tuple[tuple[str, str], ...]
     gripper_action: str | None
+    #: ``(the absolute name the plugin calls, this asset's controller manager
+    #: service)``: the remaps the side's launch puts on `ros2_control_node`.
+    controller_manager_remaps: tuple[tuple[str, str], ...] = ()
 
 
 def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorNames | None:
@@ -492,6 +495,13 @@ def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorN
             and effector is not None
             and effector.vendor_integrated
             else None
+        ),
+        controller_manager_remaps=tuple(
+            (
+                name,
+                f"{asset.namespace}/{ids.CONTROLLER_MANAGER_NODE}/{name.rsplit('/', 1)[1]}",
+            )
+            for name in driver.controller_manager_services
         ),
     )
 

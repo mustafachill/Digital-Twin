@@ -309,6 +309,13 @@ plan:
           set_mode: /cite/cell_b/picker/picker_picker/set_mode
           set_state: /cite/cell_b/picker/picker_picker/set_state
         gripper_action: /cite/cell_b/picker/picker_xarm_gripper/gripper_action
+        # The controller manager services the vendor plugin calls by an
+        # absolute name, each mapped onto this asset's own manager's service.
+        # The side's launch remaps them on `ros2_control_node`; without it the
+        # plugin's `write()` waits on a service nothing serves.
+        controller_manager_remaps:
+          /controller_manager/list_controllers: /cite/cell_b/picker/controller_manager/list_controllers
+          /controller_manager/switch_controller: /cite/cell_b/picker/controller_manager/switch_controller
       # What the counterpart runs beside its controller manager because its
       # hardware is physical (ADR-0070 items 3-6): the deadman, and the adapters
       # that serve the simulated side's names through the vendor driver. Each

@@ -332,6 +332,14 @@ asset_type:
           argument: velocity_control
           when_false: 1
           when_true: 4
+        # The controller manager services the plugin itself calls, by the
+        # absolute names it hard-codes (uf_robot_system_hardware.cpp:261-262),
+        # from `write()` with a blocking wait of up to about five seconds when
+        # nothing serves them (`_call_request`, :21-46). The physical side's
+        # launch remaps each onto this asset's own controller manager.
+        controller_manager_services:
+          - /controller_manager/list_controllers
+          - /controller_manager/switch_controller
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

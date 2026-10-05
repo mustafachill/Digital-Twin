@@ -664,6 +664,18 @@ class VendorDriver(Strict):
     gripper_action: str | None = None
     #: The vendor mode the plugin streams in; see `StreamingMode`.
     streaming_mode: StreamingMode
+    #: The controller manager services the plugin itself calls, by the ABSOLUTE
+    #: names it hard-codes. A vendor fact, read from the pinned source: the xArm
+    #: plugin creates its clients for `/controller_manager/list_controllers` and
+    #: `/controller_manager/switch_controller` (`uf_robot_system_hardware.cpp`
+    #: lines 261-262) and calls them from `write()`, blocking up to about five
+    #: seconds when nothing serves them (`_call_request`, lines 21-46). This
+    #: project's controller manager runs in the asset's namespace, so the side's
+    #: launch remaps each of these onto that manager's own service of the same
+    #: leaf name; the plan carries both halves of every remap.
+    controller_manager_services: list[
+        Annotated[str, Field(pattern=r"^(/[A-Za-z_][A-Za-z0-9_]*)+$")]
+    ]
 
 
 class VendorAxis(Strict):

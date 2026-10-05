@@ -258,7 +258,10 @@ order, each step gated on the one before it exiting 0 and no step on a timer:
 2. The deadman alone, configured and activated by the lifecycle driver.
 3. The controller manager (vendor plugin, the plant's namespace, no `name=` remap, the side's
    own configuration file, the description from the latched topic), the description
-   publisher, the facility nodes and the two adapters; then those driven to `active`.
+   publisher, the facility nodes and the two adapters; then those driven to `active`. The
+   vendor plugin calls `/controller_manager/list_controllers` and `.../switch_controller` by
+   absolute name from inside `write()`; the plan's `controller_manager_remaps` (from L0's
+   `vendor_driver.controller_manager_services`) remaps both onto this manager's own services.
 4. `hold_gate.py`.
 5. Controllers and `move_group`; the planning scene; the skill servers and the witness, which on
    this side also waits for the two actions the deadman cancels; the token.

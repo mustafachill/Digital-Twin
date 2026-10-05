@@ -357,6 +357,16 @@ plan:
 {% if manager.counterpart_vendor.gripper_action %}
         gripper_action: {{ manager.counterpart_vendor.gripper_action }}
 {% endif %}
+{% if manager.counterpart_vendor.controller_manager_remaps %}
+        # The controller manager services the vendor plugin calls by an
+        # absolute name, each mapped onto this asset's own manager's service.
+        # The side's launch remaps them on `ros2_control_node`; without it the
+        # plugin's `write()` waits on a service nothing serves.
+        controller_manager_remaps:
+{% for absolute, target in manager.counterpart_vendor.controller_manager_remaps %}
+          {{ absolute }}: {{ target }}
+{% endfor %}
+{% endif %}
 {% endif %}
 {% if manager.counterpart_physical %}
       # What the counterpart runs beside its controller manager because its

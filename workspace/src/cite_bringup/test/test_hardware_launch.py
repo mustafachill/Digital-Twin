@@ -332,6 +332,47 @@ def test_the_controller_manager_runs_where_the_plan_names_it(module, context) ->
     assert ("~/robot_description", manager.description_topic) in remappings
 
 
+#: The pinned vendor plugin, read for the absolute controller manager names its
+#: own clients use, so that the L0 declaration is checked against the source.
+VENDOR_PLUGIN = (
+    Path(__file__).resolve().parents[2]
+    / "external/xarm_ros2/xarm_controller/src/hardware/uf_robot_system_hardware.cpp"
+)
+
+
+def test_the_vendor_plugins_controller_manager_calls_reach_this_manager(
+    module, context
+) -> None:
+    """SA2c-S-01: the plugin calls `/controller_manager/...` by absolute name.
+
+    Our controller manager runs in the asset's namespace, so without a remap
+    those calls wait on a service nothing serves, from inside `write()`. Every
+    absolute name the pinned source creates a client for is remapped, and each
+    lands on this manager's own service of the same leaf name.
+    """
+    import re
+
+    manager = _plan().controller_managers[0]
+    called = set(
+        re.findall(
+            r'create_client<controller_manager_msgs::srv::\w+>\("(/controller_manager/\w+)"\)',
+            VENDOR_PLUGIN.read_text(),
+        )
+    )
+    assert called, f"no controller manager client found in {VENDOR_PLUGIN}"
+    (node,) = [
+        n for n in _nodes(_structure(module), context) if _executable(n) == "ros2_control_node"
+    ]
+    remappings = dict(
+        tuple(perform_substitutions(context, list(part)) for part in pair_)
+        for pair_ in node._Node__remappings  # noqa: SLF001 - read only
+    )
+    for absolute in called:
+        assert remappings.get(absolute) == f"{manager.node}/{absolute.rsplit('/', 1)[1]}", (
+            f"{absolute} is not remapped onto {manager.node}"
+        )
+
+
 def test_every_hardware_node_is_named_by_the_plan_with_the_generated_file(
     module, context
 ) -> None:

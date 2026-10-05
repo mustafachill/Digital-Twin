@@ -392,13 +392,23 @@ def controller_manager(manager, side: str) -> Node:
     driver's node in this process. The description arrives on the topic the
     side's description publisher latches, never as a parameter, so the robot's
     address is in no parameter of this node.
+
+    The vendor plugin's own clients of the controller manager use ABSOLUTE
+    names (`/controller_manager/list_controllers`, `.../switch_controller`)
+    from inside `write()`, where an unserved call blocks the control loop for
+    seconds. Each is remapped here onto this manager's own service, as the plan
+    states the pair (`controller_manager_remaps`, generated from L0's
+    `vendor_driver`). A process-wide remap: the plugin's node lives in this
+    process, and the manager's own `~/` services are not touched by it.
     """
+    vendor = manager.vendor_on(side)
+    remaps = [] if vendor is None else list(vendor.controller_manager_remaps.items())
     return Node(
         package="controller_manager",
         executable="ros2_control_node",
         namespace=manager.node.rsplit("/", 1)[0],
         parameters=[str(resolve_uri(manager.parameters_on(side))), {"use_sim_time": USE_SIM_TIME}],
-        remappings=[("~/robot_description", manager.description_topic)],
+        remappings=[("~/robot_description", manager.description_topic), *remaps],
         output="screen",
         on_exit=side_down_on_exit(f"the {manager.asset} controller manager"),
         sigterm_timeout=TEARDOWN_SIGTERM_S,

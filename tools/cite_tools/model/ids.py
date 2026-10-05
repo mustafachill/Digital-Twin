@@ -156,6 +156,10 @@ GRASP_DETACH = "grasp/detach"
 #: under the fully qualified name the plan states, so a name is made here and
 #: nowhere else.
 DEADMAN_NODE = "deadman"
+#: The controller manager's node name, in each asset's namespace. Named here
+#: because two artifacts form it: the plan's `node`, and the remap targets of a
+#: vendor plugin that calls the manager by an absolute name (ADR-0070).
+CONTROLLER_MANAGER_NODE = "controller_manager"
 TRACK_ADAPTER_NODE = "track_adapter"
 GRIPPER_RELAY_NODE = "gripper_relay"
 

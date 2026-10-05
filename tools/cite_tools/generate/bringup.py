@@ -554,7 +554,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
     managers = tuple(
         _ManagerView(
             asset=asset.id,
-            node=f"{asset.namespace}/controller_manager",
+            node=f"{asset.namespace}/{ids.CONTROLLER_MANAGER_NODE}",
             backend=asset.instance.hardware.backend,
             counterpart_backend=(
                 asset.instance.hardware.effective_counterpart_backend if cell.is_paired else None

@@ -474,6 +474,9 @@ class VendorNames:
     services: Mapping[str, str]
     #: The vendor's `GripperCommand` action, or `None` where it serves none.
     gripper_action: str | None
+    #: Absolute name the vendor plugin calls -> this asset's controller manager
+    #: service it is remapped onto, on the side's `ros2_control_node`.
+    controller_manager_remaps: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -2088,6 +2091,16 @@ def _vendor(entry: object | None, where: str) -> VendorNames | None:
     gripper_action = _optional(entry, "gripper_action")
     if gripper_action is not None:
         names["gripper_action"] = gripper_action
+    remaps = _optional(entry, "controller_manager_remaps")
+    if remaps is None:
+        remaps = {}
+    if not isinstance(remaps, dict):
+        raise PlanError(
+            f"{here}: 'controller_manager_remaps' must be a mapping, not {_kind(remaps)}"
+        )
+    for absolute, target in remaps.items():
+        names[f"remap {absolute!r}"] = absolute
+        names[f"remap target of {absolute!r}"] = target
     for label, name in names.items():
         if not isinstance(name, str) or not name.startswith("/"):
             raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
@@ -2096,6 +2109,7 @@ def _vendor(entry: object | None, where: str) -> VendorNames | None:
         service_namespace=names["service_namespace"],
         services=MappingProxyType(dict(services)),
         gripper_action=gripper_action,
+        controller_manager_remaps=MappingProxyType(dict(remaps)),
     )
 
 
