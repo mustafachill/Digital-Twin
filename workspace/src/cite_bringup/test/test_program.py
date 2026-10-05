@@ -20,6 +20,7 @@ Nothing here moves an arm. What moves one is `tests/scenarios/program_cycle.py`.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import signal
 
 from cite_bringup.plan import default_plan_path, load
@@ -35,7 +36,7 @@ from cite_bringup.program.cell import (
     twin_name,
 )
 from cite_bringup.program.from_plan import program, target
-from cite_bringup.program.sides import physical_sides, simulated_sides
+from cite_bringup.program.sides import physical_sides, required_speed_scale, simulated_sides
 from cite_bringup.program.steps import (
     belt,
     EXIT_INTERRUPTED,
@@ -470,3 +471,65 @@ def test_no_belt_is_commanded_on_a_physical_side(monkeypatch, capsys) -> None:
     commanded.clear()
     assert belt_command.main(["--zone", ZONE, "--side", "counterpart", "--stop"]) == 0
     assert commanded == []
+
+
+def test_a_physical_side_never_runs_at_a_defaulted_speed_scale() -> None:
+    """S-04: with a physical side the operator names the scale; none is assumed."""
+    plan = load(default_plan_path(ZONE))
+    assert physical_sides(plan), f"{ZONE} ships a physical counterpart"
+    with pytest.raises(ValueError, match="must be given explicitly"):
+        required_speed_scale(plan, "")
+    assert required_speed_scale(plan, "0.1") == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize("typed", ["0", "1.5", "nan", "inf", "abc", "-0.2"])
+def test_the_speed_scale_range_is_the_programs_own_before_bring_up(typed: str) -> None:
+    """R-06/T-02: `./scripts/program` asks this before bring-up, by `steps.speed_scale`."""
+    with pytest.raises(ValueError):
+        required_speed_scale(load(default_plan_path(ZONE)), typed)
+
+
+def test_the_script_checks_the_speed_scale_before_it_brings_anything_up() -> None:
+    """The check and the prompt, read from `scripts/program` itself."""
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
+    check = script.index("cite_bringup.program.sides --zone \"$ZONE\" --speed-scale")
+    assert check < script.index("start_in_own_group")
+    assert "runs at speed scale ${SPEED_SCALE}" in script
+
+
+def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> None:
+    """Operator safety: after a run on a pair with a physical side, the twin is put in SIM.
+
+    SIM forwards nothing to the counterpart, so the person placing the next part
+    is not beside an arm the twin can still command; the next run asks for
+    VALIDATED again through the opt-in and the readiness check.
+    """
+    from cite_interfaces.msg import TwinMode
+
+    sent = []
+
+    class Client:
+        def wait_for_service(self, timeout_sec):
+            return True
+
+        def call_async(self, request):
+            sent.append(request)
+            return request
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    class Accepted:
+        accepted = True
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    ros._until = lambda future, what, ceiling_s=0.0: Accepted()
+    ros.leave_validated()
+    (request,) = sent
+    assert request.mode == TwinMode.MODE_SIM
+    assert "nothing crosses to the physical side" in capsys.readouterr().out
+    main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
+    text = main_source.read_text()
+    assert text.index("status = run(") < text.index("ros.leave_validated()")

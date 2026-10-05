@@ -6,6 +6,7 @@
 #   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
 #   ./scripts/program --zone cell_b    name the zone; needed only when the model declares several
 #   ./scripts/program --speed-scale 0.1  every move and track slide at 10% of its speed, both sides
+#                                      (required, explicitly, whenever a side is physical)
 #
 # WHAT IT DOES. It brings up both sides of the paired cell, starts each side's
 # belt ON THAT SIDE (the belt is not twinned, ADR-0067), and for each cycle
@@ -22,7 +23,10 @@
 # spawned or removed and no pose is read - a person places the part on the table
 # and presses Enter before each cycle - and no belt is commanded, because the
 # belt is not twinned and there is no physical belt driver. The physical side
-# comes up only with CITE_ALLOW_HARDWARE=1 in the shell that runs this.
+# comes up only with CITE_ALLOW_HARDWARE=1 in the shell that runs this, and
+# only with --speed-scale named explicitly: the fraction the real arm runs at is
+# never a default. It is range-checked, by the program's own rule, before
+# anything is brought up, and printed at every cycle's prompt.
 #
 # WHAT IT IS NOT. A demonstration: it gates nothing and is in no CI step.
 # `./scripts/scenario program_cycle` is what CHECKS the program, on one side. The
@@ -38,7 +42,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 HEADLESS=0
 ZONE=""
 CYCLES=1
-SPEED_SCALE=1.0
+# Empty until given: on a physical side the scale is never defaulted.
+SPEED_SCALE=""
 WANT=""
 for arg in "$@"; do
     if [ -n "$WANT" ]; then
@@ -53,15 +58,16 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --zone|--cycles|--speed-scale) WANT="$arg" ;;
-        -h|--help)  sed -n '2,33p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,37p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
 [ -z "$WANT" ] || die "${WANT} needs a value."
 case "$CYCLES" in ''|*[!0-9]*) die "--cycles needs a whole number, 0 for forever." ;; esac
-# Checked again, and authoritatively, by the program itself (`speed_scale`);
-# here only so that a typo is refused before anything is brought up.
-case "$SPEED_SCALE" in ''|*[!0-9.]*|*.*.*|.) die "--speed-scale needs a number in (0, 1]." ;; esac
+# Only the shape here, so a typo is refused before this checkout's containers
+# are touched; the range is checked by the program's own rule below, before
+# bring-up (`cite_bringup.program.sides.required_speed_scale`).
+case "$SPEED_SCALE" in ''|[0-9]*|.[0-9]*) ;; *) die "--speed-scale needs a number." ;; esac
 
 # Defaulted only when the model leaves one answer (ADR-0069 decision 5), a named
 # zone checked against the same plans, and both asked here, before the container
@@ -113,6 +119,10 @@ PHYSICAL_SIDES="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --physica
 if [ -n "$PHYSICAL_SIDES" ]; then
     info "Physical side(s): $(echo "$PHYSICAL_SIDES" | tr '\n' ' ')- no box, no belt and no pose there; a person places the part"
 fi
+# The speed scale, by the program's own range and refused where a side is
+# physical and none was named (S-04, R-06): before anything is brought up.
+SPEED_SCALE="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --speed-scale "$SPEED_SCALE")" \
+    || die "refused before bring-up (see above)."
 
 # How long the pair may take to stop after its SIGINT before SIGKILL goes to
 # its process group. A ceiling on a failure, not a schedule. It sits above the
@@ -267,7 +277,9 @@ while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]
     replace_boxes "$([ "$CYCLE" -gt 1 ] && echo 1 || echo 0)" \
         || die "a side would not take the work-piece"
     for side in $PHYSICAL_SIDES; do
-        info "Cycle ${CYCLE}: ${side} is physical. Place the part on the table by hand, clear the cell, then press Enter."
+        info "Cycle ${CYCLE}: ${side} is physical and runs at speed scale ${SPEED_SCALE}."
+        warn "The twin forwards nothing to ${side} now (SIM), but its ARM IS ENABLED and holds where it stands."
+        info "Place the part on the table by hand, clear the cell, then press Enter."
         read -r _ || die "no operator answer for ${side} (a physical side needs one at this terminal); stopping"
     done
 

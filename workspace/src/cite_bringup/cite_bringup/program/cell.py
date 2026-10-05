@@ -285,6 +285,35 @@ class RosCell:
 
         ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
 
+    def leave_validated(self) -> None:
+        """Ask the twin for SIM, where no command crosses to the counterpart.
+
+        Called when the program ends on a pair with a physical side, so the
+        operator's next step - placing a part by hand - happens while the twin
+        forwards nothing to the physical arm or carriage; the next run asks for
+        VALIDATED again, through the opt-in and the readiness check. SIM does
+        NOT disable the arm: the deadman keeps it enabled while heartbeats
+        arrive, and it holds where it stands. A refusal is said, not raised: the
+        program has already ended.
+        """
+        client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
+        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
+            print(f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served")
+            return
+        request = SetMode.Request(
+            mode=TwinMode.MODE_SIM,
+            reason="the program ended; a person may enter the physical cell",
+        )
+        try:
+            response = self._until(client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S)
+        except StepFailed as failure:
+            print(f"could not leave VALIDATED: {failure}", flush=True)
+            return
+        if not response.accepted:
+            print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
+            return
+        print("the twin is in SIM: nothing crosses to the physical side", flush=True)
+
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).
 

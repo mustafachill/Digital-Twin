@@ -38,6 +38,7 @@ import sys
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program.from_plan import program, target
+from cite_bringup.program.sides import physical_sides
 from cite_bringup.program.steps import (
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
@@ -73,7 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as error:
         parser.error(f"--speed-scale: {error}")
 
-    cell = target(load(default_plan_path(args.zone)))
+    plan = load(default_plan_path(args.zone))
+    cell = target(plan)
     steps = program(cell)
     if args.dry_run:
         for number, step in enumerate(steps, start=1):
@@ -109,7 +111,12 @@ def main(argv: list[str] | None = None) -> int:
             f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
             f"via {args.via} at {args.speed_scale:g} of its speed"
         )
-        return run(steps, ros, args.cycles, say, first_cycle=args.first_cycle)
+        status = run(steps, ros, args.cycles, say, first_cycle=args.first_cycle)
+        if args.via == "twin" and physical_sides(plan):
+            # Operator safety at the next prompt: a person places the part by
+            # hand, so the twin forwards nothing to the physical side then.
+            ros.leave_validated()
+        return status
     finally:
         rclpy.try_shutdown()
 
