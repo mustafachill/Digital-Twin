@@ -592,7 +592,9 @@ class TrackAdapter(LifecycleNode):
             why = error if error is not None else (
                 f"vendor code {response.ret}: {response.message}"
             )
-            self._drop_in_flight(f"set_linear_motor_speed({request.speed}) failed ({why})", request)
+            self._drop_in_flight(
+                f"set_linear_motor_speed({request.speed}) failed ({why})", request
+            )
             return
         with self._lock:
             self._acked_speed = request.speed

@@ -389,7 +389,7 @@ def test_the_first_move_after_activation_writes_its_speed_again():
 
 
 def _hold(position: float = 0.55) -> JointTrajectory:
-    """A hold: both points at one position, which the adapter answers with a stop."""
+    """Build a hold: both points at one position, which the adapter answers with a stop."""
     message = JointTrajectory(joint_names=[GOOD["track_adapter"]["joint"]])
     for seconds in (0, 1):
         message.points.append(

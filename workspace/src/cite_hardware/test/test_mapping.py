@@ -189,8 +189,10 @@ def test_the_vendor_speed_never_exceeds_the_commanded_one() -> None:
 
 
 def test_a_speed_below_the_vendors_slowest_is_refused_not_raised() -> None:
-    """R-13: below 1 unit/s the vendor would run faster than commanded; zero means
-    "keep the vendor's last speed", which nobody chose."""
+    """R-13: below 1 unit/s the vendor would run faster than commanded.
+
+    Zero is no floor either: the vendor reads it as "keep the last speed".
+    """
     with pytest.raises(Refused, match="slowest"):
         vendor_speed(0.0001, 1000.0, 1.0)
 

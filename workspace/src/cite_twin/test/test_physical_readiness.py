@@ -187,7 +187,7 @@ def test_reasserting_a_mode_that_commands_no_physical_side_never_waits() -> None
 
 
 def _boundary_with_carriages(plant_m: float, counterpart_m: float) -> TwinBoundary:
-    """The boundary's own readiness question, on a ready arm with two carriages."""
+    """Build the boundary's own readiness question, on a ready arm with two carriages."""
     now = time.monotonic()
     boundary = object.__new__(TwinBoundary)
     boundary._physical_watches = {"picker": _ready_watch(now)}

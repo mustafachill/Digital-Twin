@@ -284,7 +284,7 @@ def test_a_side_that_never_arrives_fails_the_track_step() -> None:
 
 
 def _tracking(cell, plant_m: float, answers: list[tuple[bool, str]]):
-    """A twin-driven cell whose plant carriage stands at ``plant_m``; the twin answers ``answers``."""
+    """Build a twin-driven cell, its plant carriage at ``plant_m``, the twin saying ``answers``."""
     ros = object.__new__(RosCell)
     ros.node = None
     ros._via = "twin"
