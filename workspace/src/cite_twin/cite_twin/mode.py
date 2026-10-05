@@ -41,6 +41,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import ResultCode, TwinMode
 from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, PLANT_SIDE
 
@@ -367,9 +368,15 @@ class ModeAuthority:
         deployment: Deployment,
         hardware_opt_in: Callable[[], None],
         initial_mode: int = INITIAL_MODE,
+        physical_side_unready: Callable[[], str | None] | None = None,
     ) -> None:
         self._deployment = deployment
         self._hardware_opt_in = hardware_opt_in
+        #: Why a physical side may not be commanded yet, or `None` when it may
+        #: (ADR-0070 item 6). Asked after the opt-in, of every transition that
+        #: places physical actuation under a new authority, and never behind
+        #: `force`. Injected like the opt-in, so this module reads no topic.
+        self._physical_side_unready = physical_side_unready
         self._mode = initial_mode
         self._reason = "the mode a deployment starts in; never reached by a default"
 
@@ -458,6 +465,18 @@ class ModeAuthority:
             # NEVER behind `force`. SetMode.srv: "Never skips a safety check - no
             # value of this field can do that."
             self._require_hardware_opt_in(mode, asset_id)
+            # A physical side announces ready while its arm is still held; a
+            # mode commanding it waits until it is enabled and publishing. A
+            # PRECONDITION and not a safety refusal: it clears by itself, and a
+            # caller may ask again.
+            if self._physical_side_unready is not None:
+                reason = self._physical_side_unready()
+                if reason is not None:
+                    raise ModeError(
+                        ResultCode.PRECONDITION_FAILED,
+                        f"{PHYSICAL_SIDE_NOT_READY}: entering {MODE_NAMES[mode]} would "
+                        f"command a physical side that is not ready - {reason}",
+                    )
 
         previous = self._mode
         self._mode = mode

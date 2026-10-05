@@ -47,6 +47,9 @@ if(BUILD_TESTING)
   # and that `force` cannot reach the gate. Pure logic - the hardware check is
   # injected, so both answers are driven without touching the environment.
   ament_add_pytest_test(mode test/test_mode.py)
+  # ADR-0070 item 6: a mode commanding a physical side waits until it is enabled
+  # and publishing.
+  ament_add_pytest_test(physical_readiness test/test_physical_readiness.py)
   # ADR-0054 clause 8: L5's gate answers on the fact L0 declares rather than on
   # the backend's name, and the shipped single-sided deployment still refuses a
   # two-sided mode. Nothing here constructs a node or starts a graph - the map

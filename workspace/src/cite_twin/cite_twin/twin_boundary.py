@@ -94,6 +94,7 @@ from cite_bringup.plan import (
 from cite_bringup.readiness import boundary_announcement
 from cite_facility import model_info
 from cite_interfaces.msg import (
+    DeadmanState,
     DivergenceMetrics,
     ModelVersion,
     ResultCode,
@@ -122,12 +123,14 @@ from cite_twin.mode import (
     ModeAuthority,
     Verdict,
 )
+from cite_twin.physical_readiness import PhysicalSideWatch, unready as physical_unready
 from cite_twin.routing import (
     COUNTERPART_SIDE,
     PLANT_SIDE,
     reverse_state_flow,
     route,
 )
+from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.task import Future
@@ -231,16 +234,13 @@ DIVERGENCE_PERIOD_S = 1.0
 _ANNOUNCE_PERIOD_S = 0.05
 
 
-#: How often the boundary says it is alive on each side, in seconds.
-#:
-#: A publication rate and not a timing guess: nothing here waits for it and no
-#: transition is sequenced on it (P4). What it bounds is a physical side's
-#: deadman, whose timeout is declared in L0 above the link's observed spikes
-#: (ADR-0070 item 5) and has to be several of these periods long, or a single
-#: late heartbeat trips it. That relation is the wiring task's to check; a node
-#: parameter, like `divergence_period_s`, so a deployment can change it without
-#: a rebuild.
-HEARTBEAT_PERIOD_S = 0.1
+#: How often the boundary says it is alive on each side is NOT stated here: it
+#: is the zone's `twin.heartbeat_period_s` in L0, read from the plan
+#: (`Plan.twin`), so the period and the physical side's deadman timeout that
+#: has to be several of them are two declarations one validator rule relates
+#: (`deadman-timeout-below-three-heartbeats`, ADR-0070 item 5). A publication
+#: rate and not a timing guess: nothing waits for it and no transition is
+#: sequenced on it (P4).
 
 
 class _Heartbeat:
@@ -376,13 +376,18 @@ class TwinBoundary:
         )
         # Read and refused here, before anything is built on the sides, so a
         # refusal releases both contexts (S-12).
-        self._plant.node.declare_parameter("heartbeat_period_s", HEARTBEAT_PERIOD_S)
         try:
-            beat_period = heartbeat_period(
-                self._plant.node.get_parameter("heartbeat_period_s")
-                .get_parameter_value()
-                .double_value
-            )
+            if plan.twin is None:
+                raise BoundaryError(
+                    f"the plan for zone {plan.zone!r} states no `twin:` timing, so there is "
+                    "no heartbeat_period_s to publish at. It is generated from the zone's "
+                    "`twin:` block - run ./scripts/validate-model --write, then ./scripts/build."
+                )
+            beat_period = heartbeat_period(plan.twin.heartbeat_period_s)
+            # What a physical counterpart has said, per arm, before a mode may
+            # command it (ADR-0070 item 6): its deadman, its arm controller and
+            # its joints. Read on the counterpart's own domain; nothing crosses.
+            self._physical_watches = _physical_watches(plan)
         except BoundaryError:
             self.stop()
             raise
@@ -415,6 +420,7 @@ class TwinBoundary:
         self._authority = ModeAuthority(
             deployment,
             partial(require_hardware_opt_in, plan, environ),
+            physical_side_unready=self._physical_side_unready,
         )
 
         self._mode_publisher = self._plant.node.create_publisher(
@@ -487,6 +493,31 @@ class TwinBoundary:
                     model_info.TOPIC,
                     partial(self._on_model_version, side_name),
                     LATCHED,
+                    callback_group=self._group,
+                )
+            )
+
+        for asset, watch in self._physical_watches.items():
+            manager = next(m for m in plan.controller_managers if m.asset == asset)
+            physical = manager.physical_on(COUNTERPART_SIDE)
+            self._subscriptions.append(
+                self._counterpart.node.create_subscription(
+                    DeadmanState,
+                    physical.deadman_state_topic,
+                    partial(self._on_deadman_state, watch),
+                    # The deadman's own profile: latched, so the current state
+                    # arrives at once, and republished on every tick.
+                    LATCHED,
+                    callback_group=self._group,
+                )
+            )
+            self._subscriptions.append(
+                self._counterpart.node.create_subscription(
+                    JointTrajectoryControllerState,
+                    physical.arm_controller_state_topic,
+                    partial(self._on_controller_state, watch),
+                    # Reliable and volatile, as the controller publishes it.
+                    STATE,
                     callback_group=self._group,
                 )
             )
@@ -988,6 +1019,13 @@ class TwinBoundary:
             for name, position in zip(message.name, message.position)
         }
         with self._lock:
+            # Heard for readiness in every mode: whether a physical side is
+            # publishing is what decides whether a mode may command it at all.
+            watch = (
+                self._physical_watches.get(asset) if side_name == COUNTERPART_SIDE else None
+            )
+            if watch is not None:
+                watch.heard_joints(positions, time.monotonic())
             if side_name != PLANT_SIDE and side_name not in reverse_state_flow(
                 self._authority.mode
             ):
@@ -1005,6 +1043,18 @@ class TwinBoundary:
                 # makes term 3 of the conjunction false (ADR-0049 decision 5).
                 clock_deficit_s=None,
             )
+
+    def _on_deadman_state(self, watch: PhysicalSideWatch, message: DeadmanState) -> None:
+        with self._lock:
+            watch.heard_deadman(message, time.monotonic())
+
+    def _on_controller_state(self, watch: PhysicalSideWatch, _message) -> None:
+        with self._lock:
+            watch.heard_controller(time.monotonic())
+
+    def _physical_side_unready(self) -> str | None:
+        """Why a physical counterpart may not be commanded yet; asked under the lock."""
+        return physical_unready(self._physical_watches.values(), time.monotonic())
 
     def _on_model_version(self, side_name: str, message: ModelVersion) -> None:
         with self._lock:
@@ -1353,6 +1403,34 @@ def _wait(future: Future, goal_handle, handles) -> object | None:
             for handle in list(handles):
                 handle.cancel_goal_async()
     return future.result()
+
+
+def _physical_watches(plan: Plan) -> dict[str, PhysicalSideWatch]:
+    """One watch per arm whose counterpart is physical, keyed by asset.
+
+    Empty on a zone whose counterpart is simulated, and then nothing is
+    subscribed and no mode waits on anything. The freshness bound is the plan's
+    one statement of it (`twin.state_max_age_s`); a physical side with none is
+    refused rather than given a default.
+    """
+    watches: dict[str, PhysicalSideWatch] = {}
+    for manager in plan.controller_managers:
+        if manager.commands_physical_hardware_on_or_none(COUNTERPART_SIDE) is None:
+            continue
+        physical = manager.physical_on(COUNTERPART_SIDE)
+        if physical is None:
+            continue
+        if plan.twin is None or plan.twin.state_max_age_s is None:
+            raise BoundaryError(
+                f"{manager.asset}'s counterpart is physical and the plan states no "
+                "`twin.state_max_age_s` to judge its state fresh by"
+            )
+        watches[manager.asset] = PhysicalSideWatch(
+            asset=manager.asset,
+            joints=physical.joints,
+            max_age_s=plan.twin.state_max_age_s,
+        )
+    return watches
 
 
 def _skill_endpoints(plan: Plan) -> tuple[_SkillEndpoint, ...]:

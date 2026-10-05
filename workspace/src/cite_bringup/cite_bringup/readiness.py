@@ -134,3 +134,18 @@ def announced_boundary(line: str) -> str | None:
         if field.startswith("zone="):
             return field[len("zone="):]
     return None
+
+
+#: Begins the detail of a `SetMode` refusal that clears by itself: the twin
+#: boundary will not let a mode command a physical side until that side's
+#: deadman has enabled the arm and its controller and joints are publishing
+#: (ADR-0070 item 6). Stated here, beside the other words one participant says
+#: and another reads, because the boundary (`cite_twin.mode`) writes it and the
+#: fixed program (`cite_bringup.program.cell`) waits on it; any other refusal is
+#: final.
+PHYSICAL_SIDE_NOT_READY = "physical side not ready"
+
+
+def waits_for_a_physical_side(detail: str) -> bool:
+    """Whether a refusal's detail says only that a physical side is not ready yet."""
+    return detail.startswith(PHYSICAL_SIDE_NOT_READY)
