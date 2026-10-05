@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import ipaddress
 from pathlib import Path
 from types import MappingProxyType
 
@@ -185,6 +186,13 @@ PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
 )
 
 
+#: The description arguments whose value is a machine's network address, and so
+#: must parse as one before a launch hands it to the vendor (ADR-0070 item 2).
+#: `robot_ip` is the vendor macro's own argument name (`xarm_device_macro.xacro`),
+#: which the generator carries through unchanged (`description.env_argument`).
+ADDRESS_ARGUMENTS = frozenset({"robot_ip"})
+
+
 #: The plan keys that name the counterpart's OWN artifacts, stated only where its
 #: backend differs from the plant's (ADR-0048 clause 2, ADR-0070). A tuple of
 #: names authored once, here, for the reader below and for any fixture that has
@@ -275,6 +283,14 @@ class EnvironmentValueMissingError(PlanError):
     that is the only point at which an absent robot address can be caught before
     a hardware component opens a socket to nothing: the vendor component answers
     an empty address with `exit(1)` inside a loaded plugin (ADR-0053).
+    """
+
+
+class EnvironmentValueInvalidError(PlanError):
+    """A description argument read from the environment is set but malformed.
+
+    Its message names the variable and never the value, for the reason
+    `EnvironmentValueMissingError` gives: nothing an operator typed is logged.
     """
 
 
@@ -1702,6 +1718,12 @@ def resolve_description_args(
     The message names the variable and where it is set, and never prints a
     value.
 
+    An argument named in `ADDRESS_ARGUMENTS` must also parse as an IPv4 or IPv6
+    address (`ipaddress.ip_address`), and is refused otherwise with
+    `EnvironmentValueInvalidError`, which names the variable and not the value:
+    the vendor hands what it is given to its SDK as a host to connect to, and a
+    typo there is a connection to the wrong machine or to none.
+
     ``environ`` is passed in rather than read from `os` here, for the reason
     `require_hardware_opt_in` gives.
     """
@@ -1712,6 +1734,16 @@ def resolve_description_args(
         if not value.strip():
             missing.append(variable)
             continue
+        if argument in ADDRESS_ARGUMENTS:
+            try:
+                ipaddress.ip_address(value.strip())
+            except ValueError:
+                raise EnvironmentValueInvalidError(
+                    f"asset {manager.asset!r} on the {side} side reads {variable} from the "
+                    "environment as its robot's IP address, and its value is not an IPv4 "
+                    "or IPv6 address. Correct it in your local .env (see .env.example) and "
+                    "start again."
+                ) from None
         resolved[argument] = value.strip()
     if missing:
         raise EnvironmentValueMissingError(

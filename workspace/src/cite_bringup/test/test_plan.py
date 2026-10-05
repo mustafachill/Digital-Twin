@@ -37,6 +37,7 @@ from cite_bringup.plan import (
     DOMAIN_BASE_ENV,
     DOMAIN_ENV,
     DomainUnresolvedError,
+    EnvironmentValueInvalidError,
     EnvironmentValueMissingError,
     GazeboPartitionMissingError,
     GRIPPER_KEYS,
@@ -2450,6 +2451,29 @@ def test_the_refusal_never_prints_a_value() -> None:
     with pytest.raises(EnvironmentValueMissingError) as raised:
         resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": "   "})
     assert " " not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "value", ("203.0.113", "203.0.113.700", "robot.local", "203.0.113.7:502", "http://x", "2001:db8::g")
+)
+def test_a_malformed_address_is_refused_without_printing_it(value: str) -> None:
+    """S-04: an address is checked as one, and the refusal names the variable only."""
+    picker = _the_generated_counterpart()
+    with pytest.raises(EnvironmentValueInvalidError) as raised:
+        resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": value})
+    message = str(raised.value)
+    assert "CITE_XARM_IP" in message
+    assert value not in message
+    assert raised.value.__cause__ is None, "the parser's message would repeat the value"
+    assert isinstance(raised.value, PlanError)
+
+
+@pytest.mark.parametrize("value", (_TEST_ADDRESS, "2001:db8::7"))
+def test_an_ipv4_or_ipv6_address_is_accepted(value: str) -> None:
+    picker = _the_generated_counterpart()
+    assert resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": value}) == {
+        "robot_ip": value
+    }
 
 
 def test_a_side_reading_nothing_resolves_to_nothing() -> None:
