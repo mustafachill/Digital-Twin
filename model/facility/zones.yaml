@@ -48,10 +48,12 @@ zones:
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
     # PAIRED, and this is the system under construction (ADR-0059): two sides,
-    # BOTH SIMULATED, one of everything on each. It read `single` until
-    # 2026-09-18, when the project owner decided that the target is two digital
-    # twin sides rather than the three-arm cell; ADR-0056 had declared this zone
-    # unpaired and deferred the flip to a record of its own, and ADR-0059 is it.
+    # one of everything on each. It read `single` until 2026-09-18, when the
+    # project owner decided that the target is two twin sides rather than the
+    # three-arm cell; ADR-0056 had declared this zone unpaired and deferred the
+    # flip to a record of its own, and ADR-0059 is it. Since ADR-0070 the PLANT
+    # is simulated and the COUNTERPART is the physical xArm 5 on its track
+    # (`counterpart_backend: real` on `picker` and `picker_track`).
     #
     # WHAT THIS LINE DOES NOT BUY, because a declaration is not a test. Nothing
     # automated brings the pair up: ADR-0057's promotion clause 4 asks for a
@@ -60,9 +62,14 @@ zones:
     # outside `cite_twin`'s own tests. What CI drives on this zone is still the
     # PLANT ALONE.
     #
-    # Both sides stay simulated by REFUSAL and not by convention: ADR-0048
-    # clause 1 makes a divergent `counterpart_backend` an ERROR at validate
-    # time, and a physical plant on a paired zone is a second ERROR, so the L5
-    # command path cannot reach a physical machine by editing this file.
+    # WHAT KEEPS THE PHYSICAL SIDE FROM MOVING BY ACCIDENT. A physical PLANT on
+    # a paired zone is still an ERROR at validate time
+    # (`physical-plant-on-paired-zone`), so the side every scenario addresses
+    # stays simulated. The physical counterpart is gated at bring-up: a plan
+    # declaring it refuses to start without CITE_ALLOW_HARDWARE=1 (ADR-0054),
+    # and its address is read from CITE_XARM_IP at launch and never committed.
+    # The side launch, the track adapter, the gripper relay and the deadman
+    # that ADR-0070 items 3-6 require are NOT built yet, so nothing in this
+    # tree can bring the physical side up.
     twin:
       sides: pair

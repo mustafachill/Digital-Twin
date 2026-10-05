@@ -27,10 +27,17 @@ schema: cite/asset_type/v1
 # this installation, derived from the real program's pick pose (see
 # model/assets/instances/tracks.yaml).
 #
-# THE HARDWARE PATH IS NOT IMPLEMENTED. The real track is commanded through the
-# vendor's `set_linear_motor_pos` service in `xarm_api`, not through
-# `ros2_control`, so there is no `real` backend here and an instance selecting one
-# is refused by the validator. Phase 2.B builds it (ADR-0067, DoD item 5).
+# THE HARDWARE PATH IS DECLARED AND GENERATED, AND ITS ADAPTER IS NOT BUILT. The
+# vendor serves the real track only as `xarm_api` services of the arm's own
+# driver (`set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop`)
+# and never as a `ros2_control` joint, so the `real` backend below declares no
+# plugin (ADR-0070 item 3). What that buys today: on a side selecting it the
+# generator emits the track's joint into the arm's description with no
+# `<ros2_control>` block claiming it, and loads no track controller there.
+# What it does NOT buy yet: nothing serves the controller's `joint_trajectory`
+# topic or publishes the joint's position on that side. The track adapter that
+# does both is ADR-0070 item 3's second half, and until it exists a real track
+# does not move and reports no position (DoD item 5 stays open).
 asset_type:
   id: ufactory_linear_motor
   category: linear_axis
@@ -90,6 +97,18 @@ asset_type:
     sim:
       ros2_control_plugin: gz_ros2_control/GazeboSimSystem
       commands_physical_hardware: false
+      instance_params: []
+    real:
+      # No `ros2_control` component serves this joint on the physical track; see
+      # the header. Written out because the field is required: a backend becomes
+      # plugin-less only by someone saying so.
+      ros2_control_plugin: null
+      # The vendor stage moves a physical carriage carrying a physical arm, so
+      # this side is gated by CITE_ALLOW_HARDWARE exactly as the arm is
+      # (ADR-0054).
+      commands_physical_hardware: true
+      # None: the track is reached through the ARM's controller connection, so
+      # the address is the arm's `robot_ip` and is not stated twice.
       instance_params: []
 
   controllers:

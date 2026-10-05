@@ -285,6 +285,13 @@ asset_type:
       # the name back here would impose a per-instance obligation on every arm for
       # a fact that is not per arm.
       instance_params: [robot_ip]
+      # The vendor's physical component serves the gripper through its own
+      # `GripperCommand` action and exports no gripper joint:
+      # `xarm_gripper_macro.xacro` emits the gripper's `<ros2_control>` block
+      # only when the plugin is NOT this one. So a side selecting this backend
+      # loads no gripper controller, and a relay serves that controller's
+      # action name instead (ADR-0070 item 4).
+      exports_end_effector_joints: false
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

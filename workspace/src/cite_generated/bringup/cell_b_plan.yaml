@@ -126,11 +126,24 @@ plan:
       # the model left out (ADR-0041, Decision 3). The hardware opt-in reads
       # every side's backend, so a physical counterpart refuses to start without
       # it exactly as a physical plant would.
-      counterpart_backend: sim
+      counterpart_backend: real
       # The same fact for that side, emitted exactly where its backend is, so the
       # two accessors can never disagree about which sides this manager declares.
       # The reader refuses a document stating one without the other (ADR-0054).
-      counterpart_commands_physical_hardware: false
+      counterpart_commands_physical_hardware: true
+      # The counterpart loads a backend other than the plant's, so it loads its
+      # own description and controller configuration (ADR-0048 clause 2,
+      # ADR-0070). Every name in them is the plant's: what differs is the
+      # hardware behind the names. Absent where the two sides load one backend,
+      # and then the counterpart loads `description` and `parameters` below.
+      counterpart_description: package://cite_generated/description/counterpart/cell_b_picker.urdf.xacro
+      counterpart_parameters: package://cite_generated/control/counterpart/cell_b_picker_controllers.yaml
+      # What the counterpart's description reads from the ENVIRONMENT at launch:
+      # xacro argument -> variable. The plan names the variable and never holds
+      # its value; bring-up resolves it, and refuses to start when it is unset
+      # (ADR-0070 item 2).
+      counterpart_description_args:
+        robot_ip: {env: CITE_XARM_IP}
       description_topic: /cite/cell_b/picker/robot_description
       joint_state_topic: /cite/cell_b/picker/joint_states
       description: package://cite_generated/description/cell_b_picker.urdf.xacro

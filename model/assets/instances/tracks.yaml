@@ -39,6 +39,11 @@ assets:
     pose:
       frame: cite_world
       xyz_m: [0.050, 3.300, 0.000]
-    # `sim` is the only backend the type declares; see the type for the
-    # hardware path, which is not implemented.
-    hardware: {backend: sim}
+    # Simulated on the plant and physical on the counterpart, matching the arm
+    # it carries: the track's joint is emitted into that arm's description, so
+    # the two select one (plant, counterpart) pair of backends
+    # (`track-backend-differs-from-its-arm`, ADR-0070). See the type for what the
+    # physical track's hardware path does and does not do yet.
+    hardware:
+      backend: sim
+      counterpart_backend: real
