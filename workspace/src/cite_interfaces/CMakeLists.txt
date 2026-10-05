@@ -14,11 +14,13 @@ find_package(std_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  msg/DeadmanState.msg
   msg/DivergenceMetrics.msg
   msg/ModelVersion.msg
   msg/ResultCode.msg
   msg/RobotState.msg
   msg/SafetyState.msg
+  msg/TwinHeartbeat.msg
   msg/TwinMode.msg
   srv/GetModelVersion.srv
   srv/SetMode.srv

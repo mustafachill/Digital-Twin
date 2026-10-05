@@ -1,3 +1,14 @@
+msg/DeadmanState.msg
+  uint8 STATE_INACTIVE=0
+  uint8 STATE_AWAITING=1
+  uint8 STATE_HEALTHY=2
+  uint8 STATE_TRIPPED=3
+  std_msgs/Header header
+  string asset_id
+  uint8 state
+  float64 timeout_s
+  uint64 last_sequence
+  string detail
 msg/DivergenceMetrics.msg
   string TOPIC="/cite/twin/divergence"
   std_msgs/Header header
@@ -68,6 +79,12 @@ msg/SafetyState.msg
   uint8 estop_source
   builtin_interfaces/Time estop_asserted_at
   string detail
+msg/TwinHeartbeat.msg
+  string TOPIC="/cite/twin/heartbeat"
+  std_msgs/Header header
+  string asset_id
+  string zone
+  uint64 sequence
 msg/TwinMode.msg
   string TOPIC="/cite/twin/mode"
   uint8 MODE_SIM=0
