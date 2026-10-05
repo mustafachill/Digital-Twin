@@ -92,6 +92,7 @@ from cite_bringup.plan import (
 # (ADR-0057), and two literals would be the P1 defect this whole join is built
 # out of avoiding.
 from cite_bringup.readiness import boundary_announcement
+from cite_bringup.track_command import hold as track_hold
 from cite_facility import model_info
 from cite_interfaces.msg import (
     DeadmanState,
@@ -102,7 +103,7 @@ from cite_interfaces.msg import (
     TwinMode,
 )
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode
+from cite_interfaces.srv import SetMode, TrackArrived
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
     address,
@@ -130,6 +131,7 @@ from cite_twin.routing import (
     reverse_state_flow,
     route,
 )
+from cite_twin.track_arrival import arrival as track_arrival
 from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -549,11 +551,26 @@ class TwinBoundary:
         # 5. The linear track command (ADR-0067). One operator endpoint per track,
         # beside the belt's, forwarded in memory to each side's own trajectory
         # controller topic under the same routing table: refused in SIM, sent to
-        # both in VALIDATED and VIRTUAL_LEAD. Unlike a belt, a track holds the
-        # last position it was sent, so there is no stop to carry in every mode;
-        # a refused command is dropped and said in the log. What comes back is
-        # each side's own joint state, which this node already reads.
+        # both in VALIDATED and VIRTUAL_LEAD; a refused command is dropped and
+        # said in the log. A trajectory with NO points at the operator endpoint
+        # is a stop, and like a belt's zero it crosses in every mode: each side
+        # is sent a hold at ITS OWN carriage position, which a simulated
+        # controller holds and a physical adapter answers with a stop - never
+        # the plant's position sent to the physical carriage (SA2c-S-02 a).
+        # What comes back is each side's own joint state, which this node
+        # already reads, and `TrackArrived` answers from it (SA2c-S-02 c).
         tracks = [m.track for m in plan.controller_managers if m.track is not None]
+        #: Each track's joint, by its command topic, and the asset whose side
+        #: may be physical, by the joint.
+        self._track_joint_by_topic = {track.command_topic: track.joint for track in tracks}
+        self._track_asset_by_joint = {
+            m.track.joint: m.asset for m in plan.controller_managers if m.track is not None
+        }
+        #: Per (side, track joint): the last position and its steady-clock
+        #: arrival, heard in every mode, because a stop and an arrival check
+        #: are owed whatever the mode is.
+        self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
+        self._state_max_age_s = plan.twin.state_max_age_s
         self._track_publishers = {
             (side_name, track.command_topic): side.node.create_publisher(
                 JointTrajectory, track.command_topic, COMMAND
@@ -571,6 +588,13 @@ class TwinBoundary:
                     callback_group=self._group,
                 )
             )
+
+        self._track_arrived = self._plant.node.create_service(
+            TrackArrived,
+            TrackArrived.Request.SERVICE,
+            self._on_track_arrived,
+            callback_group=self._group,
+        )
 
         self._timer = self._plant.node.create_timer(
             period, self._publish_divergence, callback_group=self._group
@@ -898,9 +922,34 @@ class TwinBoundary:
         """Forward one track trajectory to the sides the mode routes a command to.
 
         The message is passed through unchanged, as a goal is: the same joint
-        name and the same point reach both sides' controllers, which is what
+        name and the same points reach both sides' controllers, which is what
         makes one signal drive both tracks (ADR-0067).
+
+        **A trajectory with no points is a stop, and a stop is never gated**
+        (SA2c-S-02 a). It is not forwarded - both sides refuse an empty
+        trajectory - but answered per side: each side is sent a hold at the
+        position THAT side last reported, so no carriage is commanded anywhere
+        but where it stands. A side whose position was never heard is sent
+        nothing, and said.
         """
+        if not message.points:
+            joint = self._track_joint_by_topic[topic]
+            with self._lock:
+                heard = {
+                    side_name: self._track_positions.get((side_name, joint))
+                    for side_name in self._sides
+                }
+            for side_name, position in heard.items():
+                if position is None:
+                    self._log.error(
+                        f"{operator_endpoint(topic)} stop: no {joint} position heard on the "
+                        f"{side_name} side, so no hold was sent there"
+                    )
+                    continue
+                self._track_publishers[(side_name, topic)].publish(
+                    track_hold(joint, position[0])
+                )
+            return
         with self._lock:
             mode = self._authority.mode
         chosen = route(mode)
@@ -913,6 +962,44 @@ class TwinBoundary:
             return
         for side_name in chosen.sides:
             self._track_publishers[(side_name, topic)].publish(message)
+
+    def _on_track_arrived(
+        self, request: TrackArrived.Request, response: TrackArrived.Response
+    ) -> TrackArrived.Response:
+        """Answer whether every side the mode commands stands at the target (SA2c-S-02 c)."""
+        asset = self._track_asset_by_joint.get(request.joint)
+        if asset is None:
+            response.arrived = False
+            response.detail = f"{request.joint!r} is no track joint this zone's plan names"
+            return response
+        with self._lock:
+            mode = self._authority.mode
+            heard = {
+                side_name: position
+                for side_name in self._sides
+                if (position := self._track_positions.get((side_name, request.joint)))
+                is not None
+            }
+        chosen = route(mode)
+        if not chosen.accepted:
+            response.arrived = False
+            response.detail = (
+                f"in {MODE_NAMES.get(mode, mode)} no side is commanded: {chosen.detail}"
+            )
+            return response
+        physical = [COUNTERPART_SIDE] if asset in self._physical_watches else []
+        reason = track_arrival(
+            chosen.sides,
+            heard,
+            physical,
+            request.position_m,
+            request.tolerance_m,
+            time.monotonic(),
+            self._state_max_age_s,
+        )
+        response.arrived = reason is None
+        response.detail = reason or "every commanded side is at the target"
+        return response
 
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
         """Command to zero every belt on a side ``mode`` no longer routes to.
@@ -1026,6 +1113,12 @@ class TwinBoundary:
             )
             if watch is not None:
                 watch.heard_joints(positions, time.monotonic())
+            for joint in self._track_asset_by_joint:
+                if joint in positions:
+                    self._track_positions[(side_name, joint)] = (
+                        positions[joint],
+                        time.monotonic(),
+                    )
             if side_name != PLANT_SIDE and side_name not in reverse_state_flow(
                 self._authority.mode
             ):

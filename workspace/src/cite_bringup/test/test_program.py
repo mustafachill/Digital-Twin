@@ -27,6 +27,7 @@ from cite_bringup.program import belt as belt_command
 from cite_bringup.program.__main__ import main as program_main
 from cite_bringup.program.cell import (
     ask_until_accepted,
+    await_arrival,
     holding_refusal,
     RosCell,
     state_topic,
@@ -209,13 +210,76 @@ def test_the_state_topic_is_beside_the_skills(cell) -> None:
     assert state_topic(cell.arm) == cell.arm.skills.move_to.rsplit("/", 1)[0] + "/state"
 
 
-def test_a_track_move_is_one_point_at_the_programs_speed(cell) -> None:
-    """|distance| / speed seconds away, in the controller's clock (ADR-0067)."""
-    trajectory = track_trajectory(cell.track, 0.65, 6.5)
+def test_a_track_move_runs_from_where_the_program_read_it(cell) -> None:
+    """|distance| / speed seconds away, from the read start (ADR-0067, SA2c-S-02 b).
+
+    The start point is what lets a physical side take the commanded speed from
+    the message rather than from where its own carriage stands.
+    """
+    trajectory = track_trajectory(cell.track, 0.0, 0.65, 6.5)
     assert trajectory.joint_names == [cell.track.joint]
-    (point,) = trajectory.points
-    assert list(point.positions) == [0.65]
-    assert (point.time_from_start.sec, point.time_from_start.nanosec) == (6, 500_000_000)
+    start, end = trajectory.points
+    assert list(start.positions) == [0.0]
+    assert (start.time_from_start.sec, start.time_from_start.nanosec) == (0, 0)
+    assert list(end.positions) == [0.65]
+    assert (end.time_from_start.sec, end.time_from_start.nanosec) == (6, 500_000_000)
+    assert list(start.velocities) == [0.0] and list(end.velocities) == [0.0]
+
+
+class _Publisher:
+    def __init__(self) -> None:
+        self.sent: list = []
+
+    def publish(self, message) -> None:
+        self.sent.append(message)
+
+
+def _cancelling(cell, via: str):
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._active = None
+    ros._sent = None
+    ros._via = via
+    ros._track = cell.track
+    ros._track_command = _Publisher()
+    ros._track_target = 0.65
+    ros._track_position = 0.2
+    return ros
+
+
+def test_a_cancel_through_the_twin_never_sends_the_plants_position(cell) -> None:
+    """SA2c-S-02 a: a stop with no position, which the boundary holds per side."""
+    ros = _cancelling(cell, "twin")
+    ros.cancel()
+    (stop,) = ros._track_command.sent
+    assert stop.joint_names == [cell.track.joint]
+    assert list(stop.points) == []
+
+
+def test_a_cancel_on_one_side_holds_that_side_where_it_stands(cell) -> None:
+    ros = _cancelling(cell, "plant")
+    ros.cancel()
+    (held,) = ros._track_command.sent
+    assert [list(p.positions) for p in held.points] == [[0.2], [0.2]]
+
+
+def test_a_side_that_never_arrives_fails_the_track_step() -> None:
+    """SA2c-S-02 c: the counterpart's carriage, asked of the twin, within the ceiling."""
+    now = {"t": 0.0}
+
+    def pause() -> None:
+        now["t"] += 1.0
+
+    with pytest.raises(StepFailed, match="counterpart: stands at"):
+        await_arrival(
+            lambda: (False, "counterpart: stands at 100.0 mm"),
+            pause,
+            deadline=5.0,
+            what="track to 650 mm",
+            clock=lambda: now["t"],
+        )
+    answers = iter([(False, "counterpart: moving"), (True, "")])
+    await_arrival(lambda: next(answers), lambda: None, deadline=5.0, what="t", clock=lambda: 0.0)
 
 
 def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:

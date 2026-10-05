@@ -1,0 +1,26 @@
+# Whether every side the twin commands has its linear track at a target
+# (ADR-0067, ADR-0070; safety finding SA2c-S-02 c).
+#
+# A program driving the pair through the twin boundary reads its OWN domain's
+# joint states, which are the plant's; the counterpart's are on a domain the
+# program never opens (ADR-0044 clause 3). So before it starts the next step it
+# asks the boundary, which already reads every side's joint states, whether each
+# side the current mode routes a command to stands within `tolerance_m` of
+# `position_m`. The boundary answers a verdict and not the positions: the
+# reverse state flow is consumed by L5 and republished nowhere (ADR-0050
+# decision 1b).
+#
+# A physical side's position counts only while it is fresh (the plan's
+# `state_max_age_s`, on the boundary's steady clock); a side the boundary has
+# no position for has not arrived. A mode that routes no command answers false.
+#
+# SERVICE is the one place this name is written, as SetMode's is.
+
+string SERVICE="/cite/twin/track_arrived"
+
+string joint        # the track joint, as the plan names it
+float64 position_m  # the target the program sent
+float64 tolerance_m # the track's goal tolerance, as the plan states it
+---
+bool arrived        # every commanded side is within tolerance of the target
+string detail       # which side is not, and where it stands; or why none counts

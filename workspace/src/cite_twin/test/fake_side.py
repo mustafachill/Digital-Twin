@@ -60,6 +60,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory
 
 #: The joints this fake reports, each from a publisher of its own, as a
 #: physical side's arm broadcaster, track adapter and gripper relay share one
@@ -86,7 +87,13 @@ def _behaviour(text: str, side: str) -> str:
 
 class FakeSide(Node):
     def __init__(
-        self, side: str, zone: str, assets: list[str], offset: float, belts: list[str]
+        self,
+        side: str,
+        zone: str,
+        assets: list[str],
+        offset: float,
+        belts: list[str],
+        track: tuple[str, str] | None = None,
     ) -> None:
         super().__init__("fake_side")
         self._side = side
@@ -122,6 +129,25 @@ class FakeSide(Node):
             )
             for topic in belts
         ]
+        # A track joint at this side's offset, on the first asset's joint
+        # states, and every track command this side receives printed with its
+        # points' positions: how the test sees what L5 sent to which carriage.
+        self._track_joint = None
+        self._track_state = None
+        if track is not None:
+            topic, self._track_joint = track
+            self._track_state = self.create_publisher(
+                JointState, f"/cite/{zone}/{assets[0]}/joint_states", STATE
+            )
+            self._track_commands = self.create_subscription(
+                JointTrajectory,
+                topic,
+                lambda message: print(
+                    f"{side}: track {[round(p.positions[0], 3) for p in message.points]}",
+                    flush=True,
+                ),
+                COMMAND,
+            )
         self._model = self.create_publisher(
             ModelVersion, "/cite/facility/model_version", LATCHED
         )
@@ -222,6 +248,12 @@ class FakeSide(Node):
                 message.name = [joint]
                 message.position = [self._offset]
                 publisher.publish(message)
+        if self._track_state is not None:
+            message = JointState()
+            message.header.stamp = stamp
+            message.name = [self._track_joint]
+            message.position = [self._offset]
+            self._track_state.publish(message)
         if quiet_now:
             self._quiet_sent += 1
             if self._quiet_sent == QUIET_AFTER:
@@ -244,6 +276,8 @@ def main() -> int:
     parser.add_argument("--assets", default="picker")
     parser.add_argument("--offset", type=float, default=0.0)
     parser.add_argument("--belts", default="", help="Belt command topics to listen on.")
+    parser.add_argument("--track-topic", default="", help="A track command topic to listen on.")
+    parser.add_argument("--track-joint", default="", help="The track joint to publish.")
     arguments, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -253,6 +287,7 @@ def main() -> int:
         arguments.assets.split(","),
         arguments.offset,
         [topic for topic in arguments.belts.split(",") if topic],
+        (arguments.track_topic, arguments.track_joint) if arguments.track_topic else None,
     )
     executor = MultiThreadedExecutor()
     executor.add_node(node)

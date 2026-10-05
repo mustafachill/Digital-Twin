@@ -50,6 +50,9 @@ if(BUILD_TESTING)
   # ADR-0070 item 6: a mode commanding a physical side waits until it is enabled
   # and publishing.
   ament_add_pytest_test(physical_readiness test/test_physical_readiness.py)
+  # SA2c-S-02 c: the program's next step waits until every commanded side's
+  # track stands at the target, the physical one included.
+  ament_add_pytest_test(track_arrival test/test_track_arrival.py)
   # ADR-0054 clause 8: L5's gate answers on the fact L0 declares rather than on
   # the backend's name, and the shipped single-sided deployment still refuses a
   # two-sided mode. Nothing here constructs a node or starts a graph - the map

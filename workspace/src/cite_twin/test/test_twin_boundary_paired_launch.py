@@ -56,10 +56,11 @@ import unittest
 
 from cite_bringup.plan import COUNTERPART_ARTIFACT_KEYS, default_plan_path
 from cite_bringup.readiness import boundary_announcement
+from cite_bringup.track_command import move as track_move
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode
+from cite_interfaces.srv import SetMode, TrackArrived
 import launch
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
@@ -71,6 +72,7 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node as RclpyNode
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory
 import yaml
 
 ZONE = "cell_b"
@@ -173,6 +175,12 @@ PLAN_PATH = _paired_plan()
 BELT = yaml.safe_load(PLAN_PATH.read_text())["plan"]["conveyors"][0]["command_topic"]
 TWIN_BELT = BELT.replace("/cite/", "/cite/twin/", 1)
 
+#: The arm's track, as a side owns its command topic, and the operator's twin
+#: of it (ADR-0067). Each fake side stands its carriage at its own offset.
+_TRACK = yaml.safe_load(PLAN_PATH.read_text())["plan"]["controller_managers"][0]["track"]
+TRACK, TRACK_JOINT = _TRACK["command_topic"], _TRACK["joint"]
+TWIN_TRACK = TRACK.replace("/cite/", "/cite/twin/", 1)
+
 
 def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
     return ExecuteProcess(
@@ -189,6 +197,10 @@ def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
             str(offset),
             "--belts",
             BELT,
+            "--track-topic",
+            TRACK,
+            "--track-joint",
+            TRACK_JOINT,
         ],
         # The whole of the isolation, and the reason this rig can hold two
         # sides at once: each child process discovers only its own domain.
@@ -239,6 +251,10 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         cls.move_to = ActionClient(cls.node, MoveTo, MOVE_TO)
         cls.pick = ActionClient(cls.node, Pick, PICK)
         cls.belt = cls.node.create_publisher(Float64, TWIN_BELT, COMMAND)
+        cls.track = cls.node.create_publisher(JointTrajectory, TWIN_TRACK, COMMAND)
+        cls.track_arrived = cls.node.create_client(
+            TrackArrived, TrackArrived.Request.SERVICE
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -471,6 +487,75 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
                 lambda side=side: self.belt.publish(stop) or zeros(side) >= before[side] + 2,
                 f"a stop sent in SIM reached the {side}",
             )
+
+    def test_a_track_move_reaches_both_sides_unchanged(self, proc_output):
+        """One signal, both carriages: the identical message, start point included."""
+        self._enter_validated()
+        self._spin_until(
+            lambda: self.track.get_subscription_count() > 0, "the boundary's track endpoint"
+        )
+        self.track.publish(track_move(TRACK_JOINT, 0.125, 0.375, 2.5))
+        _wait_for_side(proc_output, "plant: track [0.125, 0.375]")
+        _wait_for_side(proc_output, "counterpart: track [0.125, 0.375]")
+
+    def test_a_track_stop_holds_each_side_where_it_stands_in_every_mode(self, proc_output):
+        """SA2c-S-02 a: never the plant's position sent to the counterpart's carriage.
+
+        The plant stands at 0.25 and the counterpart at 0.75. A stop - a
+        trajectory with no points - is answered with a hold at each side's OWN
+        position, and it crosses in SIM, where nothing else does.
+        """
+        self._spin_until(
+            lambda: self.track.get_subscription_count() > 0, "the boundary's track endpoint"
+        )
+        response = self._request(TwinMode.MODE_SIM, "a stop crosses in every mode")
+        self.assertTrue(response.accepted, response.result.detail)
+        # Re-sent until both holds are seen: the boundary holds only once it
+        # has heard each side's carriage, which this process cannot observe.
+        for _attempt in range(int(SETTLE_S / 0.5)):
+            self.track.publish(JointTrajectory(joint_names=[TRACK_JOINT]))
+            try:
+                proc_output.assertWaitFor(
+                    expected_output="counterpart: track [0.75, 0.75]", stream="stdout",
+                    timeout=0.5,
+                )
+                break
+            except AssertionError:
+                continue
+        else:
+            self.fail("the counterpart was never held at its own position")
+        _wait_for_side(proc_output, "plant: track [0.25, 0.25]")
+        self.assertNotIn("counterpart: track [0.25, 0.25]", _stdout(proc_output))
+
+    def _arrived(self, position_m: float, tolerance_m: float):
+        self.assertTrue(
+            self.track_arrived.wait_for_service(timeout_sec=SETTLE_S),
+            f"{TrackArrived.Request.SERVICE} was never advertised",
+        )
+        future = self.track_arrived.call_async(
+            TrackArrived.Request(
+                joint=TRACK_JOINT, position_m=position_m, tolerance_m=tolerance_m
+            )
+        )
+        self._spin_until(future.done, "TrackArrived returned")
+        return future.result()
+
+    def test_arrival_is_every_commanded_sides(self, proc_output):
+        """SA2c-S-02 c: the plant at its target is not the pair at its target."""
+        self._enter_validated()
+        # Heard first: until then no side has a position at all.
+        self._spin_until(
+            lambda: "no track position" not in self._arrived(0.25, 0.001).detail,
+            "the boundary heard both carriages",
+        )
+        at_plant = self._arrived(0.25, 0.001)
+        self.assertFalse(at_plant.arrived)
+        self.assertIn("counterpart: stands at 750.0 mm", at_plant.detail)
+        self.assertNotIn("plant:", at_plant.detail)
+        self.assertTrue(self._arrived(0.5, 0.3).arrived)
+        response = self._request(TwinMode.MODE_SIM, "no side commanded")
+        self.assertTrue(response.accepted, response.result.detail)
+        self.assertFalse(self._arrived(0.5, 0.3).arrived)
 
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""

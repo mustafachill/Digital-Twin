@@ -30,21 +30,21 @@ from __future__ import annotations
 
 import time
 
-from builtin_interfaces.msg import Duration
+from cite_bringup import track_command
 from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
 from cite_bringup.program.steps import scaled_motion, speed_scale, StepFailed
 from cite_bringup.readiness import waits_for_a_physical_side
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode
+from cite_interfaces.srv import SetMode, TrackArrived
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from trajectory_msgs.msg import JointTrajectory
 import yaml
 
 #: The reserved twin scope, read off the one contract that states it. The
@@ -89,10 +89,9 @@ PHYSICAL_SIDE_READY_CEILING_S = 120.0
 #: the ceiling above, spent spinning this node.
 _ASK_AGAIN_S = 0.5
 
-#: How long a track is given to stop where it stands when a move is abandoned,
-#: in the cell's clock. Short, because the carriage moves at 0.1 m/s in the real
-#: program; a hold commanded with no duration would be a jump.
-TRACK_HOLD_S = 0.2
+#: How long one wait between two `TrackArrived` asks blocks, in wall seconds: a
+#: poll bounded by the track step's own ceiling, spent spinning this node.
+_ARRIVAL_ASK_S = 0.1
 
 
 def twin_name(name: str) -> str:
@@ -107,20 +106,34 @@ def state_topic(arm: ControllerManager) -> str:
     return f"{arm.skills.move_to.rsplit('/', 1)[0]}/state"
 
 
-def track_trajectory(track: Track, position_m: float, seconds: float) -> JointTrajectory:
-    """One point, reached ``seconds`` from now in the controller's clock (ADR-0067).
+def track_trajectory(
+    track: Track, start_m: float, position_m: float, seconds: float
+) -> JointTrajectory:
+    """From ``start_m`` now to ``position_m`` ``seconds`` later (ADR-0067).
 
-    The controller interpolates from where the carriage stands, so the speed of
-    the move is the distance over ``seconds``: the caller divides by the
-    program's own speed, and nothing here guesses a duration.
+    ``start_m`` is where this program read the carriage, so the speed of the
+    move is the distance over ``seconds``: the caller divides by the program's
+    own speed, and nothing here guesses a duration. The start point is what
+    lets a physical side take the COMMANDED speed from the message
+    (`cite_bringup.track_command`).
     """
-    whole = int(seconds)
-    point = JointTrajectoryPoint(
-        positions=[float(position_m)],
-        velocities=[0.0],
-        time_from_start=Duration(sec=whole, nanosec=int(round((seconds - whole) * 1e9))),
-    )
-    return JointTrajectory(joint_names=[track.joint], points=[point])
+    return track_command.move(track.joint, start_m, position_m, seconds)
+
+
+def await_arrival(ask, pause, deadline: float, what: str, clock=time.monotonic) -> None:
+    """Ask the twin whether every commanded side's track has arrived, until it has.
+
+    SA2c-S-02 c. ``ask`` returns `(arrived, detail)`. A ceiling on a failure,
+    not a schedule: the step's own wall-clock ``deadline`` bounds it, and a side
+    that never arrives fails the step, which cancels and stops the program.
+    """
+    while True:
+        arrived, detail = ask()
+        if arrived:
+            return
+        if clock() > deadline:
+            raise StepFailed(f"{what}: not every side arrived: {detail}")
+        pause()
 
 
 def holding_refusal(state: RobotState | None, topic: str) -> str | None:
@@ -236,6 +249,12 @@ class RosCell:
         )
         self._track_position: float | None = None
         self._track_target: float | None = None
+        #: Whether every commanded side's track arrived, asked of the twin.
+        self._track_arrived = (
+            self.node.create_client(TrackArrived, TrackArrived.Request.SERVICE)
+            if track is not None and via == "twin"
+            else None
+        )
         if track is not None:
             self.node.create_subscription(
                 JointState, arm.joint_state_topic, self._on_joint_state, STATE
@@ -359,7 +378,9 @@ class RosCell:
             f"a subscriber on {self._track_command.topic_name}",
         )
         self._track_target = position_m
-        self._track_command.publish(track_trajectory(self._track, position_m, seconds))
+        self._track_command.publish(
+            track_trajectory(self._track, self._track_position, position_m, seconds)
+        )
         ceiling_s = WAIT_WALL_FACTOR * seconds + WAIT_WALL_MARGIN_S
         wall_end = time.monotonic() + ceiling_s
         while abs(self._track_position - position_m) > self._track.goal_tolerance_m:
@@ -369,16 +390,28 @@ class RosCell:
                     f"after {ceiling_s:.0f} wall seconds; is the controller active?"
                 )
             rclpy.spin_once(self.node, timeout_sec=0.1)
+        if self._track_arrived is not None:
+            # Through the twin, this domain's joint states are the plant's
+            # only: the counterpart's carriage - the physical one - is asked of
+            # the boundary, within the same ceiling (SA2c-S-02 c).
+            self._await_every_side(position_m, wall_end, what)
         self._track_target = None
 
     def cancel(self) -> None:
-        if self._track_target is not None and self._track_position is not None:
-            # Abandoned mid-move: hold the carriage where it stands, rather than
-            # leave it running to a target nobody is waiting for.
+        if self._track_target is not None and self._track_command is not None:
+            # Abandoned mid-move: stop every carriage where IT stands, rather
+            # than leave it running to a target nobody is waiting for. Through
+            # the twin that is a trajectory with no points, which the boundary
+            # answers with a hold at each side's own position (SA2c-S-02 a):
+            # the plant's position sent to the physical carriage would move it.
+            # On one side, a hold at that side's own position.
             self._track_target = None
-            self._track_command.publish(
-                track_trajectory(self._track, self._track_position, TRACK_HOLD_S)
-            )
+            if self._via == "twin":
+                self._track_command.publish(JointTrajectory(joint_names=[self._track.joint]))
+            elif self._track_position is not None:
+                self._track_command.publish(
+                    track_command.hold(self._track.joint, self._track_position)
+                )
         handle, self._active = self._active, None
         sent, self._sent = self._sent, None
         if handle is None and sent is not None:
@@ -391,6 +424,30 @@ class RosCell:
             self._until(handle.cancel_goal_async(), "the cancel", CANCEL_CEILING_S)
 
     # --------------------------------------------------------------- mechanism
+
+    def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
+        client = self._track_arrived
+        assert client is not None and self._track is not None
+        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
+            raise StepFailed(f"{what}: {TrackArrived.Request.SERVICE} is not served")
+        request = TrackArrived.Request(
+            joint=self._track.joint,
+            position_m=float(position_m),
+            tolerance_m=float(self._track.goal_tolerance_m),
+        )
+
+        def ask() -> tuple[bool, str]:
+            response = self._until(client.call_async(request), f"{what}: TrackArrived")
+            return response.arrived, response.detail
+
+        def pause() -> None:
+            # Bounded by the wall clock: `spin_once` returns on any callback,
+            # and this node hears `/clock`.
+            again = time.monotonic() + _ARRIVAL_ASK_S
+            while time.monotonic() < again:
+                rclpy.spin_once(self.node, timeout_sec=_ARRIVAL_ASK_S)
+
+        await_arrival(ask, pause, wall_end, what)
 
     def _on_joint_state(self, message: JointState) -> None:
         if self._track is not None and self._track.joint in message.name:

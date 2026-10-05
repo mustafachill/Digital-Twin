@@ -112,6 +112,14 @@ srv/SetMode.srv
   bool accepted
   ResultCode result
   uint8 current_mode
+srv/TrackArrived.srv
+  string SERVICE="/cite/twin/track_arrived"
+  string joint
+  float64 position_m
+  float64 tolerance_m
+  ---
+  bool arrived
+  string detail
 action/Grasp.action
   float64 width_m
   float64 max_effort_n
