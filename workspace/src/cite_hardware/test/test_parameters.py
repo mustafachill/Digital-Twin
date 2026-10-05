@@ -42,6 +42,7 @@ GOOD = {
         "max_speed_mps": 1.0,
         "poll_period_s": 0.1,
         "position_max_age_s": 0.5,
+        "segment_s": 0.5,
         "auto_enable": False,
         "set_position_service": "/v/set_linear_motor_pos",
         "get_position_service": "/v/get_linear_motor_pos",

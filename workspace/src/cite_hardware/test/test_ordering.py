@@ -191,6 +191,10 @@ def test_an_abandoned_set_mode_is_retried_while_healthy():
         node._abandon_overdue(node._steady.now().nanoseconds + 10**12)
         assert node._enable_in_flight is None
         node._enable(node._epoch)
+        assert len(node._set_mode.futures) == 1, "HW-S-04: not on the very next tick"
+        # The back-off over, as ENABLE_RETRY_TICKS ticks later.
+        node._enable_backoff = (node._epoch, 0)
+        node._enable(node._epoch)
         assert len(node._set_mode.futures) == 2, "the enable retried"
         response = SetInt16.Response()
         response.ret = 0
@@ -211,7 +215,9 @@ def test_an_abandoned_set_mode_is_retried_while_healthy():
 
 
 def _command(position: float, seconds: int) -> JointTrajectory:
+    """From 0.1 m now to ``position`` in ``seconds``: a start point, then the target."""
     message = JointTrajectory(joint_names=[GOOD["track_adapter"]["joint"]])
+    message.points.append(JointTrajectoryPoint(positions=[0.1], time_from_start=Duration()))
     message.points.append(
         JointTrajectoryPoint(positions=[position], time_from_start=Duration(sec=seconds))
     )
@@ -290,7 +296,12 @@ def test_a_stop_acked_while_a_move_is_outstanding_does_not_end_the_stopping():
         _answer(move, 0, LinearMotorSetPos)
         _answer(node._stop_client.futures[-1], 0, Call)
         node._poll()
-        assert _stops(log) == 2, "and ends with a stop acked after the move was answered"
+        # SA2c-S-02 e: the second stop was SENT while the move was outstanding,
+        # so it may have been overtaken; one more, sent after the answer, ends it.
+        assert _stops(log) == 3, "a stop sent after the move was answered"
+        _answer(node._stop_client.futures[-1], 0, Call)
+        node._poll()
+        assert _stops(log) == 3, "and ends with that stop acknowledged"
     finally:
         node.destroy_node()
 
