@@ -35,6 +35,7 @@ L0 is read with PyYAML, because the host tooling is not on the path here.
 """
 
 from pathlib import Path
+import re
 import subprocess
 from xml.etree import ElementTree
 
@@ -212,4 +213,9 @@ def test_a_description_reading_the_environment_fails_without_it(
     """
     completed = subprocess.run(['xacro', str(path)], capture_output=True, text=True, check=False)
     assert completed.returncode != 0
-    assert all(name in completed.stderr for name in arguments), completed.stderr[-2000:]
+    # xacro's own refusal, by argument: a bare `name in stderr` also matched a
+    # failure for any other reason whose output merely mentions the name.
+    for name in arguments:
+        assert re.search(
+            rf'Undefined substitution argument {re.escape(name)}\b', completed.stderr
+        ), completed.stderr[-2000:]
