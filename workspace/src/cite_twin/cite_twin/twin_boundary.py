@@ -131,7 +131,7 @@ from cite_twin.routing import (
     reverse_state_flow,
     route,
 )
-from cite_twin.track_arrival import arrival as track_arrival
+from cite_twin.track_arrival import apart as tracks_apart, arrival as track_arrival
 from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -393,6 +393,18 @@ class TwinBoundary:
         except BoundaryError:
             self.stop()
             raise
+        #: Each track a physical counterpart rides, with its goal tolerance: a
+        #: mode commanding that side waits until its carriage stands where the
+        #: plant's does (SA-S-01 b), because a program reads only the plant's.
+        self._physical_tracks = [
+            (manager.track.joint, manager.track.goal_tolerance_m)
+            for manager in plan.controller_managers
+            if manager.track is not None and manager.asset in self._physical_watches
+        ]
+        #: Per (side, track joint): the last position and its steady-clock
+        #: arrival, heard in every mode, because a stop, an arrival check and
+        #: the precondition above are owed whatever the mode is.
+        self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
 
         # Both sides, read per asset, because the hardware gate asks which sides
         # the requested mode commands and what each of them DECLARES - never
@@ -566,10 +578,6 @@ class TwinBoundary:
         self._track_asset_by_joint = {
             m.track.joint: m.asset for m in plan.controller_managers if m.track is not None
         }
-        #: Per (side, track joint): the last position and its steady-clock
-        #: arrival, heard in every mode, because a stop and an arrival check
-        #: are owed whatever the mode is.
-        self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
         self._state_max_age_s = plan.twin.state_max_age_s
         self._track_publishers = {
             (side_name, track.command_topic): side.node.create_publisher(
@@ -1146,8 +1154,28 @@ class TwinBoundary:
             watch.heard_controller(time.monotonic())
 
     def _physical_side_unready(self) -> str | None:
-        """Why a physical counterpart may not be commanded yet; asked under the lock."""
-        return physical_unready(self._physical_watches.values(), time.monotonic())
+        """Why a physical counterpart may not be commanded yet; asked under the lock.
+
+        Its deadman, controller and joints (ADR-0070 item 6), and then its
+        carriage: standing within the track's goal tolerance of the plant's, by
+        a fresh position (SA-S-01 b).
+        """
+        now = time.monotonic()
+        reasons = [physical_unready(self._physical_watches.values(), now)]
+        for joint, tolerance_m in self._physical_tracks:
+            reasons.append(
+                tracks_apart(
+                    joint,
+                    self._track_positions.get((PLANT_SIDE, joint)),
+                    COUNTERPART_SIDE,
+                    self._track_positions.get((COUNTERPART_SIDE, joint)),
+                    tolerance_m,
+                    now,
+                    self._state_max_age_s,
+                )
+            )
+        found = [reason for reason in reasons if reason is not None]
+        return "; ".join(found) if found else None
 
     def _on_model_version(self, side_name: str, message: ModelVersion) -> None:
         with self._lock:

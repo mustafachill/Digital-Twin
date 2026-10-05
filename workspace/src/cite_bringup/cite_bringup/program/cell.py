@@ -389,6 +389,17 @@ class RosCell:
         timed here: the step ends when the joint state reports the carriage
         within the track's goal tolerance of the target. The wall-clock ceiling
         bounds a stalled simulator, as `wait` does (P4).
+
+        **Through the twin, never skipped on the plant's carriage alone**
+        (SA-S-01 a). Every commanded side is asked first (`TrackArrived`); the
+        step is done only if every side is there. A move is commanded when the
+        plant's carriage is away from the target, and the counterpart's,
+        wherever it stands, runs at the same commanded speed and is waited for.
+        When the plant's carriage is already there and a counterpart's is not,
+        no move can be commanded - its duration is the plant's distance, which
+        is none, and the boundary returns verdicts rather than positions
+        (ADR-0050 decision 1b) - so the step fails and says which carriage to
+        bring to the target.
         """
         if self._track is None or self._track_command is None:
             raise StepFailed("this arm rides no track")
@@ -399,9 +410,22 @@ class RosCell:
             lambda: self._track_position is not None,
             f"{self._track.joint} on the arm's joint states",
         )
-        seconds = abs(position_m - self._track_position) / (speed_mps * self._speed)
-        if abs(position_m - self._track_position) <= self._track.goal_tolerance_m:
+        distance = abs(position_m - self._track_position)
+        plant_there = distance <= self._track.goal_tolerance_m
+        if self._track_arrived is not None:
+            arrived, detail = self._ask_arrival(position_m, what)()
+            if arrived:
+                return
+            if plant_there:
+                raise StepFailed(
+                    f"{what}: the plant's carriage is there and not every side's is "
+                    f"({detail}). A move of no length cannot be commanded through the "
+                    f"twin: bring that carriage to {position_m * 1000:.0f} mm (home it) "
+                    "and run the program again"
+                )
+        elif plant_there:
             return
+        seconds = distance / (speed_mps * self._speed)
         self._until_true(
             lambda: self._track_command.get_subscription_count() > 0,
             f"a subscriber on {self._track_command.topic_name}",
@@ -454,7 +478,8 @@ class RosCell:
 
     # --------------------------------------------------------------- mechanism
 
-    def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
+    def _ask_arrival(self, position_m: float, what: str):
+        """Return a call asking the twin whether every commanded side stands at ``position_m``."""
         client = self._track_arrived
         assert client is not None and self._track is not None
         if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
@@ -468,6 +493,11 @@ class RosCell:
         def ask() -> tuple[bool, str]:
             response = self._until(client.call_async(request), f"{what}: TrackArrived")
             return response.arrived, response.detail
+
+        return ask
+
+    def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
+        ask = self._ask_arrival(position_m, what)
 
         def pause() -> None:
             # Bounded by the wall clock: `spin_once` returns on any callback,

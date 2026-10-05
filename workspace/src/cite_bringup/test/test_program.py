@@ -283,6 +283,64 @@ def test_a_side_that_never_arrives_fails_the_track_step() -> None:
     await_arrival(lambda: next(answers), lambda: None, deadline=5.0, what="t", clock=lambda: 0.0)
 
 
+def _tracking(cell, plant_m: float, answers: list[tuple[bool, str]]):
+    """A twin-driven cell whose plant carriage stands at ``plant_m``; the twin answers ``answers``."""
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._via = "twin"
+    ros._speed = 1.0
+    ros._track = cell.track
+    ros._track_command = _Publisher()
+    ros._track_target = None
+    ros._track_position = plant_m
+    ros._track_arrived = object()
+    ros._until_true = lambda predicate, what: None
+    asked: list[float] = []
+
+    def ask_arrival(position_m: float, what: str):
+        asked.append(position_m)
+        return lambda: answers.pop(0)
+
+    ros._ask_arrival = ask_arrival
+    return ros, asked
+
+
+def test_a_track_step_is_not_skipped_on_the_plants_carriage_alone(cell) -> None:
+    """SA-S-01 a: the plant at the target and the counterpart away fails the step."""
+    ros, asked = _tracking(cell, 0.65, [(False, "counterpart: stands at 0.0 mm")])
+    with pytest.raises(StepFailed, match="home it"):
+        ros.track(0.65, 0.1)
+    assert asked == [0.65]
+    assert ros._track_command.sent == []
+
+
+def test_a_track_step_every_side_has_reached_commands_nothing(cell) -> None:
+    ros, asked = _tracking(cell, 0.65, [(True, "every commanded side is at the target")])
+    ros.track(0.65, 0.1)
+    assert asked == [0.65] and ros._track_command.sent == []
+
+
+def test_a_track_step_with_the_plant_away_moves_and_waits_for_every_side(
+    cell, monkeypatch
+) -> None:
+    import cite_bringup.program.cell as cell_module
+
+    ros, asked = _tracking(
+        cell, 0.0, [(False, "plant: stands at 0.0 mm"), (False, "counterpart: moving"), (True, "")]
+    )
+    ros._track_command.get_subscription_count = lambda: 1
+    ros._track_command.topic_name = "t"
+
+    def carriage_arrives(*_args, **_kwargs) -> None:
+        ros._track_position = 0.65
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", carriage_arrives)
+    ros.track(0.65, 0.1)
+    (sent,) = ros._track_command.sent
+    assert [list(point.positions) for point in sent.points] == [[0.0], [0.65]]
+    assert asked == [0.65, 0.65]
+
+
 def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
     """S-05: a goal accepted after the interrupt is cancelled, not left running."""
     import cite_bringup.program.cell as cell_module

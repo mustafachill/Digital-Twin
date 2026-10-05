@@ -23,10 +23,13 @@ graph, no robot.
 
 from __future__ import annotations
 
+import time
+
 from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY, waits_for_a_physical_side
 from cite_interfaces.msg import DeadmanState, ResultCode, TwinMode
 from cite_twin.mode import Deployment, ModeAuthority
 from cite_twin.physical_readiness import deadman_permits_motion, PhysicalSideWatch, unready
+from cite_twin.twin_boundary import TwinBoundary
 import pytest
 
 JOINTS = ("picker_joint1", "picker_track_joint", "picker_drive_joint")
@@ -181,3 +184,34 @@ def test_reasserting_a_mode_that_commands_no_physical_side_never_waits() -> None
     watch.heard_deadman(_state(DeadmanState.STATE_TRIPPED), 10.0)
     machine = _authority(watch)
     assert machine.request(TwinMode.MODE_SIM, "", "stay", force=False).accepted
+
+
+def _boundary_with_carriages(plant_m: float, counterpart_m: float) -> TwinBoundary:
+    """The boundary's own readiness question, on a ready arm with two carriages."""
+    now = time.monotonic()
+    boundary = object.__new__(TwinBoundary)
+    boundary._physical_watches = {"picker": _ready_watch(now)}
+    boundary._physical_tracks = [("picker_track_joint", 0.001)]
+    boundary._state_max_age_s = AGE
+    boundary._track_positions = {
+        ("plant", "picker_track_joint"): (plant_m, now),
+        ("counterpart", "picker_track_joint"): (counterpart_m, now),
+    }
+    return boundary
+
+
+def test_validated_waits_for_the_physical_carriage_to_stand_where_the_plants_does() -> None:
+    """SA-S-01 b: a ready arm whose carriage stands elsewhere is not ready."""
+    reason = _boundary_with_carriages(0.0, 0.30)._physical_side_unready()
+    assert reason is not None and "picker_track_joint" in reason and "home it" in reason
+    authority = ModeAuthority(
+        Deployment.paired({"picker": True}),
+        lambda: None,
+        physical_side_unready=_boundary_with_carriages(0.0, 0.30)._physical_side_unready,
+    )
+    verdict = authority.request(TwinMode.MODE_VALIDATED, "", "go", force=False)
+    assert not verdict.accepted and waits_for_a_physical_side(verdict.detail)
+
+
+def test_a_physical_carriage_where_the_plants_is_is_ready() -> None:
+    assert _boundary_with_carriages(0.30, 0.3005)._physical_side_unready() is None

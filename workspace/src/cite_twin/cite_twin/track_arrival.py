@@ -64,3 +64,36 @@ def arrival(
                 f"{tolerance_m * 1000:g} mm of {target_m * 1000:.1f} mm"
             )
     return "; ".join(reasons) if reasons else None
+
+
+def apart(
+    joint: str,
+    plant: tuple[float, float] | None,
+    physical_side: str,
+    physical: tuple[float, float] | None,
+    tolerance_m: float,
+    now: float,
+    max_age_s: float | None,
+) -> str | None:
+    """Return why a physical carriage does not stand where the plant's does, or `None`.
+
+    SA-S-01 b: the precondition of a mode that commands a physical side. A
+    program reads only the plant's carriage, and a track step whose target the
+    plant already stands at commands nothing; so the twin does not start
+    commanding a physical carriage that stands anywhere else. The rule is
+    `arrival`'s, with the plant's position as the target: the physical
+    position counts only while it is fresh, and the plant's is its
+    simulator's.
+    """
+    if plant is None:
+        return f"no plant {joint} position heard to compare the physical carriage with"
+    heard = {} if physical is None else {physical_side: physical}
+    reason = arrival(
+        (physical_side,), heard, (physical_side,), plant[0], tolerance_m, now, max_age_s
+    )
+    if reason is None:
+        return None
+    return (
+        f"{joint} is not where the plant's stands ({plant[0] * 1000:.1f} mm) - {reason}; "
+        "bring the physical carriage there (home it) first"
+    )

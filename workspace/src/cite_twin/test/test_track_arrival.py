@@ -20,7 +20,7 @@ through `TrackArrived` before it starts the next step.
 
 from __future__ import annotations
 
-from cite_twin.track_arrival import arrival
+from cite_twin.track_arrival import apart, arrival
 
 SIDES = ("plant", "counterpart")
 AGE = 0.25
@@ -54,3 +54,30 @@ def test_a_stale_physical_position_does_not_count() -> None:
 def test_a_simulated_position_is_its_simulators_however_old() -> None:
     """A simulated side's carriage is held by its own controller; its clock may crawl."""
     assert _ask({"plant": (0.65, 0.0), "counterpart": (0.65, 0.0)}, physical=()) is None
+
+
+# SA-S-01 b: VALIDATED waits until the physical carriage stands where the plant's does.
+
+
+def _apart(plant, physical, now=10.0, tolerance=0.001):
+    return apart("track_joint", plant, "counterpart", physical, tolerance, now, AGE)
+
+
+def test_a_physical_carriage_away_from_the_plants_is_refused() -> None:
+    reason = _apart((0.0, 10.0), (0.30, 9.9))
+    assert reason is not None
+    assert "counterpart: stands at 300.0 mm" in reason and "home it" in reason
+
+
+def test_a_physical_carriage_where_the_plants_is_is_accepted() -> None:
+    assert _apart((0.30, 0.0), (0.3005, 9.9)) is None
+
+
+def test_a_stale_physical_carriage_is_refused_however_close() -> None:
+    reason = _apart((0.30, 10.0), (0.30, 10.0 - AGE - 0.01))
+    assert reason is not None and "old" in reason
+
+
+def test_no_position_on_either_side_is_refused() -> None:
+    assert "no track position heard" in _apart((0.30, 10.0), None)
+    assert "no plant" in _apart(None, (0.30, 10.0))
