@@ -30,7 +30,7 @@ than by reading the definitions.
 | `RobotState` | `cite_skills/src/skill_server.cpp`, latched on each arm's `state` topic; read by `cite_bringup`'s program and its simulation-only grasp-hold bridge |
 | `SafetyState` | **nothing** |
 | `TwinHeartbeat` | **nothing** |
-| `DeadmanState` | **nothing** |
+| `DeadmanState` | `cite_hardware/deadman.py`, which **no launch file starts yet**: the physical side's launch is ADR-0070 item 6 and is not built |
 | `TwinMode`, `DivergenceMetrics`, `SetMode` | `cite_twin/twin_boundary.py`, which the pair supervisor starts under `./scripts/sim --pair` and `./scripts/program` (ADR-0057) and no launch file starts; it refuses a zone declaring one side, and the one shipped zone, `cell_b`, declares two. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
 
 `TwinMode` and `DivergenceMetrics` each carry their own topic name as a `string TOPIC`
