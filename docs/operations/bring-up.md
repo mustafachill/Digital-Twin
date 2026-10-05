@@ -188,6 +188,11 @@ Or by hand, on a pair that is already up (`./scripts/sim --pair`):
 ./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --via plant         # the plant alone
 ```
 
+On a pair with a physical side, `./scripts/program` is the supported entry point; do not use
+the module as a shortcut. It enforces the same rules (an explicit `--speed-scale`, and the
+operator's go-ahead read from its terminal), but `./scripts/program` is what places, checks and
+tears down around it.
+
 `python3 -m cite_bringup.program` puts no part on the table and runs no belt; supplying one
 part per cycle is the caller's job, which is why `./scripts/program` runs it one cycle at a
 time. It refuses to start on an arm whose `RobotState` says it holds a part, because the program
@@ -284,10 +289,18 @@ model and the same solver, so any agreement between them is agreement of a thing
 4. The arm's address in your local, gitignored `.env` as `CITE_XARM_IP` (an IPv4 or IPv6
    address; never committed, never in L0). `.env.example` names the key.
 5. A human at the stop, watching.
+6. **The physical track is homed and enabled by the operator.** The vendor refuses a move on a
+   track that has not found its zero (`on_zero`), and the track adapter never enables the motor
+   itself (`auto_enable` is false in L0).
+7. **The physical carriage stands where the plant's does**, within the track's goal tolerance.
+   The twin boundary refuses `VALIDATED` until it does. The program keeps asking up to its own
+   wall-clock ceiling and then fails, telling you to home the carriage.
 
-Registration ([calibration-and-registration.md](calibration-and-registration.md), not built)
-ties the real cell's frame to the model's. The program moves in joint space and does not need
-it; any divergence number does.
+Registration ([calibration-and-registration.md](calibration-and-registration.md)) ties the real
+cell's frame to the model's. **It is not built.** The program moves in joint space and does not
+need it; any divergence number does. The owner's 2.B sequence runs the first motion before
+registration, as a supervised motion with a person at the hardware E-stop. See the pending
+owner decision in [safety-procedures.md](safety-procedures.md).
 
 ### Sequence
 
@@ -298,7 +311,11 @@ CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1
 ```
 
 The opt-in is read from the shell only; a value in `.env` is ignored. On a physical side,
-`--speed-scale` is required, and it is checked before anything starts.
+`--speed-scale` is required, and it is checked before anything starts. It also has a floor:
+below it, the program's slowest track slide would be slower than the track adapter can carry
+out. The floor is derived, not declared: `cite_bringup.program.sides.minimum_speed_scale` asks
+the adapter's own rule (`cite_hardware.mapping.slowest_speed_mps`) with its generated
+parameters.
 
 **What happens:**
 1. The plant (Gazebo) and the physical side come up.
@@ -307,10 +324,15 @@ The opt-in is read from the shell only; a value in `.env` is ignored. On a physi
 3. The twin boundary starts, and its heartbeat makes the deadman healthy. The deadman then
    enables the arm. The program waits until the boundary reports the side ready, with the arm
    enabled and fresh state.
-4. Before each cycle the program puts the twin in SIM and asks you to place the part on the
-   physical table by hand and press Enter. **The arm is enabled and still while you do.** No
+4. Before each run the program reads the twin's mode. Only once it reads SIM does it ask you
+   to place the part on the physical table by hand and press Enter; anything else refuses
+   without asking. **The arm is enabled and still while you do.** At the end of each run the
+   program puts the twin back in SIM; if that fails, the run fails and the cycle loop ends. No
    box is spawned and no belt runs on the physical side.
-5. One cycle of the real program then runs on both arms, at the scale you gave.
+5. A track step first asks every side whether its carriage is already at the target. If the
+   plant's is and the physical one is not, the step fails and tells you to home that carriage;
+   the physical carriage is never left unchecked.
+6. One cycle of the real program then runs on both arms, at the scale you gave.
 
 **If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
 Critical safety finding.
@@ -321,10 +343,26 @@ brings each side down.
 deliberately resets it. The recovery sequence is in `workspace/src/cite_hardware/README.md`.
 Restarting the whole run is also a reset.
 
-### First motion, always
+### First motion, always: two stages
 
-Reduced speed. A human on the stop. A single short motion before anything else. Start at
-`--speed-scale 0.1`, and raise it only after a run that showed nothing unexpected.
+Reduced speed and a human on the stop, in both stages.
+
+1. **Observation, no program.** Bring the pair up and command nothing:
+
+   ```bash
+   CITE_ALLOW_HARDWARE=1 ./scripts/sim --pair --headless
+   ```
+
+   Watch the deadman reach HEALTHY with `arm_enabled`, the vendor deactivate and then
+   reactivate the arm's controllers (the joint-state broadcaster included), and the physical
+   track's position being published. The arm should not move. Then Ctrl-C.
+2. **One cycle.** Only after stage 1 showed nothing unexpected:
+
+   ```bash
+   CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1 --cycles 1
+   ```
+
+Raise the scale only after a run that showed nothing unexpected.
 
 ### Step 1 of the 2.B plan: reading the arm without moving it (2026-10-05)
 

@@ -149,7 +149,8 @@ so the record says what the tree does. The text above is kept as written.
   validator error. `hardware.launch.py` resolves the reference and checks its kind, and never
   logs the value. The hardware opt-in comes from the shell only, never from `.env`.
 - **Item 3: the track adapter commands bounded segments, not the final point.** The command
-  carries its start and target. The vendor speed is capped at the commanded speed. Moves are
+  carries its start and target. The vendor speed is never above the commanded speed (rounded
+  down to the vendor's 1 mm/s resolution). Moves are
   sent in segments of `segment_s` (declared in L0), so a lost stop limits the overrun. A
   program cancel is a hold at each side's own position, which the adapter turns into a stop.
   The program also confirms the counterpart's carriage arrived, through the boundary's
@@ -188,3 +189,22 @@ so the record says what the tree does. The text above is kept as written.
   firmware's behaviour when its TCP stream ends, whether segments blend or stutter, and what
   the hardware E-stop cuts. The hardware E-stop is the only stop independent of these
   processes.
+- **Later on 2026-10-05, after the pre-first-motion audit:**
+  - **Track step.** Through the twin, a track step asks `TrackArrived` first. It fails ("home
+    it") when the plant's carriage is at the target and another side's is not, so a physical
+    carriage is never left unchecked because the plant was already there.
+  - **Carriage agreement.** The boundary's readiness for a mode that commands a physical side
+    also requires each physical carriage to stand within the track's goal tolerance of the
+    plant's.
+  - **Speed write.** The track adapter writes the speed explicitly (`set_linear_motor_speed`,
+    now on the vendor allow-list) before a move whose speed differs from the last one the
+    vendor acknowledged, and sends the move only on `ret == 0`. The vendor SDK caches the
+    speed and ignores the result of its own write.
+  - **Speed floor.** A move slower than the slowest the adapter can carry out is refused, never
+    sped up. The program derives the matching minimum `--speed-scale` from the adapter's
+    generated parameters and refuses a lower one before bring-up.
+  - **Hold order.** A move accepted before a hold is never sent after it.
+  - **The module enforces the rules itself.** `python3 -m cite_bringup.program` applies the
+    explicit-speed-scale rule. It asks the operator's go-ahead only once it has read the twin
+    in SIM, and a failed return to SIM at the end of a run fails the run. `./scripts/program`
+    hands it the terminal and is the supported entry point.

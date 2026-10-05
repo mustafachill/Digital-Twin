@@ -1900,6 +1900,11 @@ That is too few runs to attribute. The branch changes neither `tests/scenarios/`
 `cite_skills`, and the mechanism is the one already recorded by
 [ADR-0059](adr/0059-pair-cell-b-and-leave-cell-a-single.md) and #26.
 
+Later the same day (2026-10-05), on `acee7bb`, the defect did not appear in 6 runs on the
+branch and 6 on `2701729`, interleaved with nothing else running, nor in the branch's 2 CI-style
+runs. That is an observation, not a campaign: n is small, and it neither attributes nor fixes
+anything.
+
 Done means a campaign that compares enough runs of both commits, under recorded load, to tell
 a rate from noise. No ceiling is to be widened for it.
 

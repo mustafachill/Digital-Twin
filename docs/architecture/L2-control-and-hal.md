@@ -139,7 +139,11 @@ its own `GripperCommand` action. So on the physical side, the package `cite_hard
 serves the **same names** the simulated controllers serve:
 
 - **`track_adapter`** serves the track controller's `joint_trajectory` topic and publishes the
-  track joint.
+  track joint. It calls four vendor services: `set_linear_motor_speed`, `set_linear_motor_pos`,
+  `get_linear_motor_pos` and `set_linear_motor_stop`. It writes the speed explicitly before a
+  move because the vendor SDK caches it. The vendor speed is rounded down, never above the
+  commanded speed; a move slower than the slowest it can carry out is refused; and a move
+  accepted before a hold is never sent after it.
 - **`gripper_relay`** serves the gripper controller's `gripper_cmd` action and publishes the
   drive joint.
 - **`deadman`** holds the arm through the vendor's state until the twin boundary's heartbeat is

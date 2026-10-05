@@ -50,16 +50,25 @@
   **The track.** No planner checks a track move against the scene
   ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)). On the physical
   side the adapter bounds it instead:
-  - the vendor speed is capped at the commanded speed, and an uncommanded speed is refused;
+  - the vendor speed is never above the commanded speed: it is rounded down to the vendor's
+    1 mm/s resolution, and a move slower than the slowest the adapter can carry out is refused
+    rather than sped up;
+  - the speed is written explicitly (`set_linear_motor_speed`, `ret == 0` required) before a
+    move whose speed differs from the last one the vendor acknowledged, because the vendor SDK
+    caches the speed and skips its own write (`xarm_linear_motor.cc:208-210` at the pinned
+    `xarm_ros2`);
   - moves go in segments of `segment_s`, so a lost stop limits the overrun to one segment;
-  - a program cancel is a hold at each side's own position, which the adapter turns into a stop;
+  - a program cancel is a hold at each side's own position, which the adapter turns into a stop,
+    and a move accepted before a hold is never sent after it;
   - the stop is re-sent until acknowledged after the last move, including at exit;
-  - the program does not proceed until the boundary's `TrackArrived` confirms the counterpart's
-    carriage arrived too.
+  - a track step asks `TrackArrived` first and fails ("home it") when the plant's carriage is at
+    the target and the counterpart's is not; after a move, the program does not proceed until
+    `TrackArrived` confirms every side's carriage arrived.
 
   **The boundary's readiness gate.** VALIDATED, or any mode commanding the physical side, is
-  refused until the deadman is HEALTHY **with the arm enabled** and the side's controller state
-  and joint states are fresh. This is re-checked whenever the mode is asserted again.
+  refused until the deadman is HEALTHY **with the arm enabled**, the side's controller state
+  and joint states are fresh, and every physical carriage stands within the track's goal
+  tolerance of the plant's. This is re-checked whenever the mode is asserted again.
   **Residuals, stated rather than fixed:**
   - The vendor's gripper action is always served and is reachable on the physical domain
     without the relay's gate.
