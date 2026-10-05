@@ -18,6 +18,7 @@
     --via twin       through the twin boundary, both sides (default)
     --via plant      the plant's own servers only
     --dry-run        print the steps and exit
+    --speed-scale S  every move and track slide at S in (0, 1] of its speed (default 1)
 
 The steps are the real robot's program as the bring-up plan states it
 (`from_plan`, ADR-0067). It does NOT put parts on the table, and it does NOT run
@@ -41,6 +42,7 @@ from cite_bringup.program.steps import (
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
     run,
+    speed_scale,
     StepFailed,
 )
 
@@ -56,9 +58,20 @@ def main(argv: list[str] | None = None) -> int:
         "--first-cycle", type=int, default=1, help="Number of the first cycle, for the log."
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the steps and exit.")
+    parser.add_argument(
+        "--speed-scale",
+        type=float,
+        default=1.0,
+        help="Run every move and track slide at this fraction (0, 1] of its own speed, on "
+        "both sides alike. 1.0 is the program as written.",
+    )
     args = parser.parse_args(argv)
     if args.cycles < 0:
         parser.error("--cycles must be 0 or more")
+    try:
+        speed_scale(args.speed_scale)
+    except ValueError as error:
+        parser.error(f"--speed-scale: {error}")
 
     cell = target(load(default_plan_path(args.zone)))
     steps = program(cell)
@@ -79,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
-        ros = RosCell(cell.arm, args.via, track=cell.track)
+        ros = RosCell(cell.arm, args.via, track=cell.track, speed=args.speed_scale)
         try:
             ros.refuse_if_holding()
             if args.via == "twin":
@@ -94,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         riding = f" on {cell.track.asset}" if cell.track is not None else ""
         say(
             f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
-            f"via {args.via}"
+            f"via {args.via} at {args.speed_scale:g} of its speed"
         )
         return run(steps, ros, args.cycles, say, first_cycle=args.first_cycle)
     finally:

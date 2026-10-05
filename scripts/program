@@ -5,6 +5,7 @@
 #   ./scripts/program --headless       the same with no windows
 #   ./scripts/program --cycles 3       three cycles, a fresh box each (0: until Ctrl-C)
 #   ./scripts/program --zone cell_b    name the zone; needed only when the model declares several
+#   ./scripts/program --speed-scale 0.1  every move and track slide at 10% of its speed, both sides
 #
 # WHAT IT DOES. It brings up both sides of the paired cell, starts each side's
 # belt ON THAT SIDE (the belt is not twinned, ADR-0067), and for each cycle
@@ -15,6 +16,13 @@
 # by step (ADR-0067). Then it reports where the last box ended and tears the
 # pair down. Ctrl-C stops the program (goal cancelled, track held), then each
 # side's belt, then the pair; a normal end and a failure stop the belts too.
+#
+# A PHYSICAL SIDE (ADR-0070 item 7). Where the plan declares a side's hardware
+# physical, nothing Gazebo-only is done there, and each skip is said: no box is
+# spawned or removed and no pose is read - a person places the part on the table
+# and presses Enter before each cycle - and no belt is commanded, because the
+# belt is not twinned and there is no physical belt driver. The physical side
+# comes up only with CITE_ALLOW_HARDWARE=1 in the shell that runs this.
 #
 # WHAT IT IS NOT. A demonstration: it gates nothing and is in no CI step.
 # `./scripts/scenario program_cycle` is what CHECKS the program, on one side. The
@@ -30,22 +38,30 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 HEADLESS=0
 ZONE=""
 CYCLES=1
+SPEED_SCALE=1.0
 WANT=""
 for arg in "$@"; do
     if [ -n "$WANT" ]; then
         case "$arg" in ""|-*|*:=*) die "${WANT} needs a value and was given '${arg}'." ;; esac
-        if [ "$WANT" = "--zone" ]; then ZONE="$arg"; else CYCLES="$arg"; fi
+        case "$WANT" in
+            --zone) ZONE="$arg" ;;
+            --cycles) CYCLES="$arg" ;;
+            --speed-scale) SPEED_SCALE="$arg" ;;
+        esac
         WANT=""; continue
     fi
     case "$arg" in
         --headless) HEADLESS=1 ;;
-        --zone|--cycles) WANT="$arg" ;;
-        -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
+        --zone|--cycles|--speed-scale) WANT="$arg" ;;
+        -h|--help)  sed -n '2,33p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
 [ -z "$WANT" ] || die "${WANT} needs a value."
 case "$CYCLES" in ''|*[!0-9]*) die "--cycles needs a whole number, 0 for forever." ;; esac
+# Checked again, and authoritatively, by the program itself (`speed_scale`);
+# here only so that a typo is refused before anything is brought up.
+case "$SPEED_SCALE" in ''|*[!0-9.]*|*.*.*|.) die "--speed-scale needs a number in (0, 1]." ;; esac
 
 # Defaulted only when the model leaves one answer (ADR-0069 decision 5), a named
 # zone checked against the same plans, and both asked here, before the container
@@ -89,6 +105,14 @@ fi
 source_overlay
 
 PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
+
+# Which sides are physical, read from the plan and never from an asset's type
+# (ADR-0070 item 7): each Gazebo-only step below is skipped there, and said.
+PHYSICAL_SIDES="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --physical)" \
+    || die "could not read which sides of ${ZONE} are physical"
+if [ -n "$PHYSICAL_SIDES" ]; then
+    info "Physical side(s): $(echo "$PHYSICAL_SIDES" | tr '\n' ' ')- no box, no belt and no pose there; a person places the part"
+fi
 
 # How long the pair may take to stop after its SIGINT before SIGKILL goes to
 # its process group. A ceiling on a failure, not a schedule. It sits above the
@@ -185,6 +209,7 @@ import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from cite_bringup.gz import plan_for, run
+from cite_bringup.program.sides import is_physical
 from cite_bringup.workpiece import (
     SPAWN_DROP_M, frame, part_of, spawn, workpiece_sdf, world_name)
 
@@ -199,6 +224,9 @@ with NamedTemporaryFile("w", suffix=".sdf", delete=False) as sdf:
     sdf.write(workpiece_sdf(part))
 try:
     for side in plan.sides:
+        if is_physical(plan, side.name):
+            print(f"  --  {side.name}: physical; no box is spawned or removed there")
+            continue
         if remove_first:
             # Queued in the world ahead of the create below, so the name is
             # free by the time the create is processed; if it is not, the
@@ -238,9 +266,14 @@ while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]
     step "Cycle ${CYCLE}: putting a work-piece on each side's pick table"
     replace_boxes "$([ "$CYCLE" -gt 1 ] && echo 1 || echo 0)" \
         || die "a side would not take the work-piece"
+    for side in $PHYSICAL_SIDES; do
+        info "Cycle ${CYCLE}: ${side} is physical. Place the part on the table by hand, clear the cell, then press Enter."
+        read -r _ || die "no operator answer for ${side} (a physical side needs one at this terminal); stopping"
+    done
 
     step "Cycle ${CYCLE}: running the fixed program through the twin boundary"
-    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 --first-cycle "$CYCLE" &
+    python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 \
+        --first-cycle "$CYCLE" --speed-scale "$SPEED_SCALE" &
     PROGRAM_PID=$!
     while kill -0 "$PROGRAM_PID" 2>/dev/null; do
         if ! kill -0 "$PAIR_PID" 2>/dev/null; then
@@ -263,6 +296,7 @@ step "Where the last box ended"
 python3 - "$ZONE" <<'PY' || true
 import sys
 from cite_bringup.gz import ModelPoses, plan_for
+from cite_bringup.program.sides import is_physical
 from cite_bringup.workpiece import frame, world_name
 
 zone, name = sys.argv[1], "workpiece"
@@ -270,6 +304,9 @@ plan = plan_for(zone)
 outfeed = frame(plan, f"{zone}__{plan.conveyors[0].asset}__outfeed")
 print(f"    outfeed frame at x={outfeed[0]:+.3f}  y={outfeed[1]:+.3f}")
 for side in plan.sides:
+    if is_physical(plan, side.name):
+        print(f"    {side.name:<12} physical; no pose is read there")
+        continue
     poses = ModelPoses(zone=zone, world=world_name(plan.world), side=side.name)
     try:
         at = None

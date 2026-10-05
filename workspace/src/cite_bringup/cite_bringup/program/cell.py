@@ -32,7 +32,8 @@ import time
 
 from builtin_interfaces.msg import Duration
 from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
-from cite_bringup.program.steps import StepFailed
+from cite_bringup.program.steps import scaled_motion, speed_scale, StepFailed
+from cite_bringup.readiness import waits_for_a_physical_side
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
@@ -74,6 +75,19 @@ CANCEL_CEILING_S = 30.0
 #: catches a clock that has STOPPED and never one that is merely slow.
 WAIT_WALL_FACTOR = 50.0
 WAIT_WALL_MARGIN_S = 60.0
+
+#: How long, in wall seconds, the twin may keep refusing VALIDATED because a
+#: physical side is not ready yet - its deadman has not enabled the arm, or its
+#: controller and joints are not publishing (ADR-0070 item 6). A ceiling on a
+#: failure, not a schedule: the request is re-asked until it is accepted, and an
+#: arm that is enabled at once is not delayed. It covers the deadman hearing the
+#: boundary's first heartbeat, the vendor enabling the arm over the network and
+#: reactivating its controllers.
+PHYSICAL_SIDE_READY_CEILING_S = 120.0
+
+#: How long one wait between two asks blocks, in wall seconds: a poll bounded by
+#: the ceiling above, spent spinning this node.
+_ASK_AGAIN_S = 0.5
 
 #: How long a track is given to stop where it stands when a move is abandoned,
 #: in the cell's clock. Short, because the carriage moves at 0.1 m/s in the real
@@ -127,6 +141,52 @@ def holding_refusal(state: RobotState | None, topic: str) -> str | None:
     return None
 
 
+def ask_until_accepted(
+    ask,
+    pause,
+    say,
+    ceiling_s: float = PHYSICAL_SIDE_READY_CEILING_S,
+    clock=time.monotonic,
+) -> None:
+    """Ask for VALIDATED until it is accepted, refused for good, or the ceiling passes.
+
+    A physical side comes up held, and the twin refuses to command it until its
+    deadman has enabled the arm and its controller and joints are publishing
+    (ADR-0070 item 6). That refusal clears by itself, so it is asked again
+    after ``pause``; every other refusal is final and raised at once.
+    ``ask`` returns `(accepted, detail)`.
+    """
+    deadline = clock() + ceiling_s
+    said = ""
+    while True:
+        accepted, detail = ask()
+        if accepted:
+            return
+        if not waits_for_a_physical_side(detail):
+            raise StepFailed(f"the twin refused VALIDATED: {detail}")
+        if clock() > deadline:
+            raise StepFailed(
+                f"the physical side was not ready within {ceiling_s:.0f} s: {detail}"
+            )
+        if detail != said:
+            say(f"waiting for the physical side: {detail}")
+            said = detail
+        pause()
+
+
+def default_scaling(arm: ControllerManager) -> tuple[float, float]:
+    """Return the planner's default (velocity, acceleration) scaling, from the generated limits.
+
+    The skill server applies these when a goal says 0; a slowed program scales
+    them, so it reads them where move_group does rather than restating them.
+    """
+    document = yaml.safe_load(arm.moveit.joint_limits.read_text()) or {}
+    return (
+        float(document["default_velocity_scaling_factor"]),
+        float(document["default_acceleration_scaling_factor"]),
+    )
+
+
 def gripper_effort_n(arm: ControllerManager) -> float:
     """Return the gripper controller's own effort ceiling, from its generated configuration."""
     controller = arm.gripper_action.rsplit("/", 1)[0]
@@ -144,8 +204,14 @@ class RosCell:
         *,
         conveyor: Conveyor | None = None,
         track: Track | None = None,
+        speed: float = 1.0,
     ) -> None:
         skills = arm.skills
+        #: The fraction of its own speed every move and every track slide runs
+        #: at (`--speed-scale`). One command through the twin, so both sides run
+        #: at the same fraction.
+        self._speed = speed_scale(speed)
+        self._default_scaling = default_scaling(arm)
         name = twin_name if via == "twin" else (lambda plain: plain)
         self._via = via
         self._effort_n = gripper_effort_n(arm)
@@ -188,9 +254,17 @@ class RosCell:
         request = SetMode.Request(
             mode=TwinMode.MODE_VALIDATED, reason="fixed program (ADR-0066)"
         )
-        response = self._until(client.call_async(request), "SetMode(VALIDATED)")
-        if not response.accepted:
-            raise StepFailed(f"the twin refused VALIDATED: {response.result.detail}")
+
+        def ask() -> tuple[bool, str]:
+            response = self._until(client.call_async(request), "SetMode(VALIDATED)")
+            return response.accepted, response.result.detail
+
+        def pause() -> None:
+            ask_again = time.monotonic() + _ASK_AGAIN_S
+            while time.monotonic() < ask_again:
+                rclpy.spin_once(self.node, timeout_sec=_ASK_AGAIN_S)
+
+        ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
 
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).
@@ -219,7 +293,14 @@ class RosCell:
     # --------------------------------------------------------------- steps
 
     def move(self, pose: str, velocity_scaling: float = 0.0) -> None:
-        goal = MoveTo.Goal(named_configuration=pose, velocity_scaling=float(velocity_scaling))
+        velocity, acceleration = scaled_motion(
+            velocity_scaling, *self._default_scaling, self._speed
+        )
+        goal = MoveTo.Goal(
+            named_configuration=pose,
+            velocity_scaling=float(velocity),
+            acceleration_scaling=float(acceleration),
+        )
         self._goal(self._move_to, goal, f"move to {pose}")
 
     def grip(self, width_m: float, expect_object: bool) -> None:
@@ -270,8 +351,8 @@ class RosCell:
             lambda: self._track_position is not None,
             f"{self._track.joint} on the arm's joint states",
         )
-        seconds = abs(position_m - self._track_position) / speed_mps
-        if seconds * speed_mps <= self._track.goal_tolerance_m:
+        seconds = abs(position_m - self._track_position) / (speed_mps * self._speed)
+        if abs(position_m - self._track_position) <= self._track.goal_tolerance_m:
             return
         self._until_true(
             lambda: self._track_command.get_subscription_count() > 0,

@@ -23,7 +23,10 @@ import os
 import signal
 
 from cite_bringup.plan import default_plan_path, load
+from cite_bringup.program import belt as belt_command
+from cite_bringup.program.__main__ import main as program_main
 from cite_bringup.program.cell import (
+    ask_until_accepted,
     holding_refusal,
     RosCell,
     state_topic,
@@ -31,15 +34,19 @@ from cite_bringup.program.cell import (
     twin_name,
 )
 from cite_bringup.program.from_plan import program, target
+from cite_bringup.program.sides import physical_sides, simulated_sides
 from cite_bringup.program.steps import (
     belt,
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
     move,
     run,
+    scaled_motion,
+    speed_scale,
     StepFailed,
     wait,
 )
+from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import RobotState
 import pytest
 
@@ -296,3 +303,106 @@ def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:
     assert twin_name("/cite/cell_b/picker/move_to") == "/cite/twin/cell_b/picker/move_to"
     with pytest.raises(ValueError):
         twin_name("/elsewhere/move_to")
+
+
+# --- A physical side, and the speed of a first run (ADR-0070 items 6-7) -------
+
+
+class _Clock:
+    """A clock the test moves, so a ceiling is reached without waiting."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_validated_is_asked_again_while_the_physical_side_is_held() -> None:
+    answers = [
+        (False, f"{PHYSICAL_SIDE_NOT_READY}: entering VALIDATED would ... - held"),
+        (False, f"{PHYSICAL_SIDE_NOT_READY}: entering VALIDATED would ... - held"),
+        (True, "SIM -> VALIDATED"),
+    ]
+    said: list[str] = []
+    pauses: list[None] = []
+    ask_until_accepted(lambda: answers.pop(0), lambda: pauses.append(None), said.append)
+    assert answers == [] and len(pauses) == 2
+    assert len(said) == 1, "one line per new reason, not one per ask"
+
+
+def test_any_other_refusal_is_final_at_once() -> None:
+    asked: list[None] = []
+
+    def ask() -> tuple[bool, str]:
+        asked.append(None)
+        return False, "entering VALIDATED would place physical actuation ... opt-in"
+
+    with pytest.raises(StepFailed, match="refused VALIDATED"):
+        ask_until_accepted(ask, lambda: None, lambda text: None)
+    assert len(asked) == 1
+
+
+def test_a_side_never_ready_fails_at_the_ceiling() -> None:
+    clock = _Clock()
+
+    def pause() -> None:
+        clock.now += 1.0
+
+    with pytest.raises(StepFailed, match="not ready within"):
+        ask_until_accepted(
+            lambda: (False, f"{PHYSICAL_SIDE_NOT_READY}: held"),
+            pause,
+            lambda text: None,
+            ceiling_s=5.0,
+            clock=clock,
+        )
+    assert clock.now > 5.0
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, 1.5, float("nan"), float("inf")])
+def test_a_speed_scale_outside_zero_to_one_is_refused(value: float) -> None:
+    with pytest.raises(ValueError):
+        speed_scale(value)
+
+
+def test_full_speed_is_the_program_as_written() -> None:
+    assert scaled_motion(0.111, 0.35, 0.35, 1.0) == (0.111, 0.0)
+    assert scaled_motion(0.0, 0.35, 0.35, 1.0) == (0.0, 0.0)
+
+
+def test_a_tenth_scales_velocity_and_acceleration_and_never_widens_anything() -> None:
+    velocity, acceleration = scaled_motion(0.111, 0.35, 0.35, 0.1)
+    assert velocity == pytest.approx(0.0111)
+    assert acceleration == pytest.approx(0.035)
+    # A move stating no speed is slowed from the server's default, not from zero.
+    assert scaled_motion(0.0, 0.35, 0.35, 0.1) == pytest.approx((0.035, 0.035))
+
+
+def test_a_bad_speed_scale_is_refused_before_anything_starts(capsys) -> None:
+    with pytest.raises(SystemExit) as exited:
+        program_main(["--zone", ZONE, "--dry-run", "--speed-scale", "2"])
+    assert exited.value.code == 2
+    assert "--speed-scale" in capsys.readouterr().err
+
+
+def test_the_shipped_counterpart_is_the_physical_side() -> None:
+    plan = load(default_plan_path(ZONE))
+    assert physical_sides(plan) == ["counterpart"]
+    assert simulated_sides(plan) == ["plant"]
+
+
+def test_no_belt_is_commanded_on_a_physical_side(monkeypatch, capsys) -> None:
+    commanded: list[str] = []
+    monkeypatch.setenv("CITE_DOMAIN_BASE", "42")
+    monkeypatch.setattr(
+        belt_command,
+        "_set_on_one_side",
+        lambda topic, speed, domain, side: commanded.append(side) or True,
+    )
+    assert belt_command.main(["--zone", ZONE]) == 0
+    assert commanded == ["plant"]
+    assert "counterpart: physical" in capsys.readouterr().out
+    commanded.clear()
+    assert belt_command.main(["--zone", ZONE, "--side", "counterpart", "--stop"]) == 0
+    assert commanded == []
