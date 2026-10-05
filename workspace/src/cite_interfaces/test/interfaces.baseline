@@ -9,6 +9,7 @@ msg/DeadmanState.msg
   float64 timeout_s
   uint64 last_sequence
   string detail
+  bool arm_enabled
 msg/DivergenceMetrics.msg
   string TOPIC="/cite/twin/divergence"
   std_msgs/Header header

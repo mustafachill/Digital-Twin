@@ -132,7 +132,8 @@ SPECS: tuple[Spec, ...] = (
     Spec(
         "result_timeout_s",
         Parameter.Type.DOUBLE,
-        "how long one goal may wait for the vendor's result, steady-clock seconds",
+        "how long one goal may wait for the vendor's result, and one position read "
+        "for its answer, steady-clock seconds",
         positive=True,
     ),
     Spec(
@@ -175,6 +176,9 @@ SPECS: tuple[Spec, ...] = (
         positive=True,
     ),
 )
+
+#: Marks a position read as in flight between reserving it and sending it.
+_RESERVED = object()
 
 #: How a forwarded goal ended, other than by the vendor's own result.
 _CANCELLED = "cancelled"
@@ -225,7 +229,10 @@ class GripperRelay(LifecycleNode):
         self._state_client = None
         self._state_publisher = None
         self._poll_timer = None
-        self._poll_in_flight = False
+        #: The position read in flight, and when it is abandoned (N-08): a read
+        #: the vendor never answers must not stop every later one.
+        self._poll_future = None
+        self._poll_deadline_ns = 0
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -328,6 +335,7 @@ class GripperRelay(LifecycleNode):
         if self._state_client is not None:
             self.destroy_client(self._state_client)
             self._state_client = None
+        self._poll_future = None
         if self._state_publisher is not None:
             self.destroy_lifecycle_publisher(self._state_publisher)
             self._state_publisher = None
@@ -353,24 +361,51 @@ class GripperRelay(LifecycleNode):
     def _poll(self) -> None:
         if self._gate is not None:
             self._gate.check()
+        config = self._config
+        if config is None:
+            return
+        now = self._steady.now().nanoseconds
         with self._lock:
-            if not self._active or self._poll_in_flight:
+            if not self._active:
                 return
-            self._poll_in_flight = True
+            overdue = None
+            if self._poll_future is not None:
+                if now <= self._poll_deadline_ns:
+                    return
+                overdue, self._poll_future = self._poll_future, None
+            # Reserved under the lock before it is sent, with its deadline, so
+            # a second poll on the reentrant group sends nothing.
+            self._poll_future = _RESERVED
+            self._poll_deadline_ns = now + int(config["result_timeout_s"] * 1e9)
         client = self._state_client
+        if overdue is not None and overdue is not _RESERVED and client is not None:
+            client.remove_pending_request(overdue)
+            overdue.cancel()
+            self.get_logger().error(
+                "get_gripper_position unanswered within result_timeout_s; abandoned, and "
+                "no drive-joint position is published until one is answered",
+                throttle_duration_sec=5.0,
+            )
         if client is None or not client.service_is_ready():
             with self._lock:
-                self._poll_in_flight = False
+                self._poll_future = None
             self.get_logger().warning(
                 "gripper position unread: the vendor's get_gripper_position is not available",
                 throttle_duration_sec=5.0,
             )
             return
-        client.call_async(GetFloat32.Request()).add_done_callback(self._on_position)
+        with self._lock:
+            future = client.call_async(GetFloat32.Request())
+            self._poll_future = future
+        future.add_done_callback(self._on_position)
 
     def _on_position(self, future) -> None:
         with self._lock:
-            self._poll_in_flight = False
+            if self._poll_future is not future:
+                return  # abandoned at its deadline, or the node was cleaned up
+            self._poll_future = None
+        if future.cancelled():
+            return
         config, state_map, publisher = self._config, self._state_map, self._state_publisher
         error = future.exception()
         response = None if error is not None else future.result()

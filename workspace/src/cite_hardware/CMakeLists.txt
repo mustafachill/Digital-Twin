@@ -48,6 +48,10 @@ if(BUILD_TESTING)
   # Nothing is defaulted: a node configured without its facts refuses, naming
   # each one.
   ament_add_pytest_test(parameters test/test_parameters.py)
+  # Interleavings that a launch test cannot place: a trip between the deadman's
+  # decision to START and its send, a gate closing between the track adapter's
+  # decision to move and its send. Nodes in this process with fake clients.
+  ament_add_pytest_test(ordering test/test_ordering.py)
 
   # Each node against fake vendor endpoints held by the test process. Nothing
   # here reaches hardware: the fakes are services and an action server in the
@@ -56,6 +60,9 @@ if(BUILD_TESTING)
   add_launch_test(test/test_track_adapter_launch.py TIMEOUT 180)
   add_launch_test(test/test_gripper_relay_launch.py TIMEOUT 180)
   add_launch_test(test/test_deadman_launch.py TIMEOUT 180)
+  # The vendor driver going away and coming back is a process ending: the
+  # fake vendor there is a process of its own (test/fake_vendor_process.py).
+  add_launch_test(test/test_deadman_vendor_launch.py TIMEOUT 180)
 endif()
 
 ament_package()

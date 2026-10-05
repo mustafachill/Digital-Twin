@@ -25,7 +25,7 @@ and 5).
 |---|---|---|
 | `track_adapter.py` | the track controller's `joint_trajectory` topic in; the track joint's position on the arm's joint-state topic out | `set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop` (`xarm_msgs`) |
 | `gripper_relay.py` | `control_msgs/GripperCommand` at the plan's `gripper_action`; the drive joint's position on the arm's joint-state topic | the vendor driver's `GripperCommand` at `<prefix>xarm_gripper/gripper_action`; `get_gripper_position` (`xarm_msgs/GetFloat32`) |
-| `deadman.py` | `cite_interfaces/DeadmanState`, latched and republished every tick | `set_state(4)` in every state but HEALTHY; `set_mode` then `set_state(0)` on entering HEALTHY; while tripped also `set_linear_motor_stop` and a cancel of every goal on named actions, every tick |
+| `deadman.py` | `cite_interfaces/DeadmanState`, latched and republished every tick | `set_state(4)` in every state but HEALTHY; `set_mode` then `set_state(0)` on entering HEALTHY, retried on later ticks while HEALTHY until acknowledged (`arm_enabled`); while tripped also `set_linear_motor_stop` and a cancel of every goal on named actions, every tick |
 
 **How the arm is stopped.** The arm's own trajectory controller is not behind any gate here.
 The deadman holds the arm stopped through the vendor's state: `set_state(4)` on every tick in
@@ -34,7 +34,11 @@ undone within one tick; and, while tripped, a cancel of every goal on the arm's
 `FollowJointTrajectory` action. The vendor plugin streams nothing while the arm is in state 4
 (`uf_robot_system_hardware.cpp:339-344`, `:464-502`). Only the transition AWAITING -> HEALTHY
 enables the arm, with the vendor plugin's own sequence (`set_mode` with its streaming mode,
-then `set_state(0)`), and the plugin then reactivates the controllers itself (`:345-350`). An
+then `set_state(0)`), and the plugin then reactivates the controllers itself (`:345-350`).
+`DeadmanState.state` HEALTHY says motion is permitted; `arm_enabled` says the deadman's
+`set_state(0)` was acknowledged in this HEALTHY period. The relays gate on `state`; a consumer
+that needs the arm ready must also require `arm_enabled`. The START decision and its send are
+one step under the lock every trip and every STOP takes, so no START follows a trip's STOP. An
 empty `JointTrajectory` is not a stop on `joint_trajectory_controller` 4.x (it is refused), so
 nothing here sends one.
 
@@ -42,12 +46,22 @@ nothing here sends one.
 the latest `DeadmanState` says HEALTHY, is younger than `deadman_state_max_age_s`, and comes from
 the one deadman publishing**. When that gate closes for any reason, the track adapter calls
 `set_linear_motor_stop` itself if a move it sent may still be running, and so it does on
-deactivate and shutdown. The deadman's own behaviour, and why a trip latches, is in
+deactivate and shutdown. That stop is level-triggered: sent again on every poll, active or not,
+while motion is not permitted and a move may be running, until the vendor acknowledges one
+sent after the last move. The deadman's own behaviour, and why a trip latches, is in
 `cite_hardware/deadman.py` and `cite_hardware/liveness.py`.
 
 **What the deadman watches.** The twin boundary's heartbeat: the boundary process, its executor
 serving this side, and the DDS path from it. Not the vendor driver's link to the arm's
 controller, which is the vendor's to detect.
+
+**On SIGINT or SIGTERM** each process stops its asset before it exits: rclpy runs no lifecycle
+transition when its context goes down, so `cite_hardware/process.py` takes the signal itself,
+calls the node's `stop_before_exit()` while the context still stands — the deadman sends
+`set_state(4)`, the track adapter `set_linear_motor_stop` if a move may be running — and waits
+for the answers within the node's own vendor-call bound (`call_deadline_s`,
+`position_max_age_s`). A SIGKILL leaves no such chance: the relays' gates close when the
+deadman's publisher goes, but nothing then puts the ARM back to state 4.
 
 **Recovery after a trip.** Find why the heartbeat stopped. Then `ros2 lifecycle set
 <deadman> deactivate` and `activate`: the deadman says AWAITING and keeps the arm stopped, and
@@ -77,8 +91,9 @@ is derived from, and the deadline of a position read), `auto_enable` (bool),
 **`gripper_relay`** — `action_name`, `vendor_action_name` (strings, different),
 `open_position`, `closed_position` (doubles, the drive joint), `vendor_open_position`,
 `vendor_closed_position` (doubles, the vendor ACTION's unit: 0.0 open and 0.85 closed for the
-xArm gripper; neither range empty), `result_timeout_s` (double, > 0), `deadman_state_topic`
-(string), `deadman_state_max_age_s` (double, > 0), `drive_joint`, `joint_state_topic`,
+xArm gripper; neither range empty), `result_timeout_s` (double, > 0, also the bound on an unanswered
+`get_gripper_position`), `deadman_state_topic` (string), `deadman_state_max_age_s` (double,
+> 0), `drive_joint`, `joint_state_topic`,
 `get_position_service` (strings), `vendor_state_open_position`, `vendor_state_closed_position`
 (doubles, what the vendor's `get_gripper_position` reports, in PULSES: about 850 open and 0
 closed), `poll_period_s` (double, > 0).
@@ -139,7 +154,10 @@ refuses `use_sim_time`.
   from them reads "not holding" (ADR-0063 left the SDK stall path unestablished).
 - **The deadman trips when heartbeats stop for `timeout_s`, when their publisher disappears,
   or when a second boundary appears** (another `boundary_id`, or a second publisher), after
-  the first one. While tripped every stop is re-issued on every tick whether or not the last
+  the first one. **It trips too when the vendor's `set_state` stops being served by exactly one
+  server** while HEALTHY: a vendor driver that went away or restarted has STARTED the arm in its
+  own `on_activate`. Seen on the tick, so an outage shorter than `tick_period_s` with no overlap
+  of old and new server is not seen. While tripped every stop is re-issued on every tick whether or not the last
   one was acknowledged, and each call is abandoned at `call_deadline_s` so an unanswered call
   never holds back the next. A trip is latched until a lifecycle deactivate and activate.
 

@@ -32,7 +32,10 @@ THE RULES, which `DeadmanState.msg` states for a reader of the topic:
   when the heartbeat's publisher disappears, when a heartbeat carries a
   boundary id other than the latched one, or when more than one heartbeat
   publisher is on the topic. The last two are a second boundary commanding the
-  same side, and which of the two is in charge cannot be told from here.
+  same side, and which of the two is in charge cannot be told from here. It
+  becomes TRIPPED too when the vendor driver the deadman stops the arm through
+  is not served exactly once: a driver that went away, or restarted, re-enabled
+  the arm on its own activation, and nothing here asked it to.
 - TRIPPED is LATCHED. Heartbeats resuming do not clear it; only deactivate,
   which leaves INACTIVE, and a later activate do. An unexplained loss of the
   commander is a fault, and resuming on its own would re-run whatever caused it
@@ -179,6 +182,12 @@ class Liveness:
         return self._trip(
             f"the heartbeat publisher disappeared after sequence {self.last_sequence}"
         )
+
+    def vendor_lost(self, reason: str) -> Outcome:
+        """Record that the vendor's stop path is not the one it was: a trip when HEALTHY."""
+        if self.state != HEALTHY:
+            return Outcome(accepted=False, reason=reason)
+        return self._trip(reason)
 
     def _trip(self, reason: str) -> Outcome:
         self.state = TRIPPED

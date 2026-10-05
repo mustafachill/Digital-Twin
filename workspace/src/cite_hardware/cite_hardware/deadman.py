@@ -43,11 +43,16 @@ pendant or any other client is undone within one tick. The plugin's own
 `on_activate` sets the arm to START (`:248-254`), which is why activation is
 followed at once by a STOP here.
 
-**Only HEALTHY enables, and only on entering it.** On AWAITING -> HEALTHY the
-deadman calls the vendor's `set_mode` with the plugin's streaming mode, then,
-once that answered success and HEALTHY still stands, `set_state(0)`. That is
-the vendor plugin's own enable (`:252-254`) less `clean_error`, which is an
-operator's decision. The `set_mode` service itself stops the arm before it
+**Only HEALTHY enables.** On AWAITING -> HEALTHY the deadman calls the
+vendor's `set_mode` with the plugin's streaming mode, then, once that answered
+success and HEALTHY still stands, `set_state(0)`. That is the vendor plugin's
+own enable (`:252-254`) less `clean_error`, which is an operator's decision. An
+enable that fails or is abandoned at `call_deadline_s` is tried again on later
+ticks while HEALTHY lasts, one at a time; once `set_state(0)` is acknowledged
+in this HEALTHY epoch, `DeadmanState.arm_enabled` says so and it is not sent
+again. "HEALTHY in this epoch, so START" is decided and sent under the one lock
+every trip and every STOP takes, so no START is ever sent after the STOP a
+state change caused. The `set_mode` service itself stops the arm before it
 changes the mode (`xarm_api/src/xarm_driver_service.cpp:543-550`). Once the arm
 is ready again the plugin's `write` reactivates the controllers itself
 (`uf_robot_system_hardware.cpp:345-350`, `_activate_controller` at `:426-440`).
@@ -66,6 +71,14 @@ Each call carries a steady-clock deadline (`call_deadline_s`). A call not
 answered by its deadline is abandoned and said in the log; it never holds back
 the next tick's call. The arm is stopped by `set_state(4)` and the cancel of its
 trajectory controller's goals, and by nothing else here.
+
+**The vendor driver going away trips it.** While HEALTHY, the vendor's
+`set_state` service must be served by exactly one server: none is a driver that
+went away, two is one that restarted before the old one's discovery lease
+expired. Either way the driver's `on_activate` has cleaned the error, enabled
+motion and STARTED the arm by itself (`:248-254`), which nothing here asked for.
+Seen on the tick: an outage shorter than one `tick_period_s` with no overlap is
+not seen, and a driver restart takes seconds.
 
 **Latched.** A trip clears only by a deliberate deactivate and activate, never
 by heartbeats resuming; the activate returns to AWAITING with the arm still
@@ -187,11 +200,19 @@ class Deadman(LifecycleNode):
         # parameter overrides in through them rather than through a launch.
         super().__init__(NODE_NAME, **node_options)
         self._required = RequiredParameters(self, SPECS)
-        self._lock = threading.Lock()
-        # One mutually exclusive group for every callback: heartbeats, the
-        # tick, the matched event and the vendor's answers all touch the state
-        # machine, and none of them blocks, so serialising them costs nothing
-        # and removes every interleaving.
+        # The lock, and NOT the callback group, is what serialises this node.
+        # The group below holds heartbeats, the tick and the matched event, but
+        # a vendor's answer is delivered through a future's done callback, and
+        # rclpy (Jazzy, `Future.add_done_callback`) runs that as an executor
+        # TASK outside every callback group: under the multi-threaded executor
+        # it runs concurrently with a trip. So every decision that leads to a
+        # vendor call — "HEALTHY in this epoch, so START", "not HEALTHY, so
+        # STOP" — is taken and SENT under this lock, and no START is ever sent
+        # after a STOP that a state change caused (N-01). Reentrant, because a
+        # call refused before sending answers its continuation at once, under
+        # the same lock. Nothing done under it blocks: every call is
+        # asynchronous.
+        self._lock = threading.RLock()
         self._group = MutuallyExclusiveCallbackGroup()
         self._steady = Clock(clock_type=ClockType.STEADY_TIME)
         self._config: dict | None = None
@@ -209,6 +230,12 @@ class Deadman(LifecycleNode):
         #: Bumped on every change of state, so an enable answered after the
         #: state moved on is recognised as stale and goes no further.
         self._epoch = 0
+        #: The epoch whose enable (`set_mode`, then `set_state(0)`) is in
+        #: flight, so a tick does not start a second one; `None` when none is.
+        self._enable_in_flight: int | None = None
+        #: The epoch in which `set_state(0)` was acknowledged. The arm is
+        #: enabled only while this equals the current epoch and HEALTHY holds.
+        self._enabled_epoch: int | None = None
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -320,6 +347,31 @@ class Deadman(LifecycleNode):
         self._release()
         return TransitionCallbackReturn.SUCCESS
 
+    def stop_before_exit(self) -> tuple[list, float]:
+        """Stop the arm because the PROCESS is ending: SIGINT or SIGTERM.
+
+        rclpy (Jazzy) runs no lifecycle transition when its context goes down:
+        `LifecycleNode.destroy_node` does not call `on_shutdown`, and a context's
+        own `on_shutdown` callbacks run after `rcl` has shut down, when nothing
+        can be sent. So `cite_hardware.process.run` calls this first, while the
+        context still stands, and waits on the returned futures for at most the
+        returned seconds. Best effort: sent whether or not the vendor is seen.
+        The state is published INACTIVE first, so the relays close at once.
+        """
+        config, client = self._config, self._set_state
+        if config is None or client is None:
+            return [], 0.0
+        with self._lock:
+            if self._liveness is not None:
+                self._liveness.deactivate()
+                self._epoch += 1
+            request = SetInt16.Request()
+            request.data = VENDOR_STATE_STOP
+            future = client.call_async(request)
+        self._publish_state()
+        self.get_logger().warning("process ending: set_state(4) sent before exit")
+        return [future], config["call_deadline_s"]
+
     def _release(self) -> None:
         if self._timer is not None:
             self.destroy_timer(self._timer)
@@ -335,6 +387,8 @@ class Deadman(LifecycleNode):
         self._set_state = self._set_mode = self._linear_stop = None
         self._cancels = []
         self._pending = []
+        self._enable_in_flight = None
+        self._enabled_epoch = None
         if self._state_publisher is not None:
             self.destroy_publisher(self._state_publisher)
             self._state_publisher = None
@@ -394,6 +448,7 @@ class Deadman(LifecycleNode):
         outcome = None
         with self._lock:
             if liveness.state == HEALTHY:
+                vendors = self.count_services(config["set_state_service"])
                 if now - self._last_fresh_ns > config["timeout_s"] * 1e9:
                     outcome = liveness.expired()
                 elif self.count_publishers(TwinHeartbeat.TOPIC) > 1:
@@ -402,9 +457,20 @@ class Deadman(LifecycleNode):
                     )
                 elif self.count_publishers(TwinHeartbeat.TOPIC) == 0:
                     outcome = liveness.publisher_lost()
+                elif vendors != 1:
+                    # N-03. The vendor's `ros2_control_node` restarting is a
+                    # fault, not a pause: its plugin's `on_activate` cleans the
+                    # error, enables motion and STARTS the arm on its own. Gone
+                    # (0) or restarted before the old one's lease expired (2),
+                    # the stop path is not the one this deadman enabled.
+                    outcome = liveness.vendor_lost(
+                        f"{config['set_state_service']} is served by {vendors} server(s), "
+                        "and the vendor driver the arm was enabled through is one"
+                    )
             if outcome is not None and outcome.tripped:
                 self._epoch += 1
             state = liveness.state
+            epoch = self._epoch
         if outcome is not None and outcome.tripped:
             self._trip(outcome.reason)
             return
@@ -412,6 +478,10 @@ class Deadman(LifecycleNode):
             self._issue_trip_stops()
         elif state != HEALTHY:
             self._hold_stopped()
+        else:
+            # A failed or abandoned enable is retried while HEALTHY lasts;
+            # `_enable` itself refuses a second one in flight or a repeat.
+            self._enable(epoch)
         self._publish_state(log=False)
 
     # ------------------------------------------------------------------ #
@@ -424,9 +494,18 @@ class Deadman(LifecycleNode):
         self._issue_trip_stops()
 
     def _hold_stopped(self) -> None:
+        """Send `set_state(4)` unless HEALTHY, deciding and sending under the lock.
+
+        Under the lock so that a STOP decided on a state that is no longer
+        current — a tick that read AWAITING just before the first heartbeat —
+        is not sent after that state's START.
+        """
         request = SetInt16.Request()
         request.data = VENDOR_STATE_STOP
-        self._call("set_state(4)", self._set_state, request)
+        with self._lock:
+            if self._liveness is not None and self._liveness.state == HEALTHY:
+                return
+            self._call("set_state(4)", self._set_state, request)
 
     def _issue_trip_stops(self) -> None:
         self._hold_stopped()
@@ -436,36 +515,84 @@ class Deadman(LifecycleNode):
             # "cancel all goals" in action_msgs/srv/CancelGoal.
             self._call(f"cancel all goals on {action}", client, CancelGoal.Request())
 
+    def _current(self, epoch: int) -> bool:
+        """Whether HEALTHY holds in ``epoch``. Called with the lock held."""
+        return (
+            self._liveness is not None
+            and self._liveness.state == HEALTHY
+            and self._epoch == epoch
+        )
+
     def _enable(self, epoch: int) -> None:
-        """Enable the arm: `set_mode`, then `set_state(0)` once that succeeded."""
+        """Enable the arm: `set_mode`, then `set_state(0)` once that succeeded.
+
+        At most one enable is in flight, and none once this epoch's succeeded.
+        One that fails or is abandoned at `call_deadline_s` clears its mark, so
+        the next tick tries again while HEALTHY lasts.
+        """
         assert self._config is not None
         request = SetInt16.Request()
         request.data = self._config["enable_mode"]
-        self._call(
-            f"set_mode({request.data})",
-            self._set_mode,
-            request,
-            then=lambda response: self._start(epoch, response),
-        )
+        with self._lock:
+            if not self._current(epoch) or epoch in (
+                self._enable_in_flight,
+                self._enabled_epoch,
+            ):
+                return
+            self._enable_in_flight = epoch
+            self._call(
+                f"set_mode({request.data})",
+                self._set_mode,
+                request,
+                then=lambda response: self._start(epoch, response),
+            )
 
     def _start(self, epoch: int, response) -> None:
+        """Send `set_state(0)` if `set_mode` succeeded and HEALTHY still holds.
+
+        The check and the send are one step under the lock, which every state
+        change and every STOP also take: a trip either happened before the
+        check, and nothing is sent, or happens after the send, and its STOP
+        follows this START (N-01).
+        """
         with self._lock:
-            current = self._liveness is not None and self._liveness.state == HEALTHY
-            current = current and self._epoch == epoch
-        if not current:
-            self.get_logger().warning(
-                "enable dropped: the deadman left HEALTHY while set_mode was answered"
+            if not self._current(epoch):
+                if self._enable_in_flight == epoch:
+                    self._enable_in_flight = None
+                self.get_logger().warning(
+                    "enable dropped: the deadman left HEALTHY while set_mode was answered"
+                )
+                return
+            if response is None or response.ret != 0:
+                self._enable_in_flight = None
+                self.get_logger().error(
+                    "enable failed: set_mode did not succeed, so the arm stays stopped; "
+                    "tried again on the next tick while HEALTHY",
+                    throttle_duration_sec=5.0,
+                )
+                return
+            request = SetInt16.Request()
+            request.data = VENDOR_STATE_START
+            self._call(
+                "set_state(0)",
+                self._set_state,
+                request,
+                then=lambda answer: self._started(epoch, answer),
             )
-            return
-        if response is None or response.ret != 0:
-            self.get_logger().error(
-                "enable failed: set_mode did not succeed, so the arm stays stopped; "
-                "deactivate and activate the deadman to try again"
+
+    def _started(self, epoch: int, response) -> None:
+        """Record an acknowledged `set_state(0)` as this epoch's enable."""
+        with self._lock:
+            if self._enable_in_flight == epoch:
+                self._enable_in_flight = None
+            enabled = (
+                response is not None and response.ret == 0 and self._current(epoch)
             )
-            return
-        request = SetInt16.Request()
-        request.data = VENDOR_STATE_START
-        self._call("set_state(0)", self._set_state, request)
+            if enabled:
+                self._enabled_epoch = epoch
+        if enabled:
+            self.get_logger().info("arm enabled: set_state(0) acknowledged while HEALTHY")
+            self._publish_state(log=False)
 
     def _call(self, label: str, client, request, then=None) -> None:
         """Send one call with a deadline; never wait on it.
@@ -500,6 +627,10 @@ class Deadman(LifecycleNode):
             if pending in self._pending:
                 self._pending.remove(pending)
         if future.cancelled():
+            # Abandoned at its deadline: a continuation still hears that it
+            # failed, so an enable is not left marked in flight for ever.
+            if then is not None:
+                then(None)
             return
         error = future.exception()
         response = None if error is not None else future.result()
@@ -542,6 +673,9 @@ class Deadman(LifecycleNode):
             message.timeout_s = liveness.timeout_s
             message.last_sequence = liveness.last_sequence
             message.detail = liveness.detail
+            message.arm_enabled = (
+                liveness.state == HEALTHY and self._enabled_epoch == self._epoch
+            )
         publisher.publish(message)
         if log:
             self.get_logger().info(f"deadman {STATE_NAMES[message.state]}: {message.detail}")
