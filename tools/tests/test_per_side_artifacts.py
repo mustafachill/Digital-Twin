@@ -236,6 +236,34 @@ class TestEachSideSpawnsWhatItsOwnFileDefines:
         }
 
 
+class TestAnEndEffectorIsDroppedOnlyWhereTheVendorIntegratesIt:
+    """R-08: `exports_end_effector_joints` speaks for a vendor-integrated end effector only.
+
+    The vendor macro omits the gripper's `<ros2_control>` block for its physical
+    component only when it integrates the gripper itself (`add_gripper`); an end
+    effector that is not vendor-integrated is not that block, so the flag says
+    nothing about it. Before the fix its controller was dropped all the same.
+    `cite_description` asserts the same rule on the expanded description.
+    """
+
+    @staticmethod
+    def _counterpart_controllers(model: Path) -> set[str]:
+        (picker,) = (a for a in resolve(load(model), ZONE).assets if a.id == ARM)
+        return {c.name for c in picker.controllers_on(ids.COUNTERPART_SIDE)}
+
+    def test_a_vendor_integrated_gripper_is_dropped(self, real_model: Path) -> None:
+        assert f"{ARM}_gripper_controller" not in self._counterpart_controllers(real_model)
+
+    def test_an_end_effector_the_vendor_does_not_integrate_is_kept(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / "assets/instances/arms.yaml",
+            lambda d: d["assets"][0]["end_effector"].__setitem__("vendor_integrated", False),
+        )
+        assert f"{ARM}_gripper_controller" in self._counterpart_controllers(real_model)
+
+
 class TestTheDeclaredPluginIsTheLoadedOne:
     """open-work #65, on the generated text: each side carries its own backend's plugin.
 

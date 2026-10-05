@@ -175,19 +175,30 @@ class ResolvedAsset:
 
         * a TRACK controller is dropped where the track's backend on that side
           declares no `ros2_control_plugin` (ADR-0070 item 3);
-        * an END-EFFECTOR controller is dropped where this asset's backend on
-          that side declares `exports_end_effector_joints: false` (item 4).
+        * an END-EFFECTOR controller is dropped where the end effector is
+          vendor-integrated and this asset's backend on that side declares
+          `exports_end_effector_joints: false` (item 4). The flag is about the
+          vendor's own integration - its macro emits the gripper's block only
+          then - so an end effector that is not vendor-integrated is not
+          dropped by it; `cite_description`'s plugin test asserts the drive
+          joint is claimed exactly when both hold.
 
         The names stay what they are on every side: what is dropped is what the
         controller manager loads, never what a consumer addresses.
         """
         backend = self._backend(self.backend_on(side))
         track_unserved = self.axis is not None and self.axis.plugin_on(side) is None
+        effector = self.instance.end_effector
+        effector_unserved = (
+            effector is not None
+            and effector.vendor_integrated
+            and not backend.exports_end_effector_joints
+        )
         return tuple(
             c
             for c in self.controllers
             if not (c.origin == AXIS and track_unserved)
-            and not (c.origin == END_EFFECTOR and not backend.exports_end_effector_joints)
+            and not (c.origin == END_EFFECTOR and effector_unserved)
         )
 
     def commands_physical_hardware_of(self, backend_id: str) -> bool:
