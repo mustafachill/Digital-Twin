@@ -104,6 +104,7 @@ from cite_hardware.mapping import (
     from_vendor_position,
     next_segment,
     Refused,
+    require_carried_out,
     require_within,
     to_vendor_position,
     track_target,
@@ -474,6 +475,11 @@ class TrackAdapter(LifecycleNode):
             require_within(
                 target.position_m, config["position_min_m"], config["position_max_m"]
             )
+            # Checked here, once, so no segment of an accepted move can be
+            # refused later: below the vendor's slowest speed, or with a
+            # segment too short to move the carriage (R-13, SA-S-07).
+            vendor_speed(target.speed_mps, config["position_scale"], config["max_speed_mps"])
+            require_carried_out(target.speed_mps, config["position_scale"], config["segment_s"])
         except Refused as error:
             self.get_logger().error(f"track command refused: {error}")
             return

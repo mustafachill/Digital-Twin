@@ -32,6 +32,8 @@ import sys
 
 from cite_bringup.plan import default_plan_path, load, Plan
 from cite_bringup.program.steps import speed_scale
+from cite_hardware.mapping import slowest_speed_mps
+import yaml
 
 
 def is_physical(plan: Plan, side: str) -> bool:
@@ -50,6 +52,38 @@ def physical_sides(plan: Plan) -> list[str]:
 def simulated_sides(plan: Plan) -> list[str]:
     """Return the sides a simulator runs, in the plan's order."""
     return [side.name for side in plan.sides if not is_physical(plan, side.name)]
+
+
+def minimum_speed_scale(plan: Plan) -> float | None:
+    """Return the slowest scale a physical track carries the program's slowest slide at.
+
+    SA-S-07. A slide below the track adapter's slowest speed is refused there
+    (`cite_hardware.mapping.slowest_speed_mps`, the one statement of that
+    rule); this asks the same rule, with the adapter's own generated
+    `position_scale` and `segment_s`, of the slowest track step of the plan's
+    program, so the scale is refused before anything is brought up. `None`
+    where no physical side runs a track adapter or the program slides no track.
+    """
+    slides = [
+        step.speed_mps
+        for program in plan.programs
+        for step in program.steps
+        if step.kind == "track" and step.speed_mps > 0.0
+    ]
+    floors = []
+    for side in physical_sides(plan):
+        for manager in plan.controller_managers:
+            physical = manager.physical_on(side)
+            if physical is None or physical.track_adapter is None:
+                continue
+            document = yaml.safe_load(physical.parameters.read_text()) or {}
+            adapter = document[physical.track_adapter]["ros__parameters"]
+            floors.append(
+                slowest_speed_mps(float(adapter["position_scale"]), float(adapter["segment_s"]))
+            )
+    if not slides or not floors:
+        return None
+    return max(floors) / min(slides)
 
 
 def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
@@ -73,7 +107,14 @@ def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
         value = float(given)
     except ValueError:
         raise ValueError(f"a number is needed, not {given!r}") from None
-    return speed_scale(value)
+    value = speed_scale(value)
+    minimum = minimum_speed_scale(plan) if physical else None
+    if minimum is not None and value < minimum * (1.0 - 1e-9):
+        raise ValueError(
+            f"{value:g} is below {minimum:g}: at it the program's slowest track slide is "
+            "slower than the physical track carries out, and its adapter would refuse it"
+        )
+    return value
 
 
 def main(argv: list[str] | None = None) -> int:

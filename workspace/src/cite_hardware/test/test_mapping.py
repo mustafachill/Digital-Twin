@@ -29,7 +29,9 @@ from cite_hardware.mapping import (
     LinearMap,
     next_segment,
     Refused,
+    require_carried_out,
     require_within,
+    slowest_speed_mps,
     to_vendor_position,
     track_target,
     vendor_speed,
@@ -175,10 +177,32 @@ def test_the_vendor_speed_is_the_commanded_speed() -> None:
     assert vendor_speed(0.1, 1000.0, 1.0) == 100
 
 
-def test_the_speed_is_clamped_to_one_unit_and_to_the_declared_maximum() -> None:
-    # Zero would mean "keep the vendor's last speed", which nobody chose.
-    assert vendor_speed(0.0001, 1000.0, 1.0) == 1
+def test_the_speed_is_capped_at_the_declared_maximum() -> None:
     assert vendor_speed(0.7, 1000.0, 0.5) == 500
+
+
+def test_the_vendor_speed_never_exceeds_the_commanded_one() -> None:
+    """R-13: rounded down, never up; a float hair below a whole unit still counts."""
+    assert vendor_speed(0.1239, 1000.0, 1.0) == 123
+    assert vendor_speed(0.65 / 6.5, 1000.0, 1.0) == 100
+    assert vendor_speed(0.001, 1000.0, 1.0) == 1
+
+
+def test_a_speed_below_the_vendors_slowest_is_refused_not_raised() -> None:
+    """R-13: below 1 unit/s the vendor would run faster than commanded; zero means
+    "keep the vendor's last speed", which nobody chose."""
+    with pytest.raises(Refused, match="slowest"):
+        vendor_speed(0.0001, 1000.0, 1.0)
+
+
+def test_the_slowest_carried_out_speed_is_the_larger_of_the_two_floors() -> None:
+    """SA-S-07: the vendor's 1 unit/s, and a segment reaching one unit."""
+    assert slowest_speed_mps(1000.0, 0.5) == pytest.approx(0.002)
+    assert slowest_speed_mps(1000.0, 2.0) == pytest.approx(0.001)
+    require_carried_out(0.002, 1000.0, 0.5)
+    require_carried_out(0.13 / 65.0, 1000.0, 0.5)  # 0.002 m/s, computed
+    with pytest.raises(Refused, match="slowest this track carries out"):
+        require_carried_out(0.0019, 1000.0, 0.5)
 
 
 def test_a_hold_has_no_speed() -> None:

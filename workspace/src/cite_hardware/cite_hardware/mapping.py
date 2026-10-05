@@ -202,16 +202,56 @@ def from_vendor_position(value: int, scale: float) -> float:
     return float(value) / scale
 
 
+#: The vendor's slowest track speed, in its position units per second:
+#: `set_linear_motor_speed` takes a whole number of mm/s from 1 to 1000
+#: (`xarm_sdk/cxx/include/xarm/wrapper/xarm_api.h`, `set_linear_motor_speed`).
+VENDOR_MIN_SPEED = 1
+
+#: Slack on a comparison of a speed or a reach computed in floating point
+#: against a whole number of vendor units: 0.65 m over 6.5 s is 0.1 m/s, and
+#: must not be judged a hair below it.
+_UNIT_SLACK = 1e-9
+
+
+def slowest_speed_mps(scale: float, segment_s: float) -> float:
+    """Return the slowest commanded speed this adapter carries out, in m/s.
+
+    Two floors, the larger one binding: the vendor's slowest speed, and a
+    segment (``segment_s`` of travel at the commanded speed) that reaches at
+    least one vendor position unit - a shorter one would round to where the
+    carriage stands and never move it. Stated once, here, for the adapter's
+    refusal and for the program's speed-scale check before bring-up (SA-S-07).
+    """
+    return max(VENDOR_MIN_SPEED, 1.0 / segment_s) / scale
+
+
+def require_carried_out(speed_mps: float, scale: float, segment_s: float) -> None:
+    """Refuse a move slower than `slowest_speed_mps`, rather than stall or speed it up."""
+    slowest = slowest_speed_mps(scale, segment_s)
+    if speed_mps < slowest * (1.0 - _UNIT_SLACK):
+        raise Refused(
+            f"a move at {speed_mps:g} m/s is slower than {slowest:g} m/s, the slowest this "
+            "track carries out (the vendor's 1 unit/s, and a segment reaching one unit)"
+        )
+
+
 def vendor_speed(speed_mps: float, scale: float, max_speed_mps: float) -> int:
-    """Return the commanded speed in the vendor's units per second.
+    """Return the commanded speed in the vendor's whole units per second.
 
     The commanded speed, never one derived from where this carriage stands
-    (SA2c-S-02 b), clamped to ``[1, max_speed_mps]`` in vendor units: the
-    vendor reads zero as "keep whatever speed was set last", which is a speed
-    nobody in this system chose, and the declared maximum is the track's own
-    (L0). A hold has no speed and is a stop, never a move.
+    (SA2c-S-02 b), capped at the track's own declared maximum (L0) and rounded
+    DOWN, so the vendor is never asked for more than was commanded (R-13).
+    Below the vendor's slowest speed, 1 unit/s, it is refused rather than
+    raised to it; zero is no floor either, since the vendor reads it as "keep
+    whatever speed was set last". A hold has no speed and is a stop, never a
+    move.
     """
     if speed_mps <= 0.0:
         raise Refused(f"a move at {speed_mps:g} m/s has no speed")
-    ceiling = max_speed_mps * scale
-    return int(max(1.0, min(round(speed_mps * scale), ceiling)))
+    units = math.floor(min(speed_mps, max_speed_mps) * scale + _UNIT_SLACK)
+    if units < VENDOR_MIN_SPEED:
+        raise Refused(
+            f"a move at {speed_mps:g} m/s is below the vendor's slowest speed, "
+            f"{VENDOR_MIN_SPEED} unit/s; refused rather than run faster than commanded"
+        )
+    return int(units)

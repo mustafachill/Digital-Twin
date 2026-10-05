@@ -540,6 +540,22 @@ def test_a_physical_side_never_runs_at_a_defaulted_speed_scale() -> None:
     assert required_speed_scale(plan, "0.1") == pytest.approx(0.1)
 
 
+def test_a_scale_the_physical_track_cannot_carry_out_is_refused_before_bring_up() -> None:
+    """SA-S-07: the adapter's own rule, asked of the program's slowest slide."""
+    from cite_bringup.program.sides import minimum_speed_scale
+
+    plan = load(default_plan_path(ZONE))
+    minimum = minimum_speed_scale(plan)
+    assert minimum is not None and 0.0 < minimum < 1.0
+    with pytest.raises(ValueError, match="slower than the physical track carries out"):
+        required_speed_scale(plan, f"{minimum / 2:g}")
+    assert required_speed_scale(plan, f"{minimum:g}") == pytest.approx(minimum)
+    # The plant alone is no physical track.
+    assert required_speed_scale(plan, f"{minimum / 2:g}", via="plant") == pytest.approx(
+        minimum / 2
+    )
+
+
 @pytest.mark.parametrize("typed", ["0", "1.5", "nan", "inf", "abc", "-0.2"])
 def test_the_speed_scale_range_is_the_programs_own_before_bring_up(typed: str) -> None:
     """R-06/T-02: `./scripts/program` asks this before bring-up, by `steps.speed_scale`."""
