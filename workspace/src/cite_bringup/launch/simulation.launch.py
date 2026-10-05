@@ -80,6 +80,7 @@ from cite_bringup.plan import (
     PlanError,
     PLANT_SIDE,
     require_domain,
+    refuse_a_physical_side,
     require_hardware_opt_in,
 )
 from cite_bringup.readiness import ready_announcement
@@ -219,6 +220,11 @@ def _bring_up(context: LaunchContext) -> list:
 
     try:
         plan = load(default_plan_path(zone))
+        # FIRST, and with no opt-in that answers it: this launch starts a
+        # simulation, and a side whose hardware is physical started here would be
+        # Gazebo answering under the arm's names (ADR-0070). The physical side
+        # has a launch of its own (ADR-0070 item 6).
+        refuse_a_physical_side(plan, side)
         # The safety gate, at the ROS boundary rather than only at the shell one.
         # Refusing to start is not a divergence between the sim and real paths
         # (P2) — what gets commanded is identical either way; it simply may not
@@ -239,9 +245,10 @@ def _bring_up(context: LaunchContext) -> list:
         # ASKED OF THIS SIDE, because this launch starts this side and no other.
         # Since ADR-0070 the counterpart is physical and the plant simulated, and
         # asked of every side this gate refused every plant-only bring-up -
-        # every scenario and CI - over a machine this launch never starts. The
-        # counterpart side of this launch is still refused without the opt-in,
-        # and so is any launch that starts the physical side (ADR-0070 item 6).
+        # every scenario and CI - over a machine this launch never starts. A
+        # physical side never reaches it here: `refuse_a_physical_side` above
+        # refuses that side first. The launch that starts the physical side asks
+        # this gate of it (ADR-0070 item 6).
         require_hardware_opt_in(plan, os.environ, sides=(side,))
         # The other half of one rule. A process belonging to a side carries both
         # isolations, so both are refused in the same place: this one asks

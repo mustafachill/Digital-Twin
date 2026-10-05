@@ -46,7 +46,9 @@ from cite_bringup.plan import (
     load,
     PHYSICAL_FIELD_BY_SIDE,
     PlanError,
+    PhysicalSideNotSimulatedError,
     PLANT_SIDE,
+    refuse_a_physical_side,
     require_domain,
     require_gz_partition,
     require_hardware_opt_in,
@@ -2259,6 +2261,25 @@ def test_an_empty_counterpart_controller_list_is_refused(tmp_path: Path) -> None
     manager["counterpart_controllers"] = []
     with pytest.raises(PlanError, match="lists no controllers"):
         load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("environ", ({}, {HARDWARE_OPT_IN_ENV: "1"}))
+def test_a_simulation_never_starts_the_physical_side(environ: dict) -> None:
+    """ADR-0070: the refusal takes no environment, so no opt-in can answer it."""
+    plan = load(_generated())
+    refuse_a_physical_side(plan, PLANT_SIDE)
+    with pytest.raises(PhysicalSideNotSimulatedError) as raised:
+        refuse_a_physical_side(plan, COUNTERPART_SIDE)
+    message = str(raised.value)
+    assert "picker" in message and "ADR-0070" in message
+    assert HARDWARE_OPT_IN_ENV not in message
+    assert isinstance(raised.value, PlanError), "the launch reports a PlanError as a refusal"
+
+
+def test_a_simulated_counterpart_is_not_refused(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    refuse_a_physical_side(plan, PLANT_SIDE)
+    refuse_a_physical_side(plan, COUNTERPART_SIDE)
 
 
 def test_the_generated_plan_carries_a_reference_and_never_a_value() -> None:

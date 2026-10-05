@@ -210,6 +210,17 @@ class HardwareNotPermittedError(PlanError):
     """
 
 
+class PhysicalSideNotSimulatedError(PlanError):
+    """A launch that starts a simulation was asked to start a physical side.
+
+    Separate from :class:`HardwareNotPermittedError`, and not answerable by the
+    opt-in that one names: `simulation.launch.py` starts Gazebo and the
+    `gz_ros2_control` plugin, so a side whose hardware is physical started there
+    would be a simulation standing in for the machine, under the machine's names
+    (ADR-0070). The physical side has a launch of its own (ADR-0070 item 6).
+    """
+
+
 class GazeboPartitionMissingError(PlanError):
     """A side is about to start Gazebo processes without its declared partition.
 
@@ -1457,10 +1468,11 @@ def require_hardware_opt_in(
     shipped counterpart is physical and the plant simulated, and a launch that
     starts only the simulated plant (every scenario, CI, `./scripts/sim`) starts
     nothing the counterpart's declaration is about. What keeps the physical side
-    gated is that whatever starts IT asks about it: the counterpart side of
-    `simulation.launch.py` does, and so must the hardware side launch ADR-0070
-    item 6 owes. A side named here that the plan does not declare is skipped,
-    exactly as an undeclared side is below.
+    gated is that whatever starts IT asks about it: `simulation.launch.py`
+    refuses to start a physical side at all (`refuse_a_physical_side`, with no
+    opt-in that answers it), and the hardware side launch ADR-0070 item 6 owes
+    must ask this gate. A side named here that the plan does not declare is
+    skipped, exactly as an undeclared side is below.
 
     `cross-cutting-safety.md` requires that no command reaches a hardware
     interface without passing the safety layer. Until Phase 2 builds that layer,
@@ -1568,6 +1580,35 @@ def require_hardware_opt_in(
         "would command a physical machine. Confirm the cell is clear, then set "
         f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} deliberately — see "
         "docs/operations/safety-procedures.md."
+    )
+
+
+def refuse_a_physical_side(plan: Plan, side: str) -> None:
+    """Refuse to start ``side`` in a simulation when any asset there commands a machine.
+
+    Whatever the environment says: there is no opt-in for this, because the
+    question is not whether a machine may be commanded but whether a simulation
+    may pretend to be one. A side launched by `simulation.launch.py` is a Gazebo
+    model with simulated hardware behind every name; starting the physical side
+    there would make the twin boundary command a simulation while every name and
+    every readiness token said it was the arm.
+
+    Asked through `commands_physical_hardware_on_or_none`, and `None` - a side
+    this asset does not declare - is not a refusal here: whether the side exists
+    is the domain check's question, which refuses it by name.
+    """
+    physical = sorted(
+        manager.asset
+        for manager in plan.controller_managers
+        if manager.commands_physical_hardware_on_or_none(side) is True
+    )
+    if not physical:
+        return
+    raise PhysicalSideNotSimulatedError(
+        f"zone {plan.zone!r}: on the {side} side, {', '.join(physical)} commands physical "
+        "hardware. simulation.launch.py starts a simulation and never stands in for a "
+        "physical side (ADR-0070). The physical side is started by a launch of its own "
+        "(ADR-0070 item 6), which is not built yet."
     )
 
 

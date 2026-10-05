@@ -161,9 +161,10 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
 ) -> None:
     """The gate, at the boundary that matters.
 
-    Remove `require_hardware_opt_in` from `_bring_up` and this fails: the plan
+    Remove `refuse_a_physical_side` from `_bring_up` and this fails: the plan
     still loads, so the description comes back full of processes instead of a
-    refusal.
+    refusal. The refusal names ADR-0070 and never tells anyone to set the
+    opt-in, because no opt-in makes a simulation the physical side.
     """
     _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
@@ -176,7 +177,8 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
     )
     assert not _processes(actions), "nothing may be started on the way to refusing"
     reason = _refusal(actions, context)
-    assert "picker" in reason and HARDWARE_OPT_IN_ENV in reason
+    assert "picker" in reason and "ADR-0070" in reason
+    assert HARDWARE_OPT_IN_ENV not in reason
 
 
 def _ends_non_zero(module: ModuleType, entities: list, context: LaunchContext) -> bool:
@@ -227,17 +229,24 @@ def test_a_missing_plan_ends_the_launch_non_zero(
     assert _ends_non_zero(module, actions, context)
 
 
-def test_a_hardware_plan_starts_with_the_opt_in(
+def test_a_hardware_plan_is_refused_even_with_the_opt_in(
     module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
 ) -> None:
-    """A refusal, not a ban — and not a divergence in what gets commanded (P2)."""
+    """ADR-0070: this launch starts a simulation and never stands in for a physical side.
+
+    Before the fix the opt-in started Gazebo and `gz_ros2_control` for a side
+    whose plan said it was the physical machine - a simulation answering under
+    the arm's names. The opt-in is the physical launch's door, not this one's.
+    """
     _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
     monkeypatch.setenv(HARDWARE_OPT_IN_ENV, "1")
 
     actions = module._bring_up(context)
 
-    assert "Shutdown" not in _kinds(actions)
-    assert _processes(actions)
+    assert not _processes(actions), "nothing may be started on the way to refusing"
+    reason = _refusal(actions, context)
+    assert "ADR-0070" in reason and HARDWARE_OPT_IN_ENV not in reason
+    assert _ends_non_zero(module, actions, context)
 
 
 def test_the_simulated_plant_needs_no_opt_in(
@@ -255,21 +264,27 @@ def test_the_simulated_plant_needs_no_opt_in(
     assert _processes(actions)
 
 
-def test_the_shipped_physical_counterpart_side_is_refused_without_the_opt_in(
-    module: ModuleType, context: LaunchContext, monkeypatch
+@pytest.mark.parametrize("opt_in", (None, "1"))
+def test_the_shipped_physical_counterpart_side_is_refused_whatever_the_opt_in(
+    module: ModuleType, context: LaunchContext, monkeypatch, opt_in: str | None
 ) -> None:
-    """The other half: the side that IS physical is still gated, by name and field.
+    """The other half: the side that IS physical never starts here (ADR-0070).
 
-    Remove `sides=(side,)` and this still passes, which is right; make the gate
-    ask only the plant, and it fails.
+    With or without `CITE_ALLOW_HARDWARE`, and the message sends the reader to
+    the physical side's own launch rather than to the opt-in.
     """
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    if opt_in is None:
+        monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    else:
+        monkeypatch.setenv(HARDWARE_OPT_IN_ENV, opt_in)
     context.launch_configurations["side"] = "counterpart"
     actions = module._bring_up(context)
     assert not _processes(actions), "nothing may be started on the way to refusing"
     reason = _refusal(actions, context)
-    assert "counterpart_commands_physical_hardware" in reason
-    assert HARDWARE_OPT_IN_ENV in reason
+    assert "counterpart" in reason and "picker" in reason
+    assert "ADR-0070" in reason and "launch of its own" in reason
+    assert HARDWARE_OPT_IN_ENV not in reason
+    assert _ends_non_zero(module, actions, context)
 
 
 # --- R-15: a malformed plan is refused, not raised through --------------------
