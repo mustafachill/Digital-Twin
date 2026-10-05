@@ -33,6 +33,7 @@ install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
   ${PROJECT_NAME}/lifecycle_driver.py
   ${PROJECT_NAME}/grasp_hold_bridge.py
+  ${PROJECT_NAME}/hold_gate.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -63,6 +64,9 @@ if(BUILD_TESTING)
   # The plan reader is pure logic with no ROS runtime, so it is unit-tested here
   # rather than exercised only by bringing the whole cell up.
   ament_add_pytest_test(plan test/test_plan.py)
+  # ADR-0070 item 6: what the physical side's launch refuses and the order it
+  # would start the side in, read off the launch description; nothing starts.
+  ament_add_pytest_test(hardware_launch test/test_hardware_launch.py)
   # ADR-0054 clause 6: the reproduction refused end to end - L0 edit, generate,
   # load the plan, call the gate. The only assertion that runs the whole path
   # the defect ran, and the only one crossing `cite_tools` and `cite_bringup`,

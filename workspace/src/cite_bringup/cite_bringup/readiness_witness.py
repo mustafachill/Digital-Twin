@@ -55,6 +55,9 @@ a deadline measured in a clock that is not running cannot expire, and the witnes
 would hang forever exactly where it is supposed to produce a diagnosis. It reads
 no clock for anything else — it publishes nothing, subscribes to nothing, and
 sends no goal.
+
+**On a physical side it waits for two more servers** (ADR-0070 item 6): the
+actions that side's deadman cancels when it trips (`physical_endpoints`).
 """
 
 from __future__ import annotations
@@ -117,7 +120,7 @@ _SKILL_ACTIONS = (
 )
 
 
-def endpoints(plan: Plan) -> list[tuple[str, type]]:
+def endpoints(plan: Plan, side: str | None = None) -> list[tuple[str, type]]:
     """Every action server this side must be answering before it is ready.
 
     The tail of the bring-up chain and only the tail. Everything before it is
@@ -147,7 +150,38 @@ def endpoints(plan: Plan) -> list[tuple[str, type]]:
             continue
         for field, action_type in _SKILL_ACTIONS:
             wanted.append((getattr(manager.skills, field), action_type))
+    if side is not None:
+        wanted += physical_endpoints(plan, side)
     return wanted
+
+
+def physical_endpoints(plan: Plan, side: str) -> list[tuple[str, type]]:
+    """On a physical side, the actions its deadman cancels when it trips (ADR-0070).
+
+    The deadman is handed these names and cancels every goal on them; one that
+    does not exist when the side announces would be a cancel sent to nothing,
+    found out only on a trip. So a physical side is not ready until both are
+    served: the arm trajectory controller's, which exists once the controller is
+    configured whatever the vendor's state, and the gripper relay's. Empty on a
+    simulated side.
+    """
+    from control_msgs.action import FollowJointTrajectory, GripperCommand
+
+    wanted: list[tuple[str, type]] = []
+    for manager in plan.controller_managers:
+        physical = manager.physical_on(side) if _declares(manager, side) else None
+        if physical is None:
+            continue
+        if manager.trajectory_action is not None:
+            wanted.append((manager.trajectory_action, FollowJointTrajectory))
+        if physical.gripper_relay is not None and manager.gripper_action is not None:
+            wanted.append((manager.gripper_action, GripperCommand))
+    return wanted
+
+
+def _declares(manager, side: str) -> bool:
+    """Whether ``manager`` states a backend for ``side`` at all."""
+    return manager.commands_physical_hardware_on_or_none(side) is not None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -157,9 +191,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--side",
         required=True,
-        help="The side this process belongs to. Reported in the diagnosis only; "
-             "this witness observes one domain and it is the one it was started "
-             "in, so the name cannot select what it looks at.",
+        help="The side this process belongs to. It selects WHICH endpoints a side "
+             "must serve - a physical side also serves the actions its deadman "
+             "cancels - and never which graph is observed: this witness observes "
+             "the one domain it was started in.",
     )
     parser.add_argument("--deadline", type=float, default=DEADLINE_S)
     args, ros_args = parser.parse_known_args(argv)
@@ -170,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"READINESS WITNESS FAILED: {exc}", file=sys.stderr)
         return 2
 
-    outstanding = endpoints(plan)
+    outstanding = endpoints(plan, args.side)
     if not outstanding:
         # Refused before a context is created, because there is nothing this
         # process could go on to observe. `plan.load` accepts a plan whose

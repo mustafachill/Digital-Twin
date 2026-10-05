@@ -320,18 +320,52 @@ def side_specs(
     base = domain_base(environ)
     specs = []
     for side in plan.sides:
-        argv = (
+        domain = resolve_domain_id(plan, side.name, base)
+        argv = side_launch(plan, side.name, headless)
+        specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
+    return specs
+
+
+#: The launch that starts a side whose hardware is physical (ADR-0070 item 6),
+#: and the one that starts a simulated side. Which one a side gets is read off
+#: the plan by `side_launch`, never off an asset's type.
+HARDWARE_LAUNCH = "hardware.launch.py"
+SIMULATION_LAUNCH = "simulation.launch.py"
+
+
+def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
+    """Return the argument vector that starts ``side``, chosen by what its hardware is.
+
+    A side on which any asset declares physical hardware is started by
+    `hardware.launch.py`, which asks the hardware opt-in and starts no
+    simulator; every other side by `simulation.launch.py`, which refuses a
+    physical side whatever it is told. The answer is the plan's declared fact
+    (`commands_physical_hardware_on_or_none`), so a backend's name decides
+    nothing (ADR-0054). A physical side has no window, so it takes no
+    `headless`.
+    """
+    physical = any(
+        manager.commands_physical_hardware_on_or_none(side) is True
+        for manager in plan.controller_managers
+    )
+    if physical:
+        return (
             "ros2",
             "launch",
             "cite_bringup",
-            "simulation.launch.py",
+            HARDWARE_LAUNCH,
             f"zone:={plan.zone}",
-            f"side:={side.name}",
-            f"headless:={'true' if headless else 'false'}",
+            f"side:={side}",
         )
-        domain = resolve_domain_id(plan, side.name, base)
-        specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
-    return specs
+    return (
+        "ros2",
+        "launch",
+        "cite_bringup",
+        SIMULATION_LAUNCH,
+        f"zone:={plan.zone}",
+        f"side:={side}",
+        f"headless:={'true' if headless else 'false'}",
+    )
 
 
 def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
