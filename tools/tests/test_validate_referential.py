@@ -373,10 +373,14 @@ def test_a_literal_parameter_of_a_physical_backend_is_an_error(
     """
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
-        lambda d: _hardware(d, {"backend": backend, "params": {"real": {"robot_ip": "203.0.113.7"}}}),
+        lambda d: _hardware(
+            d, {"backend": backend, "params": {"real": {"robot_ip": "203.0.113.7"}}}
+        ),
     )
     findings = [
-        f for f in referential.check(load(minimal_model)) if f.rule == "literal-param-on-physical-backend"
+        f
+        for f in referential.check(load(minimal_model))
+        if f.rule == "literal-param-on-physical-backend"
     ]
     assert [(f.severity, f.where) for f in findings] == [
         (Severity.ERROR, "assets.arm_1.hardware.params.real.robot_ip")

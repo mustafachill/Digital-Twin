@@ -79,8 +79,8 @@ from cite_bringup.plan import (
     Plan,
     PlanError,
     PLANT_SIDE,
-    require_domain,
     refuse_a_physical_side,
+    require_domain,
     require_hardware_opt_in,
 )
 from cite_bringup.readiness import ready_announcement

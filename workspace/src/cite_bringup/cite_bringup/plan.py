@@ -711,7 +711,7 @@ class ControllerManager:
         return None
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
-        """The plant's stages: `stages_on(PLANT_SIDE)`."""
+        """Return the plant's stages: `stages_on(PLANT_SIDE)`."""
         return self.stages_on(PLANT_SIDE)
 
     def stages_on(self, side: str) -> list[tuple[int, tuple[str, ...]]]:

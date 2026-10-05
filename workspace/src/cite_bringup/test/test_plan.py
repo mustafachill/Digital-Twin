@@ -46,8 +46,8 @@ from cite_bringup.plan import (
     HardwareNotPermittedError,
     load,
     PHYSICAL_FIELD_BY_SIDE,
-    PlanError,
     PhysicalSideNotSimulatedError,
+    PlanError,
     PLANT_SIDE,
     refuse_a_physical_side,
     require_domain,
@@ -2206,7 +2206,7 @@ def test_the_generated_counterpart_loads_its_own_files() -> None:
 
 
 def _controllers_defined_in(manager: ControllerManager, side: str) -> set[str]:
-    """The controllers ``side``'s configuration file defines: what its manager can load.
+    """Return the controllers ``side``'s configuration file defines: what its manager loads.
 
     A controller is a key under the manager's `ros__parameters` whose value
     states a `type`; the manager can load that one and no other. The file is
@@ -2454,7 +2454,8 @@ def test_the_refusal_never_prints_a_value() -> None:
 
 
 @pytest.mark.parametrize(
-    "value", ("203.0.113", "203.0.113.700", "robot.local", "203.0.113.7:502", "http://x", "2001:db8::g")
+    "value",
+    ("203.0.113", "203.0.113.700", "robot.local", "203.0.113.7:502", "http://x", "2001:db8::g"),
 )
 def test_a_malformed_address_is_refused_without_printing_it(value: str) -> None:
     """S-04: an address is checked as one, and the refusal names the variable only."""

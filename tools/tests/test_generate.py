@@ -297,7 +297,7 @@ _NO_SIMULATOR_HEADER = (
 
 def _run(lines: list[str], opening: str, closing: str) -> tuple[int, int]:
     """The [start, end] of the one run of ``lines`` from ``opening`` to ``closing``."""
-    (start,) = [i for i, line in enumerate(lines) if opening in line]
+    (start,) = (i for i, line in enumerate(lines) if opening in line)
     end = next(i for i in range(start, len(lines)) if closing in lines[i])
     return start, end
 

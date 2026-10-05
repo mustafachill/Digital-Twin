@@ -218,7 +218,9 @@ class TestEachSideSpawnsWhatItsOwnFileDefines:
             for node, block in document.items()
             if node.endswith("/controller_manager")
         )
-        return {name for name, value in manager.items() if isinstance(value, dict) and "type" in value}
+        return {
+            name for name, value in manager.items() if isinstance(value, dict) and "type" in value
+        }
 
     def test_the_plan_lists_each_sides_controllers(self, real_model: Path) -> None:
         generated = artifacts(real_model)
@@ -342,7 +344,9 @@ class TestVendorNames:
 
     @staticmethod
     def _expected(generated: dict[str, str], manager: dict) -> dict:
-        text = generated[manager["counterpart_description"].removeprefix("package://cite_generated/")]
+        text = generated[
+            manager["counterpart_description"].removeprefix("package://cite_generated/")
+        ]
         prefix = _description_arg(text, "prefix")
         hw_ns = _description_arg(text, "hw_ns")
         namespace = manager["node"].rsplit("/", 1)[0]
@@ -417,7 +421,9 @@ class TestVendorServicesAreSwitchedOn:
         plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
         (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
         vendor = manager["counterpart_vendor"]
-        text = generated[manager["counterpart_parameters"].removeprefix("package://cite_generated/")]
+        text = generated[
+            manager["counterpart_parameters"].removeprefix("package://cite_generated/")
+        ]
         parameters = self._driver_parameters(text, vendor["driver_node"])
         assert parameters == {"services": dict.fromkeys(vendor["services"], True)}
 
@@ -462,4 +468,5 @@ class TestASideWithNoSimulatorCarriesNoGazeboText:
         generated = artifacts(real_model)
         description = generated[gen.arm_description_path(ZONE, ARM, ids.PLANT_SIDE)]
         assert description.count("gz_ros2_control::GazeboSimROS2ControlPlugin") == 1
-        assert "gz_ros2_control plugin" in generated[gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE)]
+        controllers = generated[gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE)]
+        assert "gz_ros2_control plugin" in controllers
