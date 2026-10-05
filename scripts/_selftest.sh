@@ -506,6 +506,27 @@ expect_fail "compose() passes no --env-file when there is no root .env" \
     grep -qxF -- "--env-file" <(compose_given "$ENV_ROOT")
 rmdir "$ENV_ROOT"
 
+# S-06 (ADR-0054): exec_in_container always hands the opt-in across, unset
+# meaning 0, so `compose exec` into a container started with CITE_ALLOW_HARDWARE=1
+# cannot carry that stale opt-in into a later command. `compose` is stubbed: it
+# reports the service as running (so the exec path is taken) and prints what it
+# was given; nothing is started.
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+exec_given() { # exec_given [VAR=value...]
+    env -u CITE_ALLOW_HARDWARE "$@" bash -c '
+        source "$1"
+        compose() {
+            if [ "$1" = ps ]; then echo dev; return 0; fi
+            printf "%s\n" "$@"
+        }
+        exec_in_container dev true
+    ' _ "${REPO_ROOT}/scripts/_lib.sh"
+}
+expect_ok "exec_in_container pins an unset opt-in to 0 on compose exec" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given)
+expect_fail "exec_in_container passes the opt-in exactly once" \
+    test "$(exec_given CITE_ALLOW_HARDWARE=0 | grep -c '^CITE_ALLOW_HARDWARE=')" -ne 1
+
 # container_name pins a host-global identifier and collides between checkouts
 # exactly as the volumes did. It must stay out of the compose file.
 if ! grep -q "container_name" "${REPO_ROOT}/infra/docker/docker-compose.yml"; then

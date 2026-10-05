@@ -1139,9 +1139,14 @@ exec_in_container() {
     # branch that depends on it becomes unreachable — which is easy to mistake for
     # the feature simply not working.
     local env_args=() v
-    for v in $(compgen -e 2>/dev/null | grep '^CITE_' || true); do
+    for v in $(compgen -e 2>/dev/null | grep '^CITE_' | grep -vx 'CITE_ALLOW_HARDWARE' || true); do
         env_args+=(-e "${v}=${!v}")
     done
+    # The hardware opt-in is ALWAYS passed, unset meaning 0 (S-06): `compose
+    # exec` attaches to a running container whose environment was fixed when it
+    # started, so an opt-in given to that container once would otherwise still
+    # stand for every later command run in it (ADR-0054).
+    env_args+=(-e "CITE_ALLOW_HARDWARE=${CITE_ALLOW_HARDWARE:-0}")
 
     # The DDS domain is decided once, by the outermost invocation, and carried in.
     # `compose run` would pick it up through the compose file's ${ROS_DOMAIN_ID}
