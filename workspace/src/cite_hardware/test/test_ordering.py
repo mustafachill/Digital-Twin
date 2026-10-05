@@ -381,3 +381,75 @@ def test_the_first_move_after_activation_writes_its_speed_again():
         assert _sent(log)[-2:] == ["set_linear_motor_speed", "set_linear_motor_pos"]
     finally:
         node.destroy_node()
+
+
+# ---------------------------------------------------------------------- #
+# The track adapter: SA-S-06, a move older than the last hold is never sent
+# ---------------------------------------------------------------------- #
+
+
+def _hold(position: float = 0.55) -> JointTrajectory:
+    """A hold: both points at one position, which the adapter answers with a stop."""
+    message = JointTrajectory(joint_names=[GOOD["track_adapter"]["joint"]])
+    for seconds in (0, 1):
+        message.points.append(
+            JointTrajectoryPoint(positions=[position], time_from_start=Duration(sec=seconds))
+        )
+    return message
+
+
+class _GateWithHook(StubGate):
+    """Open, and running ``hook`` once inside the first look: a hold landing mid-check."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hook = None
+
+    def permits_motion(self) -> bool:
+        hook, self.hook = self.hook, None
+        if hook is not None:
+            hook()
+        return super().permits_motion()
+
+
+def _moves(log: list) -> list:
+    return [value for service, value in log if service == "set_linear_motor_pos"]
+
+
+def test_a_hold_landing_while_a_move_is_checked_outranks_it():
+    """SA-S-06: the move took its place in line at entry, before the hold."""
+    gate = _GateWithHook()
+    node, log = _track(gate)
+    try:
+        gate.hook = lambda: node._on_command(_hold())
+        node._on_command(_command(0.3, 2))
+        assert _moves(log) == [] and "set_linear_motor_speed" not in _sent(log)
+        assert node._holding and node._target is None
+    finally:
+        node.destroy_node()
+
+
+def test_a_hold_during_the_speed_write_drops_the_move_behind_it():
+    node, log = _track(StubGate(), speed_answer=None)
+    try:
+        node._on_command(_command(0.3, 2))
+        node._on_command(_hold())
+        _answer(node._speed_client.futures[-1], 0, SetInt16)
+        assert _moves(log) == []
+        assert not node._set_in_flight
+    finally:
+        node.destroy_node()
+
+
+def test_a_move_after_the_hold_is_sent_in_place_of_the_one_before_it():
+    node, log = _track(StubGate(), speed_answer=None)
+    try:
+        node._on_command(_command(0.3, 2))
+        node._on_command(_hold())
+        # Back towards 0 at the same speed, held behind the speed write: its
+        # first segment ends at 50 mm, the older move's would at 150 mm.
+        node._on_command(_command(0.0, 1))
+        _answer(node._speed_client.futures[-1], 0, SetInt16)
+        assert _moves(log) == [50]
+    finally:
+        node.destroy_node()

@@ -48,7 +48,9 @@ presents the simulated names on the physical side and translates:
   the simulated controller holds where it stands, and this adapter sends
   `set_linear_motor_stop` and drops any move in progress, level-triggered like
   every other stop below, until one is acknowledged. A hold never moves the
-  carriage, whatever position it names (SA2c-S-02 a).
+  carriage, whatever position it names (SA2c-S-02 a), and a move that arrived
+  before it is never sent after it, wherever that move was - being checked,
+  waiting for its speed write, or held behind a vendor call (SA-S-06).
 - **State.** It polls `get_linear_motor_pos` and publishes the track joint's
   position on the arm's joint-state topic, where the simulated side's
   `joint_state_broadcaster` publishes it. The program reads arrival from there.
@@ -244,6 +246,13 @@ class TrackAdapter(LifecycleNode):
         self._get_future = None
         self._get_deadline_ns = 0
         self._pending: LinearMotorSetPos.Request | None = None
+        #: Counts every hold commanded. A move carries the count it was
+        #: accepted under, and one accepted before the latest hold is never
+        #: sent, wherever it is in the pipeline (SA-S-06).
+        self._hold_sequence = 0
+        #: The hold count the move in progress, and the held move, were accepted under.
+        self._target_hold = 0
+        self._pending_hold = 0
         #: The vendor speed `set_linear_motor_speed` last answered 0 for, since
         #: activation; `None` before the first and after a failed write, so the
         #: next move writes its speed first (SA-S-03).
@@ -437,6 +446,9 @@ class TrackAdapter(LifecycleNode):
 
         with self._lock:
             active = self._active
+            # Taken at entry, under the lock: a hold that lands while this
+            # command is checked below outranks it (SA-S-06).
+            accepted_under = self._hold_sequence
         if not active:
             self.get_logger().warning("track command refused: the adapter is not active")
             return
@@ -449,6 +461,7 @@ class TrackAdapter(LifecycleNode):
                 self._target = None
                 self._pending = None
                 self._holding = True
+                self._hold_sequence += 1
             self._stop_if_moving("a hold was commanded")
             return
         assert self._gate is not None
@@ -481,8 +494,17 @@ class TrackAdapter(LifecycleNode):
             )
             return
         with self._lock:
-            self._target = target
-            self._holding = False
+            superseded = self._hold_sequence != accepted_under
+            if not superseded:
+                self._target = target
+                self._target_hold = accepted_under
+                self._holding = False
+        if superseded:
+            self.get_logger().warning(
+                f"track command to {target.position_m:.4f} m dropped: a hold was commanded "
+                "after it arrived"
+            )
+            return
         self._advance(position)
 
     def _advance(self, position: float) -> None:
@@ -496,6 +518,7 @@ class TrackAdapter(LifecycleNode):
             return
         with self._lock:
             target = self._target
+            hold = self._target_hold
             if target is None or not self._active:
                 return
             goal, last = next_segment(
@@ -512,9 +535,9 @@ class TrackAdapter(LifecycleNode):
         # only to a waiting call, so it is left at the vendor's own default.
         request.wait = False
         request.auto_enable = config["auto_enable"]
-        self._submit(request)
+        self._submit(request, hold)
 
-    def _submit(self, request: LinearMotorSetPos.Request) -> None:
+    def _submit(self, request: LinearMotorSetPos.Request, hold: int) -> None:
         with self._lock:
             if self._set_in_flight:
                 if self._pending is not None:
@@ -523,20 +546,21 @@ class TrackAdapter(LifecycleNode):
                         "before the vendor answered the previous call"
                     )
                 self._pending = request
+                self._pending_hold = hold
                 return
             self._set_in_flight = True
-        self._send(request)
+        self._send(request, hold)
 
-    def _send(self, request: LinearMotorSetPos.Request) -> None:
+    def _send(self, request: LinearMotorSetPos.Request, hold: int) -> None:
         """Send one move, its speed written first unless the vendor acknowledged it (SA-S-03)."""
         with self._lock:
             acknowledged = self._acked_speed
         if request.speed != acknowledged:
-            self._send_speed(request)
+            self._send_speed(request, hold)
         else:
-            self._send_position(request)
+            self._send_position(request, hold)
 
-    def _send_speed(self, request: LinearMotorSetPos.Request) -> None:
+    def _send_speed(self, request: LinearMotorSetPos.Request, hold: int) -> None:
         """Write ``request``'s speed; the move follows only once the vendor answers 0."""
         client = self._speed_client
         assert client is not None
@@ -550,9 +574,9 @@ class TrackAdapter(LifecycleNode):
         if not active:
             self._drop_in_flight("the adapter is not active", request)
             return
-        future.add_done_callback(lambda done: self._on_speed_answered(request, done))
+        future.add_done_callback(lambda done: self._on_speed_answered(request, hold, done))
 
-    def _on_speed_answered(self, request: LinearMotorSetPos.Request, future) -> None:
+    def _on_speed_answered(self, request: LinearMotorSetPos.Request, hold: int, future) -> None:
         error = future.exception()
         response = None if error is not None else future.result()
         if response is None or response.ret != 0:
@@ -566,7 +590,7 @@ class TrackAdapter(LifecycleNode):
             return
         with self._lock:
             self._acked_speed = request.speed
-        self._send_position(request)
+        self._send_position(request, hold)
 
     def _drop_in_flight(self, why: str, request: LinearMotorSetPos.Request) -> None:
         """Release the reserved send without moving anything, and drop what was held."""
@@ -575,7 +599,7 @@ class TrackAdapter(LifecycleNode):
             self._pending = None
         self.get_logger().error(f"track target {request.pos} not sent: {why}")
 
-    def _send_position(self, request: LinearMotorSetPos.Request) -> None:
+    def _send_position(self, request: LinearMotorSetPos.Request, hold: int) -> None:
         """Send one move, with the last word on the gate taken under the lock.
 
         `_move_possible` is set BEFORE that last look (N-04): a closure that
@@ -583,7 +607,25 @@ class TrackAdapter(LifecycleNode):
         reason the move is not sent. Either way `_poll` keeps stopping the
         carriage while the gate is closed and a move may be running, so a move
         whose call reaches the vendor after the stop is stopped again.
+
+        A move accepted before the latest hold (``hold`` behind the count) is
+        not sent: the hold outranks it (SA-S-06). A move held behind it, if
+        any, was accepted later and is sent in its place.
         """
+        with self._lock:
+            stale = hold != self._hold_sequence
+            follow = self._pending if stale and self._active else None
+            follow_hold = self._pending_hold
+            if stale:
+                self._pending = None
+                self._set_in_flight = follow is not None
+        if stale:
+            self.get_logger().warning(
+                f"track target {request.pos} dropped: a hold was commanded after it"
+            )
+            if follow is not None:
+                self._send(follow, follow_hold)
+            return
         assert self._set_client is not None
         if not self._set_client.service_is_ready():
             with self._lock:
@@ -624,6 +666,7 @@ class TrackAdapter(LifecycleNode):
             )
         with self._lock:
             follow = self._pending if self._active else None
+            follow_hold = self._pending_hold
             self._pending = None
             self._set_in_flight = follow is not None
             stopping = not self._active or self._holding
@@ -641,7 +684,7 @@ class TrackAdapter(LifecycleNode):
                 f"held track target {follow.pos} dropped: {self._gate.why_closed()}"
             )
             return
-        self._send(follow)
+        self._send(follow, follow_hold)
 
     def _stop_if_moving(self, reason: str, repeated: bool = False) -> None:
         """Stop the carriage if a move this adapter sent may still be running.
