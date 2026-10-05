@@ -8,9 +8,10 @@ and 5).
 
 ## Status, stated before anything else
 
-- **Nothing starts these nodes yet.** The physical side's launch, and wiring their parameters
-  from L0 through the generated plan, are ADR-0070 item 6 and later work. Until then they run
-  only in this package's own tests.
+- **Started by `cite_bringup`'s `hardware.launch.py`** on a physical side, with parameters
+  generated from L0 into `cite_generated/control/counterpart/<zone>_<arm>_adapters.yaml`
+  (ADR-0070 items 6–7). The deadman starts first; any of these nodes exiting brings the side
+  down, and none respawns.
 - **No physical arm, track or gripper has been driven through them.** Every test runs against
   fake vendor services and a fake vendor action held by the test process. What the tests show
   is the translation and the state machines, not the machine's behaviour.

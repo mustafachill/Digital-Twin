@@ -4,8 +4,9 @@
   drives. A solo bring-up stops at the skills; **twin sync** (`cite_twin`) is started by the
   pair supervisor under `./scripts/sim --pair` and `./scripts/program`
   ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)), on the paired
-  zone `cell_b`, and appears in no launch file and no scenario. The physical path is Phase 2.B
-  and has never been run.
+  zone `cell_b`, and appears in no launch file and no scenario. The physical counterpart's path
+  is built ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) and has never
+  been run against the arm.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell
@@ -111,6 +112,11 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 > ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so the command below comes
 > up from a clean checkout.
 >
+> **The counterpart is the physical arm** ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)).
+> Without `CITE_ALLOW_HARDWARE=1` the commands below are refused at the counterpart side, and
+> nothing physical starts; with it they drive the real arm. Read *Physical cell — Phase 2.B*
+> below first.
+>
 > **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
 > step does, and what CI drives on `cell_b` is the plant alone (`bringup` twice and
 > `program_cycle`).
@@ -190,10 +196,11 @@ opens the gripper before it closes it. `--via twin` (the default) first asks for
 does Ctrl-C: the goal in flight is cancelled, the track is held where it stands, and the exit
 status is non-zero. `./scripts/scenario program_cycle` checks one cycle on the plant.
 
-**Open, and recorded in ADR-0067:** the track has no hardware path; a mode change while the
-carriages are moving drops later track commands and sends no stop, so each side finishes the
-point it already has; and through the twin the counterpart's track position and custody are
-not read back.
+**Open, and recorded in ADR-0067:** a mode change while the carriages are moving drops later
+track commands and sends no stop, so each side finishes the point it already has; and through
+the twin the counterpart's custody is not read back. Since ADR-0070, a Ctrl-C holds each
+carriage where it stands (a stop on the physical one), and the program waits for the
+counterpart's carriage to arrive too (`TrackArrived`).
 
 Past milestones are not run from here: each runs from its own folder under `projects/`, for
 example `projects/01-three-arm-event-driven-line/run` — see
@@ -264,35 +271,79 @@ model and the same solver, so any agreement between them is agreement of a thing
 
 ## Physical cell — Phase 2.B
 
-> **Not valid yet.** No hardware interface exists. This is the designed procedure, recorded
-> so that Phase 2 implements against it rather than inventing it under time pressure.
+> **Built, never run against the arm.** The physical counterpart's side
+> ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) is tested only
+> against fake vendor services. The first run is supervised, at reduced speed, with a person at
+> the hardware E-stop. Read [safety-procedures.md](safety-procedures.md) first.
 
 ### Preconditions — all of them, every time
 
 1. Risk assessment current. **Not a software artifact.**
 2. Physical E-stop tested this session, latency verified.
 3. Cell clear, confirmed by a person looking at it.
-4. Registration current — the real cell's frame tied to the model's
-   ([calibration-and-registration.md](calibration-and-registration.md); charter §8, Phase 2;
-   not built).
+4. The arm's address in your local, gitignored `.env` as `CITE_XARM_IP` (an IPv4 or IPv6
+   address; never committed, never in L0). `.env.example` names the key.
 5. A human at the stop, watching.
+
+Registration ([calibration-and-registration.md](calibration-and-registration.md), not built)
+ties the real cell's frame to the model's. The program moves in joint space and does not need
+it; any divergence number does.
 
 ### Sequence
 
+From an **interactive terminal**, because the program asks for input:
+
 ```bash
-export CITE_ALLOW_HARDWARE=1        # deliberate, never in a shell profile
-./scripts/enter hardware
-./scripts/sim --mode real           # `--mode` is not implemented yet — Phase 2
+CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1
 ```
 
-**Expect:** the hardware interface connects; controllers activate with the arm stationary;
-mode reports `REAL`.
-**If the arm moves during bring-up:** E-stop immediately. Motion during bring-up is a
-defect, never expected, and is a Critical safety finding.
+The opt-in is read from the shell only; a value in `.env` is ignored. On a physical side,
+`--speed-scale` is required, and it is checked before anything starts.
+
+**What happens:**
+1. The plant (Gazebo) and the physical side come up.
+2. The physical side starts its deadman first, then the vendor driver, and holds the arm
+   stopped. **Its readiness token means held, not enabled.**
+3. The twin boundary starts, and its heartbeat makes the deadman healthy. The deadman then
+   enables the arm. The program waits until the boundary reports the side ready, with the arm
+   enabled and fresh state.
+4. Before each cycle the program puts the twin in SIM and asks you to place the part on the
+   physical table by hand and press Enter. **The arm is enabled and still while you do.** No
+   box is spawned and no belt runs on the physical side.
+5. One cycle of the real program then runs on both arms, at the scale you gave.
+
+**If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
+Critical safety finding.
+**Ctrl-C** cancels the goal in flight on both sides and holds each carriage where it stands.
+The supervisor then stops the boundary first, so the deadman trips and stops the arm, and then
+brings each side down.
+**After a deadman trip** the trip latches, and the arm stays stopped until an operator
+deliberately resets it. The recovery sequence is in `workspace/src/cite_hardware/README.md`.
+Restarting the whole run is also a reset.
 
 ### First motion, always
 
-Reduced speed. A human on the stop. A single short motion before anything else.
+Reduced speed. A human on the stop. A single short motion before anything else. Start at
+`--speed-scale 0.1`, and raise it only after a run that showed nothing unexpected.
+
+### Step 1 of the 2.B plan: reading the arm without moving it (2026-10-05)
+
+Before any software spoke to the arm, its joint angles were read **receive-only** from the
+controller's report port (TCP 30001). No vendor driver ran and no byte was sent; the read
+succeeded. The vendor driver was not used for this, because it is not read-only:
+- its initialisation calls `clean_error` when it sees a servo error;
+- its destructor writes `set_mode(POSE)`.
+
+What the vendor driver offers, read from its source at the pinned `xarm_ros2`:
+- **The track** is not a `ros2_control` joint. It is driven only through `xarm_api` services
+  (`set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop`, …), each off unless
+  enabled.
+- **The gripper** is not a `ros2_control` joint on the physical plugin either. It is the
+  vendor's `GripperCommand` action, in drive-joint units, plus `get_gripper_position` in
+  pulses.
+
+These are the same calls the program's `set_line_track` and `gripper_set` blocks make on the
+controller. ADR-0070 is built on them.
 
 ## Shutdown
 

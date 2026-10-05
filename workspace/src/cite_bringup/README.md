@@ -115,7 +115,7 @@ a Gazebo system plugin, has no structural reason it cannot reach the hardware pa
 
 | Environment variable | Effect |
 |---|---|
-| `CITE_ALLOW_HARDWARE=1` | permits a plan on which some (asset, side) **declares** `commands_physical_hardware: true` to start. It decides on that declared fact and **not** on the backend's id — see "The hardware gate" below, which is the one statement of this and is not restated here |
+| `CITE_ALLOW_HARDWARE=1` | permits `hardware.launch.py` to start a side that **declares** `commands_physical_hardware: true` (read from the shell only; `simulation.launch.py` refuses such a side regardless). It decides on that declared fact and **not** on the backend's id — see "The hardware gate" below, which is the one statement of this and is not restated here |
 | `CITE_PHYSICS_SEED` | passed to `gz sim --seed`; a malformed value is refused, not ignored |
 
 `GZ_PARTITION` is **not** in that table on purpose: it is not a knob. The launch sets it on
@@ -489,7 +489,9 @@ boundary fails no gate in CI.
 `--pair` takes `--headless` like a single side does, and without it opens one window per side
 (it used to imply `--headless` and no longer does). It requires the zone to declare `twin: {sides: pair}` in the L0
 model; on an untwinned zone it refuses rather than inventing a second side. **`cell_b`
-declares `pair`** (ADR-0059), so `--pair` comes up on it from a clean checkout. It brings up
+declares `pair`** (ADR-0059), and its counterpart is the **physical** arm (ADR-0070): `--pair`
+starts that side with `hardware.launch.py` and is refused at it unless `CITE_ALLOW_HARDWARE=1`
+is set in the shell. It brings up
 both sides and
 then the twin boundary, which serves `SetMode` — nothing here chooses a mode. **A declaration
 is not a gate**: there is still no asserted paired scenario and no CI step brings a pair up,

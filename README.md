@@ -7,8 +7,8 @@ control interface**, with the system **continuously measuring how far the model 
 reality**. The cell is the first instrument; the project's scope is the building around it
 ([charter](./what-we-are-doing.md)).
 
-**Today both sides are digital.** No hardware path has been run, so nothing here is measured
-against reality yet. Saying so plainly is a project rule, not modesty.
+**The counterpart is the physical arm, and it has never been driven.** Its side is built and
+tested only against fakes ([ADR-0070](./docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)), so nothing here is measured against reality yet. Saying so plainly is a project rule, not modesty.
 
 ---
 
@@ -17,7 +17,8 @@ against reality yet. Saying so plainly is a project rule, not modesty.
 - **The real robot's program drives both sides of the twin.** The real xArm 5's UFACTORY
   Studio program is kept byte for byte in `model/programs/` and read strictly into the
   generated bring-up plan. `./scripts/program` brings up both sides of the paired zone
-  `cell_b` — two Gazebo instances, one arm on a linear track and one belt each — and sends
+  `cell_b` — the Gazebo plant and the physical xArm 5 as its counterpart, which needs
+  `CITE_ALLOW_HARDWARE=1` and refuses without it ([ADR-0070](./docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) — and sends
   that program **once** through the twin boundary, so both arms and both tracks follow it
   ([ADR-0067](./docs/adr/0067-the-real-program-drives-the-twin-on-a-track.md), `Proposed`).
   The belt is not twinned: each side's belt is started on that side.
@@ -26,10 +27,12 @@ against reality yet. Saying so plainly is a project rule, not modesty.
   the belt and belted on. It is a blocking CI step (`.github/workflows/ci.yml`). **No scenario
   and no CI step brings the pair up**; both sides together are shown by `./scripts/program`
   and asserted by nothing.
-- **What is not built.** The track has no hardware path, a twin mode change during a track
-  move sends no stop, and the counterpart's track position and custody are not read back —
-  all recorded in ADR-0067. There is no hardware interface at all yet (Phase 2.B), and the
-  cell layout is engineered, not surveyed (Phase 3).
+- **What is not built or not proven.** The physical counterpart's side — vendor
+  `ros2_control` plugin, track adapter, gripper relay and deadman — is built and has never
+  driven the arm ([ADR-0070](./docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md));
+  what only the bench can answer is in [`docs/open-work.md`](./docs/open-work.md) #93. A twin
+  mode change during a track move sends no stop, and the counterpart's custody is not read
+  back (ADR-0067). The cell layout is engineered, not surveyed (Phase 3).
 - **The three-arm event-driven line is not in the main tree.** It, its behaviour-tree package
   and zone `cell_a` were removed on 2026-10-01 ([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) and run as milestone 01 below, which a
   weekly, non-blocking workflow checks; main CI no longer drives `pick_and_place` or
@@ -95,8 +98,10 @@ cd Digital-Twin
 ./scripts/bootstrap      # Python tooling, container image, dependencies
 ./scripts/doctor         # what works on this machine, and what does not
 ./scripts/build          # build the ROS 2 workspace
-./scripts/program        # both sides of the pair, one window each, the real program once
-./scripts/program --headless
+./scripts/scenario program_cycle   # one cycle on the simulated plant, asserted; no hardware
+# The pair drives the PHYSICAL arm as its counterpart and refuses without the opt-in:
+# read docs/operations/bring-up.md (Physical cell) first.
+# CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1
 ./scripts/scenario program_cycle   # the check: one cycle on the plant side, asserted
 ```
 
@@ -175,7 +180,7 @@ directly — they route to the right environment automatically.
 | `./scripts/validate-model` | Validate the facility model. Runs anywhere. |
 | `./scripts/sim [--zone <name>] [--headless] [--pair]` | Launch the simulated cell. The model declares one zone, `cell_b`, the one-arm cell, so `--zone` may be left out; it is required again whenever the model declares more than one ([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) decision 5). `--pair` brings up both sides of a twin pair and needs a zone that declares one — `cell_b` does. |
 | `./scripts/scenario [name] [--zone <name>]` | Run a headless scenario; no argument lists them. There are two, `bringup` and `program_cycle`, both on `cell_b`. |
-| `./scripts/program [--headless] [--cycles N]` | Bring up both sides of the paired zone and run the real program once per cycle through the twin boundary. A demonstration: it asserts nothing; `program_cycle` is the check. |
+| `./scripts/program [--headless] [--cycles N] [--speed-scale S]` | Bring up both sides of the paired zone — the counterpart is the physical arm, behind `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` — and run the real program once per cycle through the twin boundary. A demonstration: it asserts nothing; `program_cycle` is the check. |
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares. |
 | `./scripts/audit-deps [--image]` | Scan dependencies for known vulnerabilities. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
