@@ -40,6 +40,7 @@ What it confirms, for every physical arm on the side, in order:
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import sys
 import time
 
@@ -79,6 +80,25 @@ def missing_services(wanted: list[str], advertised: set[str]) -> list[str]:
     return [name for name in wanted if name not in advertised]
 
 
+def wait_until(
+    condition: Callable[[], bool],
+    describe: Callable[[], str],
+    deadline: float,
+    ceiling_s: float,
+    spin: Callable[[], None],
+    clock: Callable[[], float] = time.monotonic,
+) -> None:
+    """Spin until ``condition`` holds, or raise `HoldFailed` once ``deadline`` passes.
+
+    ``describe`` is called only at expiry, so the failure names what was still
+    missing THEN, not what was missing when the wait began (R-09).
+    """
+    while not condition():
+        if clock() >= deadline:
+            raise HoldFailed(f"{describe()} not within {ceiling_s:g} s")
+        spin()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zone", required=True)
@@ -109,11 +129,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     deadline = time.monotonic() + args.deadline
 
-    def spin_until(condition, what: str) -> None:
-        while not condition():
-            if time.monotonic() >= deadline:
-                raise HoldFailed(f"{what} not within {args.deadline:g} s")
-            rclpy.spin_once(node, timeout_sec=_SLICE_S)
+    def spin_until(condition, describe: Callable[[], str]) -> None:
+        wait_until(
+            condition,
+            describe,
+            deadline,
+            args.deadline,
+            lambda: rclpy.spin_once(node, timeout_sec=_SLICE_S),
+        )
+
+    def advertised() -> set[str]:
+        return {name for name, _types in node.get_service_names_and_types()}
 
     try:
         for manager, physical, vendor in arms:
@@ -123,20 +149,18 @@ def main(argv: list[str] | None = None) -> int:
             )
             spin_until(
                 lambda: awaiting(last[-1] if last else None),
-                f"{manager.asset}: the deadman did not say AWAITING on "
+                lambda: f"{manager.asset}: the deadman did not say AWAITING on "
                 f"{physical.deadman_state_topic}",
             )
             wanted = list(vendor.services.values())
             spin_until(
-                lambda: not missing_services(
-                    wanted, {name for name, _types in node.get_service_names_and_types()}
-                ),
-                f"{manager.asset}: the vendor driver did not advertise "
-                f"{missing_services(wanted, {n for n, _t in node.get_service_names_and_types()})}",
+                lambda: not missing_services(wanted, advertised()),
+                lambda: f"{manager.asset}: the vendor driver did not advertise "
+                f"{missing_services(wanted, advertised())}",
             )
             client = node.create_client(SetInt16, vendor.services["set_state"])
             future = client.call_async(SetInt16.Request(data=VENDOR_STATE_STOP))
-            spin_until(future.done, f"{manager.asset}: the vendor did not answer a STOP")
+            spin_until(future.done, lambda: f"{manager.asset}: the vendor did not answer a STOP")
             response = future.result()
             if response is None or response.ret != 0:
                 code = None if response is None else response.ret

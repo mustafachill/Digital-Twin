@@ -67,6 +67,9 @@ if(BUILD_TESTING)
   # ADR-0070 item 6: what the physical side's launch refuses and the order it
   # would start the side in, read off the launch description; nothing starts.
   ament_add_pytest_test(hardware_launch test/test_hardware_launch.py)
+  # R-05, R-09: the hold gate against cite_hardware's vendor fakes, each case
+  # the real gate as a process; nothing reaches hardware.
+  ament_add_pytest_test(hold_gate test/test_hold_gate.py TIMEOUT 180)
   # ADR-0054 clause 6: the reproduction refused end to end - L0 edit, generate,
   # load the plan, call the gate. The only assertion that runs the whole path
   # the defect ran, and the only one crossing `cite_tools` and `cite_bringup`,
