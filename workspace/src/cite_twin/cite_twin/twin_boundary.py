@@ -76,6 +76,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import uuid
 
 from action_msgs.msg import GoalStatus
 from cite_bringup.plan import (
@@ -113,7 +114,7 @@ from cite_twin.boundary import (
     SideContext,
     SKILL_ACTION_TYPES,
 )
-from cite_twin.divergence import assess, compare, Operand, UNMEASURED
+from cite_twin.divergence import assess, compare, JointMerge, Operand, UNMEASURED
 from cite_twin.mode import (
     deployment_from_plan,
     far_side_is_physical,
@@ -257,11 +258,22 @@ class _Heartbeat:
     """
 
     def __init__(
-        self, side: SideContext, zone: str, period_s: float, group: ReentrantCallbackGroup
+        self,
+        side: SideContext,
+        zone: str,
+        boundary_id: str,
+        period_s: float,
+        group: ReentrantCallbackGroup,
+        lock: threading.Lock,
     ) -> None:
         self._zone = zone
+        self._boundary_id = boundary_id
         self._sequence = 0
         self._node = side.node
+        #: The boundary's own lock, the one its command path takes. A command
+        #: path wedged holding it stops the heartbeat too, which is what a
+        #: physical side's deadman has to hear.
+        self._lock = lock
         # STATE: periodic, reliable, volatile — and the profile the deadman
         # subscribes with.
         self._publisher = side.node.create_publisher(
@@ -270,12 +282,24 @@ class _Heartbeat:
         self._timer = side.node.create_timer(period_s, self._beat, callback_group=group)
 
     def _beat(self) -> None:
-        self._sequence += 1
-        message = TwinHeartbeat()
-        message.header.stamp = self._node.get_clock().now().to_msg()
-        message.zone = self._zone
-        message.sequence = self._sequence
+        with self._lock:
+            self._sequence += 1
+            message = TwinHeartbeat()
+            message.header.stamp = self._node.get_clock().now().to_msg()
+            message.zone = self._zone
+            message.boundary_id = self._boundary_id
+            message.sequence = self._sequence
         self._publisher.publish(message)
+
+
+def heartbeat_period(value: float) -> float:
+    """Return a usable heartbeat period, or refuse one that is not a period."""
+    if not (math.isfinite(value) and value > 0.0):
+        raise BoundaryError(
+            f"heartbeat_period_s is {value}; a heartbeat needs a positive, finite period, "
+            "or a physical side's deadman never hears one"
+        )
+    return value
 
 
 @dataclass(frozen=True)
@@ -350,6 +374,18 @@ class TwinBoundary:
             .get_parameter_value()
             .double_value
         )
+        # Read and refused here, before anything is built on the sides, so a
+        # refusal releases both contexts (S-12).
+        self._plant.node.declare_parameter("heartbeat_period_s", HEARTBEAT_PERIOD_S)
+        try:
+            beat_period = heartbeat_period(
+                self._plant.node.get_parameter("heartbeat_period_s")
+                .get_parameter_value()
+                .double_value
+            )
+        except BoundaryError:
+            self.stop()
+            raise
 
         # Both sides, read per asset, because the hardware gate asks which sides
         # the requested mode commands and what each of them DECLARES - never
@@ -420,6 +456,10 @@ class TwinBoundary:
         # its own side's context, so two identical topic names cannot be
         # confused for one.
         self._operands: dict[tuple[str, str], Operand] = {}
+        #: Per (side, asset), the latest position of each joint and when it
+        #: arrived. Several publishers share one joint-state topic, each with
+        #: the joints it owns, so an operand is merged from them by name.
+        self._joints: dict[tuple[str, str], JointMerge] = {}
         self._model_versions: dict[str, str] = {}
         self._subscriptions = []
         for side_name, side in self._sides.items():
@@ -506,15 +546,12 @@ class TwinBoundary:
         )
 
         # 6. The heartbeat (ADR-0070 item 5): one per side, on that side's own
-        # domain, from a timer that side's own executor runs.
-        self._plant.node.declare_parameter("heartbeat_period_s", HEARTBEAT_PERIOD_S)
-        heartbeat_period = (
-            self._plant.node.get_parameter("heartbeat_period_s")
-            .get_parameter_value()
-            .double_value
-        )
+        # domain, from a timer that side's own executor runs, under this
+        # boundary's lock. One id per boundary start, the same on both sides:
+        # a deadman latches it and trips on any other (S-07).
+        boundary_id = str(uuid.uuid4())
         self._heartbeats = [
-            _Heartbeat(side, plan.zone, heartbeat_period, self._group)
+            _Heartbeat(side, plan.zone, boundary_id, beat_period, self._group, self._lock)
             for side in self._sides.values()
         ]
 
@@ -616,6 +653,8 @@ class TwinBoundary:
                     key for key in self._operands if key[0] != PLANT_SIDE
                 ]:
                     del self._operands[key]
+                for key in [key for key in self._joints if key[0] != PLANT_SIDE]:
+                    del self._joints[key]
                 self._publish_mode()
         if changed:
             self._stop_belts_the_mode_does_not_command(verdict.mode)
@@ -935,6 +974,14 @@ class TwinBoundary:
 
         The message is consumed here. It is not forwarded to a publisher on the
         other side's context, in any mode (ADR-0050 decision 1b).
+
+        **Merged by joint name.** On a physical side the arm's joint-state topic
+        carries partial messages from several publishers — the arm's
+        broadcaster, the track adapter, the gripper relay — each naming only the
+        joints it owns. Each message updates its own joints; the operand is
+        every joint heard, and its age is its OLDEST joint's, so one publisher
+        that went quiet makes the operand old rather than hiding behind the
+        others (R-05).
         """
         positions = {
             name: float(position)
@@ -945,9 +992,13 @@ class TwinBoundary:
                 self._authority.mode
             ):
                 return
+            merge = self._joints.setdefault((side_name, asset), JointMerge())
+            merge.update(positions, time.time())
+            if not merge.positions():
+                return
             self._operands[(side_name, asset)] = Operand(
-                positions=positions,
-                received_wall_s=time.time(),
+                positions=merge.positions(),
+                received_wall_s=merge.oldest_arrival(),
                 model_version=self._model_versions.get(side_name, ""),
                 # Nothing in the tree measures a clock deficit, so nothing can
                 # supply one here. `None` is the honest value and it is what
