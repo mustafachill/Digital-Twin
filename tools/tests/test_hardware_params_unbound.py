@@ -95,6 +95,16 @@ def _hardware(model: Path, edit_yaml: Callable, add_arm: Callable, block: dict) 
         model / "facility/zones.yaml",
         lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
     )
+    # And with no counterpart declared on it, which an unpaired zone refuses
+    # (`counterpart-backend-on-unpaired-zone`, ADR-0070).
+    edit_yaml(
+        model / "assets/instances/arms.yaml",
+        lambda d: [a["hardware"].pop("counterpart_backend", None) for a in d["assets"]],
+    )
+    edit_yaml(
+        model / "assets/instances/tracks.yaml",
+        lambda d: [a["hardware"].pop("counterpart_backend", None) for a in d["assets"]],
+    )
     return model
 
 

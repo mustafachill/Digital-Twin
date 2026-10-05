@@ -258,6 +258,9 @@ def reproduction_model(destination: Path) -> Path:
     arms = scratch / "assets/instances/arms.yaml"
     instances = yaml.safe_load(arms.read_text())
     for asset in instances["assets"]:
+        # The zone is unpaired above, so no counterpart is declared:
+        # `counterpart-backend-on-unpaired-zone` refuses one (ADR-0070).
+        asset.get("hardware", {}).pop("counterpart_backend", None)
         if asset.get("hardware", {}).get("backend") == "sim":
             # INDEXED BY THE BACKEND ID, which is `sim` here because the
             # reproduction changes no id — that is the whole of it. ADR-0053
@@ -272,6 +275,11 @@ def reproduction_model(destination: Path) -> Path:
             # committed value for it (ADR-0070 item 2).
             asset["hardware"]["params"] = {"sim": {"robot_ip": {"env": "CITE_XARM_IP"}}}
     arms.write_text(yaml.safe_dump(instances, sort_keys=False))
+    tracks = scratch / "assets/instances/tracks.yaml"
+    carried = yaml.safe_load(tracks.read_text())
+    for asset in carried["assets"]:
+        asset.get("hardware", {}).pop("counterpart_backend", None)
+    tracks.write_text(yaml.safe_dump(carried, sort_keys=False))
     return scratch
 
 

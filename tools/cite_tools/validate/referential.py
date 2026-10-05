@@ -51,6 +51,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _hardware_backends_exist(model)
     findings += _instance_params_reach_a_bound_plugin(model)
     findings += _paired_zone_has_no_physical_plant(model)
+    findings += _counterpart_backend_needs_a_paired_zone(model)
     findings += _plugin_less_backends_are_not_bound(model)
     findings += _configuration_matches_category(model)
     findings += _an_arm_rides_its_track_on_one_backend(model)
@@ -660,6 +661,40 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
             )
         )
     return findings
+
+
+def _counterpart_backend_needs_a_paired_zone(model: FacilityModel) -> list[Finding]:
+    """A `counterpart_backend` other than `backend`, on a zone with no counterpart, is an ERROR.
+
+    Other than `backend`, because the loaded model cannot tell a value equal to
+    `backend` from an omitted one, by design: the fallback is applied at load so
+    the two spellings are one facility (`HardwareSelection`). A differing value
+    is the one that says something.
+
+    On a `single` zone there is no side for it to select a backend for, so the
+    value reaches no artifact and is silently inert (ADR-0041, Decision 3). That
+    silence is the hazard: a model that writes `counterpart_backend: real` on an
+    unpaired zone reads as if a physical counterpart were declared, and pairing
+    the zone later would make it one without anyone writing it again. ADR-0070
+    deleted `divergent-counterpart-backend`, which used to report this case as
+    a side effect; this keeps the case reported on its own terms.
+    """
+    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
+    return [
+        error(
+            "counterpart-backend-on-unpaired-zone",
+            f"assets.{asset.id}.hardware.counterpart_backend",
+            f"asset {asset.id!r} declares counterpart_backend "
+            f"{asset.hardware.counterpart_backend!r}, and its zone {asset.zone!r} has no "
+            "counterpart side",
+            "Set `twin: {sides: pair}` on the zone if it is twinned, or remove "
+            "`counterpart_backend`; on an unpaired zone it selects nothing (ADR-0041, "
+            "Decision 3).",
+        )
+        for asset in model.assets
+        if asset.zone not in paired
+        and asset.hardware.effective_counterpart_backend != asset.hardware.backend
+    ]
 
 
 def _configuration_matches_category(model: FacilityModel) -> list[Finding]:

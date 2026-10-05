@@ -1618,9 +1618,9 @@ class TestTwinSidesAndTheGazeboPartition:
     ) -> None:
         """Inert where there is no side for it to describe.
 
-        `divergent-counterpart-backend` used to refuse this with its own hint;
-        ADR-0070 deleted that rule, so the value is now legal on a `single` zone
-        and must reach no artifact at all — not a second description, not a key
+        The validator refuses this model (`counterpart-backend-on-unpaired-zone`,
+        `test_validate_referential.py`); the generator, asked anyway, must let
+        the value reach no artifact at all — not a second description, not a key
         in the plan.
         """
         before = artifacts(real_model)

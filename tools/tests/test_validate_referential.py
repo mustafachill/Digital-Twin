@@ -705,21 +705,42 @@ def test_a_counterpart_naming_the_backend_it_already_has_is_allowed(
     assert rules(minimal_model) == set()
 
 
-def test_a_counterpart_on_an_untwinned_zone_is_inert_rather_than_refused(
+def test_a_differing_counterpart_on_an_untwinned_zone_is_refused(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    """On a `single` zone there is no counterpart for the value to describe.
+    """R-07: on a `single` zone there is no counterpart for the value to describe.
 
-    The deleted rule refused this with a hint of its own. It is now accepted,
-    and nothing it implies is asked of the model: no parameter is required for a
-    side that does not exist (`missing-hardware-param` reads the counterpart only
-    on a paired zone), and the generator emits no artifact for it —
-    `test_a_counterpart_on_an_untwinned_zone_generates_nothing` holds that half.
+    ADR-0070 deleted `divergent-counterpart-backend`, which reported this case;
+    for a while after that it was accepted and silently inert, so a model could
+    read as declaring a physical counterpart that nothing would ever start - and
+    pairing the zone later would make it one without anyone writing it again.
+    The generator still emits nothing for it
+    (`test_a_counterpart_on_an_untwinned_zone_generates_nothing`).
     """
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
         lambda d: d["assets"][1].__setitem__(
             "hardware", {"backend": "sim", "counterpart_backend": "real"}
+        ),
+    )
+    findings = [
+        f
+        for f in referential.check(load(minimal_model))
+        if f.rule == "counterpart-backend-on-unpaired-zone"
+    ]
+    assert [(f.severity, f.where) for f in findings] == [
+        (Severity.ERROR, "assets.arm_1.hardware.counterpart_backend")
+    ]
+
+
+def test_a_counterpart_written_equal_to_the_plant_on_an_untwinned_zone_is_clean(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """Writing the fallback out is the same loaded model as omitting it (`HardwareSelection`)."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "sim"}
         ),
     )
     assert rules(minimal_model) == set()
