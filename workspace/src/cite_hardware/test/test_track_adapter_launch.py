@@ -26,6 +26,7 @@ The numbers are test inputs, not the asset's facts.
 from __future__ import annotations
 
 import os
+import signal
 import sys
 import unittest
 
@@ -156,6 +157,7 @@ class TestTrackAdapter(unittest.TestCase):
         self.track.answer_get.set()
         self.track.answer_set.set()
         self.track.set_ret = 0
+        self.track.stop_failures = 0
         self.track.position_mm = 100
 
     def _deadman(self, proc_output, state: int) -> None:
@@ -242,6 +244,20 @@ class TestTrackAdapter(unittest.TestCase):
         stops = self._moving(proc_output)
         self._deadman(proc_output, DeadmanState.STATE_TRIPPED)
         self.harness.wait_for(lambda: self.track.stops > stops, "set_linear_motor_stop")
+
+    def test_a_refused_stop_is_sent_again_until_acknowledged(self, proc_output):
+        """N-05: a stop the vendor refuses does not count; the next poll sends another."""
+        stops = self._moving(proc_output)
+        self.track.stop_failures = 2
+        self._deadman(proc_output, DeadmanState.STATE_TRIPPED)
+        self.harness.wait_for(
+            lambda: self.track.stops >= stops + 3, "the stop sent again until one succeeded"
+        )
+        self.assertEqual(self.track.stop_failures, 0)
+        settled = self.track.stops
+        self.harness.hold_for(
+            lambda: self.track.stops > settled, "a stop after one was acknowledged", 0.75
+        )
 
     def test_a_silent_deadman_stops_a_moving_carriage(self, proc_output):
         """S-06: a closure the deadman did not cause — its state went stale."""
@@ -403,6 +419,21 @@ class TestTrackAdapter(unittest.TestCase):
             )
         finally:
             self.assertTrue(self.harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
+
+    def test_zz_sigint_stops_a_moving_carriage(self, proc_output, proc_info, adapter):
+        """SIGINT reaches no lifecycle transition in rclpy; the process stops the carriage.
+
+        Last by name: it ends the first adapter's process.
+        """
+        stops = self._moving(proc_output)
+        os.kill(adapter.process_details["pid"], signal.SIGINT)
+        self.harness.wait_for(
+            lambda: self.track.stops > stops, "set_linear_motor_stop sent on SIGINT"
+        )
+        proc_output.assertWaitFor(
+            expected_output="SIGINT: every stop call answered; exiting", timeout=SETTLE_S
+        )
+        proc_info.assertWaitForShutdown(process=adapter, timeout=SETTLE_S)
 
 
 @launch_testing.post_shutdown_test()

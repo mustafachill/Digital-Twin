@@ -37,7 +37,9 @@ at its next command.
 
 **This gates the relays only.** The arm's own trajectory controller is not
 behind this gate: the deadman holds the arm through the vendor's own state
-(`cite_hardware.deadman`).
+(`cite_hardware.deadman`). The gate reads `state` and not `arm_enabled`: the
+track and the gripper move whether or not the arm's own enable has been
+acknowledged. A consumer that needs the ARM ready must require `arm_enabled`.
 """
 
 from __future__ import annotations

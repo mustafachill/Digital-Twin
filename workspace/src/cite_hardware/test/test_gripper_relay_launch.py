@@ -202,6 +202,27 @@ class TestGripperRelay(unittest.TestCase):
                 f"{DRIVE_JOINT} at {expected} on {JOINT_STATES}",
             )
 
+    def test_a_hung_position_read_is_abandoned_and_polling_resumes(self, proc_output):
+        """N-08: a read the vendor never answers is bounded, and does not end the polling."""
+        self.vendor.answer_position.clear()
+        try:
+            proc_output.assertWaitFor(
+                expected_output="get_gripper_position unanswered within result_timeout_s",
+                timeout=SETTLE_S,
+            )
+            before = self.vendor.position_requests
+            self.harness.wait_for(
+                lambda: self.vendor.position_requests > before,
+                "a new position read after the abandoned one",
+            )
+        finally:
+            self.vendor.answer_position.set()
+        seen = len(self.states)
+        self.harness.wait_for(
+            lambda: any(s.name == [DRIVE_JOINT] for s in self.states[seen:]),
+            "the drive joint published again once the vendor answers",
+        )
+
     def test_feedback_is_mapped_back_too(self, proc_output):
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
         self.vendor.pulses = 850.0  # fully open

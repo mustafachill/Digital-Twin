@@ -32,14 +32,14 @@ make each part's precondition another part's side effect.
 from __future__ import annotations
 
 import os
+import signal
 import sys
-import threading
 import unittest
 import uuid
 
 from action_msgs.msg import GoalStatus
-from cite_interfaces.msg import DeadmanState, TwinHeartbeat
-from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.msg import DeadmanState
+from cite_interfaces.qos import LATCHED
 from control_msgs.action import GripperCommand
 import launch
 from launch_ros.actions import Node
@@ -53,6 +53,7 @@ from rclpy.action import ActionClient
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vendor_fakes import (  # noqa: E402
     FakeArmState,
+    FakeBoundary,
     FakeGripper,
     FakeTrack,
     Harness,
@@ -68,8 +69,6 @@ GRIPPER_ACTION = "/test/gripper_controller/gripper_cmd"
 TIMEOUT_S = 0.5
 TICK_S = 0.05
 CALL_DEADLINE_S = 0.3
-#: Ten heartbeats per timeout: the margin the deadman is meant to run with.
-HEARTBEAT_PERIOD_S = 0.05
 STOP, START, SERVO = 4, 0, 1
 
 PARAMETERS = {
@@ -103,55 +102,15 @@ def generate_test_description():
     )
 
 
-class FakeBoundary:
-    """Publish heartbeats from a timer while ``beating`` is set."""
-
-    def __init__(self, harness: Harness, zone: str) -> None:
-        self._harness = harness
-        self.zone = zone
-        self.boundary_id = str(uuid.uuid4())
-        self.sequence = 0
-        self.beating = threading.Event()
-        self._lock = threading.Lock()
-        self.publisher = harness.node.create_publisher(TwinHeartbeat, TwinHeartbeat.TOPIC, STATE)
-        self._timer = harness.node.create_timer(
-            HEARTBEAT_PERIOD_S, self._beat, callback_group=harness.group
-        )
-
-    def _beat(self) -> None:
-        with self._lock:
-            if not self.beating.is_set() or self.publisher is None:
-                return
-            self.sequence += 1
-            self.publisher.publish(
-                TwinHeartbeat(
-                    zone=self.zone, boundary_id=self.boundary_id, sequence=self.sequence
-                )
-            )
-
-    def die(self) -> None:
-        """Make the boundary process go away: its publisher disappears."""
-        with self._lock:
-            if self.publisher is not None:
-                self._harness.node.destroy_publisher(self.publisher)
-            self.publisher = None
-
-    def restart(self) -> None:
-        """Start a new boundary process: a new publisher, a new id, counting from 1."""
-        with self._lock:
-            self.sequence = 0
-            self.boundary_id = str(uuid.uuid4())
-            self.publisher = self._harness.node.create_publisher(
-                TwinHeartbeat, TwinHeartbeat.TOPIC, STATE
-            )
-
-
 class TestDeadman(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.harness = Harness("deadman_test")
         node = cls.harness.node
         cls.arm = FakeArmState(cls.harness, VENDOR)
+        #: The one boundary of this zone, shared by every case in this file: a
+        #: second publisher of it would itself be a rival boundary.
+        cls.boundary = FakeBoundary(cls.harness, ZONE)
         cls.track = FakeTrack(cls.harness, VENDOR)
         cls.gripper = FakeGripper(cls.harness, GRIPPER_ACTION)
         cls.states: list[DeadmanState] = []
@@ -164,6 +123,7 @@ class TestDeadman(unittest.TestCase):
     def tearDownClass(cls):
         cls.gripper.release_held()
         cls.arm.release.set()
+        cls.arm.mode_release.set()
         cls.gripper_client.destroy()
         cls.harness.close()
 
@@ -199,12 +159,13 @@ class TestDeadman(unittest.TestCase):
     def test_the_deadman_sequence(self, proc_output):
         harness = self.harness
         wrong_zone = FakeBoundary(harness, "another_zone")
-        boundary = FakeBoundary(harness, ZONE)
+        boundary = self.boundary
 
         # 1. Active, nothing heard yet: AWAITING, the arm held at STOP however
         #    often another client starts it, and never a trip.
         harness.bring_up(NODE)
-        self._state_is(DeadmanState.STATE_AWAITING, "AWAITING after activation")
+        awaiting = self._state_is(DeadmanState.STATE_AWAITING, "AWAITING after activation")
+        self.assertFalse(awaiting.arm_enabled, "arm_enabled while AWAITING")
         harness.wait_for(lambda: self.arm.state == STOP, "set_state(4) on activation")
         self._undone_within_a_tick("a START by another client undone while AWAITING")
         wrong_zone.beating.set()
@@ -223,6 +184,12 @@ class TestDeadman(unittest.TestCase):
         self.assertEqual(healthy.asset_id, "test_arm")
         self.assertAlmostEqual(healthy.timeout_s, TIMEOUT_S)
         self._enabled(0, "the arm enabled on HEALTHY")
+        # N-06: arm_enabled only once set_state(0) is acknowledged.
+        harness.wait_for(
+            lambda: self.states[-1].state == DeadmanState.STATE_HEALTHY
+            and self.states[-1].arm_enabled,
+            "arm_enabled once set_state(0) was acknowledged",
+        )
         stops = self.arm.requests.count(STOP)
         harness.hold_for(
             lambda: self.states[-1].state != DeadmanState.STATE_HEALTHY
@@ -238,6 +205,7 @@ class TestDeadman(unittest.TestCase):
         boundary.beating.clear()
         tripped = self._state_is(DeadmanState.STATE_TRIPPED, "TRIPPED after the timeout")
         self.assertIn("no heartbeat within", tripped.detail)
+        self.assertFalse(tripped.arm_enabled, "arm_enabled while TRIPPED")
         harness.wait_for(lambda: self.arm.state == STOP, "set_state(4), the vendor's stop")
         harness.wait_for(
             lambda: self.track.stops >= track_stops + 3,
@@ -247,8 +215,10 @@ class TestDeadman(unittest.TestCase):
         # And on every tick: a goal accepted after the trip is cancelled too.
         # (A goal already CANCELING is not offered to the cancel callback
         # again, so the count rises once per goal, not once per tick.)
-        late = self._hold_a_gripper_goal()
+        # The count is read BEFORE the goal is sent: a tick's cancel can land
+        # between its acceptance and any later read, and is not repeated.
         cancels = self.gripper.cancels
+        late = self._hold_a_gripper_goal()
         harness.wait_for(
             lambda: self.gripper.cancels > cancels, "a goal sent after the trip cancelled too"
         )
@@ -299,9 +269,17 @@ class TestDeadman(unittest.TestCase):
         self._state_is(DeadmanState.STATE_AWAITING, "AWAITING after a reset")
         self.assertEqual(len(self.arm.modes), modes, "enabled before a heartbeat")
         self._undone_within_a_tick("a START by another client undone after the reset")
+        # N-06: the vendor refuses the first set_mode; the enable is retried
+        # on a later tick while HEALTHY, and only then is arm_enabled said.
+        self.arm.mode_failures = 1
         boundary.beating.set()
         self._state_is(DeadmanState.STATE_HEALTHY, "HEALTHY again on a fresh heartbeat")
-        self._enabled(modes, "the arm enabled again")
+        self._enabled(modes + 1, "the arm enabled again after a refused set_mode")
+        self.assertGreaterEqual(len(self.arm.modes), modes + 2, "set_mode retried")
+        self.assertEqual(self.arm.mode_failures, 0)
+        harness.wait_for(
+            lambda: self.states[-1].arm_enabled, "arm_enabled after the retried enable"
+        )
 
         # 6. A second boundary — another id on the same topic — trips it.
         boundary.boundary_id = str(uuid.uuid4())
@@ -339,6 +317,64 @@ class TestDeadman(unittest.TestCase):
         self.assertTrue(harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
         self.assertTrue(harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
         self._state_is(DeadmanState.STATE_HEALTHY, "HEALTHY with the restarted boundary")
+        boundary.beating.clear()
+        self._state_is(DeadmanState.STATE_TRIPPED, "TRIPPED as the restarted boundary stops")
+
+        # 10. N-01: a trip between the set_mode answer and set_state(0). The
+        #     vendor holds set_mode; the boundary dies and the deadman trips at
+        #     once (its STOP is served meanwhile); then set_mode answers
+        #     success. No START may follow the trip's STOP. (The precise
+        #     interleaving is pinned in-process by test_ordering.py.)
+        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
+        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
+        self._state_is(DeadmanState.STATE_AWAITING, "AWAITING before the held enable")
+        self.arm.mode_release.clear()
+        self.arm.mode_held.clear()
+        self.arm.hold_mode.set()
+        boundary.beating.set()
+        self._state_is(DeadmanState.STATE_HEALTHY, "HEALTHY with set_mode held")
+        harness.wait_for(self.arm.mode_held.is_set, "set_mode held at the vendor")
+        boundary.beating.clear()
+        boundary.die()
+        self._state_is(DeadmanState.STATE_TRIPPED, "TRIPPED with set_mode held")
+        trip_at = len(self.arm.calls)
+        harness.wait_for(
+            lambda: ("set_state", STOP) in self.arm.calls[trip_at:], "the trip's set_state(4)"
+        )
+        self.arm.mode_release.set()
+        harness.hold_for(
+            lambda: ("set_state", START) in self.arm.calls[trip_at:]
+            or self.states[-1].arm_enabled,
+            "set_state(0) after the trip's set_state(4)",
+            4 * TIMEOUT_S,
+        )
+        self.assertEqual(self.arm.state, STOP)
+
+    def test_z_sigint_stops_the_arm_before_exit(self, proc_output, proc_info, deadman):
+        """SIGINT reaches no lifecycle transition in rclpy; the process stops the arm itself.
+
+        Last by name: it ends the deadman's process.
+        """
+        harness = self.harness
+        boundary = self.boundary
+        boundary.restart()
+        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
+        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
+        self._state_is(DeadmanState.STATE_AWAITING, "AWAITING before the SIGINT case")
+        modes = len(self.arm.modes)
+        boundary.beating.set()
+        self._enabled(modes, "the arm enabled before the SIGINT")
+        harness.wait_for(lambda: self.states[-1].arm_enabled, "arm_enabled before the SIGINT")
+        stops = self.arm.requests.count(STOP)
+        os.kill(deadman.process_details["pid"], signal.SIGINT)
+        harness.wait_for(
+            lambda: self.arm.requests.count(STOP) > stops and self.arm.state == STOP,
+            "set_state(4) sent on SIGINT, before the process exited",
+        )
+        proc_output.assertWaitFor(
+            expected_output="SIGINT: every stop call answered; exiting", timeout=SETTLE_S
+        )
+        proc_info.assertWaitForShutdown(process=deadman, timeout=SETTLE_S)
         boundary.beating.clear()
 
 

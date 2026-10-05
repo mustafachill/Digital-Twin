@@ -155,3 +155,22 @@ def test_a_heartbeat_without_a_boundary_id_does_not_count() -> None:
     liveness.activate()
     assert not liveness.heartbeat(ZONE, "", 1, 1).accepted
     assert liveness.state == AWAITING
+
+
+def test_losing_the_vendor_trips_when_healthy_and_latches() -> None:
+    """N-03: a vendor driver that went away or restarted re-enabled the arm itself."""
+    liveness = _healthy()
+    outcome = liveness.vendor_lost("set_state is served 0 times")
+    assert outcome.tripped
+    assert "served 0 times" in outcome.reason
+    assert liveness.state == TRIPPED
+    assert not liveness.vendor_lost("again").tripped
+    assert not liveness.heartbeat(ZONE, BOUNDARY, 5, 1).accepted
+    assert liveness.state == TRIPPED
+
+
+def test_losing_the_vendor_before_healthy_does_not_trip() -> None:
+    liveness = Liveness(ZONE, 0.5)
+    liveness.activate()
+    assert not liveness.vendor_lost("no vendor yet").tripped
+    assert liveness.state == AWAITING

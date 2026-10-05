@@ -42,9 +42,10 @@ from __future__ import annotations
 from collections.abc import Callable
 import threading
 import time
+import uuid
 
-from cite_interfaces.msg import DeadmanState
-from cite_interfaces.qos import LATCHED
+from cite_interfaces.msg import DeadmanState, TwinHeartbeat
+from cite_interfaces.qos import LATCHED, STATE
 from control_msgs.action import GripperCommand
 from lifecycle_msgs.msg import Transition
 from lifecycle_msgs.srv import ChangeState, GetState
@@ -156,6 +157,8 @@ class FakeTrack:
         self.set_ret = 0
         self.set_requests: list[LinearMotorSetPos.Request] = []
         self.stops = 0
+        #: How many of the next stops answer with a vendor error (ret 1).
+        self.stop_failures = 0
         #: When cleared, `set_linear_motor_pos` does not answer until it is set:
         #: a vendor that is slow to answer, which is what makes a held command
         #: observable.
@@ -192,7 +195,11 @@ class FakeTrack:
 
     def _on_stop(self, _request, response):
         self.stops += 1
-        response.ret = 0
+        if self.stop_failures > 0:
+            self.stop_failures -= 1
+            response.ret = 1
+        else:
+            response.ret = 0
         return response
 
 
@@ -203,9 +210,23 @@ class FakeArmState:
     activation leaves the arm. ``flip`` is another client setting it.
     """
 
-    def __init__(self, harness: Harness, namespace: str) -> None:
+    def __init__(
+        self,
+        harness: Harness,
+        namespace: str,
+        on_call: Callable[[str, int], None] | None = None,
+    ) -> None:
         self.requests: list[int] = []
         self.modes: list[int] = []
+        #: Told of every call as it arrives, ("set_state" or "set_mode", n).
+        self._on_call = on_call
+        #: How many of the next set_mode calls answer with a vendor error.
+        self.mode_failures = 0
+        #: When set, the NEXT set_mode call is held unanswered until
+        #: ``mode_release`` is set; ``mode_held`` says it arrived.
+        self.hold_mode = threading.Event()
+        self.mode_release = threading.Event()
+        self.mode_held = threading.Event()
         #: Every call in arrival order, as ("set_state", n) or ("set_mode", n).
         self.calls: list[tuple[str, int]] = []
         self.state = 0
@@ -233,6 +254,8 @@ class FakeArmState:
             self.state = state
 
     def _on_set_state(self, request, response):
+        if self._on_call is not None:
+            self._on_call("set_state", request.data)
         with self._lock:
             hold = self.hold_next.is_set()
             self.hold_next.clear()
@@ -250,13 +273,25 @@ class FakeArmState:
         return response
 
     def _on_set_mode(self, request, response):
+        if self._on_call is not None:
+            self._on_call("set_mode", request.data)
         with self._lock:
             self.modes.append(request.data)
             self.calls.append(("set_mode", request.data))
             # The vendor's service stops the arm before it changes the mode.
             self.state = 4
-            self.mode = request.data
-            response.ret = 0
+            hold = self.hold_mode.is_set()
+            self.hold_mode.clear()
+        if hold:
+            self.mode_held.set()
+            self.mode_release.wait(timeout=SETTLE_S)
+        with self._lock:
+            if self.mode_failures > 0:
+                self.mode_failures -= 1
+                response.ret = 1
+            else:
+                self.mode = request.data
+                response.ret = 0
         return response
 
 
@@ -303,6 +338,12 @@ class FakeGripper:
         self.running = 0
         #: What `get_gripper_position` reports, in the vendor's pulses.
         self.pulses = 850.0
+        #: How many position reads arrived, answered or not.
+        self.position_requests = 0
+        #: When cleared, `get_gripper_position` does not answer until it is
+        #: set: a vendor read that hangs.
+        self.answer_position = threading.Event()
+        self.answer_position.set()
         self._lock = threading.Lock()
         self._release = threading.Event()
         if state_service:
@@ -330,6 +371,9 @@ class FakeGripper:
         return abs(cls.MAX_POS - pulses) / 1000.0
 
     def _on_position(self, _request, response):
+        with self._lock:
+            self.position_requests += 1
+        self.answer_position.wait(timeout=SETTLE_S)
         response.ret = 0
         response.data = self.pulses
         return response
@@ -375,3 +419,49 @@ class FakeGripper:
         finally:
             with self._lock:
                 self.running -= 1
+
+
+class FakeBoundary:
+    """The twin boundary's heartbeat, published from a timer while ``beating`` is set."""
+
+    #: Ten heartbeats per half-second timeout: the margin a deadman runs with.
+    PERIOD_S = 0.05
+
+    def __init__(self, harness: Harness, zone: str) -> None:
+        self._harness = harness
+        self.zone = zone
+        self.boundary_id = str(uuid.uuid4())
+        self.sequence = 0
+        self.beating = threading.Event()
+        self._lock = threading.Lock()
+        self.publisher = harness.node.create_publisher(TwinHeartbeat, TwinHeartbeat.TOPIC, STATE)
+        self._timer = harness.node.create_timer(
+            self.PERIOD_S, self._beat, callback_group=harness.group
+        )
+
+    def _beat(self) -> None:
+        with self._lock:
+            if not self.beating.is_set() or self.publisher is None:
+                return
+            self.sequence += 1
+            self.publisher.publish(
+                TwinHeartbeat(
+                    zone=self.zone, boundary_id=self.boundary_id, sequence=self.sequence
+                )
+            )
+
+    def die(self) -> None:
+        """Make the boundary process go away: its publisher disappears."""
+        with self._lock:
+            if self.publisher is not None:
+                self._harness.node.destroy_publisher(self.publisher)
+            self.publisher = None
+
+    def restart(self) -> None:
+        """Start a new boundary process: a new publisher, a new id, counting from 1."""
+        with self._lock:
+            self.sequence = 0
+            self.boundary_id = str(uuid.uuid4())
+            self.publisher = self._harness.node.create_publisher(
+                TwinHeartbeat, TwinHeartbeat.TOPIC, STATE
+            )

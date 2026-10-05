@@ -40,6 +40,15 @@ shutdown, whenever a `set_linear_motor_pos` was in flight or a move it sent may
 still be running. The deadman's own stop on a trip is the second, independent
 one; a closure the deadman did not cause has only this one.
 
+That stop is LEVEL-triggered: on every poll, active or not, while motion is not
+permitted and a move may be running, it is sent again until the vendor answers
+one with success that was sent after the last move and with no move call
+outstanding — only then is the carriage taken as no longer driven from here. A
+stop unanswered within `position_max_age_s` is abandoned and sent again. A move
+is marked possible BEFORE the last look at the gate, under the lock, so a
+closure racing a move either prevents it or finds it and stops it. On SIGINT
+or SIGTERM the stop is sent before the process exits (`cite_hardware.process`).
+
 **A speed is derived only from a fresh position.** The carriage position is
 polled; a read unanswered within `position_max_age_s` is abandoned, and a
 position older than that is not used to derive a speed.
@@ -186,13 +195,25 @@ class TrackAdapter(LifecycleNode):
         #: Steady-clock time the position above was read, nanoseconds.
         self._position_at_ns = 0
         self._set_in_flight = False
+        #: A position read is in flight: reserved under the lock BEFORE it is
+        #: sent, so two polls never both send one and drop each other's reply.
+        self._get_in_flight = False
         #: The position read in flight, and when it is abandoned.
         self._get_future = None
         self._get_deadline_ns = 0
         self._pending: LinearMotorSetPos.Request | None = None
-        #: A position command was sent and no stop has been sent since: the
-        #: carriage may be moving.
+        #: A position command may have been sent since the last ACKNOWLEDGED
+        #: stop: the carriage may be moving. Set before the move is sent and
+        #: cleared only by a stop the vendor answered with success, sent after
+        #: the last move and with no move call outstanding.
         self._move_possible = False
+        #: Counts every move sent, so a stop knows whether a move followed it.
+        self._move_sequence = 0
+        #: The stop call in flight, the move count when it was sent, and when
+        #: it is abandoned so the next poll sends another.
+        self._stop_future = None
+        self._stop_sequence = 0
+        self._stop_deadline_ns = 0
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -242,6 +263,11 @@ class TrackAdapter(LifecycleNode):
             self._group,
             self._on_gate_closed,
         )
+        # From configure to cleanup, inactive included: a stop the vendor has
+        # not acknowledged is sent again on every poll, whatever the state.
+        self._poll_timer = self.create_timer(
+            config["poll_period_s"], self._poll, callback_group=self._group
+        )
         self.get_logger().info(
             f"configured: {config['command_topic']} -> {config['set_position_service']}, "
             f"{config['joint']} published on {config['joint_state_topic']}"
@@ -252,18 +278,12 @@ class TrackAdapter(LifecycleNode):
         assert self._config is not None
         with self._lock:
             self._active = True
-        self._poll_timer = self.create_timer(
-            self._config["poll_period_s"], self._poll, callback_group=self._group
-        )
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
         with self._lock:
             self._active = False
             self._pending = None
-        if self._poll_timer is not None:
-            self.destroy_timer(self._poll_timer)
-            self._poll_timer = None
         self._stop_if_moving("the adapter was deactivated")
         return super().on_deactivate(state)
 
@@ -278,6 +298,26 @@ class TrackAdapter(LifecycleNode):
         self._stop_if_moving("the adapter is shutting down")
         self._release()
         return TransitionCallbackReturn.SUCCESS
+
+    def stop_before_exit(self) -> tuple[list, float]:
+        """Stop the carriage because the PROCESS is ending: SIGINT or SIGTERM.
+
+        rclpy runs no `on_shutdown` when its context goes down, so
+        `cite_hardware.process.run` calls this while the context still stands
+        and waits on the returned future for at most `position_max_age_s`, the
+        bound this node already applies to an unanswered vendor call. Sent
+        whenever a move this adapter sent may still be running, whether or not
+        the vendor is seen.
+        """
+        config, client = self._config, self._stop_client
+        with self._lock:
+            self._active = False
+            self._pending = None
+            moving = self._move_possible or self._set_in_flight
+        if config is None or client is None or not moving:
+            return [], 0.0
+        self.get_logger().warning("process ending: set_linear_motor_stop sent before exit")
+        return [client.call_async(Call.Request())], config["position_max_age_s"]
 
     def _release(self) -> None:
         if self._poll_timer is not None:
@@ -298,6 +338,8 @@ class TrackAdapter(LifecycleNode):
         self._set_client = self._get_client = self._stop_client = None
         self._position_m = None
         self._get_future = None
+        self._get_in_flight = False
+        self._stop_future = None
         self._config = None
 
     # ------------------------------------------------------------------ #
@@ -376,6 +418,14 @@ class TrackAdapter(LifecycleNode):
         self._send(request)
 
     def _send(self, request: LinearMotorSetPos.Request) -> None:
+        """Send one move, with the last word on the gate taken under the lock.
+
+        `_move_possible` is set BEFORE that last look (N-04): a closure that
+        lands after it either finds the move possible and stops it, or is the
+        reason the move is not sent. Either way `_poll` keeps stopping the
+        carriage while the gate is closed and a move may be running, so a move
+        whose call reaches the vendor after the stop is stopped again.
+        """
         assert self._set_client is not None
         if not self._set_client.service_is_ready():
             with self._lock:
@@ -385,12 +435,23 @@ class TrackAdapter(LifecycleNode):
                 f"track command refused: {self._set_client.srv_name} is not available"
             )
             return
+        gate = self._gate
+        with self._lock:
+            self._move_possible = True
+            permitted = self._active and gate is not None and gate.permits_motion()
+            if permitted:
+                self._move_sequence += 1
+                future = self._set_client.call_async(request)
+            else:
+                self._set_in_flight = False
+                self._pending = None
+        if not permitted:
+            why = gate.why_closed() if gate is not None else "the adapter is not configured"
+            self.get_logger().warning(f"track target {request.pos} not sent: {why}")
+            return
         self.get_logger().info(
             f"track to {request.pos} at {request.speed} (vendor units, units/s)"
         )
-        with self._lock:
-            self._move_possible = True
-        future = self._set_client.call_async(request)
         future.add_done_callback(lambda done: self._on_set_answered(request, done))
 
     def _on_set_answered(self, request: LinearMotorSetPos.Request, future) -> None:
@@ -419,34 +480,79 @@ class TrackAdapter(LifecycleNode):
             return
         self._send(follow)
 
-    def _stop_if_moving(self, reason: str) -> None:
-        """Stop the carriage if a move this adapter sent may still be running."""
+    def _stop_if_moving(self, reason: str, repeated: bool = False) -> None:
+        """Stop the carriage if a move this adapter sent may still be running.
+
+        ``repeated`` is the poll's level-triggered stop, said in the log at
+        most every five seconds; every other caller is an event, said each time.
+        """
         with self._lock:
             moving = self._move_possible or self._set_in_flight
-            self._move_possible = False
-        if moving:
+        if not moving:
+            return
+        if repeated:
+            self.get_logger().warning(f"track stop: {reason}", throttle_duration_sec=5.0)
+        else:
             self.get_logger().warning(f"track stop: {reason}")
-            self._call_stop()
+        self._call_stop()
 
     def _call_stop(self) -> None:
-        if self._stop_client is None:
+        """Send `set_linear_motor_stop` unless one is already in flight and in time."""
+        config, client = self._config, self._stop_client
+        if config is None or client is None:
             return
-        if not self._stop_client.service_is_ready():
+        now = self._steady.now().nanoseconds
+        with self._lock:
+            overdue = None
+            if self._stop_future is not None:
+                if now <= self._stop_deadline_ns:
+                    return
+                overdue, self._stop_future = self._stop_future, None
+        if overdue is not None:
+            client.remove_pending_request(overdue)
+            overdue.cancel()
             self.get_logger().error(
-                f"track stop could not be sent: {self._stop_client.srv_name} is not available"
+                "set_linear_motor_stop unanswered within position_max_age_s; sent again",
+                throttle_duration_sec=5.0,
+            )
+        if not client.service_is_ready():
+            self.get_logger().error(
+                f"track stop could not be sent: {client.srv_name} is not available; "
+                "sent again on the next poll",
+                throttle_duration_sec=5.0,
             )
             return
-        future = self._stop_client.call_async(Call.Request())
+        with self._lock:
+            if self._stop_future is not None:
+                return  # another poll sent one meanwhile
+            future = client.call_async(Call.Request())
+            self._stop_future = future
+            self._stop_sequence = self._move_sequence
+            self._stop_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
         future.add_done_callback(self._on_stop_answered)
 
     def _on_stop_answered(self, future) -> None:
+        with self._lock:
+            if self._stop_future is not future:
+                return  # abandoned at its deadline, or the node was cleaned up
+            self._stop_future = None
+        if future.cancelled():
+            return
         error = future.exception()
         if error is not None:
             self.get_logger().error(f"set_linear_motor_stop failed: {error}")
-        elif future.result().ret != 0:
+            return
+        if future.result().ret != 0:
             self.get_logger().error(
-                f"set_linear_motor_stop returned vendor code {future.result().ret}"
+                f"set_linear_motor_stop returned vendor code {future.result().ret}; "
+                "sent again on the next poll"
             )
+            return
+        # N-05: only an acknowledged stop, sent after the last move and with no
+        # move call outstanding, says the carriage is no longer driven by us.
+        with self._lock:
+            if self._stop_sequence == self._move_sequence and not self._set_in_flight:
+                self._move_possible = False
 
     def _on_gate_closed(self, reason: str) -> None:
         # Whatever is held is dropped, and a move that may be running is
@@ -465,21 +571,36 @@ class TrackAdapter(LifecycleNode):
     # ------------------------------------------------------------------ #
 
     def _poll(self) -> None:
-        if self._gate is not None:
-            self._gate.check()
+        gate = self._gate
+        if gate is not None:
+            gate.check()
         config = self._config
         if config is None:
             return
+        # Level-triggered, not only on the gate's closing edge (N-04, N-05):
+        # whenever motion is not permitted and a move may be running, the
+        # carriage is stopped, on every poll until the vendor acknowledges it.
+        with self._lock:
+            active = self._active
+        if not active:
+            self._stop_if_moving("the adapter is not active", repeated=True)
+        elif gate is None or not gate.permits_motion():
+            why = gate.why_closed() if gate is not None else "no deadman gate"
+            self._stop_if_moving(f"motion is not permitted: {why}", repeated=True)
         now = self._steady.now().nanoseconds
         overdue = None
         with self._lock:
             if not self._active:
                 return
-            if self._get_future is not None:
+            if self._get_in_flight:
                 if now <= self._get_deadline_ns:
                     return
                 overdue, self._get_future = self._get_future, None
                 self._position_m = None
+            # Reserved, with its deadline, before it is sent (N-09): a second
+            # poll running on the reentrant group sees it and sends nothing.
+            self._get_in_flight = True
+            self._get_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
         assert self._get_client is not None
         if overdue is not None:
             self._get_client.remove_pending_request(overdue)
@@ -490,16 +611,16 @@ class TrackAdapter(LifecycleNode):
             )
         if not self._get_client.service_is_ready():
             with self._lock:
+                self._get_in_flight = False
                 self._position_m = None
             self.get_logger().warning(
                 f"track position unread: {self._get_client.srv_name} is not available",
                 throttle_duration_sec=5.0,
             )
             return
-        future = self._get_client.call_async(GetInt16.Request())
         with self._lock:
+            future = self._get_client.call_async(GetInt16.Request())
             self._get_future = future
-            self._get_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
         future.add_done_callback(self._on_position)
 
     def _on_position(self, future) -> None:
@@ -507,6 +628,7 @@ class TrackAdapter(LifecycleNode):
             if self._get_future is not future:
                 return  # abandoned at its deadline, or the node was cleaned up
             self._get_future = None
+            self._get_in_flight = False
         if future.cancelled():
             return
         config = self._config
