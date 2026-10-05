@@ -880,8 +880,7 @@ def _a_physical_side_states_how_it_is_served(model: FacilityModel) -> list[Findi
                         f"asset {asset.id!r} loads backend {backend_id!r}, whose vendor "
                         "driver serves this gripper through its own action, and the type "
                         "states no `grasp.vendor` units for the relay that forwards to it",
-                        "Add `grasp.vendor: {action_open_position, action_closed_position, "
-                        "state_open_position, state_closed_position, poll_period_s}`.",
+                        "Add `grasp.vendor: {max_pos_pulses, poll_period_s}`.",
                     )
                 )
     return findings
@@ -959,7 +958,27 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
                     "stale between two ticks",
                 )
             )
+        if timing.call_deadline_s >= timing.deadman_timeout_s:
+            findings.append(
+                error(
+                    "call-deadline-not-below-timeout",
+                    f"{where}.physical_side.call_deadline_s",
+                    f"{timing.call_deadline_s:g} s is not below the deadman timeout "
+                    f"{timing.deadman_timeout_s:g} s, so an unanswered stop is abandoned "
+                    "no sooner than the heartbeat it guards is declared lost",
+                )
+            )
         for axis_where, served in _vendor_axes(model, physical):
+            if served.position_max_age_s <= served.poll_period_s:
+                findings.append(
+                    error(
+                        "track-position-age-not-above-poll",
+                        f"{axis_where}.position_max_age_s",
+                        f"{served.position_max_age_s:g} s is not above the adapter's poll "
+                        f"period {served.poll_period_s:g} s, so a live carriage position reads "
+                        "as stale between two reads",
+                    )
+                )
             if served.segment_s <= served.poll_period_s:
                 findings.append(
                     error(

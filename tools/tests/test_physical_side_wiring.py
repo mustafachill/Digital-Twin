@@ -92,6 +92,21 @@ def _physical_side(document: dict) -> dict:
 
 
 class TestVendorServicesAreLeastPrivilege:
+    def test_the_allow_list_is_exactly_what_the_generated_nodes_call(self) -> None:
+        """M-01: the schema's list and the generator's service maps are one statement."""
+        from cite_tools.generate import adapters as adapter_generator
+
+        called = {
+            name
+            for services in (
+                adapter_generator._DEADMAN_SERVICES,  # noqa: SLF001 - the maps under test
+                adapter_generator._TRACK_SERVICES,  # noqa: SLF001
+                adapter_generator._GRIPPER_SERVICES,  # noqa: SLF001
+            )
+            for name in services.values()
+        }
+        assert called == set(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
+
     def test_the_shipped_driver_switches_on_exactly_what_the_side_calls(self) -> None:
         driver = load(REAL_MODEL).asset_type("xarm5").hardware_backends["real"].vendor_driver
         assert sorted(driver.services) == sorted(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
@@ -145,6 +160,7 @@ class TestTheTimingIsDeclaredOnceAndCoherent:
             ("deadman_timeout_s", 0.25, "deadman-timeout-below-three-heartbeats"),
             ("deadman_tick_period_s", 0.5, "deadman-tick-not-below-timeout"),
             ("state_max_age_s", 0.05, "state-max-age-not-above-tick"),
+            ("call_deadline_s", 0.5, "call-deadline-not-below-timeout"),
         ],
     )
     def test_each_relation_is_a_rule(
@@ -182,6 +198,18 @@ class TestTheTimingIsDeclaredOnceAndCoherent:
             ),
         )
         assert rules(real_model) == {rule}
+
+    def test_a_track_position_younger_than_a_poll_reads_as_stale(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """M-03: the adapter's own read period against the age it trusts a read for."""
+        edit_yaml(
+            real_model / TRACK_TYPE,
+            lambda d: d["asset_type"]["hardware_backends"]["real"]["vendor_axis"].__setitem__(
+                "position_max_age_s", 0.1
+            ),
+        )
+        assert rules(real_model) == {"track-position-age-not-above-poll"}
 
     def test_the_generated_values_honour_every_relation(self) -> None:
         nodes = adapters(REAL_MODEL)
@@ -361,3 +389,24 @@ class TestTheKindOfAnEnvironmentValueIsDeclared:
         assert manager["counterpart_description_args"] == {
             "robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}
         }
+
+
+class TestTheVendorGripperRangeIsDeclaredOnce:
+    """M-02: `max_pos_pulses` is the one vendor value both relay ranges follow from."""
+
+    def _relay(self, path: Path) -> dict:
+        return adapters(path)[f"/cite/{ZONE}/{ARM}/{ids.GRIPPER_RELAY_NODE}"]["ros__parameters"]
+
+    def test_both_ranges_follow_from_max_pos(self, real_model: Path, edit_yaml: Callable) -> None:
+        shipped = self._relay(REAL_MODEL)
+        assert shipped["vendor_closed_position"] == pytest.approx(0.85)
+        assert shipped["vendor_state_open_position"] == pytest.approx(850.0)
+        edit_yaml(
+            real_model / GRIPPER_TYPE,
+            lambda d: d["asset_type"]["grasp"]["vendor"].__setitem__("max_pos_pulses", 800.0),
+        )
+        edited = self._relay(real_model)
+        assert edited["vendor_open_position"] == 0.0
+        assert edited["vendor_closed_position"] == pytest.approx(0.8)
+        assert edited["vendor_state_open_position"] == pytest.approx(800.0)
+        assert edited["vendor_state_closed_position"] == 0.0

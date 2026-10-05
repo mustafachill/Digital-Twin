@@ -694,7 +694,10 @@ class VendorAxis(Strict):
     position_scale: Annotated[float, Field(gt=0.0)]
     #: How often the adapter reads the vendor position and publishes it.
     poll_period_s: Annotated[float, Field(gt=0.0)]
-    #: The oldest position a move is planned from, and the deadline of a read.
+    #: The oldest position a move is planned from, the deadline of an
+    #: unanswered position read, AND the deadline of an unanswered stop, after
+    #: which the adapter sends another (R-08); the exit stop is bounded by twice
+    #: it. Above `poll_period_s` (`track-position-age-not-above-poll`).
     position_max_age_s: Annotated[float, Field(gt=0.0)]
     #: How far ahead of the carriage one vendor move reaches, in seconds at the
     #: commanded speed: the adapter sends a move in segments this long and
@@ -1081,31 +1084,44 @@ class GripperLinkage(Strict):
         return math.acos(max(-1.0, min(1.0, cosine))) - self._phase_rad
 
 
+#: The xArm driver's conversion between its gripper action's unit and pulses:
+#: ``pulses = |max_pos - position * 1000|`` (`_xarm_gripper_pos_convert`,
+#: `xarm_api/src/xarm_driver.cpp:507-515`). A constant of the vendor's code.
+VENDOR_GRIPPER_PULSES_PER_ACTION_UNIT = 1000.0
+
+
 class VendorGripperUnits(Strict):
     """The vendor driver's units for a gripper it serves outside `ros2_control` (ADR-0070 item 4).
 
     The xArm driver's `GripperCommand` action and its `get_gripper_position`
-    service use DIFFERENT units: the action takes 0.0 open to 0.85 closed and
-    converts it as `pulses = |850 - position * 1000|`; the service reports the
-    pulses themselves, about 850 open and 0 closed
-    (`xarm_api/src/xarm_driver.cpp:507-515`). So each has its own pair. The
-    drive joint's own range is `GraspSpec.open_position`/`closed_position`.
+    service use DIFFERENT units: the action takes 0.0 open to `max_pos / 1000`
+    closed and converts it as `pulses = |max_pos - position * 1000|`; the
+    service reports the pulses themselves, `max_pos` open and 0 closed
+    (`xarm_api/src/xarm_driver.cpp:507-515`). Both ranges follow from the one
+    vendor value `max_pos_pulses`, declared once (M-02). The drive joint's own
+    range is `GraspSpec.open_position`/`closed_position`.
     """
 
-    action_open_position: float
-    action_closed_position: float
-    state_open_position: float
-    state_closed_position: float
+    #: The driver's `xarm_gripper.max_pos`: pulses at fully open.
+    max_pos_pulses: Annotated[float, Field(gt=0.0)]
     #: How often the relay reads the gripper position and publishes it.
     poll_period_s: Annotated[float, Field(gt=0.0)]
 
-    @model_validator(mode="after")
-    def _neither_range_is_empty(self) -> VendorGripperUnits:
-        if self.action_open_position == self.action_closed_position:
-            raise ValueError("the vendor action's open and closed positions are one value")
-        if self.state_open_position == self.state_closed_position:
-            raise ValueError("the vendor state's open and closed positions are one value")
-        return self
+    @property
+    def action_open_position(self) -> float:
+        return 0.0
+
+    @property
+    def action_closed_position(self) -> float:
+        return self.max_pos_pulses / VENDOR_GRIPPER_PULSES_PER_ACTION_UNIT
+
+    @property
+    def state_open_position(self) -> float:
+        return self.max_pos_pulses
+
+    @property
+    def state_closed_position(self) -> float:
+        return 0.0
 
 
 class GraspSpec(Strict):
@@ -1255,6 +1271,12 @@ class GraspSpec(Strict):
     #: carries no claim. The same declaration reaches the hardware path, where
     #: the node clock is the wall clock and the server being waited on is the
     #: vendor's rather than a `GripperActionController` (P2).
+    #:
+    #: A SECOND ROLE THERE (R-08): the physical side's gripper relay also
+    #: abandons an unanswered `get_gripper_position` read at this bound, so a
+    #: hung read stops publishing the drive joint no later than a goal would
+    #: be given up. Not a separate field, because nothing yet argues for a
+    #: different number.
     result_timeout_s: Annotated[float, Field(gt=0.0)]
     #: How far NARROWER than a declared part a genuine stall on that part may
     #: land and still be a grasp, in metres between the pads (ADR-0052 §A.6).
@@ -1641,8 +1663,9 @@ class EnvReference(Strict):
 
     Exactly one place reads the variable: `cite_bringup.plan.resolve_description_args`,
     where an unset or empty variable is a refusal. It is provided for the
-    physical side's launch that ADR-0070 item 6 owes; no launch in this tree
-    calls it yet, because `simulation.launch.py` refuses a physical side. The generator
+    physical side's launch, `cite_bringup/launch/hardware.launch.py`, which
+    hands the value to xacro in-process; `simulation.launch.py` refuses a
+    physical side and never reads it. The generator
     emits a xacro ``$(arg <parameter>)`` where the value would have gone, so a
     description expanded without the resolved value fails in xacro rather than
     handing the vendor component an empty address.

@@ -1519,35 +1519,21 @@
     },
     "VendorGripperUnits": {
       "additionalProperties": false,
-      "description": "The vendor driver's units for a gripper it serves outside `ros2_control` (ADR-0070 item 4).\n\nThe xArm driver's `GripperCommand` action and its `get_gripper_position`\nservice use DIFFERENT units: the action takes 0.0 open to 0.85 closed and\nconverts it as `pulses = |850 - position * 1000|`; the service reports the\npulses themselves, about 850 open and 0 closed\n(`xarm_api/src/xarm_driver.cpp:507-515`). So each has its own pair. The\ndrive joint's own range is `GraspSpec.open_position`/`closed_position`.",
+      "description": "The vendor driver's units for a gripper it serves outside `ros2_control` (ADR-0070 item 4).\n\nThe xArm driver's `GripperCommand` action and its `get_gripper_position`\nservice use DIFFERENT units: the action takes 0.0 open to `max_pos / 1000`\nclosed and converts it as `pulses = |max_pos - position * 1000|`; the\nservice reports the pulses themselves, `max_pos` open and 0 closed\n(`xarm_api/src/xarm_driver.cpp:507-515`). Both ranges follow from the one\nvendor value `max_pos_pulses`, declared once (M-02). The drive joint's own\nrange is `GraspSpec.open_position`/`closed_position`.",
       "properties": {
-        "action_closed_position": {
-          "title": "Action Closed Position",
-          "type": "number"
-        },
-        "action_open_position": {
-          "title": "Action Open Position",
+        "max_pos_pulses": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Pos Pulses",
           "type": "number"
         },
         "poll_period_s": {
           "exclusiveMinimum": 0.0,
           "title": "Poll Period S",
           "type": "number"
-        },
-        "state_closed_position": {
-          "title": "State Closed Position",
-          "type": "number"
-        },
-        "state_open_position": {
-          "title": "State Open Position",
-          "type": "number"
         }
       },
       "required": [
-        "action_open_position",
-        "action_closed_position",
-        "state_open_position",
-        "state_closed_position",
+        "max_pos_pulses",
         "poll_period_s"
       ],
       "title": "VendorGripperUnits",

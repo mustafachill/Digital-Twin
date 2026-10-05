@@ -68,7 +68,7 @@ zones:
     # stays simulated. The physical counterpart is gated at bring-up: a plan
     # declaring it refuses to start without CITE_ALLOW_HARDWARE=1 (ADR-0054),
     # and its address is an environment reference to CITE_XARM_IP, never
-    # committed, which the physical side's launch is to resolve.
+    # committed, which the physical side's launch resolves.
     # `cite_bringup`'s hardware launch brings that side up with the track
     # adapter, the gripper relay and the deadman (ADR-0070 items 3-6), and no
     # physical arm has been driven through it.
@@ -78,10 +78,11 @@ zones:
       # 5). The physical side's deadman trips after several missed periods.
       heartbeat_period_s: 0.1
       # The physical counterpart's timing, steady-clock seconds. The deadman
-      # timeout is five heartbeat periods: above the Wi-Fi link's round trips
-      # probed on 2026-10-05 (a few 150 Hz controller periods at the 99th
-      # percentile; a probe, not a campaign), and at least three periods by
-      # rule (`deadman-timeout-below-three-heartbeats`). The state age bounds
+      # timeout is five heartbeat periods, and at least three by rule
+      # (`deadman-timeout-below-three-heartbeats`). 0.5 s IS NOT BACKED BY A
+      # MEASUREMENT: the heartbeat runs from the boundary to the deadman on
+      # this host and never crosses the Wi-Fi link to the arm, so the Wi-Fi
+      # probe of 2026-10-05 says nothing about it. The state age bounds
       # how stale a deadman state a relay acts on, and how stale a joint the
       # boundary counts as fresh; above the tick and every poll period.
       physical_side:
