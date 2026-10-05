@@ -22,7 +22,7 @@ order, a package:// URI that does not resolve — is in this half.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -185,6 +185,17 @@ PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
 )
 
 
+#: The plan keys that name the counterpart's OWN artifacts, stated only where its
+#: backend differs from the plant's (ADR-0048 clause 2, ADR-0070). A tuple of
+#: names authored once, here, for the reader below and for any fixture that has
+#: to strip a counterpart from a document.
+COUNTERPART_ARTIFACT_KEYS = (
+    "counterpart_description",
+    "counterpart_parameters",
+    "counterpart_description_args",
+)
+
+
 class PlanError(Exception):
     """The bring-up plan is missing, malformed, or references something absent."""
 
@@ -238,6 +249,17 @@ class RosDomainMismatchError(PlanError):
     would succeed and be invisible: a side alone on a domain nobody addresses
     answers nothing, and a side sharing the plant's domain collides with it on
     every name (ADR-0044, clause 4).
+    """
+
+
+class EnvironmentValueMissingError(PlanError):
+    """A description argument the plan reads from the environment is unset.
+
+    A `PlanError`, so the launch reports it as a refusal and starts nothing. The
+    plan carries the variable's NAME and never its value (ADR-0070 item 2), so
+    this is the only point at which an absent robot address can be caught before
+    a hardware component opens a socket to nothing: the vendor component answers
+    an empty address with `exit(1)` inside a loaded plugin (ADR-0053).
     """
 
 
@@ -447,6 +469,43 @@ class ControllerManager:
     arm: Mapping[str, float]
     #: The linear track this arm rides, or `None` for an arm bolted in place.
     track: Track | None = None
+    #: What the plant's description reads from the environment: xacro argument
+    #: -> variable NAME. Empty on a simulated side. Read through
+    #: `description_args_on` and resolved only by `resolve_description_args`.
+    description_args: Mapping[str, str] = MappingProxyType({})
+    #: The counterpart's own description and controller configuration, or
+    #: `None` where it loads the plant's. The plan states them exactly where the
+    #: counterpart's backend differs from the plant's (ADR-0048 clause 2), and the
+    #: reader refuses a differing pair that does not. Read through
+    #: `description_on` and `parameters_on`, never off these fields.
+    counterpart_description: Path | None = None
+    counterpart_parameters: str | None = None
+    counterpart_description_args: Mapping[str, str] = MappingProxyType({})
+
+    def description_on(self, side: str) -> Path:
+        """Return the description ``side`` loads: its own where it has one, else the plant's."""
+        self.backend_on(side)  # refuses a side this asset does not declare
+        if side == COUNTERPART_SIDE and self.counterpart_description is not None:
+            return self.counterpart_description
+        return self.description
+
+    def parameters_on(self, side: str) -> str:
+        """Return the controller configuration ``side`` loads, by `description_on`'s rule."""
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_parameters is not None:
+            return self.counterpart_parameters
+        return self.parameters
+
+    def description_args_on(self, side: str) -> Mapping[str, str]:
+        """Return what ``side``'s description reads from the environment: argument -> variable.
+
+        Follows the description: a counterpart that loads the plant's
+        description takes the plant's arguments.
+        """
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_description is not None:
+            return self.counterpart_description_args
+        return self.description_args
 
     def backend_on(self, side: str) -> str:
         """Return the `ros2_control` backend this asset loads on ``side``, or refuse.
@@ -1364,8 +1423,21 @@ def _track(entry: object | None, where: str) -> Track | None:
     )
 
 
-def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
+def require_hardware_opt_in(
+    plan: Plan, environ: Mapping[str, str], sides: Iterable[str] | None = None
+) -> None:
     """Refuse a plan that would drive physical hardware without a deliberate opt-in.
+
+    ``sides`` narrows the question to the sides a CALLER is about to start, and
+    ``None`` — the default, and what `cite_twin.mode` passes — asks it of every
+    side. A launch that starts one side passes that side: since ADR-0070 the
+    shipped counterpart is physical and the plant simulated, and a launch that
+    starts only the simulated plant (every scenario, CI, `./scripts/sim`) starts
+    nothing the counterpart's declaration is about. What keeps the physical side
+    gated is that whatever starts IT asks about it: the counterpart side of
+    `simulation.launch.py` does, and so must the hardware side launch ADR-0070
+    item 6 owes. A side named here that the plan does not declare is skipped,
+    exactly as an undeclared side is below.
 
     `cross-cutting-safety.md` requires that no command reaches a hardware
     interface without passing the safety layer. Until Phase 2 builds that layer,
@@ -1446,9 +1518,12 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
     # behind it to command. That is the accessor's judgement and not a second
     # one - an asset that stopped stating a side would stop being gated here only
     # because the accessor says the side is gone.
+    asked = None if sides is None else frozenset(sides)
     hardware = []
     for manager in plan.controller_managers:
         for side, field in PHYSICAL_FIELD_BY_SIDE.items():
+            if asked is not None and side not in asked:
+                continue
             try:
                 physical = manager.commands_physical_hardware_on(side)
             except SideNotDeclaredError:
@@ -1471,6 +1546,45 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
         f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} deliberately — see "
         "docs/operations/safety-procedures.md."
     )
+
+
+def resolve_description_args(
+    manager: ControllerManager, side: str, environ: Mapping[str, str]
+) -> dict[str, str]:
+    """Resolve what ``side``'s description reads from the environment, or refuse.
+
+    THE ONE PLACE A VALUE THE PLAN REFERS TO IS READ (ADR-0070 item 2). L0, the
+    generated description and the generated plan all carry the variable's name;
+    the value — today, the physical xArm's address — exists only in the process
+    environment, filled from the gitignored `.env`. This returns
+    `{xacro argument: value}` for the launch to hand xacro, and nothing else
+    reads those variables.
+
+    An unset variable, and one that is empty after stripping, are both refused:
+    `HardwareSelection.supplied_params` treats an empty address as no address for
+    the reason given there, and the vendor component answers one with `exit(1)`.
+    The message names the variable and where it is set, and never prints a
+    value.
+
+    ``environ`` is passed in rather than read from `os` here, for the reason
+    `require_hardware_opt_in` gives.
+    """
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    for argument, variable in sorted(manager.description_args_on(side).items()):
+        value = environ.get(variable, "")
+        if not value.strip():
+            missing.append(variable)
+            continue
+        resolved[argument] = value.strip()
+    if missing:
+        raise EnvironmentValueMissingError(
+            f"asset {manager.asset!r} on the {side} side reads "
+            f"{', '.join(sorted(set(missing)))} from the environment, and it is unset or "
+            "empty. Set it in your local .env (see .env.example), which is never "
+            "committed, and start again."
+        )
+    return resolved
 
 
 def _manager(entry: object, index: int) -> ControllerManager:
@@ -1549,7 +1663,84 @@ def _manager(entry: object, index: int) -> ControllerManager:
         gripper=_named_numbers(entry, GRIPPER_KEYS, where),
         arm=_named_numbers(entry, ARM_KEYS, where),
         track=_track(_optional(entry, "track"), where),
+        description_args=_environment_args(entry, "description_args", where),
+        **_counterpart_artifacts(entry, counterpart_backend, where),
     )
+
+
+def _environment_args(entry: object, key: str, where: str) -> Mapping[str, str]:
+    """Read an `argument: {env: VARIABLE}` mapping, refusing anything that is not one.
+
+    A literal value is refused rather than accepted: the plan is committed, and a
+    value here would be the address ADR-0070 item 2 keeps out of the tree.
+    """
+    stated = _optional(entry, key)
+    if stated is None:
+        return MappingProxyType({})
+    if not isinstance(stated, dict):
+        raise PlanError(f"{where}: {key!r} must be a mapping, not {_kind(stated)}")
+    arguments: dict[str, str] = {}
+    for argument, reference in stated.items():
+        variable = reference.get("env") if isinstance(reference, dict) else None
+        if (
+            not isinstance(argument, str)
+            or not isinstance(reference, dict)
+            or set(reference) != {"env"}
+            or not isinstance(variable, str)
+            or not variable
+        ):
+            raise PlanError(
+                f"{where}: {key!r} entry {argument!r} must be {{env: <VARIABLE>}}, "
+                f"not {_kind(reference)}. The plan names a variable and never holds "
+                "its value (ADR-0070)."
+            )
+        arguments[argument] = variable
+    return MappingProxyType(arguments)
+
+
+def _counterpart_artifacts(entry: object, counterpart_backend: object, where: str) -> dict:
+    """Read the counterpart's own description and configuration, where it has them.
+
+    Stated together or not at all, only beside a `counterpart_backend`, and
+    REQUIRED where that backend differs from the plant's: a counterpart that
+    loads another backend loading the plant's description would be a side
+    described as the other side's machine, which is open-work #38's defect
+    arriving from a stale plan rather than from the generator.
+    """
+    description_key, parameters_key, arguments_key = COUNTERPART_ARTIFACT_KEYS
+    description = _optional(entry, description_key)
+    parameters = _optional(entry, parameters_key)
+    arguments = _environment_args(entry, arguments_key, where)
+    if (description is None) != (parameters is None):
+        raise PlanError(
+            f"{where}: states one of 'counterpart_description' and "
+            "'counterpart_parameters' without the other. They are emitted together."
+        )
+    if description is not None and counterpart_backend is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_description' without 'counterpart_backend', "
+            "so it describes a side nothing says exists."
+        )
+    if arguments and description is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_description_args' without "
+            "'counterpart_description'. A side loading the plant's description takes "
+            "the plant's arguments."
+        )
+    backend = _optional(entry, "backend")
+    if description is None and counterpart_backend not in (None, backend):
+        raise PlanError(
+            f"{where}: the counterpart loads backend {counterpart_backend!r} and the plant "
+            f"{backend!r}, and the plan names no 'counterpart_description' for it. A side "
+            "whose backend differs loads its own description (ADR-0048 clause 2); this "
+            "plan predates that - run ./scripts/validate-model --write, then "
+            "./scripts/build."
+        )
+    return {
+        "counterpart_description": None if description is None else resolve_uri(description),
+        "counterpart_parameters": parameters,
+        "counterpart_description_args": arguments,
+    }
 
 
 def _skills(entry: object | None, where: str) -> SkillActions | None:

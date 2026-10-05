@@ -51,6 +51,7 @@ host-agnostic L0 layer has (ADR-0013). It runs in the container and so in CI.
 """
 
 from pathlib import Path
+import re
 import subprocess
 from urllib.parse import urlparse
 from xml.etree import ElementTree
@@ -60,11 +61,18 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 MODEL_TYPES = REPO_ROOT / 'model' / 'assets' / 'types'
+#: Every arm description any side loads: the plant's, and a counterpart's own
+#: where its backend differs (ADR-0048 clause 2, ADR-0070), whose collision root
+#: resolves under the other URI scheme - the half a planner on hardware uses.
 DESCRIPTIONS = sorted(
-    (REPO_ROOT / 'workspace' / 'src' / 'cite_generated' / 'description').glob(
+    (REPO_ROOT / 'workspace' / 'src' / 'cite_generated' / 'description').rglob(
         'cell_b_picker*.urdf.xacro'
     )
 )
+
+#: TEST-NET-3 (RFC 5737): what an argument read from the environment at launch
+#: is given here. Documentation-only; it routes nowhere.
+TEST_ADDRESS = '203.0.113.7'
 
 
 def _arm_types():
@@ -97,8 +105,15 @@ def _expand(path: Path) -> str:
     would produce a second, disagreeing answer about what the description says —
     which is the class of defect this file exists to catch.
     """
+    # An argument the description reads from the environment at launch (the
+    # physical arm's address, ADR-0070 item 2) is given a documentation value:
+    # what is checked here is geometry, which no address changes.
+    arguments = sorted(set(re.findall(r'\$\(arg ([A-Za-z_][A-Za-z0-9_]*)\)', path.read_text())))
     completed = subprocess.run(
-        ['xacro', str(path)], capture_output=True, text=True, check=False
+        ['xacro', str(path), *[f'{name}:={TEST_ADDRESS}' for name in arguments]],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert completed.returncode == 0, (
         f'xacro failed on {path.name}: {completed.stderr.strip()[-2000:]}'
@@ -152,7 +167,7 @@ def test_there_is_a_description_to_expand():
     assert _arm_types(), 'no asset type declares a collision spec'
 
 
-@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: p.stem)
+@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: f'{p.parent.name}-{p.stem}')
 def test_every_collision_mesh_the_description_names_exists(description: Path):
     """The failure M-01 names, caught where it happens rather than where it is declared.
 
@@ -172,7 +187,7 @@ def test_every_collision_mesh_the_description_names_exists(description: Path):
     )
 
 
-@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: p.stem)
+@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: f'{p.parent.name}-{p.stem}')
 def test_no_collision_reference_falls_outside_the_declared_set(description: Path):
     """The declared list is exhaustive, checked against the description that uses it.
 
@@ -211,7 +226,7 @@ def test_no_collision_reference_falls_outside_the_declared_set(description: Path
     )
 
 
-@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: p.stem)
+@pytest.mark.parametrize('description', DESCRIPTIONS, ids=lambda p: f'{p.parent.name}-{p.stem}')
 def test_no_declared_mesh_is_dead_weight(description: Path):
     """The other direction: a hull nothing loads is a hull nobody would notice breaking.
 

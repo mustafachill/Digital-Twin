@@ -51,9 +51,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
-from cite_bringup.plan import default_plan_path
+from cite_bringup.plan import COUNTERPART_ARTIFACT_KEYS, default_plan_path
 from cite_bringup.readiness import boundary_announcement
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
@@ -127,25 +128,41 @@ def _stdout(proc_output) -> str:
 
 
 def _paired_plan() -> Path:
-    """Return the zone's generated plan, AS GENERATED — nothing appended or edited.
+    """Return the zone's generated plan with every far side SIMULATED, written to a file.
 
-    Every far side simulated, which is what the shipped model declares; the mixed
-    case is the other rig's. This read the generated plan of an UNPAIRED zone and
-    appended a counterpart to it unconditionally, which was legal only because
-    that zone was single and would have written two sides named `counterpart` on
-    a paired one (`docs/open-work.md` #62). The zone the model declares now is
-    paired (ADR-0059), so the generated plan is used as it is, and the two
-    premises this rig rests on are asserted of it instead of manufactured.
+    The mixed case is the other rig's. This read the generated plan of an
+    UNPAIRED zone and appended a counterpart to it unconditionally, which was
+    legal only because that zone was single and would have written two sides
+    named `counterpart` on a paired one (`docs/open-work.md` #62). The zone is
+    paired (ADR-0059), so the pairing is asserted of the generated plan rather
+    than manufactured.
+
+    **The far side is normalised, and that is the one edit.** Since ADR-0070 the
+    shipped counterpart is the physical xArm 5, and this rig is about the
+    boundary with a simulated far side — on a physical one every mode but `SIM`
+    is refused, which `test_twin_boundary_launch.py` covers. So each manager's
+    counterpart is set to the plant's backend and declaration, and the keys
+    naming a differing counterpart's own files are dropped, exactly as the
+    generator emits a pair whose sides load one backend (ADR-0048 clause 2).
     """
-    path = default_plan_path(ZONE)
-    plan = yaml.safe_load(path.read_text())["plan"]
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
+    plan = document["plan"]
     assert [side["name"] for side in plan["sides"]] == ["plant", "counterpart"], (
         f"{ZONE}'s generated plan is not paired, so there is no far side to cross to"
     )
+    for manager in plan["controller_managers"]:
+        manager["counterpart_backend"] = manager["backend"]
+        manager["counterpart_commands_physical_hardware"] = manager[
+            "commands_physical_hardware"
+        ]
+        for key in COUNTERPART_ARTIFACT_KEYS:
+            manager.pop(key, None)
     assert not any(
-        manager.get("counterpart_commands_physical_hardware")
+        manager["counterpart_commands_physical_hardware"]
         for manager in plan["controller_managers"]
-    ), f"{ZONE}'s generated plan declares a physical far side; this rig is the simulated one"
+    ), f"{ZONE}'s plant declares physical hardware; this rig is the simulated one"
+    path = Path(tempfile.mkdtemp(prefix="cite_twin_paired_")) / f"{ZONE}_plan.yaml"
+    path.write_text(yaml.safe_dump(document))
     return path
 
 

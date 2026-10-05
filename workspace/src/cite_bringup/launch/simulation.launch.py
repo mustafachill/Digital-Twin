@@ -235,7 +235,14 @@ def _bring_up(context: LaunchContext) -> list:
         # `cite_bringup/plan.py`, which is the function called immediately below,
         # and ADR-0054 with its Correction of 2026-09-10 for the two residuals
         # neither this call nor that function can see.
-        require_hardware_opt_in(plan, os.environ)
+        #
+        # ASKED OF THIS SIDE, because this launch starts this side and no other.
+        # Since ADR-0070 the counterpart is physical and the plant simulated, and
+        # asked of every side this gate refused every plant-only bring-up -
+        # every scenario and CI - over a machine this launch never starts. The
+        # counterpart side of this launch is still refused without the opt-in,
+        # and so is any launch that starts the physical side (ADR-0070 item 6).
+        require_hardware_opt_in(plan, os.environ, sides=(side,))
         # The other half of one rule. A process belonging to a side carries both
         # isolations, so both are refused in the same place: this one asks
         # whether the process about to start the side is itself on the domain the

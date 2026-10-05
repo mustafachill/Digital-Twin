@@ -44,6 +44,7 @@ from pathlib import Path
 
 from cite_bringup.plan import (
     BACKEND_FIELD_BY_SIDE,
+    COUNTERPART_ARTIFACT_KEYS,
     COUNTERPART_SIDE as PLAN_COUNTERPART_SIDE,
     default_plan_path,
     load as load_plan,
@@ -170,6 +171,9 @@ _SHAPE_HELPER = "_untwinned_plan"
 _COUNTERPART_MANAGER_KEYS = (
     BACKEND_FIELD_BY_SIDE[PLAN_COUNTERPART_SIDE],
     PHYSICAL_FIELD_BY_SIDE[PLAN_COUNTERPART_SIDE],
+    # The counterpart's own files, stated where its backend differs from the
+    # plant's (ADR-0070); an untwinned zone has no counterpart to name them for.
+    *COUNTERPART_ARTIFACT_KEYS,
 )
 
 
