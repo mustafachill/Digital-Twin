@@ -19,6 +19,25 @@
   **The real program runs through it**: `./scripts/program` sends every `MoveTo`, `Grasp` and
   track command of the real robot's program to `/cite/twin/...`, and both arms act
   ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)).
+  **Built for a physical counterpart**
+  ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md); tested against fake
+  sides only, never against the arm):
+  - **Heartbeat.** The boundary publishes `TwinHeartbeat` on `/cite/twin/heartbeat` into each
+    side's domain. It carries the boundary's per-start id, its period is declared in L0, and
+    it is sent under the same lock as the command path. The physical side's deadman watches it.
+  - **Joint states.** The boundary merges each side's joint states per joint name and keeps
+    each joint's arrival time, because the physical side publishes them from three sources.
+  - **Track.** `TrackArrived` (`cite_interfaces/srv`) answers whether every side's carriage is
+    at a target, physical positions counting only while fresh. An empty track trajectory is a
+    stop: in every mode the boundary turns it into a hold at each side's own last position.
+  - **Readiness.** A mode that commands a physical side is refused until that side's deadman
+    is HEALTHY with `arm_enabled`, and its controller state and joint states are fresh. This
+    is re-checked whenever the mode is asserted again, not only on a change.
+  - **Between cycles.** `./scripts/program` puts the twin in SIM while the operator places the
+    part on a physical side, then asks for VALIDATED again through that check.
+
+  Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` and `./scripts/program` are refused at
+  the physical counterpart.
   **Not built:** an automated gate. **Nothing in CI brings a boundary up** — CI drives the
   plant alone (`bringup`, `program_cycle`) — because `launch_test` holds one context on one
   domain, so a paired scenario cannot take today's shape; that is ADR-0057's unmet promotion

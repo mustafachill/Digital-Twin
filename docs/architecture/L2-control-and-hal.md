@@ -14,6 +14,11 @@
   ([ADR-0022](../adr/0022-gripper-as-ros2-control-controller.md)) and its stall is what L3
   judges a grasp by; on the simulated side a plugin then holds the part still while L3 says
   it is held ([L1](L1-description-and-assets.md), ADR-0061/0065).
+  **Built, never run against the arm: the physical side**
+  ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). It is the vendor plugin
+  `uf_robot_hardware/UFRobotSystemHardware` plus `cite_hardware`'s three nodes, started by
+  `hardware.launch.py` and tested against fake vendor services only. See "What else differs on
+  the physical xArm" below.
   **Built: the planning pipelines.** Each arm's `move_group` loads Pilz and OMPL from a
   generated `<zone>_<arm>_planning_pipelines.yaml` and plans with Pilz PTP by default
   ([ADR-0027](../adr/0027-pilz-planning-pipeline.md)). A launch test drives the real
@@ -110,7 +115,7 @@ hardware.
               │   + controllers             │
               └─────────────────────────────┘
                             │
-                            │  hardware interface — the ONLY thing that differs
+                            │  hardware interface — what differs (plus adapters, below)
               ┌─────────────┴─────────────┐
               ▼                           ▼
    ┌────────────────────┐      ┌────────────────────┐
@@ -125,6 +130,28 @@ hardware.
 Everything above the controller manager is unaware of which branch is active. Controller
 names, joint names, command interfaces, state interfaces, action names, and frame names
 are identical, because all of them are generated from L0.
+
+**What else differs on the physical xArm, and why**
+([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md), owner decision
+2026-10-05). The vendor's `ros2_control` plugin exports joint1..5 only. It serves the linear
+track and the gripper outside `ros2_control`: the track as `xarm_api` services, the gripper as
+its own `GripperCommand` action. So on the physical side, the package `cite_hardware` (L2)
+serves the **same names** the simulated controllers serve:
+
+- **`track_adapter`** serves the track controller's `joint_trajectory` topic and publishes the
+  track joint.
+- **`gripper_relay`** serves the gripper controller's `gripper_cmd` action and publishes the
+  drive joint.
+- **`deadman`** holds the arm through the vendor's state until the twin boundary's heartbeat is
+  healthy.
+
+The physical side's controller manager therefore loads no track or gripper controller. Its
+joint states come from three publishers and are merged per joint by their consumers. Names
+stay byte-identical, which is what P2 requires as CLAUDE.md now words it; what differs is the
+component behind them. The side starts from `cite_bringup`'s `hardware.launch.py`. Its
+parameters are generated from L0 into `control/counterpart/`. Its vendor names come from
+`ids.vendor_interface`. Its residuals are listed in
+[cross-cutting-safety](cross-cutting-safety.md) and in `cite_hardware`'s README.
 
 ### Why this survives contact with reality
 

@@ -6,7 +6,8 @@
   `./scripts/scenario bringup` asserts the result — controller and joint names, the
   `/cite/facility/` scope, and station frames resolving against the world.
   **In use:** `/cite/facility/` (model version, frames) on every bring-up, and `/cite/twin/`
-  (mode, divergence, one action endpoint per skill, the belt and track operator endpoints)
+  (mode, divergence, one action endpoint per skill, the belt and track operator endpoints,
+  `track_arrived`, and the `heartbeat` the boundary publishes into each side's domain)
   whenever the pair supervisor starts the twin boundary; a `cite_twin` test asserts that no L5
   name collides with a name a side owns. `/cite/line/` is reserved and unused.
 - **Related:** [ADR-0004](../adr/0004-facility-model-single-source-of-truth.md), [ADR-0005](../adr/0005-ros2-control-sim-real-boundary.md), [L0](L0-facility-model.md)
@@ -115,12 +116,27 @@ nothing distinguishes this system's topics from anything else on a shared lab ne
 there is nowhere to put facility-level or zone-level state. The `/cite/<zone>/` prefix
 costs a few characters and buys both.
 
+## Names a vendor creates
+
+On a physical side, the xArm vendor driver creates names inside its hardware plugin.
+Those names are not ours to choose, but they are still derived once from L0 by
+`cite_tools.model.ids.vendor_interface` (ADR-0070) and emitted into the plan, never written
+by hand. For `cell_b`'s arm they are:
+- the vendor's services, under `/cite/cell_b/picker/picker_picker/<service>`
+  (`${prefix}${hw_ns}`);
+- its gripper action, `/cite/cell_b/picker/picker_xarm_gripper/gripper_action`;
+- its unprefixed driver node, `/cite/cell_b/picker/ufactory_driver`.
+
+The vendor's absolute `/controller_manager/*` service names are remapped onto the side's own
+controller manager. The deadman's state follows the asset rule, as
+`/cite/cell_b/picker/deadman/state`.
+
 ## Reserved names
 
 | Name | Purpose |
 |---|---|
 | `/cite/facility/...` | Facility-scope state that belongs to no single asset |
-| `/cite/twin/...` | L5 mode, divergence metrics, registration |
+| `/cite/twin/...` | L5 mode, divergence metrics, track arrival, the heartbeat a physical side's deadman watches, registration |
 | `/cite/line/...` | Reserved for line-level state (charter §5's L4); **unused in the main tree** ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) |
 | `cite_world` | The facility root frame, tied to the survey origin |
 
