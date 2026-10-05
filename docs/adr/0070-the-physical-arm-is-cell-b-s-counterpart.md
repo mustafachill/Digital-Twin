@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05: see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -121,3 +121,70 @@ that a test takes. Open-work #38, #65 and #74 (physical side) close.
   Widening a tolerance is never the answer (CLAUDE.md §2).
 - If a second physical asset arrives, check whether its vendor exposes the track or gripper
   through `ros2_control`. If it does, the adapters are deleted, not generalised.
+
+## Amendment — what was built (2026-10-05)
+
+The decision stands. Review found that several items, as first written, were narrower than
+what the decisions require, or wrong about the vendor. This section records what was built,
+so the record says what the tree does. The text above is kept as written.
+
+- **Owner decisions taken after the record was written.** ADR-0070 was accepted, and with it
+  CLAUDE.md §2's binding rule now names `physical-plant-on-paired-zone`, not ADR-0048
+  clause 1. On the P2 escalation (an adapter, not a plugin, serves the track and gripper
+  names), the owner chose to keep the adapters ("no over-engineering; keep the working
+  system"), and CLAUDE.md P2 now says that only what serves the names differs.
+- **Item 1: the sides differ in more than the plugin line.** Every difference is named and
+  asserted by the side-parity tests (`tools/tests/test_generate.py`,
+  `tools/tests/test_per_side_artifacts.py`). The counterpart's description also differs in:
+  - the `robot_ip` argument;
+  - the collision URI scheme;
+  - the side's own `<parameters>` path;
+  - no track `<ros2_control>` block and no Gazebo plugin block.
+
+  Its controller configuration also differs: it has no gripper controller and no track
+  controller, and it gains a vendor-driver block that enables exactly the services the side's
+  nodes call. The plan names the counterpart's own files, controllers and vendor names.
+- **Item 2: the address is an environment reference of a declared kind**
+  (`{env: CITE_XARM_IP, kind: ip_address}`). A literal value on a physical backend is a
+  validator error. `hardware.launch.py` resolves the reference and checks its kind, and never
+  logs the value. The hardware opt-in comes from the shell only, never from `.env`.
+- **Item 3: the track adapter commands bounded segments, not the final point.** The command
+  carries its start and target. The vendor speed is capped at the commanded speed. Moves are
+  sent in segments of `segment_s` (declared in L0), so a lost stop limits the overrun. A
+  program cancel is a hold at each side's own position, which the adapter turns into a stop.
+  The program also confirms the counterpart's carriage arrived, through the boundary's
+  `TrackArrived` service.
+- **Item 4: the vendor gripper action is in drive-joint units (0 to 0.85) and is always
+  served.** Its state service reports pulses. The relay refuses a new goal while a vendor goal
+  runs, because vendor cancel does nothing. The vendor action is reachable on the physical
+  domain without the relay's gate; this is a residual, stated in `cite_hardware`'s README.
+- **Item 5: the deadman holds the arm through the vendor's state.** It asserts STOP on every
+  tick unless the side is HEALTHY. It enables the arm only on the AWAITING to HEALTHY edge,
+  and that enable is atomic with respect to a trip. It trips if the vendor driver disappears
+  or restarts. When tripped, it latches and re-sends every stop on every tick. It also stops
+  the arm on SIGINT/SIGTERM. The heartbeat carries its boundary's id, and its period and every
+  deadman timing value are declared once in L0, with validator relations between them.
+  **The 0.5 s timeout is not backed by a measurement.** The heartbeat stays on this host; the
+  Wi-Fi probe in *Context* says nothing about it.
+- **Item 6: the hardware launch runs an event-driven sequence:**
+  1. refuse unless the side is physical and opted in, and resolve the address;
+  2. start the deadman;
+  3. start the vendor controller manager, with the vendor's absolute
+     `/controller_manager/*` service names remapped to the side's own (L0-declared);
+  4. start the adapters;
+  5. pass a hold gate that requires an acknowledged STOP;
+  6. start the controllers, MoveIt and the skills, then print the readiness token.
+
+  The token means held, not enabled. Any of these processes exiting brings the whole side
+  down, and nothing respawns. `simulation.launch.py` refuses a physical side whatever the
+  opt-in says. The boundary refuses VALIDATED until the deadman is HEALTHY with the arm
+  enabled and the side's state is fresh, and it re-checks this whenever VALIDATED is asserted
+  again.
+- **Item 7: on a physical side, `./scripts/program` requires an explicit `--speed-scale`,**
+  checked before bring-up. Before each cycle it asks the operator to place the part. Between
+  cycles it puts the twin in SIM; the arm stays enabled and still, and the prompt says so.
+- **What remains unverified without the arm** is listed in
+  [`../open-work.md`](../open-work.md) and in `cite_hardware`'s README. In particular: the
+  firmware's behaviour when its TCP stream ends, whether segments blend or stutter, and what
+  the hardware E-stop cuts. The hardware E-stop is the only stop independent of these
+  processes.
