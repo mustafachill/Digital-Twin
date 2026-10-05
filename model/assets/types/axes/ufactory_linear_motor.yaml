@@ -117,6 +117,15 @@ asset_type:
         position_scale: 1000.0
         poll_period_s: 0.1
         position_max_age_s: 0.5
+        # How far ahead of the carriage one vendor move reaches, in seconds at
+        # the commanded speed. The adapter sends a move in segments this long
+        # and re-sends the next one on every fresh position read while its gate
+        # is open, so a carriage whose stop is lost with every process gone
+        # overruns by at most one segment. Above `poll_period_s`, so a segment
+        # is re-sent before it ends, and not above the zone's deadman timeout,
+        # so that overrun is no longer than the deadman's own bound
+        # (`track-segment-*`).
+        segment_s: 0.5
         # Enabling the track motor is an operator's act, never a command's side
         # effect.
         auto_enable: false

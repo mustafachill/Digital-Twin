@@ -194,6 +194,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
                 ("max_speed_mps", _f(axis.max_speed_mps)),
                 ("poll_period_s", _f(served.poll_period_s)),
                 ("position_max_age_s", _f(served.position_max_age_s)),
+                ("segment_s", _f(served.segment_s)),
                 ("auto_enable", "true" if served.auto_enable else "false"),
                 *(
                     (parameter, _service(vendor, name, asset))

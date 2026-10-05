@@ -164,6 +164,25 @@ class TestTheTimingIsDeclaredOnceAndCoherent:
         edit_yaml(real_model / ZONES, edit)
         assert rules(real_model) == {"state-max-age-not-above-a-poll-period"}
 
+    @pytest.mark.parametrize(
+        ("value", "rule"),
+        [
+            (0.1, "track-segment-not-above-poll"),
+            (0.6, "track-segment-above-deadman-timeout"),
+        ],
+    )
+    def test_the_track_segment_is_related_to_the_poll_and_the_deadman(
+        self, real_model: Path, edit_yaml: Callable, value: float, rule: str
+    ) -> None:
+        """SA2c-S-02 d: re-sent before it ends, and no longer than the deadman's bound."""
+        edit_yaml(
+            real_model / TRACK_TYPE,
+            lambda d: d["asset_type"]["hardware_backends"]["real"]["vendor_axis"].__setitem__(
+                "segment_s", value
+            ),
+        )
+        assert rules(real_model) == {rule}
+
     def test_the_generated_values_honour_every_relation(self) -> None:
         nodes = adapters(REAL_MODEL)
         deadman = nodes[f"/cite/{ZONE}/{ARM}/{ids.DEADMAN_NODE}"]["ros__parameters"]

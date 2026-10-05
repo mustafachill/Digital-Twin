@@ -27,6 +27,7 @@ from builtin_interfaces.msg import Duration
 from cite_hardware.mapping import (
     from_vendor_position,
     LinearMap,
+    next_segment,
     Refused,
     require_within,
     to_vendor_position,
@@ -99,10 +100,24 @@ def test_an_empty_or_unfinite_range_is_refused(endpoints) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_the_final_point_is_the_command() -> None:
-    target = track_target(_trajectory([JOINT], ([0.1], 1.0), ([0.35], 2.5)), JOINT)
+def test_the_last_point_is_the_target_and_the_speed_is_the_commanded_one() -> None:
+    """SA2c-S-02 b: from the first point to the last, never from where the carriage is."""
+    target = track_target(_trajectory([JOINT], ([0.1], 0.0), ([0.35], 2.5)), JOINT)
     assert target.position_m == pytest.approx(0.35)
-    assert target.seconds == pytest.approx(2.5)
+    assert target.speed_mps == pytest.approx(0.1)
+    assert not target.is_hold
+
+
+def test_a_trajectory_that_stays_put_is_a_hold() -> None:
+    """SA2c-S-02 a: a hold is the same message shape at zero speed, answered by a stop."""
+    target = track_target(_trajectory([JOINT], ([0.4], 0.0), ([0.4], 0.2)), JOINT)
+    assert target.is_hold
+
+
+def test_a_trajectory_without_a_start_point_is_refused() -> None:
+    """SA2c-S-02 b: one point commands no speed, so the physical side moves nothing."""
+    with pytest.raises(Refused, match="no start"):
+        track_target(_trajectory([JOINT], ([0.35], 2.5)), JOINT)
 
 
 def test_an_empty_trajectory_is_refused_not_a_stop() -> None:
@@ -115,18 +130,28 @@ def test_an_empty_trajectory_is_refused_not_a_stop() -> None:
     "joints", [["some_other_joint"], [JOINT, "picker_joint1"], []]
 )
 def test_a_trajectory_for_any_other_joint_set_is_refused(joints) -> None:
+    width = max(1, len(joints))
     with pytest.raises(Refused):
-        track_target(_trajectory(joints, ([0.1] * max(1, len(joints)), 1.0)), JOINT)
+        track_target(_trajectory(joints, ([0.1] * width, 0.0), ([0.2] * width, 1.0)), JOINT)
 
 
-def test_a_point_due_now_or_in_the_past_is_refused() -> None:
+def test_a_last_point_not_after_the_first_is_refused() -> None:
     with pytest.raises(Refused):
-        track_target(_trajectory([JOINT], ([0.2], 0.0)), JOINT)
+        track_target(_trajectory([JOINT], ([0.1], 1.0), ([0.2], 1.0)), JOINT)
 
 
 def test_an_unfinite_position_is_refused() -> None:
     with pytest.raises(Refused):
-        track_target(_trajectory([JOINT], ([math.inf], 1.0)), JOINT)
+        track_target(_trajectory([JOINT], ([0.1], 0.0), ([math.inf], 1.0)), JOINT)
+
+
+def test_a_move_is_sent_in_segments_of_the_declared_time() -> None:
+    """SA2c-S-02 d: a lost stop overruns by one segment at most."""
+    # 0.1 m/s for 0.5 s is 50 mm ahead of the carriage, either way.
+    assert next_segment(0.1, 0.4, 0.1, 0.5) == (pytest.approx(0.15), False)
+    assert next_segment(0.4, 0.1, 0.1, 0.5) == (pytest.approx(0.35), False)
+    # Within one segment, the target itself, and the move is complete.
+    assert next_segment(0.37, 0.4, 0.1, 0.5) == (0.4, True)
 
 
 def test_a_target_outside_the_travel_is_refused_not_clamped() -> None:
@@ -146,18 +171,16 @@ def test_metres_become_the_vendors_integer_unit_and_back() -> None:
     assert to_vendor_position(0.35, 100.0) == 35
 
 
-def test_the_speed_covers_the_distance_in_the_points_time() -> None:
-    # 0.2 m in 2 s is 100 mm/s.
-    assert vendor_speed(0.2, 2.0, 1000.0, 1.0) == 100
-    assert vendor_speed(-0.2, 2.0, 1000.0, 1.0) == 100
+def test_the_vendor_speed_is_the_commanded_speed() -> None:
+    assert vendor_speed(0.1, 1000.0, 1.0) == 100
 
 
 def test_the_speed_is_clamped_to_one_unit_and_to_the_declared_maximum() -> None:
     # Zero would mean "keep the vendor's last speed", which nobody chose.
-    assert vendor_speed(0.0, 0.2, 1000.0, 1.0) == 1
-    assert vendor_speed(0.7, 0.1, 1000.0, 0.5) == 500
+    assert vendor_speed(0.0001, 1000.0, 1.0) == 1
+    assert vendor_speed(0.7, 1000.0, 0.5) == 500
 
 
-def test_a_move_with_no_time_has_no_speed() -> None:
+def test_a_hold_has_no_speed() -> None:
     with pytest.raises(Refused):
-        vendor_speed(0.1, 0.0, 1000.0, 1.0)
+        vendor_speed(0.0, 1000.0, 1.0)

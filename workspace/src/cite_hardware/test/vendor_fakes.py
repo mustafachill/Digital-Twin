@@ -157,6 +157,9 @@ class FakeTrack:
         self.set_ret = 0
         self.set_requests: list[LinearMotorSetPos.Request] = []
         self.stops = 0
+        #: "set" when a move's answer is sent and "stop" when a stop arrives,
+        #: in that order: what a stop overtaken by a move looks like.
+        self.calls: list[str] = []
         #: How many of the next stops answer with a vendor error (ret 1).
         self.stop_failures = 0
         #: When cleared, `set_linear_motor_pos` does not answer until it is set:
@@ -185,6 +188,7 @@ class FakeTrack:
         self.answer_set.wait(timeout=SETTLE_S)
         response.ret = self.set_ret
         response.message = "fake"
+        self.calls.append("set")
         return response
 
     def _on_get(self, _request, response):
@@ -194,6 +198,7 @@ class FakeTrack:
         return response
 
     def _on_stop(self, _request, response):
+        self.calls.append("stop")
         self.stops += 1
         if self.stop_failures > 0:
             self.stop_failures -= 1

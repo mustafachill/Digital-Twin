@@ -89,22 +89,39 @@ class LinearMap:
 
 @dataclass(frozen=True)
 class TrackTarget:
-    """Where a track command sends the carriage, and how long it gives it."""
+    """Where a track command sends the carriage, and at what speed it was commanded.
+
+    ``speed_mps`` zero is a HOLD: the command's first and last points are one
+    position, which the simulated controller holds where it stands and this
+    adapter answers with a stop (SA2c-S-02).
+    """
 
     position_m: float
-    seconds: float
+    speed_mps: float
+
+    @property
+    def is_hold(self) -> bool:
+        return self.speed_mps == 0.0
+
+
+def _seconds(point) -> float:
+    return point.time_from_start.sec + point.time_from_start.nanosec * 1e-9
 
 
 def track_target(message: JointTrajectory, joint: str) -> TrackTarget:
-    """Read the one thing a track command says: its final point.
+    """Read what a track command says: where it ends, and its commanded speed.
+
+    A track command carries its START as its first point and its target as its
+    last (`cite_bringup.track_command`): the controller is asked to go from
+    there to here in the time between them, so the commanded speed is
+    ``|last - first| / (t_last - t_first)``. Both sides receive that one
+    message; this adapter bounds the vendor's speed by it rather than by where
+    its own carriage happens to stand (SA2c-S-02 b).
 
     Raises :class:`Refused` for a trajectory with no points, a trajectory
-    naming any joint but ``joint``, a final point whose position
-    count does not match, a position that is not finite, or a final point that
-    is not in the future. The track's own controller takes the last point as
-    the place to be at ``time_from_start``; a vendor position command has no
-    intermediate points, so the final one is the whole of the command, which is
-    exactly what the program sends (ADR-0067).
+    naming any joint but ``joint``, a point whose position count does not
+    match or is not finite, a trajectory with no start point (one point says
+    no speed), or a last point not after the first.
     """
     names = list(message.joint_names)
     if names != [joint]:
@@ -115,24 +132,49 @@ def track_target(message: JointTrajectory, joint: str) -> TrackTarget:
     if not message.points:
         # Refused, as `joint_trajectory_controller` (4.x) refuses one: an empty
         # trajectory is not a stop to the simulated track controller either,
-        # so it is not one here (P2). The carriage is stopped by the deadman
-        # and by this adapter's own gate, never by a command.
+        # so it is not one here (P2). A hold is a trajectory that stays put.
         raise Refused("the trajectory has no points")
-    final = message.points[-1]
-    if len(final.positions) != 1:
+    if len(message.points) < 2:
         raise Refused(
-            f"the final point carries {len(final.positions)} position(s) for one joint"
+            "the trajectory has one point and so no start: the commanded speed is "
+            "read from the first point to the last, and a speed derived from where "
+            "this carriage stands could be faster than anyone commanded"
         )
-    position = float(final.positions[0])
-    if not math.isfinite(position):
-        raise Refused(f"the final point's position is {position}")
-    seconds = final.time_from_start.sec + final.time_from_start.nanosec * 1e-9
+    first, final = message.points[0], message.points[-1]
+    positions = []
+    for point in (first, final):
+        if len(point.positions) != 1:
+            raise Refused(f"a point carries {len(point.positions)} position(s) for one joint")
+        position = float(point.positions[0])
+        if not math.isfinite(position):
+            raise Refused(f"a point's position is {position}")
+        positions.append(position)
+    seconds = _seconds(final) - _seconds(first)
     if seconds <= 0.0:
         raise Refused(
-            f"the final point is due {seconds:g} s from start; a move needs a duration "
+            f"the last point is due {seconds:g} s after the first; a move needs a duration "
             "to take a speed from"
         )
-    return TrackTarget(position_m=position, seconds=seconds)
+    return TrackTarget(
+        position_m=positions[1], speed_mps=abs(positions[1] - positions[0]) / seconds
+    )
+
+
+def next_segment(
+    position_m: float, target_m: float, speed_mps: float, segment_s: float
+) -> tuple[float, bool]:
+    """Return where the next vendor move ends, and whether it ends at the target.
+
+    A move is sent in segments of ``speed_mps * segment_s`` metres from where
+    the carriage was last read, so a carriage whose stop never arrives runs at
+    most one segment past the last one sent (SA2c-S-02 d). The last segment is
+    the target itself.
+    """
+    reach = speed_mps * segment_s
+    remaining = target_m - position_m
+    if abs(remaining) <= reach:
+        return target_m, True
+    return position_m + math.copysign(reach, remaining), False
 
 
 def require_within(position_m: float, low_m: float, high_m: float) -> None:
@@ -160,20 +202,16 @@ def from_vendor_position(value: int, scale: float) -> float:
     return float(value) / scale
 
 
-def vendor_speed(
-    distance_m: float, seconds: float, scale: float, max_speed_mps: float
-) -> int:
-    """Return the vendor speed covering ``distance_m`` in ``seconds``, in units per second.
+def vendor_speed(speed_mps: float, scale: float, max_speed_mps: float) -> int:
+    """Return the commanded speed in the vendor's units per second.
 
-    The track controller in simulation reaches the final point AT
-    ``time_from_start``; a vendor position command takes a speed instead, so
-    the duration is turned into one. Clamped to ``[1, max_speed_mps]`` in vendor
-    units: the vendor reads zero as "keep whatever speed was set last", which
-    is a speed nobody in this system chose, and the declared maximum is the
-    track's own (L0).
+    The commanded speed, never one derived from where this carriage stands
+    (SA2c-S-02 b), clamped to ``[1, max_speed_mps]`` in vendor units: the
+    vendor reads zero as "keep whatever speed was set last", which is a speed
+    nobody in this system chose, and the declared maximum is the track's own
+    (L0). A hold has no speed and is a stop, never a move.
     """
-    if seconds <= 0.0:
-        raise Refused(f"a move due in {seconds:g} s has no speed")
-    wanted = abs(distance_m) / seconds * scale
+    if speed_mps <= 0.0:
+        raise Refused(f"a move at {speed_mps:g} m/s has no speed")
     ceiling = max_speed_mps * scale
-    return int(max(1.0, min(round(wanted), ceiling)))
+    return int(max(1.0, min(round(speed_mps * scale), ceiling)))

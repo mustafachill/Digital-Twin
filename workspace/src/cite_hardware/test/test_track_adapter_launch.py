@@ -63,6 +63,9 @@ PARAMETERS = {
     "max_speed_mps": 0.5,
     "poll_period_s": 0.05,
     "position_max_age_s": 0.5,
+    # Longer than any move here, so each move is one segment and a count of
+    # vendor calls means what it says; segments have an adapter of their own.
+    "segment_s": 100.0,
     "auto_enable": False,
     "set_position_service": f"{VENDOR}/set_linear_motor_pos",
     "get_position_service": f"{VENDOR}/get_linear_motor_pos",
@@ -86,6 +89,21 @@ UNSERVED_PARAMETERS = dict(
 )
 
 
+#: A third adapter, sending its moves in segments (SA2c-S-02 d): 0.5 s of travel
+#: at the commanded speed ahead of the carriage, re-planned on every read.
+SEGMENTED = "track_adapter_segmented"
+SEGMENTED_VENDOR = "/test_vendor/segmented"
+SEGMENTED_PARAMETERS = dict(
+    PARAMETERS,
+    command_topic="/test/segmented/joint_trajectory",
+    joint_state_topic="/test/segmented/joint_states",
+    set_position_service=f"{SEGMENTED_VENDOR}/set_linear_motor_pos",
+    get_position_service=f"{SEGMENTED_VENDOR}/get_linear_motor_pos",
+    stop_service=f"{SEGMENTED_VENDOR}/set_linear_motor_stop",
+    segment_s=0.5,
+)
+
+
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description():
@@ -103,22 +121,39 @@ def generate_test_description():
         parameters=[UNSERVED_PARAMETERS],
         output="screen",
     )
+    segmented = Node(
+        package="cite_hardware",
+        executable="track_adapter.py",
+        name=SEGMENTED,
+        parameters=[SEGMENTED_PARAMETERS],
+        output="screen",
+    )
     return (
-        launch.LaunchDescription([adapter, unserved, launch_testing.actions.ReadyToTest()]),
-        {"adapter": adapter, "unserved": unserved},
+        launch.LaunchDescription(
+            [adapter, unserved, segmented, launch_testing.actions.ReadyToTest()]
+        ),
+        {"adapter": adapter, "unserved": unserved, "segmented": segmented},
     )
 
 
-def _command(positions, seconds: float, joints=(JOINT,)) -> JointTrajectory:
+def _point(positions, seconds: float) -> JointTrajectoryPoint:
+    whole = int(seconds)
+    return JointTrajectoryPoint(
+        positions=list(positions),
+        time_from_start=Duration(sec=whole, nanosec=int((seconds - whole) * 1e9)),
+    )
+
+
+def _command(positions, seconds: float, joints=(JOINT,), start: float = 0.1):
+    """Build a track command as the program sends one: ``start`` now, ``positions`` later.
+
+    ``start`` is where the PROGRAM read the carriage, which need not be where
+    this adapter's carriage stands; the commanded speed is taken from it.
+    """
     message = JointTrajectory(joint_names=list(joints))
     if positions is not None:
-        whole = int(seconds)
-        message.points.append(
-            JointTrajectoryPoint(
-                positions=list(positions),
-                time_from_start=Duration(sec=whole, nanosec=int((seconds - whole) * 1e9)),
-            )
-        )
+        message.points.append(_point([start] * len(positions), 0.0))
+        message.points.append(_point(positions, seconds))
     return message
 
 
@@ -142,8 +177,13 @@ class TestTrackAdapter(unittest.TestCase):
         cls.unserved_commands = node.create_publisher(
             JointTrajectory, UNSERVED_PARAMETERS["command_topic"], COMMAND
         )
+        cls.segmented_track = FakeTrack(cls.harness, SEGMENTED_VENDOR)
+        cls.segmented_commands = node.create_publisher(
+            JointTrajectory, SEGMENTED_PARAMETERS["command_topic"], COMMAND
+        )
         cls.harness.bring_up(NODE)
         cls.harness.bring_up(UNSERVED)
+        cls.harness.bring_up(SEGMENTED)
         cls.harness.wait_for(
             lambda: cls.commands.get_subscription_count() > 0, "the adapter subscribed"
         )
@@ -218,6 +258,44 @@ class TestTrackAdapter(unittest.TestCase):
         self._send_until_count(_command([0.6], 0.5), before + 1, "set_linear_motor_pos")
         self.assertEqual(self.track.set_requests[-1].speed, 500)
 
+    def test_the_speed_is_the_commanded_one_wherever_the_carriage_stands(self, proc_output):
+        """SA2c-S-02 b: the vendor speed is the command's, not distance-from-here over time.
+
+        The program read 0.35 m and asked for 0.4 m in 0.5 s: 0.1 m/s. This
+        carriage stands at 0.6 m, so a speed derived from it would be 0.4 m/s.
+        """
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self.track.position_mm = 600
+        self._wait_for_position(0.6)
+        before = len(self.track.set_requests)
+        self._send_until_count(
+            _command([0.4], 0.5, start=0.35), before + 1, "set_linear_motor_pos"
+        )
+        self.assertEqual(self.track.set_requests[-1].pos, 400)
+        self.assertEqual(self.track.set_requests[-1].speed, 100)
+
+    def test_a_command_without_a_start_point_is_refused(self, proc_output):
+        """SA2c-S-02 b: one point names no speed, so nothing is sent."""
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        before = len(self.track.set_requests)
+        message = JointTrajectory(joint_names=[JOINT], points=[_point([0.3], 1.0)])
+        self.commands.publish(message)
+        proc_output.assertWaitFor(expected_output="has one point and so no start",
+                                  timeout=SETTLE_S)
+        self.assertEqual(len(self.track.set_requests), before)
+
+    def test_a_hold_stops_the_carriage_and_moves_it_nowhere(self, proc_output):
+        """SA2c-S-02 a: a hold names a position, and the physical side only stops."""
+        stops = self._moving(proc_output)
+        sets = len(self.track.set_requests)
+        # A hold at a position far from this carriage: the plant's, say.
+        self.commands.publish(_command([0.55], 0.2, start=0.55))
+        self.harness.wait_for(lambda: self.track.stops > stops, "set_linear_motor_stop")
+        self.harness.hold_for(
+            lambda: len(self.track.set_requests) > sets, "a move for a hold", 0.75
+        )
+
     def test_an_empty_trajectory_is_refused_not_a_stop(self, proc_output):
         """R-02: refused, as `joint_trajectory_controller` refuses one (P2)."""
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
@@ -283,6 +361,43 @@ class TestTrackAdapter(unittest.TestCase):
             )
         finally:
             self.harness.node.destroy_publisher(rival)
+
+    def test_a_move_is_sent_in_segments_until_the_target(self, proc_output):
+        """SA2c-S-02 d: each vendor move reaches one segment ahead, re-sent from every read.
+
+        0.1 m/s for 0.5 s is 50 mm: from 100 mm the first segment ends at 150,
+        from 150 the next at 200, and from 380 the target itself, after which
+        nothing more is sent for this move.
+        """
+        track = self.segmented_track
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        track.position_mm = 100
+        self.harness.wait_for(
+            lambda: self.segmented_commands.get_subscription_count() > 0,
+            "the segmented adapter subscribed",
+        )
+        # Re-sent until the first segment lands: the adapter reads a position
+        # before it plans, and this process cannot see when it has.
+        self.harness.wait_for(
+            lambda: track.set_requests
+            or self.segmented_commands.publish(_command([0.4], 3.0, start=0.1)),
+            "the first segment",
+        )
+        self.assertEqual(track.set_requests[0].pos, 150)
+        self.assertEqual(track.set_requests[0].speed, 100)
+        track.position_mm = 150
+        self.harness.wait_for(
+            lambda: any(r.pos == 200 for r in track.set_requests), "the next segment"
+        )
+        self.assertTrue(all(r.pos <= 200 for r in track.set_requests))
+        track.position_mm = 380
+        self.harness.wait_for(
+            lambda: track.set_requests[-1].pos == 400, "the target as the last segment"
+        )
+        sent = len(track.set_requests)
+        self.harness.hold_for(
+            lambda: len(track.set_requests) > sent, "a segment after the target", 0.75
+        )
 
     def test_a_hung_position_read_refuses_motion(self, proc_output):
         """S-11: a read never answered is abandoned, and no speed is derived without one."""
@@ -423,12 +538,31 @@ class TestTrackAdapter(unittest.TestCase):
     def test_zz_sigint_stops_a_moving_carriage(self, proc_output, proc_info, adapter):
         """SIGINT reaches no lifecycle transition in rclpy; the process stops the carriage.
 
+        SA2c-S-02 e: with a move still in flight at the signal, the exit stop
+        could be overtaken by it, so the process exits only after a stop sent
+        once that move was answered has been acknowledged.
+
         Last by name: it ends the first adapter's process.
         """
-        stops = self._moving(proc_output)
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        stops = self.track.stops
+        before = len(self.track.set_requests)
+        self.track.answer_set.clear()
+        self._send_until_count(_command([0.3], 2.0), before + 1, "a move left in flight")
         os.kill(adapter.process_details["pid"], signal.SIGINT)
         self.harness.wait_for(
             lambda: self.track.stops > stops, "set_linear_motor_stop sent on SIGINT"
+        )
+        answered_at = len(self.track.calls)
+        self.track.answer_set.set()
+
+        def stopped_after_the_answer() -> bool:
+            calls = self.track.calls[answered_at:]
+            return "set" in calls and "stop" in calls[calls.index("set"):]
+
+        self.harness.wait_for(
+            stopped_after_the_answer, "a stop sent after the move in flight was answered"
         )
         proc_output.assertWaitFor(
             expected_output="SIGINT: every stop call answered; exiting", timeout=SETTLE_S
@@ -438,6 +572,6 @@ class TestTrackAdapter(unittest.TestCase):
 
 @launch_testing.post_shutdown_test()
 class TestCleanShutdown(unittest.TestCase):
-    def test_the_adapters_exit_cleanly(self, proc_info, adapter, unserved):
-        for process in (adapter, unserved):
+    def test_the_adapters_exit_cleanly(self, proc_info, adapter, unserved, segmented):
+        for process in (adapter, unserved, segmented):
             self.assertIn(proc_info[process].returncode, (0, -2, -15))

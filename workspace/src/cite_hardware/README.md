@@ -48,7 +48,17 @@ the one deadman publishing**. When that gate closes for any reason, the track ad
 `set_linear_motor_stop` itself if a move it sent may still be running, and so it does on
 deactivate and shutdown. That stop is level-triggered: sent again on every poll, active or not,
 while motion is not permitted and a move may be running, until the vendor acknowledges one
-sent after the last move. The deadman's own behaviour, and why a trip latches, is in
+sent after the last move was answered.
+
+**What the track adapter sends** (SA2c-S-02). A track command carries the sender's start as its
+first point and the target as its last (`cite_bringup/track_command.py`); the vendor speed is
+that COMMANDED speed, capped at the axis maximum, never one derived from where this carriage
+stands, and a one-point command is refused. A move goes out in segments reaching `segment_s`
+of travel ahead of the carriage, the next sent on every fresh read while the gate is open, so a
+lost stop with every process gone overruns by at most one segment. A command whose two points
+are one position is a HOLD, answered with `set_linear_motor_stop` (level-triggered) and no
+move; the twin boundary sends each side a hold at that side's own position when a program
+abandons a move. The deadman's own behaviour, and why a trip latches, is in
 `cite_hardware/deadman.py` and `cite_hardware/liveness.py`.
 
 **What the deadman watches.** The twin boundary's heartbeat: the boundary process, its executor
@@ -59,8 +69,9 @@ controller, which is the vendor's to detect.
 transition when its context goes down, so `cite_hardware/process.py` takes the signal itself,
 calls the node's `stop_before_exit()` while the context still stands — the deadman sends
 `set_state(4)`, the track adapter `set_linear_motor_stop` if a move may be running — and waits
-for the answers within the node's own vendor-call bound (`call_deadline_s`,
-`position_max_age_s`). A SIGKILL leaves no such chance: the relays' gates close when the
+for the answers within the node's own vendor-call bound (`call_deadline_s`; twice
+`position_max_age_s` for the track adapter, which exits only once a stop sent after any move in
+flight was answered is acknowledged). A SIGKILL leaves no such chance: the relays' gates close when the
 deadman's publisher goes, but nothing then puts the ARM back to state 4.
 
 **Recovery after a trip.** Find why the heartbeat stopped. Then `ros2 lifecycle set
@@ -83,8 +94,10 @@ meaning once the node is up.
 **`track_adapter`** — `command_topic` (string), `joint` (string), `joint_state_topic`
 (string), `position_scale` (double, vendor units per metre, > 0), `position_min_m` and
 `position_max_m` (double, the travel; min < max), `max_speed_mps` (double, > 0),
-`poll_period_s` (double, > 0), `position_max_age_s` (double, > 0: the oldest position a speed
-is derived from, and the deadline of a position read), `auto_enable` (bool),
+`poll_period_s` (double, > 0), `position_max_age_s` (double, > 0: the oldest position a
+segment is planned from, the deadline of a position read and of a stop), `segment_s` (double,
+> 0: how far ahead of the carriage one vendor move reaches, in seconds at the commanded speed),
+`auto_enable` (bool),
 `set_position_service`, `get_position_service`, `stop_service`, `deadman_state_topic`
 (strings), `deadman_state_max_age_s` (double, > 0, above the deadman's `tick_period_s`).
 
@@ -133,9 +146,9 @@ refuses `use_sim_time`.
 ## How each one fails
 
 - **A command it will not forward is refused and logged, never clamped into a different
-  motion.** A track trajectory with no points, naming any joint but the track's, a target
-  outside the travel, a final point not in the future, a command while the carriage position
-  is unread or older than `position_max_age_s`: refused.
+  motion.** A track trajectory with no points or only one, naming any joint but the track's, a
+  target outside the travel, a last point not after the first, a command while the carriage
+  position is unread or older than `position_max_age_s`: refused.
   A gripper position beyond the drive joint's travel is clamped, as the simulated joint's own
   limits would clamp it, and said in the log.
 - **A vendor service that is not advertised refuses the command** (no wait, no retry), and a

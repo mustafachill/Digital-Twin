@@ -694,8 +694,14 @@ class VendorAxis(Strict):
     position_scale: Annotated[float, Field(gt=0.0)]
     #: How often the adapter reads the vendor position and publishes it.
     poll_period_s: Annotated[float, Field(gt=0.0)]
-    #: The oldest position a speed is derived from, and the deadline of a read.
+    #: The oldest position a move is planned from, and the deadline of a read.
     position_max_age_s: Annotated[float, Field(gt=0.0)]
+    #: How far ahead of the carriage one vendor move reaches, in seconds at the
+    #: commanded speed: the adapter sends a move in segments this long and
+    #: re-sends the next on every fresh position read while its gate is open,
+    #: so a lost stop overruns by at most one segment. Related to the poll
+    #: period and the deadman timeout by `track-segment-*`.
+    segment_s: Annotated[float, Field(gt=0.0)]
     #: Whether a position command may enable a disabled track motor. `false`:
     #: enabling the motor is an operator's act, not a side effect of a command.
     auto_enable: bool

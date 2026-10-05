@@ -1443,12 +1443,18 @@
           "exclusiveMinimum": 0.0,
           "title": "Position Scale",
           "type": "number"
+        },
+        "segment_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Segment S",
+          "type": "number"
         }
       },
       "required": [
         "position_scale",
         "poll_period_s",
         "position_max_age_s",
+        "segment_s",
         "auto_enable"
       ],
       "title": "VendorAxis",

@@ -25,6 +25,7 @@ from cite_tools.model.schema import (
     VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS,
     EnvReference,
     FlowEdge,
+    VendorAxis,
     xacro_would_evaluate,
 )
 from cite_tools.validate import Finding, error
@@ -958,6 +959,27 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
                     "stale between two ticks",
                 )
             )
+        for axis_where, served in _vendor_axes(model, physical):
+            if served.segment_s <= served.poll_period_s:
+                findings.append(
+                    error(
+                        "track-segment-not-above-poll",
+                        f"{axis_where}.segment_s",
+                        f"{served.segment_s:g} s is not above the adapter's poll period "
+                        f"{served.poll_period_s:g} s, so a segment ends before the next one "
+                        "is sent and the carriage stops between them",
+                    )
+                )
+            if served.segment_s > timing.deadman_timeout_s:
+                findings.append(
+                    error(
+                        "track-segment-above-deadman-timeout",
+                        f"{axis_where}.segment_s",
+                        f"{served.segment_s:g} s is above the deadman timeout "
+                        f"{timing.deadman_timeout_s:g} s, so a carriage whose stop is lost "
+                        "overruns further than the deadman itself would let it",
+                    )
+                )
         for period, what in _poll_periods(model, physical):
             if timing.state_max_age_s <= period:
                 findings.append(
@@ -969,6 +991,21 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
                     )
                 )
     return findings
+
+
+def _vendor_axes(model: FacilityModel, assets: list) -> list[tuple[str, VendorAxis]]:
+    """``(where, vendor_axis)`` of every vendor-served axis on the physical side of ``assets``."""
+    found: list[tuple[str, VendorAxis]] = []
+    for asset in assets:
+        asset_type = model.asset_type(asset.type)
+        if asset_type is None or asset_type.axis is None:
+            continue
+        backend_id = asset.hardware.effective_counterpart_backend
+        backend = asset_type.hardware_backends.get(backend_id)
+        if backend is not None and backend.vendor_axis is not None:
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}.vendor_axis"
+            found.append((where, backend.vendor_axis))
+    return found
 
 
 def _poll_periods(model: FacilityModel, assets: list) -> list[tuple[float, str]]:

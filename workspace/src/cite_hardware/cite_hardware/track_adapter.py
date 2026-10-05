@@ -23,11 +23,24 @@ and its embedded driver serves the track only as `xarm_api` services. This node
 presents the simulated names on the physical side and translates:
 
 - **Command.** It subscribes the same `command_topic` the simulated controller
-  serves, takes the trajectory's FINAL point — the program sends exactly one
-  (ADR-0067) — and calls `set_linear_motor_pos` with the position in the
-  vendor's unit and the speed that reaches it in the point's `time_from_start`.
-  A trajectory with no points is refused, as the simulated controller refuses
-  it (`joint_trajectory_controller` 4.x); it is not a stop there either.
+  serves. A command carries its start as its first point and its target as its
+  last (`cite_bringup.track_command`), so the COMMANDED speed is the distance
+  between them over the time between them, the same on both sides. The vendor
+  is sent that speed, capped at the axis maximum, and never one derived from
+  where this carriage stands (SA2c-S-02 b); a command with one point names no
+  speed and is refused. A trajectory with no points is refused, as the
+  simulated controller refuses it (`joint_trajectory_controller` 4.x).
+- **Segments.** A move is sent as `set_linear_motor_pos` to a point at most
+  `segment_s` of travel at the commanded speed ahead of the carriage, and the
+  next segment is sent on every fresh position read while the gate is open,
+  until the target itself is within one segment and is sent. If every process
+  here dies with the carriage moving, it runs at most one segment past the
+  last read (SA2c-S-02 d).
+- **Hold.** A command whose first and last points are one position is a hold:
+  the simulated controller holds where it stands, and this adapter sends
+  `set_linear_motor_stop` and drops any move in progress, level-triggered like
+  every other stop below, until one is acknowledged. A hold never moves the
+  carriage, whatever position it names (SA2c-S-02 a).
 - **State.** It polls `get_linear_motor_pos` and publishes the track joint's
   position on the arm's joint-state topic, where the simulated side's
   `joint_state_broadcaster` publishes it. The program reads arrival from there.
@@ -42,16 +55,19 @@ one; a closure the deadman did not cause has only this one.
 
 That stop is LEVEL-triggered: on every poll, active or not, while motion is not
 permitted and a move may be running, it is sent again until the vendor answers
-one with success that was sent after the last move and with no move call
-outstanding — only then is the carriage taken as no longer driven from here. A
-stop unanswered within `position_max_age_s` is abandoned and sent again. A move
-is marked possible BEFORE the last look at the gate, under the lock, so a
-closure racing a move either prevents it or finds it and stops it. On SIGINT
-or SIGTERM the stop is sent before the process exits (`cite_hardware.process`).
+one with success that was sent after the last move was ANSWERED and with no
+move call outstanding — only then is the carriage taken as no longer driven
+from here. A stop unanswered within `position_max_age_s` is abandoned and sent
+again. A move is marked possible BEFORE the last look at the gate, under the
+lock, so a closure racing a move either prevents it or finds it and stops it.
+On SIGINT or SIGTERM the process exits only once such a stop is acknowledged,
+or after twice `position_max_age_s`: a move in flight when the signal came is
+followed by a stop sent after its answer, so the exit stop is never overtaken
+by it (`cite_hardware.process`, SA2c-S-02 e).
 
-**A speed is derived only from a fresh position.** The carriage position is
+**A segment is planned only from a fresh position.** The carriage position is
 polled; a read unanswered within `position_max_age_s` is abandoned, and a
-position older than that is not used to derive a speed.
+position older than that is not used to plan a segment.
 
 **The vendor call is never waited on.** `set_linear_motor_pos` is called with
 `wait=false`, and that is load-bearing rather than a preference: the vendor's
@@ -62,9 +78,10 @@ the whole move — and the deadman's `set_linear_motor_stop` and `set_state`
 would queue behind it.
 
 **Preemption.** A new command retargets the carriage: the vendor takes a new
-position while moving. A command that arrives while the previous vendor call
-has not yet answered is held, and replaced by any later one, so the vendor
-receives the latest target and never a backlog.
+position while moving, which is also what makes a segment's successor
+seamless. A command that arrives while the previous vendor call has not yet
+answered is held, and replaced by any later one, so the vendor receives the
+latest target and never a backlog.
 """
 
 from __future__ import annotations
@@ -75,10 +92,12 @@ import threading
 from cite_hardware.gate import DeadmanGate
 from cite_hardware.mapping import (
     from_vendor_position,
+    next_segment,
     Refused,
     require_within,
     to_vendor_position,
     track_target,
+    TrackTarget,
     vendor_speed,
 )
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
@@ -88,6 +107,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.clock import Clock, ClockType
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from rclpy.parameter import Parameter
+from rclpy.task import Future
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
 from xarm_msgs.srv import Call, GetInt16, LinearMotorSetPos
@@ -131,8 +151,15 @@ SPECS: tuple[Spec, ...] = (
     Spec(
         "position_max_age_s",
         Parameter.Type.DOUBLE,
-        "steady-clock bound on a carriage position used to derive a speed, and on an "
-        "unanswered position read",
+        "steady-clock bound on a carriage position a segment is planned from, on an "
+        "unanswered position read and on an unanswered stop",
+        positive=True,
+    ),
+    Spec(
+        "segment_s",
+        Parameter.Type.DOUBLE,
+        "how far ahead of the carriage one vendor move reaches, seconds at the commanded "
+        "speed; the overrun if every stop is lost",
         positive=True,
     ),
     Spec(
@@ -214,6 +241,18 @@ class TrackAdapter(LifecycleNode):
         self._stop_future = None
         self._stop_sequence = 0
         self._stop_deadline_ns = 0
+        #: The stop in flight was sent with no move call outstanding, so it is
+        #: processed after every move this adapter sent (SA2c-S-02 e).
+        self._stop_after_answer = False
+        #: The move in progress, until its last segment is sent: re-planned
+        #: from every fresh position while the gate is open.
+        self._target: TrackTarget | None = None
+        #: A hold was commanded: the carriage is stopped, level-triggered,
+        #: until a move is accepted again.
+        self._holding = False
+        #: Completed once the carriage is no longer driven from here, while the
+        #: process is ending (`stop_before_exit`).
+        self._exit_future: Future | None = None
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -284,6 +323,7 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             self._active = False
             self._pending = None
+            self._target = None
         self._stop_if_moving("the adapter was deactivated")
         return super().on_deactivate(state)
 
@@ -295,6 +335,7 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             self._active = False
             self._pending = None
+            self._target = None
         self._stop_if_moving("the adapter is shutting down")
         self._release()
         return TransitionCallbackReturn.SUCCESS
@@ -304,20 +345,29 @@ class TrackAdapter(LifecycleNode):
 
         rclpy runs no `on_shutdown` when its context goes down, so
         `cite_hardware.process.run` calls this while the context still stands
-        and waits on the returned future for at most `position_max_age_s`, the
-        bound this node already applies to an unanswered vendor call. Sent
-        whenever a move this adapter sent may still be running, whether or not
-        the vendor is seen.
+        and waits on the returned future. The future completes only once a stop
+        sent after the last move was ANSWERED is acknowledged (SA2c-S-02 e): a
+        move still in flight when the signal came would otherwise reach the
+        vendor after the exit stop and drive the carriage on. The bound is twice
+        `position_max_age_s` - one for the move in flight to be answered, one
+        for the stop after it - the bound this node already applies to an
+        unanswered vendor call. Sent whenever a move this adapter sent may still
+        be running, whether or not the vendor is seen.
         """
         config, client = self._config, self._stop_client
         with self._lock:
             self._active = False
             self._pending = None
+            self._target = None
             moving = self._move_possible or self._set_in_flight
-        if config is None or client is None or not moving:
+            if moving:
+                self._exit_future = Future()
+            done = self._exit_future
+        if config is None or client is None or not moving or done is None:
             return [], 0.0
         self.get_logger().warning("process ending: set_linear_motor_stop sent before exit")
-        return [client.call_async(Call.Request())], config["position_max_age_s"]
+        self._call_stop()
+        return [done], 2.0 * config["position_max_age_s"]
 
     def _release(self) -> None:
         if self._poll_timer is not None:
@@ -340,6 +390,8 @@ class TrackAdapter(LifecycleNode):
         self._get_future = None
         self._get_in_flight = False
         self._stop_future = None
+        self._target = None
+        self._holding = False
         self._config = None
 
     # ------------------------------------------------------------------ #
@@ -358,10 +410,19 @@ class TrackAdapter(LifecycleNode):
 
         with self._lock:
             active = self._active
-            position = self._position_m
-            position_age_s = (self._steady.now().nanoseconds - self._position_at_ns) * 1e-9
         if not active:
             self.get_logger().warning("track command refused: the adapter is not active")
+            return
+        if target.is_hold:
+            # A hold is a stop here, whatever position it names: the simulated
+            # controller holds where its own carriage stands, and this one is
+            # stopped where it stands (SA2c-S-02 a). Never gated: a stop is
+            # what a closed gate would do anyway.
+            with self._lock:
+                self._target = None
+                self._pending = None
+                self._holding = True
+            self._stop_if_moving("a hold was commanded")
             return
         assert self._gate is not None
         if not self._gate.permits_motion():
@@ -376,27 +437,49 @@ class TrackAdapter(LifecycleNode):
         except Refused as error:
             self.get_logger().error(f"track command refused: {error}")
             return
+        with self._lock:
+            position = self._position_m
+            position_age_s = (self._steady.now().nanoseconds - self._position_at_ns) * 1e-9
         if position is None:
             self.get_logger().error(
                 "track command refused: the carriage position has not been read from "
-                f"{config['get_position_service']}, so no speed can be derived"
+                f"{config['get_position_service']}, so no segment can be planned"
             )
             return
         if position_age_s > config["position_max_age_s"]:
             self.get_logger().error(
                 f"track command refused: the carriage position is {position_age_s:.3f} s old, "
-                f"above position_max_age_s {config['position_max_age_s']:g}, so no speed "
-                "can be derived from it"
+                f"above position_max_age_s {config['position_max_age_s']:g}, so no segment "
+                "can be planned from it"
             )
             return
+        with self._lock:
+            self._target = target
+            self._holding = False
+        self._advance(position)
 
+    def _advance(self, position: float) -> None:
+        """Send the next segment of the move in progress, planned from ``position``.
+
+        The last segment is the target itself; after it the move is complete
+        here and nothing more is sent for it.
+        """
+        config = self._config
+        if config is None:
+            return
+        with self._lock:
+            target = self._target
+            if target is None or not self._active:
+                return
+            goal, last = next_segment(
+                position, target.position_m, target.speed_mps, config["segment_s"]
+            )
+            if last:
+                self._target = None
         request = LinearMotorSetPos.Request()
-        request.pos = to_vendor_position(target.position_m, config["position_scale"])
+        request.pos = to_vendor_position(goal, config["position_scale"])
         request.speed = vendor_speed(
-            target.position_m - position,
-            target.seconds,
-            config["position_scale"],
-            config["max_speed_mps"],
+            target.speed_mps, config["position_scale"], config["max_speed_mps"]
         )
         # Never wait: see the module docstring. The vendor's timeout applies
         # only to a waiting call, so it is left at the vendor's own default.
@@ -468,7 +551,12 @@ class TrackAdapter(LifecycleNode):
             follow = self._pending if self._active else None
             self._pending = None
             self._set_in_flight = follow is not None
+            stopping = not self._active or self._holding
         if follow is None:
+            if stopping:
+                # Answered after the carriage was told to stop: a stop sent
+                # from now on is processed after this move (SA2c-S-02 e).
+                self._stop_if_moving("a move was answered after the stop was asked for")
             return
         assert self._gate is not None
         if not self._gate.permits_motion():
@@ -528,6 +616,7 @@ class TrackAdapter(LifecycleNode):
             future = client.call_async(Call.Request())
             self._stop_future = future
             self._stop_sequence = self._move_sequence
+            self._stop_after_answer = not self._set_in_flight
             self._stop_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
         future.add_done_callback(self._on_stop_answered)
 
@@ -548,11 +637,19 @@ class TrackAdapter(LifecycleNode):
                 "sent again on the next poll"
             )
             return
-        # N-05: only an acknowledged stop, sent after the last move and with no
-        # move call outstanding, says the carriage is no longer driven by us.
+        # N-05 and SA2c-S-02 e: only an acknowledged stop, sent after the last
+        # move was answered and with no move call outstanding since, says the
+        # carriage is no longer driven by us.
         with self._lock:
-            if self._stop_sequence == self._move_sequence and not self._set_in_flight:
+            if (
+                self._stop_sequence == self._move_sequence
+                and self._stop_after_answer
+                and not self._set_in_flight
+            ):
                 self._move_possible = False
+            done = None if self._move_possible else self._exit_future
+        if done is not None and not done.done():
+            done.set_result(True)
 
     def _on_gate_closed(self, reason: str) -> None:
         # Whatever is held is dropped, and a move that may be running is
@@ -562,6 +659,7 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             dropped = self._pending
             self._pending = None
+            self._target = None
         if dropped is not None:
             self.get_logger().warning(f"held track target {dropped.pos} dropped: {reason}")
         self._stop_if_moving(f"the deadman gate closed: {reason}")
@@ -582,11 +680,16 @@ class TrackAdapter(LifecycleNode):
         # carriage is stopped, on every poll until the vendor acknowledges it.
         with self._lock:
             active = self._active
+            holding = self._holding
         if not active:
             self._stop_if_moving("the adapter is not active", repeated=True)
         elif gate is None or not gate.permits_motion():
+            with self._lock:
+                self._target = None
             why = gate.why_closed() if gate is not None else "no deadman gate"
             self._stop_if_moving(f"motion is not permitted: {why}", repeated=True)
+        elif holding:
+            self._stop_if_moving("a hold was commanded", repeated=True)
         now = self._steady.now().nanoseconds
         overdue = None
         with self._lock:
@@ -657,6 +760,11 @@ class TrackAdapter(LifecycleNode):
         publisher = self._state_publisher
         if publisher is not None:
             publisher.publish(message)
+        # The next segment of a move in progress, from this fresh position,
+        # only while motion is permitted (SA2c-S-02 d).
+        gate = self._gate
+        if gate is not None and gate.permits_motion():
+            self._advance(position)
 
 
 def main() -> int:
