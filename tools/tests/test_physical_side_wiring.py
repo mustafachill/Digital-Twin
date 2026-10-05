@@ -99,9 +99,9 @@ class TestVendorServicesAreLeastPrivilege:
         called = {
             name
             for services in (
-                adapter_generator._DEADMAN_SERVICES,  # noqa: SLF001 - the maps under test
-                adapter_generator._TRACK_SERVICES,  # noqa: SLF001
-                adapter_generator._GRIPPER_SERVICES,  # noqa: SLF001
+                adapter_generator._DEADMAN_SERVICES,
+                adapter_generator._TRACK_SERVICES,
+                adapter_generator._GRIPPER_SERVICES,
             )
             for name in services.values()
         }

@@ -34,7 +34,7 @@ AGE = 0.25
 
 
 def _state(state: int, arm_enabled: bool | None = None) -> DeadmanState:
-    """A deadman state; enabled exactly when HEALTHY unless the test says otherwise."""
+    """Build a deadman state, enabled exactly when HEALTHY unless the test says otherwise."""
     message = DeadmanState()
     message.state = state
     message.detail = "for the record"

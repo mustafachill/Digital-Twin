@@ -268,8 +268,8 @@ order, each step gated on the one before it exiting 0 and no step on a timer:
 
 The token means **held, not enabled**: the vendor plugin deactivates every controller while the
 deadman holds the arm at STOP, and reactivates them once the deadman enables the arm on the
-boundary's first heartbeat. The twin boundary refuses a mode that would command the side until
-the deadman is HEALTHY, the arm trajectory controller's state is fresh and every joint the side
+boundary's first heartbeat. The twin boundary refuses a mode that would command the side, and
+a re-assertion of the mode already in force, until the deadman is HEALTHY with `arm_enabled`, the arm trajectory controller's state is fresh and every joint the side
 publishes is fresh (`cite_twin.physical_readiness`); the fixed program asks again under a
 ceiling. Any process of the side exiting, for any reason, stops the whole side, and nothing
 respawns. Nothing here has run against the physical arm.

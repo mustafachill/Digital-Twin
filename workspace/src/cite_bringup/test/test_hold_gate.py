@@ -36,10 +36,10 @@ from cite_bringup.hold_gate import HoldFailed, wait_until
 from cite_bringup.plan import COUNTERPART_SIDE, default_plan_path, load
 from cite_interfaces.msg import DeadmanState
 import pytest
-from xarm_msgs.srv import GetFloat32
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "cite_hardware" / "test"))
 from vendor_fakes import FakeArmState, FakeDeadman, FakeTrack, Harness  # noqa: E402
+from xarm_msgs.srv import GetFloat32  # noqa: E402
 
 ZONE = "cell_b"
 #: Short, because every failing case waits it out; a ceiling, not a schedule.
