@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
-from cite_tools.model import blockly, ids
+from cite_tools.model import blockly
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.resolve import program_steps
@@ -46,7 +46,7 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _hardware_backends_exist(model)
     findings += _instance_params_reach_a_bound_plugin(model)
     findings += _paired_zone_has_no_physical_plant(model)
-    findings += _counterpart_backend_matches_the_plant(model)
+    findings += _plugin_less_backends_are_not_bound(model)
     findings += _configuration_matches_category(model)
     findings += _an_arm_rides_its_track_on_one_backend(model)
     findings += _programs_fit_the_arm(model)
@@ -309,6 +309,7 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       deliberate and it is what makes flipping an arm to hardware a one-field
       edit.
     """
+    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
     findings: list[Finding] = []
     for asset in model.assets:
         asset_type = model.asset_type(asset.type)
@@ -408,6 +409,17 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         if chosen not in backends:
             continue
 
+        # EVERY SIDE THAT EXISTS, each against the backend it loads. The
+        # counterpart of a paired zone gets a description of its own, valued from
+        # ITS backend's block (ADR-0048 clause 2, ADR-0070), so a parameter that
+        # backend declares and the asset does not supply would fail the generator
+        # exactly as the plant's would. On an untwinned zone there is no
+        # counterpart to describe, and its backend is not asked about.
+        selected = [chosen]
+        counterpart = asset.hardware.effective_counterpart_backend
+        if asset.zone in paired and counterpart != chosen and counterpart in backends:
+            selected.append(counterpart)
+
         # The mirror. A connection parameter has no default that could be right:
         # the vendor's own `robot_ip:=''` becomes `<param name="robot_ip">R</param>`
         # and `uf_robot_system_hardware.cpp` answers it with `exit(1)` from inside
@@ -419,17 +431,19 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         # reads as well, so the two cannot disagree about a model. A declared key
         # holding an empty string is unsupplied: decision 2a's reason is about the
         # value, and `robot_ip: ''` lands the same `exit(1)`.
-        supplied = set(asset.hardware.supplied_params(chosen))
-        for key in sorted(set(backends[chosen].instance_params) - supplied):
-            findings.append(
-                error(
-                    "missing-hardware-param",
-                    f"assets.{asset.id}.hardware.params.{chosen}.{key}",
-                    f"backend {chosen!r} of type {asset_type.id!r} declares parameter "
-                    f"{key!r}, which this asset does not supply a value for",
-                    f"Add it under `hardware.params.{chosen}`. An empty value is not one.",
+        for backend_id in selected:
+            supplied = set(asset.hardware.supplied_params(backend_id))
+            for key in sorted(set(backends[backend_id].instance_params) - supplied):
+                findings.append(
+                    error(
+                        "missing-hardware-param",
+                        f"assets.{asset.id}.hardware.params.{backend_id}.{key}",
+                        f"backend {backend_id!r} of type {asset_type.id!r} declares "
+                        f"parameter {key!r}, which this asset does not supply a value for",
+                        f"Add it under `hardware.params.{backend_id}`. An empty value is not "
+                        "one; a value read at launch is written `{env: <VARIABLE>}`.",
+                    )
                 )
-            )
     return findings
 
 
@@ -472,6 +486,37 @@ def _instance_params_reach_a_bound_plugin(model: FacilityModel) -> list[Finding]
                     "that component instead. Bind the plugin, or remove the parameter bindings.",
                 )
             )
+    return findings
+
+
+def _plugin_less_backends_are_not_bound(model: FacilityModel) -> list[Finding]:
+    """A backend declaring no plugin may not sit on a type that binds the plugin.
+
+    `plugin-less-backend-on-a-bound-description`, one ERROR per (type, backend).
+    `ros2_control_plugin: null` says that no `ros2_control` component serves this
+    type's joints on that backend (ADR-0070 item 3), which the generator honours
+    for joints IT emits — a track's — by emitting no `<ros2_control>` block. A
+    vendor description is different: its `<ros2_control>` block is the vendor
+    macro's, and binding no plugin into it hands the macro its OWN default, which
+    for `xarm_description` is the physical component. The generator refuses the
+    same condition as a backstop (`generate.description._binding_value`).
+    """
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        if PLUGIN_BINDING not in asset_type.description.bound_args.values():
+            continue
+        for name, backend in sorted(asset_type.hardware_backends.items()):
+            if backend.ros2_control_plugin is None:
+                findings.append(
+                    error(
+                        "plugin-less-backend-on-a-bound-description",
+                        f"types.{asset_type.id}.hardware_backends.{name}.ros2_control_plugin",
+                        f"backend {name!r} of type {asset_type.id!r} declares no plugin, and "
+                        f"the type's description binds {PLUGIN_BINDING}",
+                        "The vendor macro would load its own default plugin on a side "
+                        "selecting this backend. Declare the plugin, or stop binding it.",
+                    )
+                )
     return findings
 
 
@@ -583,121 +628,9 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
                 "two machines, it is what charter §8's Phase 2 scopes, and it is the "
                 "encoding MODE_VIRTUAL_LEAD describes (ADR-0041, Decision 3). What decides "
                 "here is the declaration on the type's backend and not the backend's name, "
-                "so renaming the backend changes nothing (ADR-0054). Note that "
-                "`divergent-counterpart-backend` then refuses that encoding as well, "
-                "until the generator emits a per-side artifact set: the vocabulary is "
-                "right and the generator is not ready for it (ADR-0048).",
-            )
-        )
-    return findings
-
-
-def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding]:
-    """An asset's two sides must name one backend, because they are handed one artifact set.
-
-    A schema cannot say this either, and for a different reason than
-    `physical-plant-on-paired-zone`: this is a cross-FIELD equality, between two
-    siblings of the same object. pydantic could express it only as a validator,
-    which the exported JSON Schema would not carry, so stating it there would
-    make the schema claim a constraint it does not enforce. This package's own
-    docstring fixes that split, and this rule sits beside the one that closed
-    the other half of the same cross product (ADR-0048, clause 1).
-
-    WHY IT IS KEYED ON DIFFERENCE RATHER THAN ON `real`. The defect is not that
-    a side is physical. Every generator site that branches on a backend reads
-    `hardware.backend` — the PLANT's — and not one of them has ever been asked
-    which side it is generating for: the `ros2_control` plugin
-    (`cite_tools.model.resolve`, consumed by `generate.description`), the
-    collision scheme (`generate.description`, `spec.collision.scheme_for`) and
-    `use_sim_time` (`generate.control`). So whatever the counterpart names, it is
-    handed artifacts derived from the other side's answer. Keying on the literal
-    `real` would leave a third backend to rediscover exactly this gap.
-
-    THE SET IS ASKED FOR, NOT COUNTED HERE. This docstring said "three" and named
-    among them the bring-up plan key ADR-0048 clause 3 has since removed. That
-    key WAS a branch on the plant's backend, exactly like the three above — the
-    count was right when it was written, and it went stale because a site was
-    deleted, not because it was miscounted. (What made the deletion free is a
-    different property: the key was a total function of a backend the plan
-    already states per side, and nothing read it.) Meanwhile the collision
-    scheme, added 2026-08-31, was never listed at all. So a count in prose is a
-    claim with an expiry date; `grep -rn "instance.hardware.backend"
-    tools/cite_tools` is the instrument.
-
-    WHAT THAT INSTRUMENT REACHES, STATED AS WHAT IT IS. It reaches every read
-    through `ResolvedAsset.instance` — which is every GENERATOR site, in
-    `model/` as well as in `generate/`, where a glob over `generate/*.py` misses
-    the first of the three. It does NOT reach a read off the raw model asset,
-    spelled `asset.hardware.backend`: `model/schema.py`'s counterpart fallback,
-    `cli.py`'s asset table and three lines in this file read it that way, and
-    not one of them generates an artifact. This docstring claimed "every read of
-    the PLANT's backend" and that is the wider set.
-
-    ONE SITE THE INSTRUMENT REACHES IS NOT A DEFECT, AND IT IS NEW. ADR-0054's
-    bring-up generator asks `commands_physical_hardware_of(instance.hardware
-    .backend)` in order to state the PLANT's fact, and states the counterpart's
-    from `effective_counterpart_backend` on the next line — so it reads the
-    plant's backend to answer a question about the plant, which is the shape this
-    rule is waiting for rather than an instance of the shape it refuses. A reader
-    running the instrument has to look at what each hit is answering; the count
-    alone does not say.
-
-    AND IT COUNTS ITSELF. The instrument returned **6 lines in 5 files** in this
-    checkout on 2026-09-08 and **7 in 5** after that generator site landed, and
-    one of them is the sentence above, because
-    this file is inside the search scope — the same "a guard that counts a
-    string counts its own message" hazard the guard in
-    `cite_bringup/test/test_plan.py` is parsed rather than grepped to avoid. Five
-    are reads; one is prose about them. The record's own copies of the count are
-    stale until the change that makes these sites per-side corrects them.
-
-    WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
-    `backend` stays legal and stays byte-identical to omitting it, which is the
-    property `test_writing_the_counterpart_backend_it_already_has_changes_nothing`
-    pins; the fallback in `HardwareSelection` is what makes those the same model,
-    and this rule reads through it rather than around it.
-
-    THE REFUSAL IS TEMPORARY BY CONSTRUCTION and the message says so. ADR-0048
-    clause 2 fixes the shape that lifts it — the description and the controller
-    configuration become per-side, the side goes in a file path and never in a
-    ROS name — and this rule is deleted by the change that builds it.
-    """
-    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
-    findings: list[Finding] = []
-    for asset in model.assets:
-        plant = asset.hardware.backend
-        counterpart = asset.hardware.effective_counterpart_backend
-        if counterpart == plant:
-            continue
-        if asset.zone in paired:
-            hint = (
-                "All three generator sites that branch on a backend read the plant's, so "
-                f"the counterpart would be handed the plant's description, the {plant!r} "
-                "backend's `ros2_control` plugin, "
-                f"`use_sim_time: {'true' if plant == ids.SIMULATION_BACKEND else 'false'}` "
-                "in its controller configuration and a plan stating where the plant's "
-                "controller manager is hosted — a description of the other side's machine, "
-                "generated and committed without a word of warning. ADR-0048 refuses the "
-                "combination until the generator emits a per-side artifact set (its clause "
-                "2); until then both sides of a paired zone name one backend, and "
-                "`physical-plant-on-paired-zone` fixes what that backend may be: one "
-                "declaring `commands_physical_hardware: false` (ADR-0054)."
-            )
-        else:
-            hint = (
-                f"zone {asset.zone!r} declares `twin.sides: single`, so there is no "
-                "counterpart side for this value to describe: no generated artifact "
-                "carries it and nothing reads it. Remove it. If the facility really has "
-                "two sides, pair the zone — but ADR-0048 refuses a divergent counterpart "
-                "there too, until the generator emits a per-side artifact set."
-            )
-        findings.append(
-            error(
-                "divergent-counterpart-backend",
-                f"assets.{asset.id}.hardware.counterpart_backend",
-                f"counterpart side names backend {counterpart!r} while the plant side "
-                f"names {plant!r}, and the generator emits one artifact set for both sides",
-                hint,
+                "so renaming the backend changes nothing (ADR-0054). The generator emits "
+                "that counterpart a description and controller configuration of its own "
+                "(ADR-0048 clause 2, ADR-0070).",
             )
         )
     return findings

@@ -64,6 +64,7 @@
     <axis xyz="{{ arm.axis.direction }}"/>
     <limit lower="0" upper="{{ arm.axis.stroke_m }}" velocity="{{ arm.axis.max_speed_mps }}" effort="{{ arm.axis.max_force_n }}"/>
   </joint>
+{% if arm.axis.plugin %}
   <!-- One hardware component for the track, beside the arm's own: the same
        controller manager loads both, and only the plugin names which machine is
        behind it. The track's hardware path is not implemented (ADR-0067). -->
@@ -79,6 +80,7 @@
       <state_interface name="velocity"/>
     </joint>
   </ros2_control>
+{% endif %}
 {% endif %}
 
   <xacro:include filename="$(find {{ arm.package }})/{{ arm.file }}"/>
@@ -114,7 +116,7 @@
 
   <gazebo>
     <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-      <parameters>$(find cite_generated)/control/{{ zone }}_{{ arm.id }}_controllers.yaml</parameters>
+      <parameters>$(find cite_generated)/{{ arm.controllers_path }}</parameters>
       <ros>
         <namespace>{{ arm.namespace }}</namespace>
       </ros>

@@ -134,10 +134,38 @@ plan:
       # two accessors can never disagree about which sides this manager declares.
       # The reader refuses a document stating one without the other (ADR-0054).
       counterpart_commands_physical_hardware: {{ manager.counterpart_commands_physical_hardware | declared_bool }}
+{% if manager.counterpart_description %}
+      # The counterpart loads a backend other than the plant's, so it loads its
+      # own description and controller configuration (ADR-0048 clause 2,
+      # ADR-0070). Every name in them is the plant's: what differs is the
+      # hardware behind the names. Absent where the two sides load one backend,
+      # and then the counterpart loads `description` and `parameters` below.
+      counterpart_description: {{ manager.counterpart_description }}
+      counterpart_parameters: {{ manager.counterpart_parameters }}
+{% endif %}
+{% if manager.counterpart_description_args %}
+      # What the counterpart's description reads from the ENVIRONMENT at launch:
+      # xacro argument -> variable. The plan names the variable and never holds
+      # its value; bring-up resolves it, and refuses to start when it is unset
+      # (ADR-0070 item 2).
+      counterpart_description_args:
+{% for argument, variable in manager.counterpart_description_args %}
+        {{ argument }}: {env: {{ variable }}}
+{% endfor %}
+{% endif %}
 {% endif %}
       description_topic: {{ manager.description_topic }}
       joint_state_topic: {{ manager.joint_state_topic }}
       description: {{ manager.description }}
+{% if manager.description_args %}
+      # What this description reads from the ENVIRONMENT at launch: xacro
+      # argument -> variable, resolved by bring-up and never stated here
+      # (ADR-0070 item 2).
+      description_args:
+{% for argument, variable in manager.description_args %}
+        {{ argument }}: {env: {{ variable }}}
+{% endfor %}
+{% endif %}
       # Where this model is placed in the world. Stated here rather than inside
       # the description, so the description says what the arm IS and the model
       # says where it stands (L1).

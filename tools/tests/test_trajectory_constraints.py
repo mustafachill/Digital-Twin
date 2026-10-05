@@ -177,7 +177,7 @@ class TestTheValuesAreTheTypesOwn:
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0].__setitem__(
                 "hardware",
-                {"backend": "real", "params": {"real": {"robot_ip": "192.168.1.100"}}},
+                {"backend": "real", "params": {"real": {"robot_ip": "203.0.113.7"}}},
             ),
         )
         assert controller_block(real_model, ARM)["constraints"] == sim

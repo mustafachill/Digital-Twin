@@ -22,6 +22,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from cite_tools.model import ids
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.resolve import resolve
 
@@ -37,6 +38,37 @@ class Artifact:
 
     path: str
     content: str
+
+
+def per_side_path(directory: str, filename: str, side: str) -> str:
+    """Where one side's copy of a per-side artifact lives, relative to the package.
+
+    THE ONE SPELLING (ADR-0048 clause 2, ADR-0070 item 1): the side is a
+    directory, and only for a side that is not the plant. The plant's artifact
+    keeps the path it always had, so a zone whose sides load one backend — every
+    2.A pair — emits exactly the tree it emitted before a side could differ, and
+    a counterpart that differs adds `<directory>/counterpart/<filename>` beside
+    it. The filename is the same on both sides because it is built from names,
+    and no name differs by a byte between the sides (ADR-0044 clause 1).
+
+    Only the description and the controller configuration are ever per-side;
+    every other artifact contains no backend term and stays one file.
+    """
+    if side not in ids.SIDES:
+        raise ValueError(f"{side!r} is not a side of a twin pair. Expected one of {ids.SIDES}.")
+    if side == ids.PLANT_SIDE:
+        return f"{directory}/{filename}"
+    return f"{directory}/{side}/{filename}"
+
+
+def arm_description_path(zone: str, asset_id: str, side: str) -> str:
+    """The arm description ``side`` loads; see `per_side_path`."""
+    return per_side_path("description", f"{zone}_{asset_id}.urdf.xacro", side)
+
+
+def controllers_path(zone: str, asset_id: str, side: str) -> str:
+    """The controller configuration ``side`` loads; see `per_side_path`."""
+    return per_side_path("control", f"{zone}_{asset_id}_controllers.yaml", side)
 
 
 def model_hash(model: FacilityModel) -> str:

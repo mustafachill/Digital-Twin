@@ -604,7 +604,28 @@ class HardwareBackend(Strict):
     occurrence is a trend rather than another exception — treat it as one.
     """
 
-    ros2_control_plugin: str
+    #: The `ros2_control` hardware component this backend loads, or ``null`` for
+    #: a backend whose joints NO `ros2_control` component serves.
+    #:
+    #: Required, and ``null`` must be written: a backend becomes plugin-less only
+    #: because someone said so, never because a key was left out — the same rule
+    #: `commands_physical_hardware` below states for itself.
+    #:
+    #: WHAT ``null`` MEANS, and it is exactly one thing (ADR-0070 item 3). On a
+    #: side that selects this backend the generator emits no `<ros2_control>`
+    #: block for the joints this type contributes and loads none of its
+    #: controllers there; the joint itself stays in the description, so
+    #: `robot_state_publisher`, MoveIt and the collision scene still see it.
+    #: Something outside `ros2_control` serves the controller's names on that
+    #: side instead. The UFACTORY linear track's `real` backend is the case: the
+    #: vendor serves that track only through `xarm_api` services, never as a
+    #: `ros2_control` joint.
+    #:
+    #: It is refused on a type whose vendor description binds
+    #: `instance.hardware.ros2_control_plugin`, because there an absent plugin
+    #: hands the vendor macro its own default — for `xarm_description`, the
+    #: physical component (`plugin-less-backend-on-a-bound-description`).
+    ros2_control_plugin: str | None
 
     #: Whether loading this backend's plugin can reach a physical machine.
     #:
@@ -645,6 +666,22 @@ class HardwareBackend(Strict):
     commands_physical_hardware: bool
 
     instance_params: list[str] = Field(default_factory=list)
+
+    #: Whether this backend's plugin serves a vendor-integrated end effector's
+    #: joints as `ros2_control` joints.
+    #:
+    #: ``false`` for the vendor's physical xArm component: `xarm_gripper_macro.xacro`
+    #: emits the gripper's `<ros2_control>` block only when the plugin is NOT
+    #: `uf_robot_hardware/UFRobotSystemHardware`, and that component serves the
+    #: gripper through the vendor's own `GripperCommand` action instead. On a side
+    #: selecting such a backend the fitted end effector's controllers are not
+    #: loaded, because no hardware exports the joint they would claim; a relay
+    #: serves the controller's action name there (ADR-0070 item 4).
+    #:
+    #: The generator cannot derive this: the switch is a string comparison inside
+    #: the vendor's xacro, and knowing the vendor's plugin strings is what this
+    #: generator does not do. So it is declared, beside the plugin it is about.
+    exports_end_effector_joints: bool = True
 
 
 class ControlSpec(Strict):
@@ -1427,6 +1464,34 @@ class Registration(Strict):
     survey_reference: str | None = None
 
 
+#: The name of an environment variable, as POSIX shells accept one.
+EnvName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
+
+
+class EnvReference(Strict):
+    """A hardware parameter whose value is read from the environment at launch.
+
+    ``{env: CITE_XARM_IP}`` in place of a value. The model, the generated
+    description and the generated plan carry the REFERENCE and never the value:
+    an address is a fact about one lab's network, not about the facility, and
+    the project owner decided on 2026-10-05 that it is never committed
+    (ADR-0070 item 2). It lives in the gitignored ``.env``.
+
+    Exactly one place reads the variable: `cite_bringup.plan.resolve_description_args`,
+    at launch, and an unset or empty variable is a refusal there. The generator
+    emits a xacro ``$(arg <parameter>)`` where the value would have gone, so a
+    description expanded without the resolved value fails in xacro rather than
+    handing the vendor component an empty address.
+    """
+
+    env: EnvName
+
+
+#: One value in a backend's ``params`` block: a literal, or a reference to the
+#: environment that is resolved at launch (`EnvReference`).
+HardwareParamValue = str | bool | int | float | EnvReference
+
+
 class HardwareSelection(Strict):
     """Which backend this instance loads. Required, with no default, on purpose.
 
@@ -1479,9 +1544,9 @@ class HardwareSelection(Strict):
     #: recorded in ADR-0053 decision 1: an unexercised block is indistinguishable
     #: from a deliberate pre-declaration, and no check in this repository can tell
     #: a stale address from a planned one.
-    params: dict[Identifier, dict[str, str | bool | int | float]] = Field(default_factory=dict)
+    params: dict[Identifier, dict[str, HardwareParamValue]] = Field(default_factory=dict)
 
-    def supplied_params(self, backend: str) -> dict[str, str | bool | int | float]:
+    def supplied_params(self, backend: str) -> dict[str, HardwareParamValue]:
         """This instance's parameters for ``backend`` that actually carry a value.
 
         THE ONE DEFINITION OF "SUPPLIED", and both halves of ADR-0053 decision 2a
@@ -1497,7 +1562,10 @@ class HardwareSelection(Strict):
         alone let a declared key holding nothing pass at every level.
 
         A non-string value is supplied whatever it is: `False` and `0` are values
-        somebody wrote, and the emptiness question has no meaning for them. The
+        somebody wrote, and the emptiness question has no meaning for them. An
+        `EnvReference` is supplied too: what it names is checked where it is read,
+        at launch, because whether a variable is set is a fact about the machine
+        and not about the model. The
         value itself is returned unchanged — this decides presence, and stripping
         what is emitted would be a second, silent edit of a model value.
         """

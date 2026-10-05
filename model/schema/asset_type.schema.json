@@ -739,6 +739,11 @@
           "title": "Commands Physical Hardware",
           "type": "boolean"
         },
+        "exports_end_effector_joints": {
+          "default": true,
+          "title": "Exports End Effector Joints",
+          "type": "boolean"
+        },
         "instance_params": {
           "items": {
             "type": "string"
@@ -747,8 +752,15 @@
           "type": "array"
         },
         "ros2_control_plugin": {
-          "title": "Ros2 Control Plugin",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ros2 Control Plugin"
         }
       },
       "required": [

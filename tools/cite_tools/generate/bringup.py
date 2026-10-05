@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cite_tools.generate import Artifact
+from cite_tools.generate import Artifact, arm_description_path, controllers_path
+from cite_tools.generate.description import described_sides, environment_arguments
 from cite_tools.generate.moveit import PIPELINES
 from cite_tools.model import blockly, ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell, ResolveError
@@ -121,6 +122,31 @@ class _ManagerView:
     gripper_pad_face_centre_z_m: float | None
     skills: _SkillView | None
     track: _TrackView | None = None
+    #: The xacro arguments the PLANT's description takes from the environment,
+    #: as `(argument, variable)` pairs; empty — and so not emitted — on every
+    #: simulated side (ADR-0070 item 2). The plan carries the variable's NAME and
+    #: never its value.
+    description_args: tuple[tuple[str, str], ...] = ()
+    #: The description and controller configuration the COUNTERPART loads, as
+    #: package URIs, or `None` where it loads the plant's: on an untwinned zone,
+    #: and on a paired one whose counterpart names the plant's backend, because
+    #: such a side gets no artifact of its own (ADR-0048 clause 2). Present
+    #: together or not at all.
+    counterpart_description: str | None = None
+    counterpart_parameters: str | None = None
+    #: `description_args` for the counterpart's description.
+    counterpart_description_args: tuple[tuple[str, str], ...] = ()
+
+
+def _package_uri(path: str) -> str:
+    return f"package://cite_generated/{path}"
+
+
+def _counterpart_artifact(cell: ResolvedCell, asset: ResolvedAsset, path: str) -> str | None:
+    """``path``'s package URI when the counterpart has an artifact of its own, else None."""
+    if ids.COUNTERPART_SIDE not in described_sides(cell, asset):
+        return None
+    return _package_uri(path)
 
 
 @dataclass(frozen=True)
@@ -521,11 +547,15 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             # that belongs to another arm.
             description_topic=f"{asset.namespace}/robot_description",
             joint_state_topic=f"{asset.namespace}/joint_states",
-            description=(f"package://cite_generated/description/{cell.zone}_{asset.id}.urdf.xacro"),
+            description=_package_uri(arm_description_path(cell.zone, asset.id, ids.PLANT_SIDE)),
             spawn_xyz_m=" ".join(fmt(v) for v in asset.world_pose.xyz_m),
             spawn_rpy_rad=" ".join(fmt(v) for v in asset.world_pose.rpy_rad),
+            # The PLANT's controllers. The counterpart's are what its own
+            # configuration lists, and differ only where a side's hardware
+            # exports no joint for a controller (`ResolvedAsset.controllers_on`).
             controllers=tuple(
-                _ControllerRef(name=c.name, stage=c.stage) for c in asset.controllers
+                _ControllerRef(name=c.name, stage=c.stage)
+                for c in asset.controllers_on(ids.PLANT_SIDE)
             ),
             planning_group=_planning_group(asset),
             planning_tip_link=_planning_link(asset, "tip"),
@@ -561,6 +591,16 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_pad_face_centre_z_m=_linkage(cell, asset, "pad_face_centre_z_m"),
             skills=_skills(cell, asset),
             track=_track(asset),
+            description_args=environment_arguments(asset, ids.PLANT_SIDE),
+            counterpart_description=_counterpart_artifact(
+                cell, asset, arm_description_path(cell.zone, asset.id, ids.COUNTERPART_SIDE)
+            ),
+            counterpart_parameters=_counterpart_artifact(
+                cell, asset, controllers_path(cell.zone, asset.id, ids.COUNTERPART_SIDE)
+            ),
+            counterpart_description_args=(
+                environment_arguments(asset, ids.COUNTERPART_SIDE) if cell.is_paired else ()
+            ),
         )
         for asset in cell.assets
         if asset.controllers

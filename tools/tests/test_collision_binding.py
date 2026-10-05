@@ -23,7 +23,9 @@ import pytest
 from pydantic import ValidationError
 
 from cite_tools import generate as gen
+from cite_tools.generate.description import described_sides
 from cite_tools.model.loader import load
+from cite_tools.model.resolve import resolve
 from cite_tools.model.schema import CollisionMeshSet, CollisionSpec
 from cite_tools.validate import Severity, physical
 
@@ -46,11 +48,20 @@ def _arm_descriptions(path: Path) -> set[str]:
     many arms the facility declares and in which cell as well as about the
     property it exists for, and declaring a second zone (ADR-0056) falsified it
     while that property held.
+
+    One per SIDE that has a description of its own, too: a counterpart whose
+    backend differs from the plant's gets a second one (ADR-0048 clause 2,
+    ADR-0070), and the type's collision selection reaches it as much as it
+    reaches the plant's. Asked of `described_sides`, the function the generator
+    itself decides that with.
     """
+    model = load(path)
     return {
-        f"description/{instance.zone}_{instance.id}.urdf.xacro"
-        for instance in load(path).assets
-        if instance.type == ARM_TYPE_ID
+        gen.arm_description_path(zone.id, asset.id, side)
+        for zone in model.zones
+        for asset in resolve(model, zone.id).assets
+        if asset.asset_type.id == ARM_TYPE_ID
+        for side in described_sides(resolve(model, zone.id), asset)
     }
 
 
