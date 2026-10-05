@@ -56,6 +56,13 @@ x-common-env: &common-env
   # half-configured.
   CITE_DOMAIN_BASE: ${CITE_DOMAIN_BASE:-42}
   RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+  # The hardware opt-in and the physical arm's address, passed through from the
+  # host and never set here (ADR-0070 item 6). Bring-up refuses a plan declaring
+  # physical hardware unless CITE_ALLOW_HARDWARE is exactly `1`, so the default
+  # below keeps it off; and it reads CITE_XARM_IP at launch, refusing when it is
+  # empty. Both are set, if at all, in the gitignored `.env` (see .env.example).
+  CITE_ALLOW_HARDWARE: ${CITE_ALLOW_HARDWARE:-0}
+  CITE_XARM_IP: ${CITE_XARM_IP:-}
   # Gazebo needs a writable home for its cache.
   HOME: /home/cite
 
