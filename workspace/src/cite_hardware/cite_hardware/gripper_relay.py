@@ -24,6 +24,15 @@ plan's name and relays, mapping the drive-joint position linearly between
 `[open_position, closed_position]` and `[vendor_open_position,
 vendor_closed_position]` in both directions, and nothing more.
 
+**The vendor's units.** The vendor action takes and reports drive-joint-like
+units, 0.0 open to 0.85 closed: it converts a goal to a pulse target as
+``|max_pos - position * 1000|`` and a pulse reading back as
+``|max_pos - pulses| / 1000``, with `xarm_gripper.max_pos` 850 by default
+(`xarm_api/src/xarm_driver.cpp:507-515`, used at `:607` and `:643`). Its
+`get_gripper_position` service reports the raw PULSES, about 850 open to 0
+closed (`xarm_driver_service.cpp:800-805`). So the action's endpoints are
+0.0 / 0.85 and the state service's 850 / 0, each its own pair of parameters.
+
 **IT REPORTS WHAT THE VENDOR REPORTS, AND NOTHING IT DOES NOT.** The vendor's
 action fills only `position` in its feedback and result: `stalled` and
 `reached_goal` are never set and arrive false, and it succeeds whenever the
@@ -42,10 +51,15 @@ relay answers its own client's cancel once the vendor has acknowledged it, with
 the last position the vendor reported. That is the whole of what "cancel" can
 mean on this hardware, and it is stated rather than papered over.
 
-**Preemption** follows `GripperActionController`: a new goal ends the one in
-flight. rclpy cannot mark a goal cancelled that no client asked to cancel, so a
-preempted goal ends ABORTED here where the simulated controller ends it
-CANCELED; the vendor goal behind it is cancelled either way.
+**No preemption: a new goal is REJECTED while a vendor goal is still running**,
+where `GripperActionController` would preempt. The vendor ignores a cancel, and
+runs each goal on a thread of its own that keeps commanding the jaws until they
+stop (`xarm_driver.cpp:542-546`, `:609-650`): preempting would run two vendor
+threads against one gripper. A vendor goal counts as running until the vendor
+reports its result, or until `result_timeout_s` after it was sent — whichever
+comes first — so a vendor goal that never ends cannot wedge the relay. Our own
+goal may already have ended by then (cancelled, or ended by the deadman); the
+refusal still holds until the vendor's goal is over.
 
 **The drive joint's state** is published too, because on the physical side
 `joint_state_broadcaster` reports joint1..5 only and `robot_state_publisher`
@@ -108,12 +122,12 @@ SPECS: tuple[Spec, ...] = (
     Spec(
         "vendor_open_position",
         Parameter.Type.DOUBLE,
-        "the vendor action's position for fully open, in the vendor's units",
+        "the vendor action's position for fully open (0.0 for the xArm gripper)",
     ),
     Spec(
         "vendor_closed_position",
         Parameter.Type.DOUBLE,
-        "the vendor action's position for fully closed, in the vendor's units",
+        "the vendor action's position for fully closed (0.85 for the xArm gripper)",
     ),
     Spec(
         "result_timeout_s",
@@ -125,6 +139,13 @@ SPECS: tuple[Spec, ...] = (
         "deadman_state_topic",
         Parameter.Type.STRING,
         "the deadman's DeadmanState topic for this side",
+    ),
+    Spec(
+        "deadman_state_max_age_s",
+        Parameter.Type.DOUBLE,
+        "steady-clock age above which the deadman's last state closes the gate; above "
+        "the deadman's tick_period_s",
+        positive=True,
     ),
     Spec("drive_joint", Parameter.Type.STRING, "the gripper's drive joint name"),
     Spec(
@@ -157,7 +178,6 @@ SPECS: tuple[Spec, ...] = (
 
 #: How a forwarded goal ended, other than by the vendor's own result.
 _CANCELLED = "cancelled"
-_PREEMPTED = "preempted"
 _TIMED_OUT = "timed out"
 _DEADMAN = "deadman"
 _INACTIVE = "inactive"
@@ -194,6 +214,10 @@ class GripperRelay(LifecycleNode):
         self._vendor: ActionClient | None = None
         self._gate: DeadmanGate | None = None
         self._current: _Forwarded | None = None
+        #: The goal whose VENDOR goal may still be running. Outlives `_current`
+        #: when our goal ends first; cleared by the vendor's result, a vendor
+        #: refusal, or the goal's `result_timeout_s` deadline.
+        self._busy: _Forwarded | None = None
         #: Drive joint <-> what `get_gripper_position` reports. A second map,
         #: because the vendor's state service and its action do not share a
         #: unit: the service reports pulses, the action converts them.
@@ -245,7 +269,11 @@ class GripperRelay(LifecycleNode):
             callback_group=self._group,
         )
         self._gate = DeadmanGate(
-            self, config["deadman_state_topic"], self._group, self._on_gate_closed
+            self,
+            config["deadman_state_topic"],
+            config["deadman_state_max_age_s"],
+            self._group,
+            self._on_gate_closed,
         )
         self._state_client = self.create_client(
             GetFloat32, config["get_position_service"], callback_group=self._group
@@ -315,12 +343,16 @@ class GripperRelay(LifecycleNode):
             self._vendor = None
         self._config = None
         self._map = None
+        self._current = None
+        self._busy = None
 
     # ------------------------------------------------------------------ #
     # The drive joint's state
     # ------------------------------------------------------------------ #
 
     def _poll(self) -> None:
+        if self._gate is not None:
+            self._gate.check()
         with self._lock:
             if not self._active or self._poll_in_flight:
                 return
@@ -383,15 +415,25 @@ class GripperRelay(LifecycleNode):
                 f"gripper goal rejected: position {request.command.position}"
             )
             return GoalResponse.REJECT
+        with self._lock:
+            busy = self._busy is not None or self._current is not None
+        if busy:
+            self.get_logger().warning(
+                "gripper goal rejected: a vendor goal is still running, and the vendor "
+                "cannot be preempted (see the module docstring)"
+            )
+            return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
     def _on_accepted(self, goal_handle) -> None:
         forwarded = _Forwarded(handle=goal_handle)
         with self._lock:
-            previous = self._current
-            self._current = forwarded
-        if previous is not None:
-            self._end(previous, _PREEMPTED, "preempted by a newer goal")
+            # Two goals accepted at once both passed `_on_goal`; the later one
+            # is not executed, rather than preempting the first.
+            taken = self._busy is not None or self._current is not None
+            if not taken:
+                self._current = forwarded
+                self._busy = forwarded
         goal_handle.execute()
 
     def _on_cancel(self, goal_handle) -> CancelResponse:
@@ -411,10 +453,31 @@ class GripperRelay(LifecycleNode):
     async def _execute(self, goal_handle) -> GripperCommand.Result:
         with self._lock:
             forwarded = self._current
+            active = self._active
         if forwarded is None or forwarded.handle is not goal_handle:
-            # Preempted between acceptance and execution.
+            # Refused at acceptance: another goal holds the gripper.
             goal_handle.abort()
             return self._result(math.nan)
+        # Checked again here, immediately before the vendor is commanded: the
+        # deadman, a cancel or a deactivate may all have arrived since
+        # `_on_goal` said yes.
+        gate = self._gate
+        refusal = None
+        if forwarded.finish.done():
+            refusal = "ended before it was sent"
+        elif not active:
+            refusal = "the relay is not active"
+        elif gate is None or not gate.permits_motion():
+            refusal = gate.why_closed() if gate is not None else "no deadman gate"
+        if refusal is not None:
+            self._end(forwarded, _DEADMAN, f"not sent to the vendor: {refusal}")
+            with self._lock:
+                if self._busy is forwarded:
+                    self._busy = None
+                if self._current is forwarded:
+                    self._current = None
+            kind, payload = forwarded.finish.result()
+            return self._conclude(forwarded, kind, payload)
         assert self._map is not None and self._vendor is not None and self._config
         command = goal_handle.request.command
         target = self._map.clamp(command.position)
@@ -430,9 +493,7 @@ class GripperRelay(LifecycleNode):
         timeout_s = self._config["result_timeout_s"]
         forwarded.deadline = self.create_timer(
             timeout_s,
-            lambda: self._end(
-                forwarded, _TIMED_OUT, f"no vendor result within {timeout_s:g} s"
-            ),
+            lambda: self._on_deadline(forwarded, timeout_s),
             callback_group=self._group,
             clock=self._steady,
         )
@@ -447,13 +508,28 @@ class GripperRelay(LifecycleNode):
 
         kind, payload = await forwarded.finish
 
-        if forwarded.deadline is not None:
-            self.destroy_timer(forwarded.deadline)
-            forwarded.deadline = None
+        # The deadline is NOT destroyed here: it also bounds the vendor goal,
+        # which may outlive ours (`_busy`).
         with self._lock:
             if self._current is forwarded:
                 self._current = None
         return self._conclude(forwarded, kind, payload)
+
+    def _on_deadline(self, forwarded: _Forwarded, timeout_s: float) -> None:
+        self._end(forwarded, _TIMED_OUT, f"no vendor result within {timeout_s:g} s")
+        self._vendor_over(forwarded, f"no vendor result within {timeout_s:g} s")
+
+    def _vendor_over(self, forwarded: _Forwarded, why: str) -> None:
+        """Record that the vendor goal behind ``forwarded`` is over, or no longer waited for."""
+        with self._lock:
+            freed = self._busy is forwarded
+            if freed:
+                self._busy = None
+            timer, forwarded.deadline = forwarded.deadline, None
+        if timer is not None:
+            self.destroy_timer(timer)
+        if freed:
+            self.get_logger().info(f"the gripper takes a new goal: {why}")
 
     # ------------------------------------------------------------------ #
     # The vendor's side
@@ -464,25 +540,27 @@ class GripperRelay(LifecycleNode):
         vendor = None if error is not None else future.result()
         if vendor is None or not vendor.accepted:
             self._end(forwarded, _REFUSED, f"the vendor did not accept the goal ({error})")
+            self._vendor_over(forwarded, "the vendor did not accept the last goal")
             return
         forwarded.vendor = vendor
-        if forwarded.finish.done():
-            # Ended while the vendor was answering: the vendor goal outlives
-            # ours unless it is cancelled now.
-            self._forward_cancel(forwarded, conclude=False)
-            return
-        if forwarded.cancel_requested:
-            self._forward_cancel(forwarded, conclude=True)
-            return
+        # The vendor's result is followed in every case: it is what says the
+        # vendor goal is over (`_busy`), whether or not ours still waits on it.
         result = vendor.get_result_async()
         result.add_done_callback(lambda done: self._on_vendor_result(forwarded, done))
+        if forwarded.finish.done():
+            # Ended while the vendor was answering: asked to cancel, which the
+            # vendor acknowledges and does not act on.
+            self._forward_cancel(forwarded, conclude=False)
+        elif forwarded.cancel_requested:
+            self._forward_cancel(forwarded, conclude=True)
 
     def _on_vendor_result(self, forwarded: _Forwarded, future) -> None:
         error = future.exception()
         if error is not None:
             self._end(forwarded, _REFUSED, f"the vendor result failed: {error}")
-            return
-        self._end(forwarded, _VENDOR, future.result())
+        else:
+            self._end(forwarded, _VENDOR, future.result())
+        self._vendor_over(forwarded, "the vendor reported the last goal's result")
 
     def _on_vendor_feedback(self, forwarded: _Forwarded, message) -> None:
         if self._map is None:
@@ -536,7 +614,7 @@ class GripperRelay(LifecycleNode):
             if forwarded.finish.done():
                 return
             forwarded.finish.set_result((kind, payload))
-        if kind in (_PREEMPTED, _TIMED_OUT, _DEADMAN, _INACTIVE):
+        if kind in (_TIMED_OUT, _DEADMAN, _INACTIVE):
             self.get_logger().warning(f"gripper goal ended, {kind}: {payload}")
             if forwarded.vendor is not None:
                 self._forward_cancel(forwarded, conclude=False)
@@ -572,7 +650,7 @@ class GripperRelay(LifecycleNode):
             self.get_logger().info(f"gripper goal cancelled: {payload}")
             handle.canceled()
         else:
-            if kind not in (_PREEMPTED, _TIMED_OUT, _DEADMAN, _INACTIVE):
+            if kind not in (_TIMED_OUT, _DEADMAN, _INACTIVE):
                 self.get_logger().error(f"gripper goal aborted, {kind}: {payload}")
             handle.abort()
         return result

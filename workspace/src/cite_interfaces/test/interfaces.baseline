@@ -82,8 +82,8 @@ msg/SafetyState.msg
 msg/TwinHeartbeat.msg
   string TOPIC="/cite/twin/heartbeat"
   std_msgs/Header header
-  string asset_id
   string zone
+  string boundary_id
   uint64 sequence
 msg/TwinMode.msg
   string TOPIC="/cite/twin/mode"

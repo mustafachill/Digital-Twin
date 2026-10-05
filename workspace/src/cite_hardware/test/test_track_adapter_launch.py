@@ -43,7 +43,7 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vendor_fakes import FakeTrack, Harness, SETTLE_S  # noqa: E402
+from vendor_fakes import FakeDeadman, FakeTrack, Harness, SETTLE_S  # noqa: E402
 
 NODE = "track_adapter"
 VENDOR = "/test_vendor/xarm"
@@ -61,11 +61,13 @@ PARAMETERS = {
     "position_max_m": 0.7,
     "max_speed_mps": 0.5,
     "poll_period_s": 0.05,
+    "position_max_age_s": 0.5,
     "auto_enable": False,
     "set_position_service": f"{VENDOR}/set_linear_motor_pos",
     "get_position_service": f"{VENDOR}/get_linear_motor_pos",
     "stop_service": f"{VENDOR}/set_linear_motor_stop",
     "deadman_state_topic": DEADMAN,
+    "deadman_state_max_age_s": 0.5,
 }
 
 
@@ -128,7 +130,7 @@ class TestTrackAdapter(unittest.TestCase):
         cls.states: list[JointState] = []
         node.create_subscription(JointState, JOINT_STATES, cls.states.append, STATE)
         cls.commands = node.create_publisher(JointTrajectory, COMMAND_TOPIC, COMMAND)
-        cls.deadman = node.create_publisher(DeadmanState, DEADMAN, LATCHED)
+        cls.deadman = FakeDeadman(cls.harness, DEADMAN)
         cls.unserved_states: list[JointState] = []
         node.create_subscription(
             JointState,
@@ -150,6 +152,8 @@ class TestTrackAdapter(unittest.TestCase):
         cls.harness.close()
 
     def setUp(self):
+        self.deadman.publishing.set()
+        self.track.answer_get.set()
         self.track.answer_set.set()
         self.track.set_ret = 0
         self.track.position_mm = 100
@@ -164,7 +168,7 @@ class TestTrackAdapter(unittest.TestCase):
         """
         type(self)._sequence = getattr(type(self), "_sequence", 0) + 1
         detail = f"test state {type(self)._sequence}."
-        self.deadman.publish(DeadmanState(state=state, detail=detail))
+        self.deadman.say(state, detail)
         proc_output.assertWaitFor(expected_output=detail, timeout=SETTLE_S)
 
     def _send_until_count(self, message, count: int, what: str) -> None:
@@ -173,10 +177,12 @@ class TestTrackAdapter(unittest.TestCase):
         self.harness.wait_for(lambda: len(self.track.set_requests) >= count, what)
 
     def _wait_for_position(self, metres: float) -> None:
+        """Wait for a position published from NOW on: an older one may be stale."""
+        seen = len(self.states)
         self.harness.wait_for(
             lambda: any(
                 s.name == [JOINT] and abs(s.position[0] - metres) < 1e-9
-                for s in self.states[-5:]
+                for s in self.states[seen:]
             ),
             f"{JOINT} at {metres} m on {JOINT_STATES}",
         )
@@ -210,20 +216,73 @@ class TestTrackAdapter(unittest.TestCase):
         self._send_until_count(_command([0.6], 0.5), before + 1, "set_linear_motor_pos")
         self.assertEqual(self.track.set_requests[-1].speed, 500)
 
-    def test_an_empty_trajectory_stops_the_track(self, proc_output):
+    def test_an_empty_trajectory_is_refused_not_a_stop(self, proc_output):
+        """R-02: refused, as `joint_trajectory_controller` refuses one (P2)."""
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
-        before = self.track.stops
+        sets, stops = len(self.track.set_requests), self.track.stops
         self.commands.publish(_command(None, 0.0))
-        self.harness.wait_for(lambda: self.track.stops > before, "set_linear_motor_stop")
-
-    def test_a_stop_is_not_gated_by_the_deadman(self, proc_output):
-        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
-        self._deadman(proc_output, DeadmanState.STATE_TRIPPED)
-        before = self.track.stops
-        self.commands.publish(_command(None, 0.0))
-        self.harness.wait_for(
-            lambda: self.track.stops > before, "set_linear_motor_stop while tripped"
+        proc_output.assertWaitFor(
+            expected_output="track command refused: the trajectory has no points",
+            timeout=SETTLE_S,
         )
+        self.assertEqual(len(self.track.set_requests), sets)
+        self.assertEqual(self.track.stops, stops)
+
+    def _moving(self, proc_output) -> int:
+        """Send a move while HEALTHY, and return the stop count before any stop."""
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        stops = self.track.stops
+        before = len(self.track.set_requests)
+        self._send_until_count(_command([0.3], 2.0), before + 1, "set_linear_motor_pos")
+        return stops
+
+    def test_a_trip_stops_a_moving_carriage(self, proc_output):
+        """S-02: the adapter's own stop when its gate closes, beside the deadman's."""
+        stops = self._moving(proc_output)
+        self._deadman(proc_output, DeadmanState.STATE_TRIPPED)
+        self.harness.wait_for(lambda: self.track.stops > stops, "set_linear_motor_stop")
+
+    def test_a_silent_deadman_stops_a_moving_carriage(self, proc_output):
+        """S-06: a closure the deadman did not cause — its state went stale."""
+        stops = self._moving(proc_output)
+        self.deadman.publishing.clear()
+        self.harness.wait_for(
+            lambda: self.track.stops > stops, "set_linear_motor_stop on a stale deadman"
+        )
+        proc_output.assertWaitFor(expected_output="above the bound of 0.5 s", timeout=SETTLE_S)
+
+    def test_a_second_deadman_stops_a_moving_carriage(self, proc_output):
+        """S-07: two deadmen are two answers to one question, and neither is taken."""
+        stops = self._moving(proc_output)
+        rival = self.harness.node.create_publisher(DeadmanState, DEADMAN, LATCHED)
+        try:
+            self.harness.wait_for(
+                lambda: self.track.stops > stops, "set_linear_motor_stop on a second deadman"
+            )
+            before = len(self.track.set_requests)
+            self.commands.publish(_command([0.2], 1.0))
+            self.harness.hold_for(
+                lambda: len(self.track.set_requests) > before, "a move beside two deadmen", 0.75
+            )
+        finally:
+            self.harness.node.destroy_publisher(rival)
+
+    def test_a_hung_position_read_refuses_motion(self, proc_output):
+        """S-11: a read never answered is abandoned, and no speed is derived without one."""
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        self.track.answer_get.clear()
+        proc_output.assertWaitFor(
+            expected_output="get_linear_motor_pos unanswered within position_max_age_s",
+            timeout=SETTLE_S,
+        )
+        before = len(self.track.set_requests)
+        self.commands.publish(_command([0.3], 1.0))
+        self.harness.hold_for(
+            lambda: len(self.track.set_requests) > before, "a move on a stale position", 0.75
+        )
+        self.track.answer_get.set()
 
     def test_a_command_for_another_joint_is_refused(self, proc_output):
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
@@ -327,9 +386,15 @@ class TestTrackAdapter(unittest.TestCase):
         self.assertEqual(late.set_requests[-1].pos, 250)
 
     def test_z_an_inactive_adapter_commands_nothing(self, proc_output):
-        """Last by name, because it deactivates the node the others drive."""
-        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        """Last by name, because it deactivates the node the others drive.
+
+        R-04: deactivating with a move sent stops the carriage first.
+        """
+        stops = self._moving(proc_output)
         self.assertTrue(self.harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
+        self.harness.wait_for(
+            lambda: self.track.stops > stops, "set_linear_motor_stop on deactivate"
+        )
         try:
             before = len(self.track.set_requests)
             self.commands.publish(_command([0.3], 1.0))

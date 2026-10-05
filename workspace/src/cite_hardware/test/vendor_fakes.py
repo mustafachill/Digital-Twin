@@ -19,11 +19,16 @@ action server in the TEST's own node, under a test-chosen name, recording what
 it was asked. They imitate exactly the parts of `xarm_api`'s driver that the
 adapters depend on, as read in the pinned source:
 
-- the linear-track services and `set_state` answer with `ret`, 0 for success
-  (`xarm_api/src/xarm_driver_service.cpp`);
-- the gripper action fills only `position` in its feedback and result, never
-  `stalled` or `reached_goal`, accepts a cancel and does not stop for it
-  (`xarm_api/src/xarm_driver.cpp`, `_xarm_gripper_action_execute`).
+- the linear-track services, `set_state` and `set_mode` answer with `ret`, 0
+  for success (`xarm_api/src/xarm_driver_service.cpp`); `set_mode` stops the
+  arm before it changes the mode (`:543-550`), and the arm's state is one
+  value any client may set — UFACTORY Studio, the pendant, another node;
+- the gripper action takes and reports 0.0 (open) to 0.85 (closed), turning a
+  goal into a pulse target as ``|850 - position * 1000|`` and pulses back as
+  ``|850 - pulses| / 1000``; `get_gripper_position` reports the raw pulses,
+  850 open to 0 closed (`xarm_api/src/xarm_driver.cpp:507-515`). It fills only
+  `position` in its feedback and result, never `stalled` or `reached_goal`,
+  accepts a cancel and does not stop for it (`_xarm_gripper_action_execute`).
 
 Where a test needs the vendor to do something else — fail, stall, hold — it
 says so through the fake's attributes, never by editing the fake per test.
@@ -38,6 +43,8 @@ from collections.abc import Callable
 import threading
 import time
 
+from cite_interfaces.msg import DeadmanState
+from cite_interfaces.qos import LATCHED
 from control_msgs.action import GripperCommand
 from lifecycle_msgs.msg import Transition
 from lifecycle_msgs.srv import ChangeState, GetState
@@ -154,6 +161,9 @@ class FakeTrack:
         #: observable.
         self.answer_set = threading.Event()
         self.answer_set.set()
+        #: The same for `get_linear_motor_pos`: a position read that hangs.
+        self.answer_get = threading.Event()
+        self.answer_get.set()
         handlers = {
             self.SET: (LinearMotorSetPos, self._on_set),
             self.GET: (GetInt16, self._on_get),
@@ -175,6 +185,7 @@ class FakeTrack:
         return response
 
     def _on_get(self, _request, response):
+        self.answer_get.wait(timeout=SETTLE_S)
         response.ret = self.position_ret
         response.data = self.position_mm
         return response
@@ -186,34 +197,113 @@ class FakeTrack:
 
 
 class FakeArmState:
-    """`set_state`, failing its first ``failures`` calls when asked to."""
+    """`set_state` and `set_mode`, and the one arm state every client shares.
+
+    ``state`` starts at 0 (START), which is where the vendor plugin's own
+    activation leaves the arm. ``flip`` is another client setting it.
+    """
 
     def __init__(self, harness: Harness, namespace: str) -> None:
         self.requests: list[int] = []
+        self.modes: list[int] = []
+        #: Every call in arrival order, as ("set_state", n) or ("set_mode", n).
+        self.calls: list[tuple[str, int]] = []
+        self.state = 0
+        self.mode = 1
         self.failures = 0
-        self._service = harness.node.create_service(
-            SetInt16, f"{namespace}/set_state", self._on_set_state,
-            callback_group=harness.group,
-        )
+        #: When set, the NEXT set_state call is held unanswered until
+        #: ``release`` is set: a vendor that does not answer.
+        self.hold_next = threading.Event()
+        self.release = threading.Event()
+        self._lock = threading.Lock()
+        self._services = [
+            harness.node.create_service(
+                SetInt16, f"{namespace}/set_state", self._on_set_state,
+                callback_group=harness.group,
+            ),
+            harness.node.create_service(
+                SetInt16, f"{namespace}/set_mode", self._on_set_mode,
+                callback_group=harness.group,
+            ),
+        ]
+
+    def flip(self, state: int) -> None:
+        """Another client (Studio, the pendant) sets the arm's state."""
+        with self._lock:
+            self.state = state
 
     def _on_set_state(self, request, response):
-        self.requests.append(request.data)
-        if self.failures > 0:
-            self.failures -= 1
-            response.ret = 1
-        else:
+        with self._lock:
+            hold = self.hold_next.is_set()
+            self.hold_next.clear()
+        if hold:
+            self.release.wait(timeout=SETTLE_S)
+        with self._lock:
+            self.requests.append(request.data)
+            self.calls.append(("set_state", request.data))
+            if self.failures > 0:
+                self.failures -= 1
+                response.ret = 1
+            else:
+                self.state = request.data
+                response.ret = 0
+        return response
+
+    def _on_set_mode(self, request, response):
+        with self._lock:
+            self.modes.append(request.data)
+            self.calls.append(("set_mode", request.data))
+            # The vendor's service stops the arm before it changes the mode.
+            self.state = 4
+            self.mode = request.data
             response.ret = 0
         return response
+
+
+class FakeDeadman:
+    """A deadman's `DeadmanState`, republished on a timer as the real one is."""
+
+    PERIOD_S = 0.05
+
+    def __init__(self, harness: Harness, topic: str) -> None:
+        self._harness = harness
+        self._topic = topic
+        self._lock = threading.Lock()
+        self.message: DeadmanState | None = None
+        #: Cleared to make this deadman HANG: alive on the graph, silent.
+        self.publishing = threading.Event()
+        self.publishing.set()
+        self.publisher = harness.node.create_publisher(DeadmanState, topic, LATCHED)
+        self._timer = harness.node.create_timer(
+            self.PERIOD_S, self._republish, callback_group=harness.group
+        )
+
+    def say(self, state: int, detail: str) -> None:
+        with self._lock:
+            self.message = DeadmanState(state=state, detail=detail)
+        self.publisher.publish(self.message)
+
+    def _republish(self) -> None:
+        with self._lock:
+            message = self.message
+        if message is not None and self.publishing.is_set():
+            self.publisher.publish(message)
 
 
 class FakeGripper:
     """The vendor's `GripperCommand` server, as `xarm_driver.cpp` behaves."""
 
+    #: `xarm_gripper.max_pos`, the vendor's default (`xarm_params.yaml`).
+    MAX_POS = 850.0
+
     def __init__(self, harness: Harness, name: str, state_service: str = "") -> None:
         self.goals: list[float] = []
         self.cancels = 0
+        #: How many vendor goals are executing now.
+        self.running = 0
         #: What `get_gripper_position` reports, in the vendor's pulses.
         self.pulses = 850.0
+        self._lock = threading.Lock()
         self._release = threading.Event()
         if state_service:
             self._state = harness.node.create_service(
@@ -228,6 +318,16 @@ class FakeGripper:
             cancel_callback=self._on_cancel,
             callback_group=harness.group,
         )
+
+    @classmethod
+    def to_pulses(cls, position: float) -> float:
+        """Convert a goal as the vendor does, `_xarm_gripper_pos_convert(pos, true)`."""
+        return abs(cls.MAX_POS - position * 1000.0)
+
+    @classmethod
+    def from_pulses(cls, pulses: float) -> float:
+        """Convert pulses back as the vendor does, `_xarm_gripper_pos_convert(pos)`."""
+        return abs(cls.MAX_POS - pulses) / 1000.0
 
     def _on_position(self, _request, response):
         response.ret = 0
@@ -249,17 +349,29 @@ class FakeGripper:
         return CancelResponse.ACCEPT
 
     def _execute(self, goal_handle):
-        command = goal_handle.request.command
-        self.goals.append(command.position)
-        feedback = GripperCommand.Feedback()
-        feedback.position = command.position / 2.0
-        goal_handle.publish_feedback(feedback)
-        if command.max_effort == HOLD:
-            self._release.wait(timeout=SETTLE_S * 3)
-        result = GripperCommand.Result()
-        result.position = command.position
-        if command.max_effort == STALL:
-            result.stalled = True
-        # The vendor succeeds whenever the motion ends, from CANCELING too.
-        goal_handle.succeed()
-        return result
+        with self._lock:
+            self.running += 1
+        try:
+            command = goal_handle.request.command
+            self.goals.append(command.position)
+            target = self.to_pulses(command.position)
+            # Halfway there, reported as the vendor reports it.
+            self.pulses = (self.pulses + target) / 2.0
+            feedback = GripperCommand.Feedback()
+            feedback.position = self.from_pulses(self.pulses)
+            goal_handle.publish_feedback(feedback)
+            if command.max_effort == HOLD:
+                self._release.wait(timeout=SETTLE_S * 3)
+            self.pulses = target
+            result = GripperCommand.Result()
+            result.position = self.from_pulses(self.pulses)
+            if command.max_effort == STALL:
+                # Not the vendor: it never sets `stalled`. Used only to show
+                # the relay forwards what it is given.
+                result.stalled = True
+            # The vendor succeeds whenever the motion ends, from CANCELING too.
+            goal_handle.succeed()
+            return result
+        finally:
+            with self._lock:
+                self.running -= 1

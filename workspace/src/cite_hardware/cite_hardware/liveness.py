@@ -22,20 +22,26 @@ TRIPPED it. The node turns a trip into stop calls; this module only says when.
 THE RULES, which `DeadmanState.msg` states for a reader of the topic:
 
 - Motion is permitted in HEALTHY and in nothing else.
-- AWAITING becomes HEALTHY on the first heartbeat from the deadman's own zone.
-  It never trips: before any heartbeat there is no commander whose loss could be
-  detected, and nothing is permitted to move anyway.
-- HEALTHY becomes TRIPPED when the timeout elapses with no fresh heartbeat, or
-  when the heartbeat's publisher disappears.
+- AWAITING becomes HEALTHY on the first heartbeat from the deadman's own zone,
+  carrying a boundary id, while exactly one heartbeat publisher is on the
+  topic. That heartbeat's boundary id is LATCHED: it names the one boundary
+  this deadman follows until the next activation. AWAITING never trips: before
+  any heartbeat there is no commander whose loss could be detected, and nothing
+  is permitted to move anyway.
+- HEALTHY becomes TRIPPED when the timeout elapses with no fresh heartbeat,
+  when the heartbeat's publisher disappears, when a heartbeat carries a
+  boundary id other than the latched one, or when more than one heartbeat
+  publisher is on the topic. The last two are a second boundary commanding the
+  same side, and which of the two is in charge cannot be told from here.
 - TRIPPED is LATCHED. Heartbeats resuming do not clear it; only deactivate,
   which leaves INACTIVE, and a later activate do. An unexplained loss of the
   commander is a fault, and resuming on its own would re-run whatever caused it
   (cross-cutting-safety.md).
 
-A heartbeat counts only when it is FRESH: from this zone, and with a sequence
-above the last one accepted. A repeated or rewound sequence is not evidence that
-the boundary is alive now — it is a duplicate, or a second boundary, and either
-way it does not reset the timeout.
+A heartbeat counts only when it is FRESH: from this zone, from the latched
+boundary, and with a sequence above the last one accepted. A repeated or rewound
+sequence is not evidence that the boundary is alive now — it is a duplicate, and
+it does not reset the timeout.
 """
 
 from __future__ import annotations
@@ -82,6 +88,9 @@ class Liveness:
         self.timeout_s = timeout_s
         self.state = INACTIVE
         self.last_sequence = 0
+        #: The boundary this deadman follows, latched from the first heartbeat
+        #: after activation; empty until then.
+        self.boundary_id = ""
         self.detail = "not active"
 
     @property
@@ -91,6 +100,7 @@ class Liveness:
     def activate(self) -> Outcome:
         self.state = AWAITING
         self.last_sequence = 0
+        self.boundary_id = ""
         self.detail = f"awaiting the first heartbeat of zone {self.zone!r}"
         return Outcome(accepted=True, reason=self.detail)
 
@@ -99,8 +109,14 @@ class Liveness:
         self.detail = "deactivated"
         return Outcome(accepted=True, reason=self.detail)
 
-    def heartbeat(self, zone: str, sequence: int) -> Outcome:
-        """Take one heartbeat. Accepted only when fresh, and only while it can matter."""
+    def heartbeat(
+        self, zone: str, boundary_id: str, sequence: int, publishers: int
+    ) -> Outcome:
+        """Take one heartbeat. Accepted only when fresh, and only while it can matter.
+
+        ``publishers`` is how many heartbeat publishers the graph shows at the
+        moment this one arrived.
+        """
         if self.state in (INACTIVE, TRIPPED):
             return Outcome(
                 accepted=False,
@@ -111,19 +127,42 @@ class Liveness:
                 accepted=False,
                 reason=f"heartbeat from zone {zone!r}, and this deadman guards {self.zone!r}",
             )
+        if publishers > 1:
+            return self.second_boundary(
+                f"{publishers} heartbeat publishers on the topic, and one boundary has one"
+            )
+        if not boundary_id:
+            return Outcome(
+                accepted=False,
+                reason="heartbeat without a boundary id; which boundary sent it is unknown",
+            )
+        if self.boundary_id and boundary_id != self.boundary_id:
+            return self.second_boundary(
+                f"heartbeat from boundary {boundary_id!r}, and this deadman follows "
+                f"{self.boundary_id!r}"
+            )
         if sequence <= self.last_sequence:
             return Outcome(
                 accepted=False,
                 reason=(
                     f"heartbeat sequence {sequence} is not above {self.last_sequence}; "
-                    "a duplicate or a second boundary, not evidence of this one"
+                    "a duplicate, not evidence that the boundary is alive now"
                 ),
             )
         self.last_sequence = sequence
         if self.state == AWAITING:
             self.state = HEALTHY
-            self.detail = f"heartbeat {sequence} received; motion permitted"
+            self.boundary_id = boundary_id
+            self.detail = (
+                f"heartbeat {sequence} of boundary {boundary_id!r} received; motion permitted"
+            )
         return Outcome(accepted=True, reason=self.detail)
+
+    def second_boundary(self, reason: str) -> Outcome:
+        """Record evidence of a second boundary: a trip when HEALTHY, a refusal before."""
+        if self.state == HEALTHY:
+            return self._trip(reason)
+        return Outcome(accepted=False, reason=reason)
 
     def expired(self) -> Outcome:
         """Record that the timeout elapsed since the last fresh heartbeat."""

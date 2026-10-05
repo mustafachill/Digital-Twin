@@ -29,7 +29,6 @@ from cite_hardware.mapping import (
     LinearMap,
     Refused,
     require_within,
-    STOP,
     to_vendor_position,
     track_target,
     vendor_speed,
@@ -106,8 +105,10 @@ def test_the_final_point_is_the_command() -> None:
     assert target.seconds == pytest.approx(2.5)
 
 
-def test_an_empty_trajectory_is_a_stop() -> None:
-    assert track_target(_trajectory([JOINT]), JOINT) == STOP
+def test_an_empty_trajectory_is_refused_not_a_stop() -> None:
+    """R-02: `joint_trajectory_controller` refuses one, so the adapter does (P2)."""
+    with pytest.raises(Refused, match="no points"):
+        track_target(_trajectory([JOINT]), JOINT)
 
 
 @pytest.mark.parametrize(

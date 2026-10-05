@@ -87,13 +87,6 @@ class LinearMap:
         return self.source_a + fraction * (self.source_b - self.source_a)
 
 
-#: A track trajectory with no points. ``trajectory_msgs`` gives an empty
-#: trajectory one meaning on a `joint_trajectory_controller` topic — stop and
-#: hold where it stands — and the adapter keeps that meaning, so a caller that
-#: stops the simulated carriage this way stops the physical one the same way (P2).
-STOP = "stop"
-
-
 @dataclass(frozen=True)
 class TrackTarget:
     """Where a track command sends the carriage, and how long it gives it."""
@@ -102,11 +95,11 @@ class TrackTarget:
     seconds: float
 
 
-def track_target(message: JointTrajectory, joint: str) -> TrackTarget | str:
-    """Read the one thing a track command says: its final point, or a stop.
+def track_target(message: JointTrajectory, joint: str) -> TrackTarget:
+    """Read the one thing a track command says: its final point.
 
-    Returns :data:`STOP` for an empty trajectory. Raises :class:`Refused` for a
-    trajectory naming any joint but ``joint``, a final point whose position
+    Raises :class:`Refused` for a trajectory with no points, a trajectory
+    naming any joint but ``joint``, a final point whose position
     count does not match, a position that is not finite, or a final point that
     is not in the future. The track's own controller takes the last point as
     the place to be at ``time_from_start``; a vendor position command has no
@@ -120,7 +113,11 @@ def track_target(message: JointTrajectory, joint: str) -> TrackTarget | str:
             f"{joint!r}; refused rather than forwarded partially"
         )
     if not message.points:
-        return STOP
+        # Refused, as `joint_trajectory_controller` (4.x) refuses one: an empty
+        # trajectory is not a stop to the simulated track controller either,
+        # so it is not one here (P2). The carriage is stopped by the deadman
+        # and by this adapter's own gate, never by a command.
+        raise Refused("the trajectory has no points")
     final = message.points[-1]
     if len(final.positions) != 1:
         raise Refused(

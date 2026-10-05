@@ -41,11 +41,13 @@ GOOD = {
         "position_max_m": 0.7,
         "max_speed_mps": 1.0,
         "poll_period_s": 0.1,
+        "position_max_age_s": 0.5,
         "auto_enable": False,
         "set_position_service": "/v/set_linear_motor_pos",
         "get_position_service": "/v/get_linear_motor_pos",
         "stop_service": "/v/set_linear_motor_stop",
         "deadman_state_topic": "/t/deadman",
+        "deadman_state_max_age_s": 0.5,
     },
     "gripper_relay": {
         "action_name": "/t/gripper_cmd",
@@ -56,6 +58,7 @@ GOOD = {
         "vendor_closed_position": 0.85,
         "result_timeout_s": 5.0,
         "deadman_state_topic": "/t/deadman",
+        "deadman_state_max_age_s": 0.5,
         "drive_joint": "drive_joint",
         "joint_state_topic": "/t/joint_states",
         "get_position_service": "/v/get_gripper_position",
@@ -67,11 +70,14 @@ GOOD = {
         "zone": "cell_b",
         "asset_id": "picker",
         "timeout_s": 0.5,
+        "tick_period_s": 0.1,
+        "call_deadline_s": 1.0,
         "state_topic": "/t/deadman",
         "set_state_service": "/v/set_state",
+        "set_mode_service": "/v/set_mode",
+        "enable_mode": 1,
         "linear_motor_stop_service": "/v/set_linear_motor_stop",
-        "cancel_actions": ["/t/gripper_cmd"],
-        "stop_trajectory_topics": ["/t/joint_trajectory"],
+        "cancel_actions": ["/t/gripper_cmd", "/t/arm_controller/follow_joint_trajectory"],
     },
 }
 
@@ -140,6 +146,12 @@ def test_the_refusal_names_every_missing_fact() -> None:
         ("gripper_relay", "closed_position", 0.0),  # an empty drive range
         ("gripper_relay", "vendor_action_name", "/t/gripper_cmd"),  # serving itself
         ("deadman", "timeout_s", 0.0),
+        ("deadman", "tick_period_s", 0.5),  # not below timeout_s
+        ("deadman", "call_deadline_s", 0.0),
+        ("deadman", "enable_mode", 0),  # a mode the vendor plugin does not stream in
+        ("track_adapter", "position_max_age_s", 0.0),
+        ("track_adapter", "deadman_state_max_age_s", -1.0),
+        ("gripper_relay", "deadman_state_max_age_s", 0.0),
         ("deadman", "cancel_actions", ["/t/gripper_cmd", ""]),
     ],
 )

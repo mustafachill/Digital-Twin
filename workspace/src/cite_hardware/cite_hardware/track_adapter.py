@@ -26,15 +26,23 @@ presents the simulated names on the physical side and translates:
   serves, takes the trajectory's FINAL point — the program sends exactly one
   (ADR-0067) — and calls `set_linear_motor_pos` with the position in the
   vendor's unit and the speed that reaches it in the point's `time_from_start`.
-  An empty trajectory is a stop, as it is to the simulated controller, and
-  calls `set_linear_motor_stop`.
+  A trajectory with no points is refused, as the simulated controller refuses
+  it (`joint_trajectory_controller` 4.x); it is not a stop there either.
 - **State.** It polls `get_linear_motor_pos` and publishes the track joint's
   position on the arm's joint-state topic, where the simulated side's
   `joint_state_broadcaster` publishes it. The program reads arrival from there.
 
 **It never commands motion while not ACTIVE, and never while the deadman does
-not permit it** (`cite_hardware.gate`). A stop is not motion and is never
-gated.
+not permit it** (`cite_hardware.gate`). **It stops the carriage itself** with
+`set_linear_motor_stop` when its gate closes for any reason — the deadman's
+trip, the deadman's state going stale, a second deadman — and on deactivate and
+shutdown, whenever a `set_linear_motor_pos` was in flight or a move it sent may
+still be running. The deadman's own stop on a trip is the second, independent
+one; a closure the deadman did not cause has only this one.
+
+**A speed is derived only from a fresh position.** The carriage position is
+polled; a read unanswered within `position_max_age_s` is abandoned, and a
+position older than that is not used to derive a speed.
 
 **The vendor call is never waited on.** `set_linear_motor_pos` is called with
 `wait=false`, and that is load-bearing rather than a preference: the vendor's
@@ -60,7 +68,6 @@ from cite_hardware.mapping import (
     from_vendor_position,
     Refused,
     require_within,
-    STOP,
     to_vendor_position,
     track_target,
     vendor_speed,
@@ -69,6 +76,7 @@ from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.process import run
 from cite_interfaces.qos import COMMAND, STATE
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.clock import Clock, ClockType
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import JointState
@@ -112,6 +120,13 @@ SPECS: tuple[Spec, ...] = (
         positive=True,
     ),
     Spec(
+        "position_max_age_s",
+        Parameter.Type.DOUBLE,
+        "steady-clock bound on a carriage position used to derive a speed, and on an "
+        "unanswered position read",
+        positive=True,
+    ),
+    Spec(
         "auto_enable",
         Parameter.Type.BOOL,
         "whether a position command may enable a disabled track motor",
@@ -136,6 +151,13 @@ SPECS: tuple[Spec, ...] = (
         Parameter.Type.STRING,
         "the deadman's DeadmanState topic for this side",
     ),
+    Spec(
+        "deadman_state_max_age_s",
+        Parameter.Type.DOUBLE,
+        "steady-clock age above which the deadman's last state closes the gate; above "
+        "the deadman's tick_period_s",
+        positive=True,
+    ),
 )
 
 
@@ -149,6 +171,7 @@ class TrackAdapter(LifecycleNode):
         self._config: dict | None = None
         self._active = False
         self._group = ReentrantCallbackGroup()
+        self._steady = Clock(clock_type=ClockType.STEADY_TIME)
         self._set_client = None
         self._get_client = None
         self._stop_client = None
@@ -160,9 +183,16 @@ class TrackAdapter(LifecycleNode):
         #: until the first good read and after a failed one: a speed derived
         #: from a position nobody has read would be a guess.
         self._position_m: float | None = None
+        #: Steady-clock time the position above was read, nanoseconds.
+        self._position_at_ns = 0
         self._set_in_flight = False
-        self._get_in_flight = False
+        #: The position read in flight, and when it is abandoned.
+        self._get_future = None
+        self._get_deadline_ns = 0
         self._pending: LinearMotorSetPos.Request | None = None
+        #: A position command was sent and no stop has been sent since: the
+        #: carriage may be moving.
+        self._move_possible = False
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -206,7 +236,11 @@ class TrackAdapter(LifecycleNode):
             callback_group=self._group,
         )
         self._gate = DeadmanGate(
-            self, config["deadman_state_topic"], self._group, self._on_gate_closed
+            self,
+            config["deadman_state_topic"],
+            config["deadman_state_max_age_s"],
+            self._group,
+            self._on_gate_closed,
         )
         self.get_logger().info(
             f"configured: {config['command_topic']} -> {config['set_position_service']}, "
@@ -230,6 +264,7 @@ class TrackAdapter(LifecycleNode):
         if self._poll_timer is not None:
             self.destroy_timer(self._poll_timer)
             self._poll_timer = None
+        self._stop_if_moving("the adapter was deactivated")
         return super().on_deactivate(state)
 
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
@@ -240,6 +275,7 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             self._active = False
             self._pending = None
+        self._stop_if_moving("the adapter is shutting down")
         self._release()
         return TransitionCallbackReturn.SUCCESS
 
@@ -261,6 +297,7 @@ class TrackAdapter(LifecycleNode):
                 self.destroy_client(client)
         self._set_client = self._get_client = self._stop_client = None
         self._position_m = None
+        self._get_future = None
         self._config = None
 
     # ------------------------------------------------------------------ #
@@ -276,17 +313,11 @@ class TrackAdapter(LifecycleNode):
         except Refused as error:
             self.get_logger().error(f"track command refused: {error}")
             return
-        if target == STOP:
-            # Never gated: a stop is not motion. Whatever was held is dropped
-            # with it, so the stop is not followed by the move it stopped.
-            with self._lock:
-                self._pending = None
-            self._call_stop()
-            return
 
         with self._lock:
             active = self._active
             position = self._position_m
+            position_age_s = (self._steady.now().nanoseconds - self._position_at_ns) * 1e-9
         if not active:
             self.get_logger().warning("track command refused: the adapter is not active")
             return
@@ -307,6 +338,13 @@ class TrackAdapter(LifecycleNode):
             self.get_logger().error(
                 "track command refused: the carriage position has not been read from "
                 f"{config['get_position_service']}, so no speed can be derived"
+            )
+            return
+        if position_age_s > config["position_max_age_s"]:
+            self.get_logger().error(
+                f"track command refused: the carriage position is {position_age_s:.3f} s old, "
+                f"above position_max_age_s {config['position_max_age_s']:g}, so no speed "
+                "can be derived from it"
             )
             return
 
@@ -350,6 +388,8 @@ class TrackAdapter(LifecycleNode):
         self.get_logger().info(
             f"track to {request.pos} at {request.speed} (vendor units, units/s)"
         )
+        with self._lock:
+            self._move_possible = True
         future = self._set_client.call_async(request)
         future.add_done_callback(lambda done: self._on_set_answered(request, done))
 
@@ -379,6 +419,15 @@ class TrackAdapter(LifecycleNode):
             return
         self._send(follow)
 
+    def _stop_if_moving(self, reason: str) -> None:
+        """Stop the carriage if a move this adapter sent may still be running."""
+        with self._lock:
+            moving = self._move_possible or self._set_in_flight
+            self._move_possible = False
+        if moving:
+            self.get_logger().warning(f"track stop: {reason}")
+            self._call_stop()
+
     def _call_stop(self) -> None:
         if self._stop_client is None:
             return
@@ -387,7 +436,6 @@ class TrackAdapter(LifecycleNode):
                 f"track stop could not be sent: {self._stop_client.srv_name} is not available"
             )
             return
-        self.get_logger().info("track stop")
         future = self._stop_client.call_async(Call.Request())
         future.add_done_callback(self._on_stop_answered)
 
@@ -401,27 +449,47 @@ class TrackAdapter(LifecycleNode):
             )
 
     def _on_gate_closed(self, reason: str) -> None:
-        # Only what is held here is dropped. The deadman stops the carriage
-        # itself; a second stop from this node would race it for nothing.
+        # Whatever is held is dropped, and a move that may be running is
+        # stopped here: the deadman stops the carriage on its own trip, but a
+        # closure it did not cause — its state gone stale, a second deadman —
+        # has only this stop.
         with self._lock:
             dropped = self._pending
             self._pending = None
         if dropped is not None:
             self.get_logger().warning(f"held track target {dropped.pos} dropped: {reason}")
+        self._stop_if_moving(f"the deadman gate closed: {reason}")
 
     # ------------------------------------------------------------------ #
     # State
     # ------------------------------------------------------------------ #
 
     def _poll(self) -> None:
+        if self._gate is not None:
+            self._gate.check()
+        config = self._config
+        if config is None:
+            return
+        now = self._steady.now().nanoseconds
+        overdue = None
         with self._lock:
-            if not self._active or self._get_in_flight:
+            if not self._active:
                 return
-            self._get_in_flight = True
+            if self._get_future is not None:
+                if now <= self._get_deadline_ns:
+                    return
+                overdue, self._get_future = self._get_future, None
+                self._position_m = None
         assert self._get_client is not None
+        if overdue is not None:
+            self._get_client.remove_pending_request(overdue)
+            overdue.cancel()
+            self.get_logger().error(
+                "get_linear_motor_pos unanswered within position_max_age_s; abandoned",
+                throttle_duration_sec=5.0,
+            )
         if not self._get_client.service_is_ready():
             with self._lock:
-                self._get_in_flight = False
                 self._position_m = None
             self.get_logger().warning(
                 f"track position unread: {self._get_client.srv_name} is not available",
@@ -429,15 +497,23 @@ class TrackAdapter(LifecycleNode):
             )
             return
         future = self._get_client.call_async(GetInt16.Request())
+        with self._lock:
+            self._get_future = future
+            self._get_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
         future.add_done_callback(self._on_position)
 
     def _on_position(self, future) -> None:
+        with self._lock:
+            if self._get_future is not future:
+                return  # abandoned at its deadline, or the node was cleaned up
+            self._get_future = None
+        if future.cancelled():
+            return
         config = self._config
         error = future.exception()
         response = None if error is not None else future.result()
         if config is None or response is None or response.ret != 0:
             with self._lock:
-                self._get_in_flight = False
                 self._position_m = None
             detail = error if error is not None else (
                 f"vendor code {response.ret}" if response is not None else "unconfigured"
@@ -450,8 +526,8 @@ class TrackAdapter(LifecycleNode):
             return
         position = from_vendor_position(response.data, config["position_scale"])
         with self._lock:
-            self._get_in_flight = False
             self._position_m = position
+            self._position_at_ns = self._steady.now().nanoseconds
         message = JointState()
         message.header.stamp = self.get_clock().now().to_msg()
         message.name = [config["joint"]]
