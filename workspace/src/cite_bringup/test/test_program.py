@@ -552,7 +552,10 @@ def test_the_script_checks_the_speed_scale_before_it_brings_anything_up() -> Non
     script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
     check = script.index("cite_bringup.program.sides --zone \"$ZONE\" --speed-scale")
     assert check < script.index("start_in_own_group")
-    assert "runs at speed scale ${SPEED_SCALE}" in script
+    # The prompt is the program's own (SA-S-02, SA-S-05): the script hands it
+    # the terminal and asks nothing itself.
+    assert "--speed-scale \"$SPEED_SCALE\" <&0 &" in script
+    assert "read -r" not in script
 
 
 def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> None:
@@ -580,14 +583,104 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
 
     class Accepted:
         accepted = True
+        current_mode = TwinMode.MODE_SIM
 
     ros = object.__new__(RosCell)
     ros.node = Node()
     ros._until = lambda future, what, ceiling_s=0.0: Accepted()
-    ros.leave_validated()
+    assert ros.leave_validated()
     (request,) = sent
     assert request.mode == TwinMode.MODE_SIM
     assert "nothing crosses to the physical side" in capsys.readouterr().out
     main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
     text = main_source.read_text()
     assert text.index("status = run(") < text.index("ros.leave_validated()")
+
+
+def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
+    """SA-S-02: the module asks `required_speed_scale` itself, not only the script."""
+    with pytest.raises(SystemExit) as exited:
+        program_main(["--zone", ZONE, "--dry-run"])
+    assert exited.value.code == 2
+    assert "must be given explicitly" in capsys.readouterr().err
+    # The plant alone is no physical side: the program as written.
+    assert program_main(["--zone", ZONE, "--via", "plant", "--dry-run"]) == 0
+
+
+def test_the_operator_is_asked_only_once_the_twin_is_read_in_sim() -> None:
+    """SA-S-05: the prompt's "nothing crosses" is read, never assumed."""
+    from cite_bringup.program.operator import confirm_operator
+    from cite_interfaces.msg import TwinMode
+
+    said: list[str] = []
+    asked: list[str] = []
+    for mode in (None, TwinMode.MODE_VALIDATED):
+        with pytest.raises(StepFailed):
+            confirm_operator(mode, ["counterpart"], 0.1, said.append, asked.append)
+    assert said == [] and asked == []
+    confirm_operator(TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, asked.append)
+    assert any("speed scale 0.1" in line for line in said) and len(asked) == 1
+
+    def no_answer(_prompt: str) -> str:
+        raise EOFError
+
+    with pytest.raises(StepFailed, match="no operator answer"):
+        confirm_operator(TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, no_answer)
+
+
+class _PairCell:
+    """`RosCell` on a pair with a physical side, as far as `main` uses it."""
+
+    mode = None
+    left = True
+    calls: list[str] = []
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        _PairCell.calls = []
+
+    def twin_mode(self):
+        return _PairCell.mode
+
+    def refuse_if_holding(self) -> None:
+        _PairCell.calls.append("refuse_if_holding")
+
+    def enter_validated(self) -> None:
+        _PairCell.calls.append("enter_validated")
+
+    def leave_validated(self) -> bool:
+        _PairCell.calls.append("leave_validated")
+        return _PairCell.left
+
+
+def _main_on_a_pair(monkeypatch, mode, left: bool, answers=("",)) -> int:
+    import builtins
+
+    import cite_bringup.program.__main__ as program_module
+    import cite_bringup.program.cell as cell_module
+    import rclpy
+
+    _PairCell.mode, _PairCell.left = mode, left
+    answers = list(answers)
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
+    monkeypatch.setattr(program_module, "run", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": answers.pop(0))
+    return program_main(["--zone", ZONE, "--speed-scale", "0.1"])
+
+
+def test_a_run_whose_return_to_sim_is_unconfirmed_fails(monkeypatch) -> None:
+    """SA-S-05: a failed leave_validated is the run's failure, so no one is asked in next."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=False) != 0
+    assert _PairCell.calls[-1] == "leave_validated"
+
+
+def test_a_twin_not_in_sim_is_never_entered_and_no_one_is_asked(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_VALIDATED, left=True, answers=()) == 1
+    assert _PairCell.calls == []

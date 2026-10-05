@@ -26,7 +26,9 @@
 # comes up only with CITE_ALLOW_HARDWARE=1 in the shell that runs this, and
 # only with --speed-scale named explicitly: the fraction the real arm runs at is
 # never a default. It is range-checked, by the program's own rule, before
-# anything is brought up, and printed at every cycle's prompt.
+# anything is brought up. The operator's prompt is the PROGRAM's, not this
+# script's (`cite_bringup.program.operator`): it is asked only once the twin's
+# mode is read as SIM, and this script hands the program its terminal for it.
 #
 # WHAT IT IS NOT. A demonstration: it gates nothing and is in no CI step.
 # `./scripts/scenario program_cycle` is what CHECKS the program, on one side. The
@@ -58,7 +60,7 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --zone|--cycles|--speed-scale) WANT="$arg" ;;
-        -h|--help)  sed -n '2,37p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,39p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
@@ -276,16 +278,13 @@ while [ "$STATUS" -eq 0 ] && { [ "$CYCLES" -eq 0 ] || [ "$CYCLE" -lt "$CYCLES" ]
     step "Cycle ${CYCLE}: putting a work-piece on each side's pick table"
     replace_boxes "$([ "$CYCLE" -gt 1 ] && echo 1 || echo 0)" \
         || die "a side would not take the work-piece"
-    for side in $PHYSICAL_SIDES; do
-        info "Cycle ${CYCLE}: ${side} is physical and runs at speed scale ${SPEED_SCALE}."
-        warn "The twin forwards nothing to ${side} now (SIM), but its ARM IS ENABLED and holds where it stands."
-        info "Place the part on the table by hand, clear the cell, then press Enter."
-        read -r _ || die "no operator answer for ${side} (a physical side needs one at this terminal); stopping"
-    done
 
     step "Cycle ${CYCLE}: running the fixed program through the twin boundary"
+    # With this terminal as its input, stated explicitly: a job started with
+    # `&` here otherwise reads /dev/null. On a physical side the program asks
+    # the operator itself, once it has read the twin in SIM (SA-S-02, SA-S-05).
     python3 -u -m cite_bringup.program --zone "$ZONE" --via twin --cycles 1 \
-        --first-cycle "$CYCLE" --speed-scale "$SPEED_SCALE" &
+        --first-cycle "$CYCLE" --speed-scale "$SPEED_SCALE" <&0 &
     PROGRAM_PID=$!
     while kill -0 "$PROGRAM_PID" 2>/dev/null; do
         if ! kill -0 "$PAIR_PID" 2>/dev/null; then

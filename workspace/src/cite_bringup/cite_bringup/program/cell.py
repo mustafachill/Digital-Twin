@@ -285,7 +285,7 @@ class RosCell:
 
         ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
 
-    def leave_validated(self) -> None:
+    def leave_validated(self) -> bool:
         """Ask the twin for SIM, where no command crosses to the counterpart.
 
         Called when the program ends on a pair with a physical side, so the
@@ -293,13 +293,14 @@ class RosCell:
         forwards nothing to the physical arm or carriage; the next run asks for
         VALIDATED again, through the opt-in and the readiness check. SIM does
         NOT disable the arm: the deadman keeps it enabled while heartbeats
-        arrive, and it holds where it stands. A refusal is said, not raised: the
-        program has already ended.
+        arrive, and it holds where it stands. Return whether the twin confirmed
+        SIM: a refusal, a timeout or no server is said and returns False, which
+        the caller makes the run's failure (SA-S-05).
         """
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
             print(f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served")
-            return
+            return False
         request = SetMode.Request(
             mode=TwinMode.MODE_SIM,
             reason="the program ended; a person may enter the physical cell",
@@ -308,11 +309,26 @@ class RosCell:
             response = self._until(client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S)
         except StepFailed as failure:
             print(f"could not leave VALIDATED: {failure}", flush=True)
-            return
-        if not response.accepted:
+            return False
+        if not response.accepted or response.current_mode != TwinMode.MODE_SIM:
             print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
-            return
+            return False
         print("the twin is in SIM: nothing crosses to the physical side", flush=True)
+        return True
+
+    def twin_mode(self) -> int | None:
+        """Read the twin's mode from its latched topic, or None if none is heard in time."""
+        received: list[TwinMode] = []
+        subscription = self.node.create_subscription(
+            TwinMode, TwinMode.TOPIC, received.append, LATCHED
+        )
+        try:
+            self._until_true(lambda: bool(received), f"TwinMode on {TwinMode.TOPIC}")
+        except StepFailed:
+            return None
+        finally:
+            self.node.destroy_subscription(subscription)
+        return received[-1].mode
 
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).

@@ -52,15 +52,16 @@ def simulated_sides(plan: Plan) -> list[str]:
     return [side.name for side in plan.sides if not is_physical(plan, side.name)]
 
 
-def required_speed_scale(plan: Plan, given: str) -> float:
+def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
     """Return the speed scale a run uses, refusing one the operator must state (S-04).
 
     ``given`` is `--speed-scale` exactly as typed, empty when it was not. The
-    range is `steps.speed_scale`'s, the one statement of it. Where a side is
-    physical the scale is never defaulted: the operator names the fraction of
-    the program's speed the real arm and carriage move at.
+    range is `steps.speed_scale`'s, the one statement of it. Where a side the
+    run commands is physical - any physical side, through the twin - the scale
+    is never defaulted: the operator names the fraction of the program's speed
+    the real arm and carriage move at. ``via`` "plant" commands the plant only.
     """
-    physical = physical_sides(plan)
+    physical = physical_sides(plan) if via == "twin" else []
     if not given:
         if physical:
             raise ValueError(
