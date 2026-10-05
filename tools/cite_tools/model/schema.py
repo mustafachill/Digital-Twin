@@ -587,6 +587,38 @@ class DescriptionSpec(Strict):
         )
 
 
+class VendorDriver(Strict):
+    """The vendor driver a physical backend's plugin embeds, and what it serves outside it.
+
+    Some vendors serve part of a machine only through a driver of their own that
+    runs inside the `ros2_control` component: for the xArm, the plugin
+    `uf_robot_hardware/UFRobotSystemHardware` constructs `xarm_api`'s driver on a
+    node of its own, and that driver serves the linear track only as services and
+    the gripper only as an action (ADR-0070 items 3-5). This block is what the
+    generator needs to name those, and to switch the services on: it states
+    facts about the vendor's code, each read from the pinned source, and no name
+    a consumer writes by hand.
+
+    The NAMES are formed by `cite_tools.model.ids.vendor_interface`, once.
+    """
+
+    #: The driver node's name, as the plugin constructs it. Its parameters are
+    #: emitted under this node in the side's controller configuration.
+    node: Identifier
+    #: The description argument the vendor builds its service namespace from.
+    #: Its value is read from the same binding the description is generated
+    #: from, so the namespace and the description cannot disagree.
+    namespace_arg: Identifier
+    #: The driver services the real side's adapters and watchdog call. Each is
+    #: OFF unless its `services.<name>` parameter is true, so every one listed
+    #: here is switched on in that side's configuration and no other is.
+    services: Annotated[list[Identifier], Field(min_length=1)]
+    #: The driver's `control_msgs/GripperCommand` action, relative to the driver
+    #: node and before the instance prefix; ``None`` where the driver serves no
+    #: gripper. Named only for an asset whose end effector is vendor-integrated.
+    gripper_action: str | None = None
+
+
 class HardwareBackend(Strict):
     """One selectable ``ros2_control`` backend for a type.
 
@@ -682,6 +714,11 @@ class HardwareBackend(Strict):
     #: the vendor's xacro, and knowing the vendor's plugin strings is what this
     #: generator does not do. So it is declared, beside the plugin it is about.
     exports_end_effector_joints: bool = True
+
+    #: The vendor driver this backend's plugin embeds, where part of the machine
+    #: is served by that driver rather than as `ros2_control` joints; see
+    #: `VendorDriver`. ``None`` for every simulated backend.
+    vendor_driver: VendorDriver | None = None
 
 
 class ControlSpec(Strict):

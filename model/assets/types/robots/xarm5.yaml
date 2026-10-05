@@ -292,6 +292,35 @@ asset_type:
       # loads no gripper controller, and a relay serves that controller's
       # action name instead (ADR-0070 item 4).
       exports_end_effector_joints: false
+      # The vendor driver this plugin embeds, read from the pinned `xarm_ros2`
+      # (ADR-0070 items 3-5). The generator forms every name from this block
+      # through `ids.vendor_interface` and switches the services on in the
+      # physical side's controller configuration.
+      vendor_driver:
+        # `rclcpp::Node::make_shared("ufactory_driver", ...)` —
+        # xarm_controller/src/hardware/uf_robot_system_hardware.cpp:53.
+        node: ufactory_driver
+        # The driver creates its services on a sub-node named by the hardware
+        # parameter `hw_ns` (xarm_api/src/xarm_driver.cpp:157-159), which the
+        # vendor macro sets to `${prefix}${hw_ns}`
+        # (xarm_description/urdf/xarm5/xarm5.ros2_control.xacro:17).
+        namespace_arg: hw_ns
+        # Each is created only where `services.<name>` is true, default false
+        # (xarm_api/src/xarm_driver_service.cpp:19). The track adapter's five and
+        # the watchdog's two stops (`set_state`, `set_linear_motor_stop`). The
+        # gripper needs none: its action is created unconditionally and enables
+        # the gripper itself (xarm_driver.cpp:485, 570 and 582).
+        services:
+          - get_linear_motor_is_enabled
+          - get_linear_motor_pos
+          - set_linear_motor_enable
+          - set_linear_motor_pos
+          - set_linear_motor_speed
+          - set_linear_motor_stop
+          - set_state
+        # `prefix + "xarm_gripper/gripper_action"` on the driver node
+        # (xarm_api/src/xarm_driver.cpp:486).
+        gripper_action: xarm_gripper/gripper_action
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

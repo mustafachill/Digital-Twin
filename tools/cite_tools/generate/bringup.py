@@ -15,7 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cite_tools.generate import Artifact, arm_description_path, controllers_path
-from cite_tools.generate.description import described_sides, environment_arguments
+from cite_tools.generate.description import (
+    VendorNames,
+    described_sides,
+    environment_arguments,
+    vendor_names,
+)
 from cite_tools.generate.moveit import PIPELINES
 from cite_tools.model import blockly, ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell, ResolveError
@@ -141,6 +146,10 @@ class _ManagerView:
     #: configuration spawns the plant's list, and a side loading its own spawns
     #: what that file defines (`ResolvedAsset.controllers_on`, ADR-0070 item 1).
     counterpart_controllers: tuple[_ControllerRef, ...] = ()
+    #: The names the counterpart's embedded vendor driver serves outside
+    #: `ros2_control` - the track's and the stop services, the gripper action -
+    #: or `None` where that side embeds no driver (ADR-0070 items 3-5).
+    counterpart_vendor: VendorNames | None = None
 
 
 def _package_uri(path: str) -> str:
@@ -619,6 +628,11 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                 environment_arguments(asset, ids.COUNTERPART_SIDE) if cell.is_paired else ()
             ),
             counterpart_controllers=_counterpart_controllers(cell, asset),
+            counterpart_vendor=(
+                vendor_names(asset, cell, ids.COUNTERPART_SIDE)
+                if ids.COUNTERPART_SIDE in described_sides(cell, asset)
+                else None
+            ),
         )
         for asset in cell.assets
         if asset.controllers

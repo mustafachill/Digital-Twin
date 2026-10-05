@@ -425,6 +425,71 @@ def _dropped_on_this_backend(asset: ResolvedAsset, binding: str, side: str) -> b
     return declared_somewhere and not declared_here
 
 
+def description_argument(asset: ResolvedAsset, cell: ResolvedCell, side: str, name: str) -> str:
+    """The value ``side``'s description hands the vendor macro for argument ``name``.
+
+    From the same `fixed_args` / `bound_args` entry, and the same formatting,
+    the description itself is generated from, so a name derived from an
+    argument (the vendor's service namespace, ADR-0070) and the argument the
+    description carries are one statement read twice. An argument the type does
+    not hand the macro is refused rather than defaulted: the vendor's default is
+    a value this generator does not know.
+    """
+    spec = asset.asset_type.description
+    if name in spec.fixed_args:
+        value = spec.fixed_args[name]
+        return str(value).lower() if isinstance(value, bool) else str(value)
+    if name in spec.bound_args:
+        return _binding_value(asset, spec.bound_args[name], cell, side)
+    raise BindingError(
+        f"type {asset.asset_type.id!r} hands the vendor macro no argument {name!r}, so "
+        "the value the vendor derives a name from is the vendor's default, which this "
+        "generator does not know. Bind it."
+    )
+
+
+@dataclass(frozen=True)
+class VendorNames:
+    """Every name the vendor driver on one side serves outside `ros2_control` (ADR-0070).
+
+    Formed here, once, from the backend's `vendor_driver` block and the
+    description's own arguments, and read by the bring-up plan (which names
+    them) and the controller configuration (which switches the services on
+    under ``driver_node``).
+    """
+
+    #: The driver node's fully qualified name; its parameters are keyed by it.
+    driver_node: str
+    service_namespace: str
+    #: ``(service, fully qualified name)``, sorted by service.
+    services: tuple[tuple[str, str], ...]
+    gripper_action: str | None
+
+
+def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorNames | None:
+    """The vendor names ``side`` serves for ``asset``, or ``None`` where it embeds no driver."""
+    backend = asset.asset_type.hardware_backends.get(asset.backend_on(side))
+    driver = backend.vendor_driver if backend is not None else None
+    if driver is None:
+        return None
+    namespace = ids.vendor_interface(
+        cell.zone, asset.id, description_argument(asset, cell, side, driver.namespace_arg)
+    )
+    effector = asset.instance.end_effector
+    return VendorNames(
+        driver_node=ids.interface(cell.zone, asset.id, driver.node),
+        service_namespace=namespace,
+        services=tuple((name, f"{namespace}/{name}") for name in sorted(driver.services)),
+        gripper_action=(
+            ids.vendor_interface(cell.zone, asset.id, driver.gripper_action)
+            if driver.gripper_action is not None
+            and effector is not None
+            and effector.vendor_integrated
+            else None
+        ),
+    )
+
+
 def environment_arguments(asset: ResolvedAsset, side: str) -> tuple[tuple[str, str], ...]:
     """The xacro arguments ``side``'s description takes from the environment.
 

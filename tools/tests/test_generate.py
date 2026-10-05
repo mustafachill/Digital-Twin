@@ -287,6 +287,26 @@ def _without_controllers(document: dict, names: set[str]) -> dict:
     return {key: block for key, block in trimmed.items() if key.rsplit("/", 1)[-1] not in names}
 
 
+#: The vendor driver's node, as the physical backend's plugin constructs it
+#: (`uf_robot_system_hardware.cpp:53`), in the asset's namespace.
+_DRIVER_NODE = "/cite/cell_b/picker/ufactory_driver"
+
+
+def _without_vendor_driver(document: dict) -> dict:
+    """``document`` less the physical backend's vendor-driver block, which must be there.
+
+    The one thing a physical side's configuration ADDS: the services its
+    embedded vendor driver is to create (ADR-0070). It carries no controller,
+    joint or interface name, so it is not a P2 difference; it is removed by name
+    and only after asserting it is present, so this cannot hide a block that
+    went missing.
+    """
+    trimmed = yaml.safe_load(yaml.safe_dump(document))
+    block = trimmed.pop(_DRIVER_NODE)
+    assert set(block["ros__parameters"]) == {"services"}, block
+    return trimmed
+
+
 def _with_sim_time(document: dict, value: bool) -> dict:
     flipped = yaml.safe_load(yaml.safe_dump(document))
     for key, block in flipped.items():
@@ -323,12 +343,10 @@ class TestSimRealParity:
         # false`, ADR-0070 item 4) — its action name is served by a relay.
         sim_controllers = _controller_configuration(sim["control/cell_b_picker_controllers.yaml"])
         real_controllers = _controller_configuration(real["control/cell_b_picker_controllers.yaml"])
-        assert (
-            _with_sim_time(
-                _without_controllers(sim_controllers, {f"{ARM}_gripper_controller"}), False
-            )
-            == real_controllers
-        )
+        assert _with_sim_time(
+            _without_controllers(sim_controllers, {f"{ARM}_gripper_controller"}), False
+        ) == _without_vendor_driver(real_controllers)
+        assert _DRIVER_NODE not in sim_controllers
 
         # The description differs in exactly two lines, and the second of them
         # arrived on 2026-09-01 when the shipped collision selection moved to the
@@ -539,7 +557,9 @@ class TestSideParity:
             generated[gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE)]
         )
         unserved = {f"{ARM}_gripper_controller", "picker_track_trajectory_controller"}
-        assert _with_sim_time(_without_controllers(plant, unserved), False) == counterpart
+        assert _with_sim_time(_without_controllers(plant, unserved), False) == (
+            _without_vendor_driver(counterpart)
+        )
         # And the absences are absences, not renames: neither name is anywhere in
         # the counterpart's configuration.
         text = generated[gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE)]

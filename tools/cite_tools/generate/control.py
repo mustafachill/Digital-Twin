@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cite_tools.generate import Artifact, controllers_path
-from cite_tools.generate.description import described_sides
+from cite_tools.generate.description import described_sides, vendor_names
 from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.model.schema import ControlSpec
@@ -248,6 +248,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
                     "true" if asset.backend_on(side) == ids.SIMULATION_BACKEND else "false"
                 ),
                 controllers=[_view(c, asset) for c in asset.controllers_on(side)],
+                vendor=vendor_names(asset, cell, side),
             )
             artifacts.append(Artifact(controllers_path(cell.zone, asset.id, side), text))
     return artifacts

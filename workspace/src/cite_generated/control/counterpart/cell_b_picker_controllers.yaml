@@ -112,3 +112,20 @@
       picker_joint5:
         trajectory: 1.0
         goal: 0.01
+
+# The vendor driver the hardware plugin embeds (ADR-0070 items 3-5). It runs on a
+# node of its own in this process, reads its parameters from this file under its
+# own name, and creates each service below only where `services.<name>` is true:
+# the vendor's own default is false for every one of them, and the vendor's
+# parameter file is not loaded here. Exactly the services the real side's track
+# adapter and watchdog call are switched on, and no other.
+/cite/cell_b/picker/ufactory_driver:
+  ros__parameters:
+    services:
+      get_linear_motor_is_enabled: true
+      get_linear_motor_pos: true
+      set_linear_motor_enable: true
+      set_linear_motor_pos: true
+      set_linear_motor_speed: true
+      set_linear_motor_stop: true
+      set_state: true

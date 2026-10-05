@@ -281,6 +281,24 @@ plan:
       counterpart_controllers:
         - {name: picker_joint_state_broadcaster, stage: 0}
         - {name: picker_joint_trajectory_controller, stage: 1}
+      # What the vendor driver embedded in the counterpart's hardware plugin
+      # serves OUTSIDE `ros2_control`, under the names the vendor creates: the
+      # services the real side's track adapter and watchdog call, and the action
+      # its gripper relay forwards to (ADR-0070 items 3-5). Formed once, by
+      # `ids.vendor_interface`; the services are switched on under
+      # `driver_node` in the counterpart's controller configuration.
+      counterpart_vendor:
+        driver_node: /cite/cell_b/picker/ufactory_driver
+        service_namespace: /cite/cell_b/picker/picker_picker
+        services:
+          get_linear_motor_is_enabled: /cite/cell_b/picker/picker_picker/get_linear_motor_is_enabled
+          get_linear_motor_pos: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
+          set_linear_motor_enable: /cite/cell_b/picker/picker_picker/set_linear_motor_enable
+          set_linear_motor_pos: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
+          set_linear_motor_speed: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
+          set_linear_motor_stop: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
+          set_state: /cite/cell_b/picker/picker_picker/set_state
+        gripper_action: /cite/cell_b/picker/picker_xarm_gripper/gripper_action
       moveit:
         group: picker_xarm5
         base_link: picker_link_base

@@ -761,6 +761,17 @@
             }
           ],
           "title": "Ros2 Control Plugin"
+        },
+        "vendor_driver": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorDriver"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1360,6 +1371,50 @@
         "stopped_velocity_tolerance_rad_s"
       ],
       "title": "TrajectoryConstraints",
+      "type": "object"
+    },
+    "VendorDriver": {
+      "additionalProperties": false,
+      "description": "The vendor driver a physical backend's plugin embeds, and what it serves outside it.\n\nSome vendors serve part of a machine only through a driver of their own that\nruns inside the `ros2_control` component: for the xArm, the plugin\n`uf_robot_hardware/UFRobotSystemHardware` constructs `xarm_api`'s driver on a\nnode of its own, and that driver serves the linear track only as services and\nthe gripper only as an action (ADR-0070 items 3-5). This block is what the\ngenerator needs to name those, and to switch the services on: it states\nfacts about the vendor's code, each read from the pinned source, and no name\na consumer writes by hand.\n\nThe NAMES are formed by `cite_tools.model.ids.vendor_interface`, once.",
+      "properties": {
+        "gripper_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Action"
+        },
+        "namespace_arg": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Namespace Arg",
+          "type": "string"
+        },
+        "node": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Node",
+          "type": "string"
+        },
+        "services": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Services",
+          "type": "array"
+        }
+      },
+      "required": [
+        "node",
+        "namespace_arg",
+        "services"
+      ],
+      "title": "VendorDriver",
       "type": "object"
     },
     "VendorSelfCollisionMatrix": {

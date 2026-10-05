@@ -2282,6 +2282,53 @@ def test_a_simulated_counterpart_is_not_refused(tmp_path: Path) -> None:
     refuse_a_physical_side(plan, COUNTERPART_SIDE)
 
 
+def test_the_generated_counterpart_names_its_vendor_driver() -> None:
+    """ADR-0070: the real side's adapters read every vendor name from the plan."""
+    picker = _the_generated_counterpart()
+    assert picker.vendor_on(PLANT_SIDE) is None
+    vendor = picker.vendor_on(COUNTERPART_SIDE)
+    assert vendor is not None
+    namespace = picker.node.rsplit("/", 1)[0]
+    assert vendor.driver_node.startswith(namespace + "/")
+    assert vendor.services, "the track adapter and watchdog call these"
+    for service, name in vendor.services.items():
+        assert name == f"{vendor.service_namespace}/{service}"
+    assert {"set_linear_motor_pos", "set_linear_motor_stop", "set_state"} <= set(vendor.services)
+    assert vendor.gripper_action is not None and vendor.gripper_action.startswith(namespace)
+
+
+def test_vendor_names_without_files_of_its_own_are_refused(tmp_path: Path) -> None:
+    document = _paired_document()
+    manager = document["plan"]["controller_managers"][1]
+    manager["counterpart_vendor"] = {
+        "driver_node": "/a/ufactory_driver",
+        "service_namespace": "/a/b",
+        "services": {"set_state": "/a/b/set_state"},
+    }
+    with pytest.raises(PlanError, match="counterpart_vendor"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("field", ("driver_node", "service_namespace", "service"))
+def test_a_relative_vendor_name_is_refused(tmp_path: Path, field: str) -> None:
+    """Every name is formed by the generator; a relative one would be composed by a reader."""
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    vendor = {
+        "driver_node": "/a/ufactory_driver",
+        "service_namespace": "/a/b",
+        "services": {"set_state": "/a/b/set_state"},
+    }
+    if field == "service":
+        vendor["services"]["set_state"] = "set_state"
+    else:
+        vendor[field] = vendor[field].lstrip("/")
+    manager["counterpart_vendor"] = vendor
+    with pytest.raises(PlanError, match="absolute"):
+        load(_written(tmp_path, document))
+
+
 def test_the_generated_plan_carries_a_reference_and_never_a_value() -> None:
     picker = _the_generated_counterpart()
     assert dict(picker.description_args_on(COUNTERPART_SIDE)) == {"robot_ip": "CITE_XARM_IP"}

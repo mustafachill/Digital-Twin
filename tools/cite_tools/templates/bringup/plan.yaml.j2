@@ -324,6 +324,24 @@ plan:
         - {name: {{ controller.name }}, stage: {{ controller.stage }}}
 {% endfor %}
 {% endif %}
+{% if manager.counterpart_vendor %}
+      # What the vendor driver embedded in the counterpart's hardware plugin
+      # serves OUTSIDE `ros2_control`, under the names the vendor creates: the
+      # services the real side's track adapter and watchdog call, and the action
+      # its gripper relay forwards to (ADR-0070 items 3-5). Formed once, by
+      # `ids.vendor_interface`; the services are switched on under
+      # `driver_node` in the counterpart's controller configuration.
+      counterpart_vendor:
+        driver_node: {{ manager.counterpart_vendor.driver_node }}
+        service_namespace: {{ manager.counterpart_vendor.service_namespace }}
+        services:
+{% for service, name in manager.counterpart_vendor.services %}
+          {{ service }}: {{ name }}
+{% endfor %}
+{% if manager.counterpart_vendor.gripper_action %}
+        gripper_action: {{ manager.counterpart_vendor.gripper_action }}
+{% endif %}
+{% endif %}
 {% if manager.planning_group %}
       moveit:
         group: {{ manager.planning_group }}

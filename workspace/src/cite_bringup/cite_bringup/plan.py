@@ -194,6 +194,7 @@ COUNTERPART_ARTIFACT_KEYS = (
     "counterpart_parameters",
     "counterpart_description_args",
     "counterpart_controllers",
+    "counterpart_vendor",
 )
 
 
@@ -436,6 +437,24 @@ class Track:
 
 
 @dataclass(frozen=True)
+class VendorNames:
+    """What a side's embedded vendor driver serves outside `ros2_control` (ADR-0070).
+
+    Every name is formed by the generator (`ids.vendor_interface`) and read here,
+    never composed: the real side's track adapter, gripper relay and watchdog
+    address these and nothing they build themselves.
+    """
+
+    #: The driver node, fully qualified; its parameters are keyed by it.
+    driver_node: str
+    service_namespace: str
+    #: Vendor service name -> fully qualified service.
+    services: Mapping[str, str]
+    #: The vendor's `GripperCommand` action, or `None` where it serves none.
+    gripper_action: str | None
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -497,6 +516,20 @@ class ControllerManager:
     #: where it loads the plant's. Stated exactly where `counterpart_parameters`
     #: is. Read through `controllers_on` and `stages_on`, never off this field.
     counterpart_controllers: tuple[ControllerRef, ...] | None = None
+    #: The names the counterpart's embedded vendor driver serves, or `None`
+    #: where it embeds none. Stated only beside `counterpart_description`. Read
+    #: through `vendor_on`.
+    counterpart_vendor: VendorNames | None = None
+
+    def vendor_on(self, side: str) -> VendorNames | None:
+        """Return the vendor names ``side`` serves, or `None` where the plan states none.
+
+        The plan states them for a counterpart that loads files of its own and
+        whose backend embeds a vendor driver (ADR-0070); a side loading the
+        plant's files loads the plant's simulated hardware and serves none.
+        """
+        self.backend_on(side)
+        return self.counterpart_vendor if side == COUNTERPART_SIDE else None
 
     def description_on(self, side: str) -> Path:
         """Return the description ``side`` loads: its own where it has one, else the plant's."""
@@ -1775,7 +1808,13 @@ def _counterpart_artifacts(entry: object, counterpart_backend: object, where: st
     described as the other side's machine, which is open-work #38's defect
     arriving from a stale plan rather than from the generator.
     """
-    description_key, parameters_key, arguments_key, controllers_key = COUNTERPART_ARTIFACT_KEYS
+    (
+        description_key,
+        parameters_key,
+        arguments_key,
+        controllers_key,
+        vendor_key,
+    ) = COUNTERPART_ARTIFACT_KEYS
     description = _optional(entry, description_key)
     parameters = _optional(entry, parameters_key)
     arguments = _environment_args(entry, arguments_key, where)
@@ -1789,6 +1828,13 @@ def _counterpart_artifacts(entry: object, counterpart_backend: object, where: st
         raise PlanError(
             f"{where}: states 'counterpart_description' without 'counterpart_backend', "
             "so it describes a side nothing says exists."
+        )
+    vendor = _vendor(_optional(entry, vendor_key), where)
+    if vendor is not None and description is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_vendor' without 'counterpart_description'. "
+            "A side loading the plant's files loads simulated hardware, which embeds no "
+            "vendor driver."
         )
     if arguments and description is None:
         raise PlanError(
@@ -1814,7 +1860,35 @@ def _counterpart_artifacts(entry: object, counterpart_backend: object, where: st
             if controllers is None
             else _controller_refs(_sequence(entry, controllers_key, where), where)
         ),
+        "counterpart_vendor": vendor,
     }
+
+
+def _vendor(entry: object | None, where: str) -> VendorNames | None:
+    """Read a `counterpart_vendor` block; every name absolute, none composed here."""
+    if entry is None:
+        return None
+    here = f"{where}, counterpart_vendor"
+    services = _require(entry, "services", here)
+    if not isinstance(services, dict) or not services:
+        raise PlanError(f"{here}: 'services' must be a non-empty mapping, not {_kind(services)}")
+    names = {
+        "driver_node": _require(entry, "driver_node", here),
+        "service_namespace": _require(entry, "service_namespace", here),
+        **{f"service {key!r}": value for key, value in services.items()},
+    }
+    gripper_action = _optional(entry, "gripper_action")
+    if gripper_action is not None:
+        names["gripper_action"] = gripper_action
+    for label, name in names.items():
+        if not isinstance(name, str) or not name.startswith("/"):
+            raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
+    return VendorNames(
+        driver_node=names["driver_node"],
+        service_namespace=names["service_namespace"],
+        services=MappingProxyType(dict(services)),
+        gripper_action=gripper_action,
+    )
 
 
 def _skills(entry: object | None, where: str) -> SkillActions | None:

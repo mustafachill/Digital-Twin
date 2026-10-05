@@ -267,3 +267,142 @@ class TestTheDeclaredPluginIsTheLoadedOne:
         track_plugins = re.findall(r"<plugin>([^<]*)</plugin>", text)
         declared = self._declared(real_model, TRACK, side)
         assert track_plugins == ([] if declared is None else [declared])
+
+
+#: The pinned vendor source, where `./scripts/bootstrap` imported it. The vendor
+#: checks below read it when it is there and are skipped where it is not; the
+#: rule each one restates is cited by file and line either way.
+VENDOR = Path(__file__).resolve().parents[2] / "workspace/src/external/xarm_ros2"
+
+
+def _vendor_source(relative: str) -> str:
+    path = VENDOR / relative
+    if not path.is_file():
+        pytest.skip(f"vendor source not imported: {relative}")
+    return path.read_text()
+
+
+def _description_arg(text: str, name: str) -> str:
+    (value,) = re.findall(rf'^\s*{name}="([^"]*)"\s*$', text, re.MULTILINE)
+    return value
+
+
+class TestVendorNames:
+    """ADR-0070: every vendor name the real side needs, as the vendor would create it.
+
+    The expected names are computed HERE from the generated description and the
+    vendor's own rules, not through `ids.vendor_interface`, so a generator that
+    formed them wrongly cannot agree with itself:
+
+    * the driver node is ``ufactory_driver``, unprefixed, in the process's
+      namespace (`xarm_controller/src/hardware/uf_robot_system_hardware.cpp:53`);
+    * its services live on a sub-node named by the hardware parameter `hw_ns`
+      (`xarm_api/src/xarm_driver.cpp:157-159`), which the vendor macro sets to
+      ``${prefix}${hw_ns}`` (`xarm_description/urdf/xarm5/xarm5.ros2_control.xacro:17`),
+      and each is created relative to it
+      (`xarm_api/src/xarm_driver_service.cpp:20`);
+    * the gripper action is ``prefix + "xarm_gripper/gripper_action"`` on the
+      driver node (`xarm_api/src/xarm_driver.cpp:486`).
+
+    The process's namespace is the controller manager's, which the real side
+    runs in as the plant does (`/cite/<zone>/<asset>/controller_manager`).
+    """
+
+    @staticmethod
+    def _expected(generated: dict[str, str], manager: dict) -> dict:
+        text = generated[manager["counterpart_description"].removeprefix("package://cite_generated/")]
+        prefix = _description_arg(text, "prefix")
+        hw_ns = _description_arg(text, "hw_ns")
+        namespace = manager["node"].rsplit("/", 1)[0]
+        service_namespace = f"{namespace}/{prefix}{hw_ns}"
+        return {
+            "driver_node": f"{namespace}/ufactory_driver",
+            "service_namespace": service_namespace,
+            "services": {
+                name: f"{service_namespace}/{name}"
+                for name in (
+                    "get_linear_motor_is_enabled",
+                    "get_linear_motor_pos",
+                    "set_linear_motor_enable",
+                    "set_linear_motor_pos",
+                    "set_linear_motor_speed",
+                    "set_linear_motor_stop",
+                    "set_state",
+                )
+            },
+            "gripper_action": f"{namespace}/{prefix}xarm_gripper/gripper_action",
+        }
+
+    def test_the_plan_names_what_the_vendor_creates(self, real_model: Path) -> None:
+        generated = artifacts(real_model)
+        plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
+        (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
+        assert manager["counterpart_vendor"] == self._expected(generated, manager)
+        # The shipped expansion, stated once so a reader sees what it is: `hw_ns`
+        # is bound to the instance id and the vendor prepends the prefix.
+        assert manager["counterpart_vendor"]["service_namespace"] == (
+            "/cite/cell_b/picker/picker_picker"
+        )
+
+    def test_the_vendor_rules_restated_above_are_the_pinned_sources(self) -> None:
+        macro = _vendor_source("xarm_description/urdf/xarm5/xarm5.ros2_control.xacro")
+        assert '<param name="hw_ns">${prefix}${hw_ns}</param>' in macro
+        driver = _vendor_source("xarm_api/src/xarm_driver.cpp")
+        assert 'node_->get_parameter_or("hw_ns", hw_ns, std::string("xarm"));' in driver
+        assert "hw_node_ = node_->create_sub_node(hw_ns);" in driver
+        assert 'node_, prefix + "xarm_gripper/gripper_action",' in driver
+        hardware = _vendor_source("xarm_controller/src/hardware/uf_robot_system_hardware.cpp")
+        assert 'rclcpp::Node::make_shared("ufactory_driver", node_options);' in hardware
+
+    def test_only_a_side_embedding_a_driver_names_one(self, real_model: Path) -> None:
+        generated = artifacts(real_model)
+        plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
+        for manager in plan["controller_managers"]:
+            assert "vendor" not in manager
+            if "counterpart_description" not in manager:
+                assert "counterpart_vendor" not in manager, manager["asset"]
+
+
+class TestVendorServicesAreSwitchedOn:
+    """ADR-0070: each service the real side calls is created, and no other is.
+
+    The driver creates a service only where `services.<name>` is true, default
+    false (`xarm_api/src/xarm_driver_service.cpp:19`), reading its parameters as
+    the node `ufactory_driver` (`uf_robot_system_hardware.cpp:51-53`, undeclared
+    parameters allowed and declared from overrides). The vendor's parameter file
+    is not loaded on our side, so its own `true` for `set_state` does not apply.
+    """
+
+    @staticmethod
+    def _driver_parameters(text: str, node: str) -> dict | None:
+        block = yaml.safe_load(text).get(node)
+        return None if block is None else block["ros__parameters"]
+
+    def test_the_counterpart_configuration_switches_on_exactly_the_named_services(
+        self, real_model: Path
+    ) -> None:
+        generated = artifacts(real_model)
+        plan = yaml.safe_load(generated[f"bringup/{ZONE}_plan.yaml"])["plan"]
+        (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
+        vendor = manager["counterpart_vendor"]
+        text = generated[manager["counterpart_parameters"].removeprefix("package://cite_generated/")]
+        parameters = self._driver_parameters(text, vendor["driver_node"])
+        assert parameters == {"services": dict.fromkeys(vendor["services"], True)}
+
+    def test_the_plants_configuration_carries_no_driver(self, real_model: Path) -> None:
+        text = artifacts(real_model)[gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE)]
+        assert "ufactory_driver" not in text
+
+    def test_every_named_service_is_one_the_vendor_creates_off_by_default(
+        self, real_model: Path
+    ) -> None:
+        service_source = _vendor_source("xarm_api/src/xarm_driver_service.cpp")
+        assert 'node_->get_parameter_or("services." + service_name, enable, false);' in (
+            service_source
+        )
+        arm_type = load(real_model).asset_type("xarm5")
+        assert arm_type is not None
+        driver = arm_type.hardware_backends["real"].vendor_driver
+        assert driver is not None
+        for name in driver.services:
+            assert re.search(rf'_create_service<[^>]+>\("{name}",', service_source), name

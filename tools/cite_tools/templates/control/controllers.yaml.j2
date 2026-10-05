@@ -130,3 +130,18 @@
 {% endif %}
 {% endif %}
 {% endfor %}
+{% if vendor %}
+
+# The vendor driver the hardware plugin embeds (ADR-0070 items 3-5). It runs on a
+# node of its own in this process, reads its parameters from this file under its
+# own name, and creates each service below only where `services.<name>` is true:
+# the vendor's own default is false for every one of them, and the vendor's
+# parameter file is not loaded here. Exactly the services the real side's track
+# adapter and watchdog call are switched on, and no other.
+{{ vendor.driver_node }}:
+  ros__parameters:
+    services:
+{% for service, _ in vendor.services %}
+      {{ service }}: true
+{% endfor %}
+{% endif %}
