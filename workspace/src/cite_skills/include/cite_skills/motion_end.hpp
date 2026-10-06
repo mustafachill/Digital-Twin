@@ -186,6 +186,10 @@ struct ExecutionFailure
 {
   uint8_t code{cite_interfaces::msg::ResultCode::MOTION_INTERRUPTED};
   std::string detail;
+  //: True only for the AT_GOAL row: the arm is within its goal tolerance of the
+  //: trajectory's last point and the controller still did not report the goal
+  //: met. Read by `execution_failure_stands`, and by nothing that picks a code.
+  bool reached_last_point{false};
 };
 
 /// Whether MoveIt itself named why the motion ended.
@@ -286,7 +290,8 @@ inline ExecutionFailure classify_execution_failure(
       return {
         ResultCode::EXECUTION_FAILED,
         "the arm reached the trajectory's last point, but the controller did not report the "
-        "goal met" + moveit_code};
+        "goal met" + moveit_code,
+        true};
 
     case MotionEnd::PART_WAY:
       return {
@@ -306,6 +311,24 @@ inline ExecutionFailure classify_execution_failure(
         "the controller did not complete the planned trajectory, and where the arm ended up "
         "could not be established from its joint state" + moveit_code};
   }
+}
+
+/// Whether a classified execution failure fails the step on this side.
+///
+/// It always does, except in ONE row: the arm reached the trajectory's last
+/// point and the controller did not report the goal met, on a side that does
+/// not judge its outcomes. `judges_outcome` is false on a side whose arm is
+/// physical, by owner decision 2026-10-06 recorded in ADR-0070's amendment:
+/// there the xArm's own controller executes the motion, and an arm that is at
+/// the last point has done what the real program asks of it, whatever the
+/// `joint_trajectory_controller`'s simulator-tuned goal check concluded. It
+/// arrives from the plan (`cite_bringup.side_launch.skill_parameters`), never
+/// from an asset name. No tolerance changes: the AT_GOAL test above still uses
+/// the arm's own goal tolerance, and every other row — a timeout, a preemption,
+/// an arm at the start, part-way or unreadable — stands on every side.
+inline bool execution_failure_stands(const ExecutionFailure & failure, bool judges_outcome)
+{
+  return judges_outcome || !failure.reached_last_point;
 }
 
 }  // namespace cite_skills

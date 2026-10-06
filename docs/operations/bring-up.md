@@ -346,6 +346,9 @@ parameters.
 7. On the physical side a close expecting a part is executed, not judged (owner decision
    2026-10-06, ADR-0070): it succeeds once the gripper command completes, the reached width is
    logged, and only a relay refusal, vendor abort or timeout fails the step.
+8. Likewise an arm motion on the physical side that ends at the trajectory's last point succeeds
+   even if the controller did not report the goal met (owner decision 2026-10-06, ADR-0070);
+   the classification is logged, and every other abort, timeout or cancel still fails the step.
 
 **If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
 Critical safety finding.

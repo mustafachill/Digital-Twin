@@ -429,8 +429,11 @@ def test_every_node_runs_on_the_wall_clock(module, context) -> None:
                 assert parameters.get("use_sim_time", False) is False, _executable(node)
 
 
-def test_the_physical_sides_skill_server_executes_its_grasps_unjudged(module, context) -> None:
-    """Owner decision 2026-10-06 (ADR-0070): a physical close is executed, not judged.
+def test_the_physical_sides_skill_server_executes_its_outcomes_unjudged(module, context) -> None:
+    """Owner decisions 2026-10-06 (ADR-0070): physical outcomes are executed, not judged.
+
+    A physical close and a physical arm arrival both, through the one
+    `side_judges_outcome`.
 
     Asked of the plan through the production builder, on both sides of the one
     shipped plan: the physical counterpart's skill server is told not to judge,
@@ -445,11 +448,11 @@ def test_the_physical_sides_skill_server_executes_its_grasps_unjudged(module, co
             if isinstance(parameters, dict)
             for key, value in parameters.items()
         }
-        assert delivered.get("gripper_judges_grasp") is False
+        assert delivered.get("side_judges_outcome") is False
     plan = _plan()
     for manager in plan.controller_managers:
         if manager.moveit is not None:
-            assert skill_parameters(plan, manager, side=PLANT_SIDE)["gripper_judges_grasp"] is True
+            assert skill_parameters(plan, manager, side=PLANT_SIDE)["side_judges_outcome"] is True
 
 
 # --- Which launch a side gets, and what its witness waits on -----------------

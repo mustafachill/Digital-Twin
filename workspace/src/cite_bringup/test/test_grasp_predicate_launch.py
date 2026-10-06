@@ -402,7 +402,7 @@ def generate_test_description(case):
                 # the work-piece interval, which are the four values this whole
                 # file is about.
                 SIM._skill_parameters(PLAN, MANAGER),
-                {'use_sim_time': False, 'gripper_judges_grasp': JUDGES[case]},
+                {'use_sim_time': False, 'side_judges_outcome': JUDGES[case]},
             ],
             remappings=[('/tf', '/tf'), ('/tf_static', '/tf_static')],
             output='screen',

@@ -338,12 +338,15 @@ public:
     declare_parameter("gripper_stall_band_wide_m", 0.0);
     declare_parameter("workpiece_narrowest_width_m", 0.0);
     declare_parameter("workpiece_widest_width_m", 0.0);
-    // Whether an empty close that expected a part FAILS the step (see
-    // `cite_skills::grasp_verdict`). True by default and on every simulated
-    // side; false only where the plan says this side's arm is physical, by owner
-    // decision 2026-10-06 (ADR-0070 amendment): there the close is executed, not
-    // judged, as the real robot's own program does it.
-    declare_parameter("gripper_judges_grasp", true);
+    // Whether this side JUDGES its outcomes: an empty close that expected a part
+    // (see `cite_skills::grasp_verdict`), and an arm that reached its
+    // trajectory's last point without the controller reporting the goal met (see
+    // `cite_skills::execution_failure_stands`), each fail the step only where it
+    // does. True by default and on every simulated side; false only where the
+    // plan says this side's arm is physical, by owner decisions 2026-10-06
+    // (ADR-0070 amendment): there both are executed, not judged, as the real
+    // robot's own program does it.
+    declare_parameter("side_judges_outcome", true);
     // How many seeds IK is tried from before a pose is called unreachable
     // (ADR-0026). Seed 0 is the arm's current state; the rest are random within
     // the joint limits, which is what recovers the choice of IK branch that a
@@ -446,7 +449,7 @@ public:
     travel_.stall_band_wide_m = get_parameter("gripper_stall_band_wide_m").as_double();
     parts_.narrowest_m = get_parameter("workpiece_narrowest_width_m").as_double();
     parts_.widest_m = get_parameter("workpiece_widest_width_m").as_double();
-    judges_grasp_ = get_parameter("gripper_judges_grasp").as_bool();
+    judges_outcome_ = get_parameter("side_judges_outcome").as_bool();
     if (!gripper_action_.empty() &&
       (travel_.stall_band_narrow_m <= 0.0 || travel_.stall_band_wide_m <= 0.0))
     {
@@ -1068,7 +1071,7 @@ private:
     // recorded here so that whoever gains one knows what they are reading.
     const auto verdict = cite_skills::grasp_verdict(
       gripper.result.code == ResultCode::SUCCESS, goal->expect_object, result->holding,
-      judges_grasp_);
+      judges_outcome_);
     if (verdict == cite_skills::GraspVerdict::kCommandFailed) {
       terminate(handle, result, gripper.result);
       return;
@@ -2414,6 +2417,15 @@ private:
 
     const auto answer = cite_skills::classify_execution_failure(
       executed.val, current, start, goal, arm_goal_tolerance_rad_);
+    // A physical side does not judge an arrival (owner decision 2026-10-06,
+    // ADR-0070): the arm is at the last point, so the step succeeds, and the
+    // classification is logged as information rather than acted on.
+    if (!cite_skills::execution_failure_stands(answer, judges_outcome_)) {
+      RCLCPP_INFO(
+        get_logger(), "motion executed, not judged (this side's arm is physical): %s",
+        answer.detail.c_str());
+      return make_result(ResultCode::SUCCESS);
+    }
     return make_result(answer.code, answer.detail);
   }
 
@@ -2923,7 +2935,8 @@ private:
   /// `plan:` block. An interval and never a part: nothing carries which one is in
   /// the jaws (ADR-0052 §A.5).
   cite_skills::WorkpieceWidths parts_;
-  bool judges_grasp_{true};
+  //: `side_judges_outcome`: false only on a physical side (ADR-0070 amendment).
+  bool judges_outcome_{true};
   double default_grasp_width_m_{0.0};
 
   //: The drive-joint position the gripper last closed to while holding something.

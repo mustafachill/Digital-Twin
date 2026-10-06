@@ -569,11 +569,13 @@ def skill_parameters(
         "fallback_planner_id": manager.moveit.fallback_planner_id,
         "cartesian_planner_ids": list(manager.moveit.cartesian_planner_ids),
         "use_sim_time": use_sim_time,
-        # Whether an empty close that expected a part fails the step. Not where
-        # this side's arm is physical, by owner decision 2026-10-06 (ADR-0070
-        # amendment): there the close is executed, not judged, as the real
-        # robot's own program does it. Asked of the plan, never of an asset name.
-        "gripper_judges_grasp": not manager.commands_physical_hardware_on(side),
+        # Whether an empty close that expected a part, or an arm at its
+        # trajectory's last point whose controller did not report the goal met,
+        # fails the step. Not where this side's arm is physical, by owner
+        # decisions 2026-10-06 (ADR-0070 amendment): there both are executed, not
+        # judged, as the real robot's own program does it. Asked of the plan,
+        # never of an asset name.
+        "side_judges_outcome": not manager.commands_physical_hardware_on(side),
         **manager.gripper,
         **manager.arm,
         # How wide the parts this facility handles are (ADR-0052 option F). It

@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip executed, not judged): see "Amendment — what was built" at the end)
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged): see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -231,3 +231,18 @@ so the record says what the tree does. The text above is kept as written.
   (`cite_bringup.side_launch.skill_parameters`); `cite_skills::grasp_verdict` decides. Prompted by
   the first physical run, whose step 11 failed with the real box held (commanded 60.9 mm,
   reached 62.8 mm, `stalled=false`).
+- **2026-10-06, owner decision: the physical side's arm arrival is executed, not judged, as the
+  real program does.** On the physical side the xArm's own controller executes the motion; an
+  execution that ADR-0037's classification finds at the trajectory's last point, with the
+  `joint_trajectory_controller` not reporting the goal met, succeeds there and the classification
+  is logged as information. Every other outcome still fails on every side: an arm at the start,
+  part-way (a path-tolerance abort included) or unreadable, a MoveIt timeout, a cancel or
+  preemption, a planning failure, a deadman refusal, a controller not active. The plant keeps its
+  judgement unchanged. No tolerance, `goal_time` or L0 value changes, so CLAUDE.md §2's "never
+  widen an execution tolerance" is untouched: the AT_GOAL test still uses the arm's own goal
+  tolerance, and what is withdrawn is only the simulator-tuned controller's verdict on the
+  physical arm. The grip's parameter is generalised to one, `side_judges_outcome` (formerly
+  `gripper_judges_grasp`), from the same plan fact; `cite_skills::execution_failure_stands`
+  decides. Prompted by the first physical run's step 1 ("move to zero"), failed with "the arm
+  reached the trajectory's last point, but the controller did not report the goal met (MoveIt
+  error code -4)".

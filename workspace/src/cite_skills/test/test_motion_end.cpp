@@ -50,6 +50,7 @@ using cite_interfaces::msg::ResultCode;
 using cite_skills::MotionEnd;
 using cite_skills::classify_execution_failure;
 using cite_skills::classify_motion_end;
+using cite_skills::execution_failure_stands;
 using cite_skills::positions_in_trajectory_order;
 using cite_skills::within_tolerance;
 using moveit_msgs::msg::MoveItErrorCodes;
@@ -329,6 +330,59 @@ TEST(ExecutionFailureTest, ADegenerateOnePointTrajectoryIsNotTheHarshestAnswer)
     classify_execution_failure(
       MoveItErrorCodes::CONTROL_FAILED, kStart, kStart, kStart, kToleranceRad).code,
     ResultCode::EXECUTION_FAILED);
+}
+
+// --- Whether a classified failure fails the step on this side ---------------
+//
+// Owner decision 2026-10-06 (ADR-0070): on a physical side an arm motion is
+// executed, not judged. The case is the first physical run's step 1: "the arm
+// reached the trajectory's last point, but the controller did not report the goal
+// met (MoveIt error code -4)".
+
+TEST(ExecutionFailureStandsTest, APhysicalSideAcceptsAnArmAtTheLastPoint)
+{
+  const auto arrived = classify_execution_failure(
+    MoveItErrorCodes::CONTROL_FAILED, kGoal, kStart, kGoal, kToleranceRad);
+  ASSERT_TRUE(arrived.reached_last_point);
+  EXPECT_FALSE(execution_failure_stands(arrived, false));
+  EXPECT_TRUE(execution_failure_stands(arrived, true))
+    << "the plant's judgement of the same arrival changed";
+}
+
+TEST(ExecutionFailureStandsTest, EveryOtherRowStandsOnEverySide)
+{
+  // An arm at the start, part-way or unreadable, a MoveIt timeout and a
+  // preemption: not judging the arrival never excuses any of them.
+  const std::vector<cite_skills::ExecutionFailure> others{
+    classify_execution_failure(
+      MoveItErrorCodes::CONTROL_FAILED, kStart, kStart, kGoal, kToleranceRad),
+    classify_execution_failure(
+      MoveItErrorCodes::CONTROL_FAILED, kPartWay, kStart, kGoal, kToleranceRad),
+    classify_execution_failure(
+      MoveItErrorCodes::CONTROL_FAILED, {}, kStart, kGoal, kToleranceRad),
+    classify_execution_failure(
+      MoveItErrorCodes::TIMED_OUT, kGoal, kStart, kGoal, kToleranceRad),
+    classify_execution_failure(
+      MoveItErrorCodes::PREEMPTED, kGoal, kStart, kGoal, kToleranceRad),
+  };
+  for (const auto & failure : others) {
+    EXPECT_FALSE(failure.reached_last_point) << failure.detail;
+    for (const bool judges : {true, false}) {
+      EXPECT_TRUE(execution_failure_stands(failure, judges)) << failure.detail;
+    }
+  }
+}
+
+TEST(ExecutionFailureStandsTest, TheArrivalIsStillJudgedWithTheArmsOwnTolerance)
+{
+  // Just outside the goal tolerance is part-way, and stands on a physical side
+  // too: the decision withdraws the controller's verdict, not the tolerance.
+  std::vector<double> just_short = kGoal;
+  just_short[0] -= 2.0 * kToleranceRad;
+  const auto answer = classify_execution_failure(
+    MoveItErrorCodes::CONTROL_FAILED, just_short, kStart, kGoal, kToleranceRad);
+  EXPECT_EQ(answer.code, ResultCode::MOTION_INTERRUPTED);
+  EXPECT_TRUE(execution_failure_stands(answer, false));
 }
 
 // --- Reading the arm by the names the trajectory carries ---------------------
