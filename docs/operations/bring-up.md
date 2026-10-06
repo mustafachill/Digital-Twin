@@ -380,6 +380,27 @@ Reduced speed and a human on the stop, in both stages.
 
 Raise the scale only after a run that showed nothing unexpected.
 
+### First physical runs (2026-10-06)
+
+Supervised, owner at the hardware E-stop, `--speed-scale 0.1`, over the lab Wi-Fi. Observations,
+not a campaign:
+
+- **Observation bring-up (`./scripts/sim --pair`)**: the deadman held the arm at STOP, the hold
+  gate passed, the boundary's heartbeat made the deadman HEALTHY and the arm was enabled; the
+  physical joint states matched the receive-only read of 2026-10-05. Teardown tripped the
+  deadman and stopped the arm.
+- **The hold gate's single STOP was lost once** (sent before its client matched); fixed by
+  waiting for the match and re-sending (commit `6e7a733`).
+- **One signal drove both arms**: the real program's first ten steps ran on the physical arm
+  and in Gazebo together (track to 0 mm confirmed on both sides, two joint moves, gripper open,
+  descend). The physical gripper closed on the real box at a reported 62.8 mm, outside the
+  Gazebo-tuned accept band; by owner decision (ADR-0070) the physical side's grip and arm
+  arrival are executed, not judged.
+- **Later runs stopped on the xArm's own collision detection** (`C31: Collision Caused Abnormal
+  Joint Current`) about two seconds into the first move, with no reported contact. The open
+  question is the cause: real contact, or the 150 Hz servo stream over Wi-Fi (the control loop
+  reads late about once a second). Recorded in [`../open-work.md`](../open-work.md) #98.
+
 ### Step 1 of the 2.B plan: reading the arm without moving it (2026-10-05)
 
 Before any software spoke to the arm, its joint angles were read **receive-only** from the

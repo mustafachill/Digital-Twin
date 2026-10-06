@@ -80,8 +80,10 @@ names text that is `git show 960e6b4:CLAUDE.md`.
 
 **What does not work yet, stated plainly:**
 
-- **No physical arm has been driven.** The physical counterpart's side
-  (`hardware.launch.py`, `cite_hardware`, ADR-0070) is built and tested only against fakes; a
+- **No full cycle has run on the physical arm.** One signal has driven the physical xArm 5 and
+  its twin together through the first steps of the real program at reduced speed; the run
+  then stopped on the controller's own collision detection (C31). What was run and what stopped
+  it: [`docs/operations/bring-up.md`](docs/operations/bring-up.md), "First physical runs". A
   physical plant on a paired zone is refused at validate time (ADR-0041 Decision 3).
 - **Nothing automated brings a pair up**, so the twin boundary is held only by `cite_twin`'s own
   tests against fake sides (ADR-0057). `DivergenceMetrics.valid` is false by construction.

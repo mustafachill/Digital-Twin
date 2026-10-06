@@ -1917,6 +1917,31 @@ is destroyed.
 of ours. On the physical side, `move_group` exiting brings the whole side down by design, so
 there the crash only ever happens at teardown.
 
+### #98 — The physical arm stops on C31 during streamed motion (2026-10-06)
+On the first physical runs (`docs/operations/bring-up.md`, "First physical runs"), the xArm
+raised `C31: Collision Caused Abnormal Joint Current` about two seconds into the first joint
+move, with no contact reported by the owner at the cell. The vendor plugin then deactivated the
+controllers and MoveIt timed out. Unattributed. Candidates, cheapest first:
+- the servo stream: `UFRobotSystemHardware` streams `set_servo_angle_j` at 150 Hz over the lab
+  Wi-Fi, and the control loop's read overruns 20-25 ms about once a second; a wired link
+  separates this from the rest;
+- the controller's payload / TCP-load and collision-sensitivity settings differing from what
+  the program's own runs used;
+- real contact.
+
+Two facts found on the way:
+- The vendor plugin's `on_activate` calls `clean_error`, so a C31 latched by the previous run
+  is cleared automatically on the next bring-up (seen in the log). Clearing a collision error
+  is an operator's decision; the plugin takes it. Out of this repository's code; a vendor patch
+  or an operating rule.
+- The program's pair log now lives in the `cite-log` volume at
+  `workspace/log/program/pair.*.log` (commit `c417599`); read it with
+  `./scripts/enter dev cat <path>`.
+
+Also open from the last review of the hold-gate fix (Medium, test quality only): no test pins
+"exactly one STOP when the vendor answers at once", and the per-call-bound test accepts any
+positive number.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
