@@ -1917,6 +1917,20 @@ is destroyed.
 of ours. On the physical side, `move_group` exiting brings the whole side down by design, so
 there the crash only ever happens at teardown.
 
+### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
+Each fails safe; none blocks the first supervised motion. From the last reviewer and
+safety-auditor passes on `feat/real-counterpart`:
+- A track step whose plant carriage is already at the target treats an UNHEARD physical
+  carriage like an AWAY one and fails at once with "home it" (`program/cell.py`, `track`).
+  It should wait with `await_heard` within the step's ceiling, then word the refusal by reason.
+- `TrackArrived.Response.ARRIVED` is 0, so a response with `reason` left unset reads as
+  arrived; `carriage_verdict` checks `reason` only. Every server path sets it today.
+- `test_physical_readiness.py` asserts the absence of a string production no longer emits.
+- The `_speed_epoch` bump on re-activation in the track adapter has no test.
+- The program reads the twin's mode once before waiting up to the readiness ceiling for the
+  carriage; a second `SetMode` client in that window is not seen. The operating precondition
+  is that the program is the only `SetMode` client.
+
 ---
 
 ## 5. The one large composite item

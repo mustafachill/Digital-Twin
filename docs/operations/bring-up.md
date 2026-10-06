@@ -294,9 +294,11 @@ model and the same solver, so any agreement between them is agreement of a thing
    track that has not found its zero (`on_zero`), and the track adapter never enables the motor
    itself (`auto_enable` is false in L0).
 7. **The physical carriage stands where the plant's does**, within the track's goal tolerance.
-   The program checks this before it asks you into the cell: a physical carriage heard
-   standing elsewhere refuses the run, naming the position to home it to, from outside the
-   cell. If it is heard elsewhere only after you pressed Enter, the twin refuses `VALIDATED`
+   The program checks this before it asks you into the cell. It first waits, up to the
+   readiness ceiling, until the twin hears the physical carriage's position fresh; a carriage
+   never heard in that time refuses the run before the prompt (check the physical side, do not
+   enter). A physical carriage heard standing elsewhere refuses the run, naming the position to
+   home it to, from outside the cell. If it is heard elsewhere only after you pressed Enter, the twin refuses `VALIDATED`
    for good and the program stops at once; it waits only for what clears by itself (the
    deadman, the arm's enable, fresh state).
 
@@ -335,7 +337,9 @@ parameters.
    box is spawned and no belt runs on the physical side.
 5. A track step first asks every side whether its carriage is already at the target. If the
    plant's is and the physical one is not, the step fails and tells you to home that carriage;
-   the physical carriage is never left unchecked.
+   the physical carriage is never left unchecked. A track step also fails if the twin is in a
+   mode that forwards no track command (for example SIM mid-run), rather than counting as
+   arrived.
 6. One cycle of the real program then runs on both arms, at the scale you gave.
 
 **If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
