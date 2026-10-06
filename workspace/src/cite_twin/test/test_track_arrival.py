@@ -20,7 +20,7 @@ through `TrackArrived` before it starts the next step.
 
 from __future__ import annotations
 
-from cite_twin.track_arrival import apart, arrival
+from cite_twin.track_arrival import apart, arrival, elsewhere, unheard
 
 SIDES = ("plant", "counterpart")
 AGE = 0.25
@@ -73,11 +73,25 @@ def test_a_physical_carriage_where_the_plants_is_is_accepted() -> None:
     assert _apart((0.30, 0.0), (0.3005, 9.9)) is None
 
 
-def test_a_stale_physical_carriage_is_refused_however_close() -> None:
-    reason = _apart((0.30, 10.0), (0.30, 10.0 - AGE - 0.01))
+def test_a_stale_physical_carriage_is_not_apart_but_unheard() -> None:
+    """S-08: a position too old clears by itself, so it is never the final refusal."""
+    stale = (0.0, 10.0 - AGE - 0.01)
+    assert _apart((0.30, 10.0), stale) is None
+    reason = unheard("track_joint", (0.30, 10.0), "counterpart", stale, 10.0, AGE)
     assert reason is not None and "old" in reason
 
 
-def test_no_position_on_either_side_is_refused() -> None:
-    assert "no track position heard" in _apart((0.30, 10.0), None)
-    assert "no plant" in _apart(None, (0.30, 10.0))
+def test_no_position_on_either_side_is_unheard_and_not_apart() -> None:
+    assert _apart((0.30, 10.0), None) is None and _apart(None, (0.30, 10.0)) is None
+    assert "no track position heard" in unheard(
+        "track_joint", (0.30, 10.0), "counterpart", None, 10.0, AGE
+    )
+    assert "no plant" in unheard("track_joint", None, "counterpart", (0.30, 10.0), 10.0, AGE)
+    assert unheard("track_joint", (0.30, 10.0), "counterpart", (0.0, 9.9), 10.0, AGE) is None
+
+
+def test_a_carriage_elsewhere_is_only_one_heard_fresh_and_away() -> None:
+    assert "stands at 0.0 mm" in elsewhere("counterpart", (0.0, 9.9), 0.30, 0.001, 10.0, AGE)
+    assert elsewhere("counterpart", (0.30, 9.9), 0.30, 0.001, 10.0, AGE) is None
+    assert elsewhere("counterpart", None, 0.30, 0.001, 10.0, AGE) is None
+    assert elsewhere("counterpart", (0.0, 9.0), 0.30, 0.001, 10.0, AGE) is None

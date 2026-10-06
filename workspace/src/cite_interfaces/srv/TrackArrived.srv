@@ -12,7 +12,14 @@
 #
 # A physical side's position counts only while it is fresh (the plan's
 # `state_max_age_s`, on the boundary's steady clock); a side the boundary has
-# no position for has not arrived. A mode that routes no command answers false.
+# no position for has not arrived. In a mode that routes no command, the plant's
+# carriage - the one the program reads - is the side asked about.
+#
+# A physical side the mode does NOT command counts against arrival only once
+# its position is heard fresh and stands away from `position_m` (ADR-0070,
+# finding S-08): in SIM the fixed program asks this with the plant's own track
+# position, so a physical carriage that stands elsewhere is refused before a
+# person is asked into the cell, not after.
 #
 # SERVICE is the one place this name is written, as SetMode's is.
 

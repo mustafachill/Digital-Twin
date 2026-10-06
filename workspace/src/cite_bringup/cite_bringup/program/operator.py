@@ -36,12 +36,16 @@ def confirm_operator(
     scale: float,
     say: Callable[[str], None],
     read: Callable[[str], str],
+    carriage_refusal: Callable[[], str | None],
 ) -> None:
     """Ask the operator to place the part and clear the cell, once the twin is in SIM.
 
     ``mode`` is the twin's mode as read from `TwinMode.TOPIC`, `None` when none
     was heard. Anything but SIM refuses before a word is said to the operator.
-    ``read`` is `input`: an end of input is no answer, and refuses.
+    ``carriage_refusal`` is asked next, in SIM (`RosCell.carriage_refusal`): a
+    physical carriage standing away from the plant's refuses the run before the
+    operator is asked, never after (S-08). ``read`` is `input`: an end of input
+    is no answer, and refuses.
     """
     if mode is None:
         raise StepFailed(
@@ -54,6 +58,9 @@ def confirm_operator(
             f"command {', '.join(physical)}, so no one is asked into the cell. Put it in "
             "SIM first"
         )
+    refusal = carriage_refusal()
+    if refusal is not None:
+        raise StepFailed(refusal)
     for side in physical:
         say(f"{side} is physical and runs at speed scale {scale:g}.")
         say(

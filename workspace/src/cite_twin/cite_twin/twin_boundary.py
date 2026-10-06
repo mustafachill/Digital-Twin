@@ -131,7 +131,12 @@ from cite_twin.routing import (
     reverse_state_flow,
     route,
 )
-from cite_twin.track_arrival import apart as tracks_apart, arrival as track_arrival
+from cite_twin.track_arrival import (
+    apart as tracks_apart,
+    arrival as track_arrival,
+    elsewhere as track_elsewhere,
+    unheard as track_unheard,
+)
 from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -435,6 +440,7 @@ class TwinBoundary:
             deployment,
             partial(require_hardware_opt_in, plan, environ),
             physical_side_unready=self._physical_side_unready,
+            physical_carriage_apart=self._physical_carriage_apart,
         )
 
         self._mode_publisher = self._plant.node.create_publisher(
@@ -989,24 +995,48 @@ class TwinBoundary:
                 is not None
             }
         chosen = route(mode)
-        if not chosen.accepted:
-            response.arrived = False
-            response.detail = (
-                f"in {MODE_NAMES.get(mode, mode)} no side is commanded: {chosen.detail}"
-            )
-            return response
+        # In a mode that routes no command, the plant's carriage - the one the
+        # program reads - is the side asked about, beside the physical one below.
+        sides = chosen.sides if chosen.accepted else (PLANT_SIDE,)
         physical = [COUNTERPART_SIDE] if asset in self._physical_watches else []
+        now = time.monotonic()
         reason = track_arrival(
-            chosen.sides,
+            sides,
             heard,
             physical,
             request.position_m,
             request.tolerance_m,
-            time.monotonic(),
+            now,
             self._state_max_age_s,
         )
+        # A physical carriage the mode does not command counts too, but only
+        # once it is heard fresh and standing elsewhere: before a person is
+        # asked into the cell the program asks this in SIM, and is refused
+        # then rather than after they confirmed it clear (S-08).
+        uncommanded = [
+            found
+            for side_name in physical
+            if side_name not in sides
+            and (
+                found := track_elsewhere(
+                    side_name,
+                    heard.get(side_name),
+                    request.position_m,
+                    request.tolerance_m,
+                    now,
+                    self._state_max_age_s,
+                )
+            )
+            is not None
+        ]
+        reason = "; ".join([found for found in (reason, *uncommanded) if found]) or None
         response.arrived = reason is None
-        response.detail = reason or "every commanded side is at the target"
+        response.detail = reason or (
+            "every commanded side is at the target"
+            if chosen.accepted
+            else f"in {MODE_NAMES.get(mode, mode)} no side is commanded; the plant's carriage "
+            "is at the target and no physical carriage is heard standing elsewhere"
+        )
         return response
 
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
@@ -1154,17 +1184,39 @@ class TwinBoundary:
             watch.heard_controller(time.monotonic())
 
     def _physical_side_unready(self) -> str | None:
-        """Why a physical counterpart may not be commanded yet; asked under the lock.
+        """Why a physical counterpart may not be commanded YET; asked under the lock.
 
-        Its deadman, controller and joints (ADR-0070 item 6), and then its
-        carriage: standing within the track's goal tolerance of the plant's, by
-        a fresh position (SA-S-01 b).
+        Its deadman, controller and joints (ADR-0070 item 6), and a fresh
+        position for its carriage to be compared by: each clears by itself.
         """
         now = time.monotonic()
         reasons = [physical_unready(self._physical_watches.values(), now)]
-        for joint, tolerance_m in self._physical_tracks:
+        for joint, _tolerance_m in self._physical_tracks:
             reasons.append(
-                tracks_apart(
+                track_unheard(
+                    joint,
+                    self._track_positions.get((PLANT_SIDE, joint)),
+                    COUNTERPART_SIDE,
+                    self._track_positions.get((COUNTERPART_SIDE, joint)),
+                    now,
+                    self._state_max_age_s,
+                )
+            )
+        found = [reason for reason in reasons if reason is not None]
+        return "; ".join(found) if found else None
+
+    def _physical_carriage_apart(self) -> str | None:
+        """Why a physical carriage, heard fresh, stands away from the plant's; under the lock.
+
+        SA-S-01 b, and final (S-08): within the track's goal tolerance of the
+        plant's or not at all, and nothing but a person homing it clears it.
+        """
+        now = time.monotonic()
+        found = [
+            reason
+            for joint, tolerance_m in self._physical_tracks
+            if (
+                reason := tracks_apart(
                     joint,
                     self._track_positions.get((PLANT_SIDE, joint)),
                     COUNTERPART_SIDE,
@@ -1174,7 +1226,8 @@ class TwinBoundary:
                     self._state_max_age_s,
                 )
             )
-        found = [reason for reason in reasons if reason is not None]
+            is not None
+        ]
         return "; ".join(found) if found else None
 
     def _on_model_version(self, side_name: str, message: ModelVersion) -> None:

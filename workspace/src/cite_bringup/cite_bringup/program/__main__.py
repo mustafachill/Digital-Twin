@@ -115,7 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             if physical:
                 # Read, not assumed: the operator is asked in only while the
                 # twin forwards nothing to the physical side (SA-S-05).
-                confirm_operator(ros.twin_mode(), physical, scale, say_now, input)
+                confirm_operator(
+                    ros.twin_mode(), physical, scale, say_now, input, ros.carriage_refusal
+                )
             ros.refuse_if_holding()
             if args.via == "twin":
                 ros.enter_validated()

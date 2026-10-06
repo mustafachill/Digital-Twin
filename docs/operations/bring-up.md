@@ -293,8 +293,11 @@ model and the same solver, so any agreement between them is agreement of a thing
    track that has not found its zero (`on_zero`), and the track adapter never enables the motor
    itself (`auto_enable` is false in L0).
 7. **The physical carriage stands where the plant's does**, within the track's goal tolerance.
-   The twin boundary refuses `VALIDATED` until it does. The program keeps asking up to its own
-   wall-clock ceiling and then fails, telling you to home the carriage.
+   The program checks this before it asks you into the cell: a physical carriage heard
+   standing elsewhere refuses the run, naming the position to home it to, from outside the
+   cell. If it is heard elsewhere only after you pressed Enter, the twin refuses `VALIDATED`
+   for good and the program stops at once; it waits only for what clears by itself (the
+   deadman, the arm's enable, fresh state).
 
 Registration ([calibration-and-registration.md](calibration-and-registration.md)) ties the real
 cell's frame to the model's. **It is not built.** The program moves in joint space and does not

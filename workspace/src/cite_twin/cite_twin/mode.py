@@ -369,6 +369,7 @@ class ModeAuthority:
         hardware_opt_in: Callable[[], None],
         initial_mode: int = INITIAL_MODE,
         physical_side_unready: Callable[[], str | None] | None = None,
+        physical_carriage_apart: Callable[[], str | None] | None = None,
     ) -> None:
         self._deployment = deployment
         self._hardware_opt_in = hardware_opt_in
@@ -377,6 +378,12 @@ class ModeAuthority:
         #: places physical actuation under a new authority, and never behind
         #: `force`. Injected like the opt-in, so this module reads no topic.
         self._physical_side_unready = physical_side_unready
+        #: Why a physical carriage, heard fresh, stands where the plant's does
+        #: not, or `None`. Asked with the readiness above and refused for good,
+        #: never as "not ready": it does not clear by itself, and a caller that
+        #: waited on it would wait beside an operator who has confirmed the
+        #: cell clear (S-08).
+        self._physical_carriage_apart = physical_carriage_apart
         self._mode = initial_mode
         self._reason = "the mode a deployment starts in; never reached by a default"
 
@@ -493,6 +500,16 @@ class ModeAuthority:
             return
         if not self._deployment.physical_sides_commanded(mode, asset_id):
             return
+        apart = (
+            None if self._physical_carriage_apart is None else self._physical_carriage_apart()
+        )
+        if apart is not None:
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES[mode]} would command a physical carriage that does not stand "
+                f"where the plant's does - {apart}. Refused for good: it does not clear "
+                "by itself",
+            )
         unready = self._physical_side_unready()
         if unready is not None:
             raise ModeError(

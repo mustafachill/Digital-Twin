@@ -632,16 +632,22 @@ def test_the_operator_is_asked_only_once_the_twin_is_read_in_sim() -> None:
     asked: list[str] = []
     for mode in (None, TwinMode.MODE_VALIDATED):
         with pytest.raises(StepFailed):
-            confirm_operator(mode, ["counterpart"], 0.1, said.append, asked.append)
+            confirm_operator(
+                mode, ["counterpart"], 0.1, said.append, asked.append, lambda: None
+            )
     assert said == [] and asked == []
-    confirm_operator(TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, asked.append)
+    confirm_operator(
+        TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, asked.append, lambda: None
+    )
     assert any("speed scale 0.1" in line for line in said) and len(asked) == 1
 
     def no_answer(_prompt: str) -> str:
         raise EOFError
 
     with pytest.raises(StepFailed, match="no operator answer"):
-        confirm_operator(TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, no_answer)
+        confirm_operator(
+            TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, no_answer, lambda: None
+        )
 
 
 class _PairCell:
@@ -649,6 +655,7 @@ class _PairCell:
 
     mode = None
     left = True
+    carriage: str | None = None
     calls: list[str] = []
 
     def __init__(self, *_args, **_kwargs) -> None:
@@ -660,6 +667,9 @@ class _PairCell:
     def refuse_if_holding(self) -> None:
         _PairCell.calls.append("refuse_if_holding")
 
+    def carriage_refusal(self) -> str | None:
+        return _PairCell.carriage
+
     def enter_validated(self) -> None:
         _PairCell.calls.append("enter_validated")
 
@@ -668,14 +678,14 @@ class _PairCell:
         return _PairCell.left
 
 
-def _main_on_a_pair(monkeypatch, mode, left: bool, answers=("",)) -> int:
+def _main_on_a_pair(monkeypatch, mode, left: bool, answers=("",), carriage=None) -> int:
     import builtins
 
     import cite_bringup.program.__main__ as program_module
     import cite_bringup.program.cell as cell_module
     import rclpy
 
-    _PairCell.mode, _PairCell.left = mode, left
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = mode, left, carriage
     answers = list(answers)
     monkeypatch.setattr(cell_module, "RosCell", _PairCell)
     monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
@@ -699,4 +709,48 @@ def test_a_twin_not_in_sim_is_never_entered_and_no_one_is_asked(monkeypatch) -> 
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_VALIDATED, left=True, answers=()) == 1
+    assert _PairCell.calls == []
+
+
+# S-08: a carriage that disagrees is refused BEFORE the operator is asked in.
+
+
+def test_a_carriage_apart_refuses_before_the_operator_is_asked() -> None:
+    from cite_bringup.program.operator import confirm_operator
+    from cite_interfaces.msg import TwinMode
+
+    said: list[str] = []
+    asked: list[str] = []
+    with pytest.raises(StepFailed, match="from outside the cell"):
+        confirm_operator(
+            TwinMode.MODE_SIM,
+            ["counterpart"],
+            0.1,
+            said.append,
+            asked.append,
+            lambda: "bring the physical carriage to 650 mm (home it) - from outside the cell",
+        )
+    assert said == [] and asked == []
+
+
+def test_the_carriages_are_asked_of_the_twin_at_the_plants_own_position(cell) -> None:
+    ros, asked = _tracking(cell, 0.65, [(False, "counterpart: stands at 0.0 mm")])
+    refusal = ros.carriage_refusal()
+    assert asked == [0.65]
+    assert refusal is not None
+    assert "Bring the physical carriage to 650 mm (home it) - from outside the cell" in refusal
+    assert "counterpart: stands at 0.0 mm" in refusal
+    ros, _ = _tracking(cell, 0.65, [(True, "every commanded side is at the target")])
+    assert ros.carriage_refusal() is None
+
+
+def test_a_run_whose_carriages_disagree_never_asks_and_never_enters_validated(
+    monkeypatch,
+) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    status = _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, answers=(), carriage="apart"
+    )
+    assert status == 1
     assert _PairCell.calls == []

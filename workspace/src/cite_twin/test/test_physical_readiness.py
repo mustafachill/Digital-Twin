@@ -186,7 +186,9 @@ def test_reasserting_a_mode_that_commands_no_physical_side_never_waits() -> None
     assert machine.request(TwinMode.MODE_SIM, "", "stay", force=False).accepted
 
 
-def _boundary_with_carriages(plant_m: float, counterpart_m: float) -> TwinBoundary:
+def _boundary_with_carriages(
+    plant_m: float, counterpart_m: float, counterpart_age_s: float = 0.0
+) -> TwinBoundary:
     """Build the boundary's own readiness question, on a ready arm with two carriages."""
     now = time.monotonic()
     boundary = object.__new__(TwinBoundary)
@@ -195,23 +197,106 @@ def _boundary_with_carriages(plant_m: float, counterpart_m: float) -> TwinBounda
     boundary._state_max_age_s = AGE
     boundary._track_positions = {
         ("plant", "picker_track_joint"): (plant_m, now),
-        ("counterpart", "picker_track_joint"): (counterpart_m, now),
+        ("counterpart", "picker_track_joint"): (counterpart_m, now - counterpart_age_s),
     }
     return boundary
 
 
-def test_validated_waits_for_the_physical_carriage_to_stand_where_the_plants_does() -> None:
-    """SA-S-01 b: a ready arm whose carriage stands elsewhere is not ready."""
-    reason = _boundary_with_carriages(0.0, 0.30)._physical_side_unready()
-    assert reason is not None and "picker_track_joint" in reason and "home it" in reason
-    authority = ModeAuthority(
+def _boundary_authority(boundary: TwinBoundary) -> ModeAuthority:
+    return ModeAuthority(
         Deployment.paired({"picker": True}),
         lambda: None,
-        physical_side_unready=_boundary_with_carriages(0.0, 0.30)._physical_side_unready,
+        physical_side_unready=boundary._physical_side_unready,
+        physical_carriage_apart=boundary._physical_carriage_apart,
     )
-    verdict = authority.request(TwinMode.MODE_VALIDATED, "", "go", force=False)
+
+
+def test_a_physical_carriage_apart_is_refused_for_good() -> None:
+    """SA-S-01 b, S-08: a ready arm whose carriage stands elsewhere is refused, finally.
+
+    It never clears by itself, and the program asks VALIDATED after the operator
+    confirmed the cell clear; a refusal it waited on would keep them waiting.
+    """
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    reason = boundary._physical_carriage_apart()
+    assert reason is not None and "picker_track_joint" in reason and "home it" in reason
+    assert boundary._physical_side_unready() is None
+    verdict = _boundary_authority(boundary).request(TwinMode.MODE_VALIDATED, "", "go", False)
+    assert not verdict.accepted and verdict.code == ResultCode.PRECONDITION_FAILED
+    assert "home it" in verdict.detail
+    assert not waits_for_a_physical_side(verdict.detail)
+
+
+def test_the_program_stops_at_once_on_a_carriage_apart() -> None:
+    """The boundary's verdict, read by the program's own loop: one ask, no wait."""
+    from cite_bringup.program.cell import ask_until_accepted
+    from cite_bringup.program.steps import StepFailed
+
+    authority = _boundary_authority(_boundary_with_carriages(0.0, 0.30))
+    asks: list[int] = []
+
+    def ask() -> tuple[bool, str]:
+        asks.append(1)
+        verdict = authority.request(TwinMode.MODE_VALIDATED, "", "go", False)
+        return verdict.accepted, verdict.detail
+
+    def pause() -> None:
+        raise AssertionError("waited on a refusal that never clears by itself")
+
+    with pytest.raises(StepFailed, match="refused VALIDATED"):
+        ask_until_accepted(ask, pause, lambda _text: None)
+    assert asks == [1]
+
+
+def test_a_physical_carriage_not_heard_fresh_is_waited_for() -> None:
+    """A position too old clears by itself: still the retryable 'not ready'."""
+    boundary = _boundary_with_carriages(0.0, 0.30, counterpart_age_s=2 * AGE)
+    assert boundary._physical_carriage_apart() is None
+    reason = boundary._physical_side_unready()
+    assert reason is not None and "old" in reason
+    verdict = _boundary_authority(boundary).request(TwinMode.MODE_VALIDATED, "", "go", False)
     assert not verdict.accepted and waits_for_a_physical_side(verdict.detail)
 
 
 def test_a_physical_carriage_where_the_plants_is_is_ready() -> None:
-    assert _boundary_with_carriages(0.30, 0.3005)._physical_side_unready() is None
+    boundary = _boundary_with_carriages(0.30, 0.3005)
+    assert boundary._physical_side_unready() is None
+    assert boundary._physical_carriage_apart() is None
+    verdict = _boundary_authority(boundary).request(TwinMode.MODE_VALIDATED, "", "go", False)
+    assert verdict.accepted
+
+
+def _track_arrived(boundary: TwinBoundary, mode: int, position_m: float):
+    from cite_interfaces.srv import TrackArrived
+    import threading
+
+    class _Authority:
+        pass
+
+    boundary._lock = threading.Lock()
+    boundary._authority = _Authority()
+    boundary._authority.mode = mode
+    boundary._sides = {"plant": None, "counterpart": None}
+    boundary._track_asset_by_joint = {"picker_track_joint": "picker"}
+    request = TrackArrived.Request(
+        joint="picker_track_joint", position_m=position_m, tolerance_m=0.001
+    )
+    return boundary._on_track_arrived(request, TrackArrived.Response())
+
+
+def test_in_sim_a_physical_carriage_heard_elsewhere_has_not_arrived() -> None:
+    """S-08: what the program asks before the operator, at the plant's own position."""
+    answer = _track_arrived(_boundary_with_carriages(0.0, 0.30), TwinMode.MODE_SIM, 0.0)
+    assert not answer.arrived and "counterpart: stands at 300.0 mm" in answer.detail
+    answer = _track_arrived(_boundary_with_carriages(0.30, 0.3005), TwinMode.MODE_SIM, 0.30)
+    assert answer.arrived
+
+
+def test_in_sim_a_physical_carriage_not_heard_fresh_is_left_to_the_readiness_wait() -> None:
+    boundary = _boundary_with_carriages(0.0, 0.30, counterpart_age_s=2 * AGE)
+    assert _track_arrived(boundary, TwinMode.MODE_SIM, 0.0).arrived
+
+
+def test_in_sim_the_plants_carriage_is_still_asked_about() -> None:
+    answer = _track_arrived(_boundary_with_carriages(0.0, 0.0), TwinMode.MODE_SIM, 0.30)
+    assert not answer.arrived and "plant: stands at 0.0 mm" in answer.detail

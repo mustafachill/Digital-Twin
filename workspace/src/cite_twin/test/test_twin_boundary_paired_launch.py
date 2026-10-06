@@ -555,7 +555,14 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertTrue(self._arrived(0.5, 0.3).arrived)
         response = self._request(TwinMode.MODE_SIM, "no side commanded")
         self.assertTrue(response.accepted, response.result.detail)
-        self.assertFalse(self._arrived(0.5, 0.3).arrived)
+        # In SIM no side is commanded through L5: the plant's carriage, which
+        # the program reads, is asked about, and a simulated counterpart is not
+        # (S-08: only a PHYSICAL carriage heard elsewhere counts there).
+        in_sim = self._arrived(0.25, 0.001)
+        self.assertTrue(in_sim.arrived, in_sim.detail)
+        away = self._arrived(0.75, 0.001)
+        self.assertFalse(away.arrived)
+        self.assertIn("plant: stands at 250.0 mm", away.detail)
 
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""

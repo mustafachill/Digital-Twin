@@ -330,6 +330,33 @@ class RosCell:
             self.node.destroy_subscription(subscription)
         return received[-1].mode
 
+    def carriage_refusal(self) -> str | None:
+        """Say why the operator may not be asked in, as to the carriages, or None (S-08).
+
+        Asked in SIM, before the operator is: the twin answers `TrackArrived`
+        for the plant's own track position, and a physical carriage it has
+        heard standing elsewhere is not where the plant's is. That never clears
+        by itself, so it is said now, with what to do - from outside the cell -
+        rather than once VALIDATED is asked of an operator who confirmed it
+        clear. A position the twin has not heard yet is not this refusal: it is
+        waited for after the answer, as the rest of the physical side is.
+        """
+        if self._track_arrived is None or self._track is None:
+            return None
+        self._until_true(
+            lambda: self._track_position is not None,
+            f"{self._track.joint} on the arm's joint states",
+        )
+        plant_m = self._track_position
+        arrived, detail = self._ask_arrival(plant_m, "the carriages before the operator")()
+        if arrived:
+            return None
+        return (
+            f"the physical carriage does not stand where the plant's does ({detail}). "
+            f"Bring the physical carriage to {plant_m * 1000:.0f} mm (home it) - from "
+            "outside the cell - and run the program again; no one is asked into the cell"
+        )
+
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).
 
