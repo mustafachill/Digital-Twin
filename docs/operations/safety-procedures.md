@@ -55,12 +55,11 @@ Every session. Not once per week.
 4. **Registration current** — the real cell's frame tied to the model's, by
    [calibration-and-registration.md](calibration-and-registration.md) (Phase 2, charter §8;
    not built yet). A drifted registration means the robot's model of where things are is wrong.
-   **Owner decision pending (2026-10-05):** registration is not built, and the owner's 2.B
-   sequence runs the first physical motion before it, as a supervised, reduced-speed motion
-   with a person at the hardware E-stop
-   ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). This rule and that
-   sequence disagree, and only the owner can settle which holds; until then the rule stands as
-   written.
+   **Owner decision (2026-10-06):** registration is not required before the program's
+   joint-space motion, supervised, with the hardware E-stop tested and in hand
+   ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). It is required
+   before any Cartesian motion, any claim on the physical side that depends on the planning
+   scene, and any divergence number.
 5. **A human at the stop**, watching, for the whole session.
 6. **Reduced speed** for the first execution of any motion that has not run on this
    hardware before.

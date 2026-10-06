@@ -303,10 +303,11 @@ model and the same solver, so any agreement between them is agreement of a thing
    deadman, the arm's enable, fresh state).
 
 Registration ([calibration-and-registration.md](calibration-and-registration.md)) ties the real
-cell's frame to the model's. **It is not built.** The program moves in joint space and does not
-need it; any divergence number does. The owner's 2.B sequence runs the first motion before
-registration, as a supervised motion with a person at the hardware E-stop. See the pending
-owner decision in [safety-procedures.md](safety-procedures.md).
+cell's frame to the model's. **It is not built.** By owner decision (2026-10-06) it is not
+required before the program's joint-space motion, supervised, with the hardware E-stop tested
+and in hand; it is required before any Cartesian motion, any claim on the physical side that
+depends on the planning scene, and any divergence number
+([safety-procedures.md](safety-procedures.md), item 4).
 
 ### Sequence
 
