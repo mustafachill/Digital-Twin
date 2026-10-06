@@ -453,3 +453,63 @@ def test_a_move_after_the_hold_is_sent_in_place_of_the_one_before_it():
         assert _moves(log) == [50]
     finally:
         node.destroy_node()
+
+
+def test_a_hold_landing_after_the_stale_check_is_not_followed_by_the_move():
+    """SA-S-10: the hold count is looked at again where the move is sent, under the lock."""
+    node, log = _track(StubGate())
+    try:
+        # After `_send_position`'s first look at the hold count and before the
+        # lock section that sends: the last window a hold can land in.
+        node._set_client.before_send = lambda: node._on_command(_hold())
+        node._on_command(_command(0.3, 2))
+        assert _moves(log) == [], f"a move sent after the hold that outranks it: {log}"
+        assert not node._set_in_flight
+    finally:
+        node.destroy_node()
+
+
+# ---------------------------------------------------------------------- #
+# The track adapter: SA-S-09, a closed gate forgets the acknowledged speed
+# ---------------------------------------------------------------------- #
+
+
+def _move_at_an_acknowledged_speed(gate: StubGate):
+    node, log = _track(gate)
+    node._on_command(_command(0.3, 2))
+    _answer(node._set_client.futures[-1], 0, LinearMotorSetPos)
+    assert _sent(log).count("set_linear_motor_speed") == 1
+    return node, log
+
+
+def _reopen_and_move(node, gate: StubGate) -> None:
+    gate.open = True
+    node._position_at_ns = node._steady.now().nanoseconds
+    node._on_command(_command(0.3, 2))
+
+
+def test_the_first_move_after_the_gate_closed_writes_its_speed_again():
+    """A trip or an E-stop may reset the vendor's speed; it is not taken on trust."""
+    gate = StubGate()
+    node, log = _move_at_an_acknowledged_speed(gate)
+    try:
+        gate.open = False
+        node._on_gate_closed("tripped by the test")
+        _reopen_and_move(node, gate)
+        assert _sent(log).count("set_linear_motor_speed") == 2, log
+        assert _sent(log)[-2:] == ["set_linear_motor_speed", "set_linear_motor_pos"]
+    finally:
+        node.destroy_node()
+
+
+def test_the_first_move_after_a_poll_found_the_gate_closed_writes_its_speed_again():
+    gate = StubGate()
+    node, log = _move_at_an_acknowledged_speed(gate)
+    try:
+        gate.open = False
+        node._poll()
+        _reopen_and_move(node, gate)
+        assert _sent(log).count("set_linear_motor_speed") == 2, log
+        assert _sent(log)[-1] == "set_linear_motor_pos"
+    finally:
+        node.destroy_node()

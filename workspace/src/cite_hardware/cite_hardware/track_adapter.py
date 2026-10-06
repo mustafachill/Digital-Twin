@@ -255,8 +255,9 @@ class TrackAdapter(LifecycleNode):
         self._target_hold = 0
         self._pending_hold = 0
         #: The vendor speed `set_linear_motor_speed` last answered 0 for, since
-        #: activation; `None` before the first and after a failed write, so the
-        #: next move writes its speed first (SA-S-03).
+        #: activation; `None` before the first, after a failed write and once
+        #: the gate is found closed, so the next move writes its speed first
+        #: (SA-S-03, SA-S-09).
         self._acked_speed: int | None = None
         #: A position command may have been sent since the last ACKNOWLEDGED
         #: stop: the carriage may be moving. Set before the move is sent and
@@ -622,17 +623,8 @@ class TrackAdapter(LifecycleNode):
         """
         with self._lock:
             stale = hold != self._hold_sequence
-            follow = self._pending if stale and self._active else None
-            follow_hold = self._pending_hold
-            if stale:
-                self._pending = None
-                self._set_in_flight = follow is not None
         if stale:
-            self.get_logger().warning(
-                f"track target {request.pos} dropped: a hold was commanded after it"
-            )
-            if follow is not None:
-                self._send(follow, follow_hold)
+            self._drop_superseded(request)
             return
         assert self._set_client is not None
         if not self._set_client.service_is_ready():
@@ -645,14 +637,22 @@ class TrackAdapter(LifecycleNode):
             return
         gate = self._gate
         with self._lock:
-            self._move_possible = True
-            permitted = self._active and gate is not None and gate.permits_motion()
-            if permitted:
-                self._move_sequence += 1
-                future = self._set_client.call_async(request)
-            else:
-                self._set_in_flight = False
-                self._pending = None
+            # Looked at again where the move is sent: a hold that landed since
+            # the look above outranks it as surely (SA-S-10).
+            stale = hold != self._hold_sequence
+            permitted = False
+            if not stale:
+                self._move_possible = True
+                permitted = self._active and gate is not None and gate.permits_motion()
+                if permitted:
+                    self._move_sequence += 1
+                    future = self._set_client.call_async(request)
+                else:
+                    self._set_in_flight = False
+                    self._pending = None
+        if stale:
+            self._drop_superseded(request)
+            return
         if not permitted:
             why = gate.why_closed() if gate is not None else "the adapter is not configured"
             self.get_logger().warning(f"track target {request.pos} not sent: {why}")
@@ -661,6 +661,19 @@ class TrackAdapter(LifecycleNode):
             f"track to {request.pos} at {request.speed} (vendor units, units/s)"
         )
         future.add_done_callback(lambda done: self._on_set_answered(request, done))
+
+    def _drop_superseded(self, request: LinearMotorSetPos.Request) -> None:
+        """Drop a move accepted before the latest hold; send the one held behind it, if any."""
+        with self._lock:
+            follow = self._pending if self._active else None
+            follow_hold = self._pending_hold
+            self._pending = None
+            self._set_in_flight = follow is not None
+        self.get_logger().warning(
+            f"track target {request.pos} dropped: a hold was commanded after it"
+        )
+        if follow is not None:
+            self._send(follow, follow_hold)
 
     def _on_set_answered(self, request: LinearMotorSetPos.Request, future) -> None:
         error = future.exception()
@@ -786,6 +799,9 @@ class TrackAdapter(LifecycleNode):
             dropped = self._pending
             self._pending = None
             self._target = None
+            # A trip or an E-stop may leave the vendor at another speed: the
+            # next move writes its own again (SA-S-09).
+            self._acked_speed = None
         if dropped is not None:
             self.get_logger().warning(f"held track target {dropped.pos} dropped: {reason}")
         self._stop_if_moving(f"the deadman gate closed: {reason}")
@@ -812,6 +828,7 @@ class TrackAdapter(LifecycleNode):
         elif gate is None or not gate.permits_motion():
             with self._lock:
                 self._target = None
+                self._acked_speed = None
             why = gate.why_closed() if gate is not None else "no deadman gate"
             self._stop_if_moving(f"motion is not permitted: {why}", repeated=True)
         elif holding:
