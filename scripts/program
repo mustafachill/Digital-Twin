@@ -23,7 +23,8 @@
 # spawned or removed and no pose is read - a person places the part on the table
 # and presses Enter before each cycle - and no belt is commanded, because the
 # belt is not twinned and there is no physical belt driver. The physical side
-# comes up only with CITE_ALLOW_HARDWARE=1 in the shell that runs this, and
+# comes up only with CITE_ALLOW_HARDWARE=1, in the shell or in the
+# repository-root .env (shell first; `resolve_hardware_opt_in`), and
 # only with --speed-scale named explicitly: the fraction the real arm runs at is
 # never a default. It is range-checked, by the program's own rule, before
 # anything is brought up. The operator's prompt is the PROGRAM's, not this
@@ -60,7 +61,7 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --zone|--cycles|--speed-scale) WANT="$arg" ;;
-        -h|--help)  sed -n '2,39p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,40p' "$0"; exit 0 ;;
         *)          die "unknown argument '${arg}'. Try --help." ;;
     esac
 done
@@ -80,6 +81,10 @@ if [ -z "$ZONE" ]; then
 else
     require_declared_zone "$ZONE" || die "--zone named a zone the model does not declare (see above)."
 fi
+
+# The hardware opt-in, shell > repository-root .env > 0, resolved once here and
+# handed to the container explicitly; the check before bring-up below reads it.
+resolve_hardware_opt_in
 
 # ---------------------------------------------------------------- on the host
 if ! in_container; then

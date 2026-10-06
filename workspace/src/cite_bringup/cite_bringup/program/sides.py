@@ -17,7 +17,7 @@
     --zone cell_b --physical      the sides whose hardware is physical, one per line
     --zone cell_b --simulated     the others
     --zone cell_b --speed-scale S the speed scale to run at, or a refusal
-    --zone cell_b --hardware-opt-in  refuse unless the shell opted in to a physical side
+    --zone cell_b --hardware-opt-in  refuse unless the opt-in permits a physical side
 
 `./scripts/program` asks this before every Gazebo-only step (ADR-0070 item 7):
 it spawns a box, removes one, reads a model's pose and runs a belt only on a
@@ -142,7 +142,8 @@ def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
     except HardwareNotPermittedError as refusal:
         return (
             f"{', '.join(physical)} is physical, and nothing is brought up without "
-            f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} set in the shell that runs this, "
+            f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} set in the shell that runs this "
+            "or in the repository-root .env, "
             f"once the cell is confirmed clear. {refusal}"
         )
     return None

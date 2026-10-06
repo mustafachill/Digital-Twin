@@ -19,13 +19,16 @@ operate**, and nothing in this document should be read as suggesting otherwise.
 ## The rule that governs everything
 
 **Nothing in this repository commands physical hardware unless `CITE_ALLOW_HARDWARE=1` is
-set deliberately in the current shell.**
+set deliberately, in the current shell or in the repository-root `.env`.**
 
 Never set it in a shell profile, a Dockerfile, a launch default, or CI. It exists so that
 reaching hardware requires a conscious act, and putting it in a profile destroys the only
-protection it provides. **Never put it in `.env` either.** The scripts ignore it there and take it only from
-the shell, and every container command carries the shell's value, so a container left running
-from an earlier session cannot carry it over.
+protection it provides. **`.env` is allowed, by owner decision (2026-10-06):** `./scripts/program`,
+`./scripts/sim --pair` and `./scripts/enter hardware` read it there when the shell does not set
+it (the shell wins, even when it sets it empty), and say so when `.env` arms them. A `1` in
+`.env` arms every physical bring-up from this checkout until it is removed. Test, scenario,
+lint, build and CI never read it from `.env`. Every container command carries the value the
+command resolved, so a container left running from an earlier session cannot carry it over.
 
 **When it binds.** It binds:
 - at the shell, for `./scripts/enter hardware`;

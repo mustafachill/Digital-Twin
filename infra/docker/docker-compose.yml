@@ -61,8 +61,11 @@ x-common-env: &common-env
   # physical hardware unless CITE_ALLOW_HARDWARE is exactly `1`, so the default
   # below keeps it off; and it reads CITE_XARM_IP at launch, refusing when it is
   # empty. The address is set in the gitignored repository-root `.env`, which
-  # `compose()` in scripts/_lib.sh hands over with `--env-file`; the opt-in comes
-  # from the launching shell only, and a value for it in `.env` is not read.
+  # `compose()` in scripts/_lib.sh hands over with `--env-file`. The opt-in is
+  # never interpolated from that file: `compose()` always sets it in the
+  # environment, resolved by `resolve_hardware_opt_in` (shell > `.env` > 0) for
+  # the commands that may start the physical side, and from the shell alone,
+  # unset meaning 0, for every other command.
   CITE_ALLOW_HARDWARE: ${CITE_ALLOW_HARDWARE:-0}
   CITE_XARM_IP: ${CITE_XARM_IP:-}
   # Gazebo needs a writable home for its cache.

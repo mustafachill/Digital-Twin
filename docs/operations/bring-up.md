@@ -316,7 +316,8 @@ From an **interactive terminal**, because the program asks for input:
 CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1
 ```
 
-The opt-in is read from the shell only; a value in `.env` is ignored. On a physical side,
+The opt-in is read from the shell first, then from the repository-root `.env`, and is `0` when
+neither sets it; `1` in `.env` arms every physical bring-up from this checkout. On a physical side,
 `--speed-scale` is required, and it is checked before anything starts. It also has a floor:
 below it, the program's slowest track slide would be slower than the track adapter can carry
 out. The floor is derived, not declared: `cite_bringup.program.sides.minimum_speed_scale` asks

@@ -481,51 +481,136 @@ fi
 
 # R-03 (ADR-0070 item 6): compose() hands the repository-root `.env` over, because
 # compose reads only the `.env` in the compose file's directory and so never saw
-# it. And the opt-in is pinned from the shell, so a value in that file is not
-# read. `docker` is stubbed to print what it was given; nothing is started.
+# it. The opt-in is never interpolated from that file: compose() always sets it
+# from `hardware_opt_in`. `docker` is stubbed to print what it was given; nothing
+# is started. A scratch root stands in for the repository's, so the developer's
+# own `.env` is neither read nor touched.
 # shellcheck disable=SC2016  # expanded by the inner shell, on purpose
-compose_given() { # compose_given <repo root> [VAR=value...]
-    local root="$1"; shift
+compose_given() { # compose_given <repo root> [resolve] [VAR=value...]
+    local root="$1" resolve=""; shift
+    if [ "${1:-}" = resolve ]; then resolve=resolve_hardware_opt_in; shift; fi
     env -u CITE_ALLOW_HARDWARE "$@" bash -c '
         source "$1"
         docker() { printf "%s\n" "$@"; printf "ALLOW=%s\n" "${CITE_ALLOW_HARDWARE-unset}"; }
         REPO_ROOT="$2"
+        $3
         compose config
-    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$root"
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$root" "$resolve" 2>/dev/null
 }
 ENV_ROOT="$(mktemp -d)"
-: > "${ENV_ROOT}/.env"
+printf 'CITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
 expect_ok "compose() passes the repository-root .env with --env-file" \
     grep -qxF -- "${ENV_ROOT}/.env" <(compose_given "$ENV_ROOT")
 expect_ok "compose() passes --env-file when the root .env exists" \
     grep -qxF -- "--env-file" <(compose_given "$ENV_ROOT")
-expect_ok "compose() pins an unset opt-in to 0, so .env cannot turn it on" \
+expect_ok "compose() pins an unset opt-in to 0 when .env says 1 and nothing resolved it" \
     grep -qxF -- "ALLOW=0" <(compose_given "$ENV_ROOT")
+expect_ok "compose() carries a 1 from .env once the opt-in is resolved" \
+    grep -qxF -- "ALLOW=1" <(compose_given "$ENV_ROOT" resolve)
+expect_ok "compose() carries the shell's 0 over a 1 in .env when resolved" \
+    grep -qxF -- "ALLOW=0" <(compose_given "$ENV_ROOT" resolve CITE_ALLOW_HARDWARE=0)
 rm -f "${ENV_ROOT}/.env"
 expect_fail "compose() passes no --env-file when there is no root .env" \
     grep -qxF -- "--env-file" <(compose_given "$ENV_ROOT")
-rmdir "$ENV_ROOT"
 
-# S-06 (ADR-0054): exec_in_container always hands the opt-in across, unset
-# meaning 0, so `compose exec` into a container started with CITE_ALLOW_HARDWARE=1
-# cannot carry that stale opt-in into a later command. `compose` is stubbed: it
-# reports the service as running (so the exec path is taken) and prints what it
-# was given; nothing is started.
+# S-06 (ADR-0054): exec_in_container always hands the opt-in across, as the
+# command resolved it, so `compose exec` into a container started with
+# CITE_ALLOW_HARDWARE=1 cannot carry that stale opt-in into a later command.
+# `compose` is stubbed: it reports the service as running (so the exec path is
+# taken) and prints what it was given; nothing is started.
 # shellcheck disable=SC2016  # expanded by the inner shell, on purpose
-exec_given() { # exec_given [VAR=value...]
+exec_given() { # exec_given <repo root> [resolve] [VAR=value...]
+    local root="$1" resolve=""; shift
+    if [ "${1:-}" = resolve ]; then resolve=resolve_hardware_opt_in; shift; fi
     env -u CITE_ALLOW_HARDWARE "$@" bash -c '
         source "$1"
         compose() {
             if [ "$1" = ps ]; then echo dev; return 0; fi
             printf "%s\n" "$@"
         }
+        REPO_ROOT="$2"
+        $3
         exec_in_container dev true
-    ' _ "${REPO_ROOT}/scripts/_lib.sh"
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$root" "$resolve" 2>/dev/null
 }
 expect_ok "exec_in_container pins an unset opt-in to 0 on compose exec" \
-    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given)
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given "$ENV_ROOT")
 expect_fail "exec_in_container passes the opt-in exactly once" \
-    test "$(exec_given CITE_ALLOW_HARDWARE=0 | grep -c '^CITE_ALLOW_HARDWARE=')" -ne 1
+    test "$(exec_given "$ENV_ROOT" CITE_ALLOW_HARDWARE=0 | grep -c '^CITE_ALLOW_HARDWARE=')" -ne 1
+
+# The opt-in's resolution (owner decision 2026-10-06, ADR-0070 amendment item 2):
+# shell > repository-root `.env` > 0, in `resolve_hardware_opt_in` and only
+# there, and only for the commands that may start the physical side.
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+resolved_given() { # resolved_given <repo root> [VAR=value...]
+    local root="$1"; shift
+    env -u CITE_ALLOW_HARDWARE "$@" bash -c '
+        source "$1"
+        REPO_ROOT="$2"
+        resolve_hardware_opt_in
+        printf "%s|%s" "$(hardware_opt_in)" "$(bash -c "printf %s \"\${CITE_ALLOW_HARDWARE-unset}\"")"
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$root" 2>/dev/null
+}
+expect_eq "with no .env and no shell value the opt-in resolves to 0" \
+    "0|0" "$(resolved_given "$ENV_ROOT")"
+printf 'ROS_DOMAIN_ID=0\nCITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
+expect_eq "a 1 in .env resolves to 1, exported to child processes" \
+    "1|1" "$(resolved_given "$ENV_ROOT")"
+expect_eq "the shell's 0 outranks a 1 in .env" \
+    "0|0" "$(resolved_given "$ENV_ROOT" CITE_ALLOW_HARDWARE=0)"
+expect_eq "a shell value set empty outranks .env too, and means 0" \
+    "0|" "$(resolved_given "$ENV_ROOT" CITE_ALLOW_HARDWARE=)"
+printf 'CITE_ALLOW_HARDWARE=0\n' > "${ENV_ROOT}/.env"
+expect_eq "the shell's 1 outranks a 0 in .env" \
+    "1|1" "$(resolved_given "$ENV_ROOT" CITE_ALLOW_HARDWARE=1)"
+expect_eq "a 0 in .env resolves to 0" "0|0" "$(resolved_given "$ENV_ROOT")"
+printf '# CITE_ALLOW_HARDWARE=1\nCITE_ALLOW_HARDWARE=0\n' > "${ENV_ROOT}/.env"
+expect_eq "a commented-out 1 in .env is not read" "0|0" "$(resolved_given "$ENV_ROOT")"
+printf 'CITE_ALLOW_HARDWARE=0\nCITE_ALLOW_HARDWARE="1"  # armed\n' > "${ENV_ROOT}/.env"
+expect_eq "the last assignment in .env wins, quotes and comment dropped" \
+    "1|1" "$(resolved_given "$ENV_ROOT")"
+printf 'CITE_ALLOW_HARDWARE=yes\n' > "${ENV_ROOT}/.env"
+expect_eq "anything but 1 in .env is carried as written, and is not the opt-in" \
+    "yes|yes" "$(resolved_given "$ENV_ROOT")"
+printf 'CITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
+expect_ok "a resolved 1 from .env is what exec_in_container hands the container" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=1" <(exec_given "$ENV_ROOT" resolve)
+expect_fail "and it is handed across exactly once" \
+    test "$(exec_given "$ENV_ROOT" resolve | grep -c '^CITE_ALLOW_HARDWARE=')" -ne 1
+expect_ok "the shell's 0 is what it hands the container over a 1 in .env" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given "$ENV_ROOT" resolve CITE_ALLOW_HARDWARE=0)
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+expect_ok "require_explicit_hardware_opt_in passes on a 1 resolved from .env" \
+    env -u CITE_ALLOW_HARDWARE bash -c 'source "$1"; REPO_ROOT="$2"; resolve_hardware_opt_in; require_explicit_hardware_opt_in' \
+        _ "${REPO_ROOT}/scripts/_lib.sh" "$ENV_ROOT"
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+expect_fail "and refuses on the same .env when nothing resolved it" \
+    env -u CITE_ALLOW_HARDWARE bash -c 'source "$1"; REPO_ROOT="$2"; require_explicit_hardware_opt_in' \
+        _ "${REPO_ROOT}/scripts/_lib.sh" "$ENV_ROOT"
+rm -f "${ENV_ROOT}/.env"
+rmdir "$ENV_ROOT"
+
+# Who resolves it. Exactly the three entry points that may start the physical
+# side call `resolve_hardware_opt_in`; test, scenario, lint, build and everything
+# CI runs do not, so a developer's `1` in .env never reaches them and their
+# "refused without the opt-in" behaviour holds. A new caller has to be added here
+# deliberately.
+expect_eq "only enter, program and sim resolve the opt-in from .env" \
+    "enter program sim" \
+    "$(cd "${REPO_ROOT}/scripts" && grep -l 'resolve_hardware_opt_in' -- * \
+        | grep -vx -e _lib.sh -e _selftest.sh | sort | tr '\n' ' ' | sed 's/ $//')"
+expect_fail "and no CI workflow resolves it" \
+    grep -rqs 'resolve_hardware_opt_in' "${REPO_ROOT}/.github"
+expect_eq "_lib.sh spells the opt-in's default in exactly one place" \
+    "1" "$(grep -c 'CITE_ALLOW_HARDWARE:-' "${REPO_ROOT}/scripts/_lib.sh")"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok "./scripts/sim resolves it only for a pair" \
+    grep -qzP 'if \[ "\$PAIR" -eq 1 \]; then\n    resolve_hardware_opt_in\nfi' "${REPO_ROOT}/scripts/sim"
+enter_line_of() { awk -v text="$1" 'index($0, text) { print NR; exit }' "${REPO_ROOT}/scripts/enter"; }
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok "./scripts/enter resolves it inside the hardware branch, before the check" \
+    test "$(enter_line_of 'if [ "$SERVICE" = "hardware" ]')" -lt "$(enter_line_of '    resolve_hardware_opt_in')" \
+      -a "$(enter_line_of '    resolve_hardware_opt_in')" -lt "$(enter_line_of '    require_explicit_hardware_opt_in')"
 
 # container_name pins a host-global identifier and collides between checkouts
 # exactly as the volumes did. It must stay out of the compose file.
@@ -1301,6 +1386,15 @@ OPT_IN_LINE="$(program_line_of 'cite_bringup.program.sides --zone "$ZONE" --hard
 BRING_UP_LINE="$(program_line_of 'start_in_own_group "$PAIR_LOG"')"
 expect_ok   "./scripts/program asks the hardware opt-in before it brings anything up" \
             test "${OPT_IN_LINE:-999999}" -lt "${BRING_UP_LINE:-0}"
+# The T-01 check sees the RESOLVED opt-in (shell > .env > 0): it is resolved
+# on the host before the container is entered, and so before the check.
+RESOLVE_LINE="$(awk '$0 == "resolve_hardware_opt_in" { print NR; exit }' "${REPO_ROOT}/scripts/program")"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+ENTER_LINE="$(program_line_of 'require_ros_env program "$@"')"
+expect_ok   "./scripts/program resolves the opt-in before it enters the container" \
+            test "${RESOLVE_LINE:-999999}" -lt "${ENTER_LINE:-0}"
+expect_ok   "and so before the check before bring-up" \
+            test "${RESOLVE_LINE:-999999}" -lt "${OPT_IN_LINE:-0}"
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "./scripts/program's teardown commands every side's belt to zero" \
             grep -qF 'python3 -m cite_bringup.program.belt --zone "$ZONE" --stop' \

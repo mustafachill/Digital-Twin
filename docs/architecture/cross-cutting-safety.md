@@ -18,9 +18,12 @@
   (`cite_bringup/plan.py`) in `hardware.launch.py` for the side it starts, and by the twin
   boundary's mode gate for every mode that commands a physical side. It is decided on the
   declared fact `commands_physical_hardware`, not on a backend's id
-  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It is taken from the
-  shell only: a value in `.env` is ignored, and every container exec carries the shell's value
-  (default `0`), so a stale container cannot carry it over. `simulation.launch.py` refuses a
+  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It is resolved
+  once, by `resolve_hardware_opt_in` (`scripts/_lib.sh`), shell first, then the repository-root
+  `.env`, default `0` — and only for `./scripts/program`, `./scripts/sim --pair` and
+  `./scripts/enter hardware` (owner decision 2026-10-06, ADR-0070 amendment item 2); every other
+  command takes the shell's value alone. Every container exec carries the resolved value, so a
+  stale container cannot carry it over. `simulation.launch.py` refuses a
   physical side whatever the opt-in says, so a simulation never stands in for the arm. The
   opt-in rests on a declaration: the side-parity tests assert that each side's description
   carries the plugin L0 declares (open-work #65 closed), but nothing proves the arm at the

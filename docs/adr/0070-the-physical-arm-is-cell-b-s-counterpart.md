@@ -148,6 +148,11 @@ so the record says what the tree does. The text above is kept as written.
   (`{env: CITE_XARM_IP, kind: ip_address}`). A literal value on a physical backend is a
   validator error. `hardware.launch.py` resolves the reference and checks its kind, and never
   logs the value. The hardware opt-in comes from the shell only, never from `.env`.
+  *2026-10-06, owner decision:* this reverses the shell-only rule. For `./scripts/program`,
+  `./scripts/sim --pair` and `./scripts/enter hardware` the opt-in is read shell > repository-root
+  `.env` > `0`, resolved once by `resolve_hardware_opt_in` in `scripts/_lib.sh` and passed to
+  every container command explicitly. Test, scenario, lint, build and CI never read it from
+  `.env`.
 - **Item 3: the track adapter commands bounded segments, not the final point.** The command
   carries its start and target. The vendor speed is never above the commanded speed (rounded
   down to the vendor's 1 mm/s resolution). Moves are
