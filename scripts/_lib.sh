@@ -1252,7 +1252,8 @@ source_overlay() {
 # given, explicitly, so a running container never keeps a stale value.
 #
 # resolve_hardware_opt_in — the ONE place the opt-in is resolved, with the
-# precedence shell > repository-root `.env` > 0. Called only by the entry points
+# precedence shell > repository-root `.env` (read fail closed, `env_file_opt_in`)
+# > 0. Called only by the entry points
 # that may start the physical side: `./scripts/program`, `./scripts/sim --pair`
 # and `./scripts/enter hardware`. Every other command — test, scenario, lint,
 # build, CI — never calls it, so for them a `1` in `.env` is not read and the
@@ -1269,46 +1270,79 @@ resolve_hardware_opt_in() {
         export CITE_ALLOW_HARDWARE
         return 0
     fi
-    local from_file
-    from_file="$(env_file_value CITE_ALLOW_HARDWARE "${REPO_ROOT}/.env")"
-    export CITE_ALLOW_HARDWARE="${from_file:-0}"
+    env_file_opt_in "${REPO_ROOT}/.env"
+    CITE_ALLOW_HARDWARE="$ENV_FILE_OPT_IN"
+    CITE_ALLOW_HARDWARE="$(hardware_opt_in)"
+    export CITE_ALLOW_HARDWARE
     if [ "$CITE_ALLOW_HARDWARE" = "1" ]; then
         warn "CITE_ALLOW_HARDWARE=1 is taken from ${REPO_ROOT}/.env: this command may start a physical side."
     fi
 }
 
-# env_file_value <key> <file> — the value an env file gives <key>, the last
-# assignment winning; empty when the file or the key is absent. Read the way
-# compose reads its env file: surrounding whitespace dropped, one pair of
-# enclosing quotes removed, and on an unquoted value a ` #` comment dropped.
-env_file_value() {
-    local key="$1" file="$2" line value="" found=0
+# env_file_opt_in <file> — what an env file says about the hardware opt-in,
+# read FAIL CLOSED (S-01): ENV_FILE_OPT_IN is set to 1 only when exactly one
+# non-comment line names CITE_ALLOW_HARDWARE, that line is the plain form
+# `CITE_ALLOW_HARDWARE=<value>`, and <value> is `1`, `"1"` or `'1'`, optionally
+# followed by whitespace and a `#` comment (surrounding whitespace and a CRLF
+# ending tolerated). A recognised off value (`0`, `"0"`, `'0'`, empty, `""`,
+# `''`) or no such line gives empty, which `hardware_opt_in` reads as 0.
+# Anything else — `export CITE_ALLOW_HARDWARE=1`, spaces around `=`, `:` for
+# `=`, the key named twice, an unterminated quote, `"1" x`, `yes` — gives empty
+# as well, and a warning naming the offending line by NUMBER; no line's text is
+# echoed, so no other key's value reaches a terminal or a log. The problem is
+# also kept in ENV_FILE_OPT_IN_PROBLEM for the refusal to name. Stricter than
+# compose on purpose: what is not unambiguously an opt-in is not one.
+env_file_opt_in() {
+    local file="$1" key=CITE_ALLOW_HARDWARE line n=0 count=0 first=0 value="" problem=""
+    local on_re="^(1|\"1\"|'1')([[:space:]]+#.*)?[[:space:]]*\$"
+    local off_re="^(0|\"0\"|'0'|\"\"|'')?([[:space:]]+#.*)?[[:space:]]*\$"
+    ENV_FILE_OPT_IN=""
+    ENV_FILE_OPT_IN_PROBLEM=""
     [ -f "$file" ] || return 0
     while IFS= read -r line || [ -n "$line" ]; do
+        n=$((n + 1))
         line="${line%$'\r'}"
         line="${line#"${line%%[![:space:]]*}"}"
         case "$line" in
-            "${key}="*) value="${line#"${key}="}"; found=1 ;;
+            '#'*|'') continue ;;
+            *"$key"*) ;;
+            *) continue ;;
         esac
+        count=$((count + 1))
+        if [ "$count" -eq 1 ]; then
+            first=$n
+        else
+            problem="${problem:+$problem; }line ${n} names ${key} again (first on line ${first})"
+            continue
+        fi
+        case "$line" in
+            "${key}="*) value="${line#"${key}="}" ;;
+            *)
+                problem="${problem:+$problem; }line ${n} names ${key} in a form other than ${key}=<value>"
+                continue
+                ;;
+        esac
+        if [[ "$value" =~ $on_re ]]; then
+            ENV_FILE_OPT_IN=1
+        elif ! [[ "$value" =~ $off_re ]]; then
+            problem="${problem:+$problem; }line ${n} gives ${key} a value that is neither 1 nor 0"
+        fi
     done < "$file"
-    [ "$found" -eq 1 ] || return 0
-    value="${value#"${value%%[![:space:]]*}"}"
-    case "$value" in
-        \"*) value="${value#\"}"; value="${value%%\"*}" ;;
-        \'*) value="${value#\'}"; value="${value%%\'*}" ;;
-        *)
-            value="${value%%[[:space:]]#*}"
-            value="${value%"${value##*[![:space:]]}"}"
-            ;;
-    esac
-    printf '%s' "$value"
+    if [ -n "$problem" ]; then
+        ENV_FILE_OPT_IN=""
+        ENV_FILE_OPT_IN_PROBLEM="${file}: ${problem}"
+        warn "${ENV_FILE_OPT_IN_PROBLEM}; the hardware opt-in is not taken from it (read as 0)."
+    fi
+    return 0
 }
 
 # Guard for anything that must not run against physical hardware by accident.
 require_explicit_hardware_opt_in() {
     if [ "$(hardware_opt_in)" != "1" ]; then
         die "This command can command physical hardware.
-  Set CITE_ALLOW_HARDWARE=1 in the shell or in the repository-root .env to proceed,
-  and confirm the cell is clear first."
+  Set CITE_ALLOW_HARDWARE=1 in the shell or in the repository-root .env (read on the
+  host by ./scripts/program, ./scripts/sim --pair, ./scripts/enter hardware) to proceed,
+  and confirm the cell is clear first.${ENV_FILE_OPT_IN_PROBLEM:+
+  Not read from .env: ${ENV_FILE_OPT_IN_PROBLEM}.}"
     fi
 }

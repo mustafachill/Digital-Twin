@@ -535,6 +535,37 @@ exec_given() { # exec_given <repo root> [resolve] [VAR=value...]
 }
 expect_ok "exec_in_container pins an unset opt-in to 0 on compose exec" \
     grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given "$ENV_ROOT")
+# R-01: the same with a 1 in `.env` that nothing resolved — on `compose exec`,
+# on `compose run`, and through `require_ros_env`, the path every container
+# command takes. A resolve call slipped into any of them turns these red.
+printf 'CITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
+expect_ok "exec_in_container hands over 0 on compose exec when .env says 1 and nothing resolved it" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(exec_given "$ENV_ROOT")
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+run_given() { # run_given <repo root> — exec_in_container with no running service
+    env -u CITE_ALLOW_HARDWARE bash -c '
+        source "$1"
+        compose() { if [ "$1" = ps ]; then return 0; fi; printf "%s\n" "$@"; }
+        REPO_ROOT="$2"
+        exec_in_container dev true
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$1" 2>/dev/null
+}
+expect_ok "exec_in_container hands over 0 on compose run when .env says 1 and nothing resolved it" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(run_given "$ENV_ROOT")
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+ros_env_given() { # ros_env_given <repo root> — require_ros_env re-entering the container
+    env -u CITE_ALLOW_HARDWARE CITE_ENV=docker bash -c '
+        source "$1"
+        in_container() { return 1; }
+        docker() { return 0; }
+        compose() { if [ "$1" = ps ]; then return 0; fi; printf "%s\n" "$@"; }
+        REPO_ROOT="$2"
+        require_ros_env test
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$1" 2>/dev/null
+}
+expect_ok "require_ros_env hands over 0 when .env says 1 and nothing resolved it" \
+    grep -qxF -- "CITE_ALLOW_HARDWARE=0" <(ros_env_given "$ENV_ROOT")
+rm -f "${ENV_ROOT}/.env"
 expect_fail "exec_in_container passes the opt-in exactly once" \
     test "$(exec_given "$ENV_ROOT" CITE_ALLOW_HARDWARE=0 | grep -c '^CITE_ALLOW_HARDWARE=')" -ne 1
 
@@ -566,12 +597,58 @@ expect_eq "the shell's 1 outranks a 0 in .env" \
 expect_eq "a 0 in .env resolves to 0" "0|0" "$(resolved_given "$ENV_ROOT")"
 printf '# CITE_ALLOW_HARDWARE=1\nCITE_ALLOW_HARDWARE=0\n' > "${ENV_ROOT}/.env"
 expect_eq "a commented-out 1 in .env is not read" "0|0" "$(resolved_given "$ENV_ROOT")"
-printf 'CITE_ALLOW_HARDWARE=0\nCITE_ALLOW_HARDWARE="1"  # armed\n' > "${ENV_ROOT}/.env"
-expect_eq "the last assignment in .env wins, quotes and comment dropped" \
-    "1|1" "$(resolved_given "$ENV_ROOT")"
-printf 'CITE_ALLOW_HARDWARE=yes\n' > "${ENV_ROOT}/.env"
-expect_eq "anything but 1 in .env is carried as written, and is not the opt-in" \
-    "yes|yes" "$(resolved_given "$ENV_ROOT")"
+
+# S-01/S-02/S-03 (ADR-0070): `.env` is read FAIL CLOSED. Only one well-formed
+# `CITE_ALLOW_HARDWARE=<value>` line whose value is 1 arms; every other way of
+# naming the key resolves to 0 and warns with the offending line's NUMBER, never
+# its text, so no other key's value is echoed.
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+opt_in_warning() { # opt_in_warning <repo root> — what resolving the opt-in says on stderr
+    env -u CITE_ALLOW_HARDWARE bash -c '
+        source "$1"; REPO_ROOT="$2"; C_YEL=""; C_RST=""
+        { resolve_hardware_opt_in >/dev/null; } 2>&1
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$1"
+}
+env_arms() { # env_arms <description> <expected 0|1> <.env content, printf format>
+    # shellcheck disable=SC2059  # the content IS the format, so \r and \n are written
+    printf "$3" > "${ENV_ROOT}/.env"
+    expect_eq "$1" "${2}|${2}" "$(resolved_given "$ENV_ROOT")"
+}
+env_arms ".env: a plain 1 arms" 1 'CITE_ALLOW_HARDWARE=1\n'
+env_arms ".env: a double-quoted 1 with a trailing comment arms" 1 'CITE_ALLOW_HARDWARE="1"  # armed\n'
+env_arms ".env: a single-quoted 1 arms" 1 "CITE_ALLOW_HARDWARE='1'\\n"
+env_arms ".env: CRLF and surrounding whitespace are tolerated" 1 '  CITE_ALLOW_HARDWARE=1 \r\n'
+env_arms ".env: a 1 among other keys arms" 1 'ROS_DOMAIN_ID=3\nCITE_ALLOW_HARDWARE=1\nCITE_XARM_IP=\n'
+env_arms ".env: an empty value is off" 0 'CITE_ALLOW_HARDWARE=\n'
+env_arms ".env: a quoted 0 is off" 0 'CITE_ALLOW_HARDWARE="0" # off\n'
+env_arms ".env: export CITE_ALLOW_HARDWARE=1 does not arm" 0 'export CITE_ALLOW_HARDWARE=1\n'
+env_arms ".env: spaces around = do not arm" 0 'CITE_ALLOW_HARDWARE = 1\n'
+env_arms ".env: a space after = does not arm" 0 'CITE_ALLOW_HARDWARE= 1\n'
+env_arms ".env: a colon for = does not arm" 0 'CITE_ALLOW_HARDWARE: 1\n'
+env_arms ".env: the key twice does not arm, even both 1" 0 'CITE_ALLOW_HARDWARE=1\nCITE_ALLOW_HARDWARE=1\n'
+env_arms ".env: a 0 then a 1 does not arm" 0 'CITE_ALLOW_HARDWARE=0\nCITE_ALLOW_HARDWARE="1"  # armed\n'
+env_arms ".env: a 1 then a malformed line does not arm" 0 'CITE_ALLOW_HARDWARE=1\nexport CITE_ALLOW_HARDWARE=0\n'
+env_arms ".env: an unterminated quote does not arm" 0 'CITE_ALLOW_HARDWARE="1\n'
+env_arms ".env: a quoted 1 followed by text does not arm" 0 'CITE_ALLOW_HARDWARE="1" x\n'
+env_arms ".env: a comment with no space before it does not arm" 0 'CITE_ALLOW_HARDWARE=1#x\n'
+env_arms ".env: yes does not arm" 0 'CITE_ALLOW_HARDWARE=yes\n'
+env_arms ".env: true does not arm" 0 'CITE_ALLOW_HARDWARE=true\n'
+printf 'CITE_XARM_IP=192.0.2.7\nexport CITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
+expect_ok "a malformed opt-in line is named by its line number" \
+    grep -qF '.env: line 2 names CITE_ALLOW_HARDWARE in a form other than' <(opt_in_warning "$ENV_ROOT")
+expect_fail "and the warning echoes no line's text, so no other key's value" \
+    grep -qF '192.0.2.7' <(opt_in_warning "$ENV_ROOT")
+printf 'CITE_ALLOW_HARDWARE=0\n\nCITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
+expect_ok "a repeated key is named with both line numbers" \
+    grep -qF 'line 3 names CITE_ALLOW_HARDWARE again (first on line 1)' <(opt_in_warning "$ENV_ROOT")
+printf 'CITE_ALLOW_HARDWARE="1" x\n' > "${ENV_ROOT}/.env"
+expect_ok "an unrecognised value is named by its line number" \
+    grep -qF 'line 1 gives CITE_ALLOW_HARDWARE a value that is neither 1 nor 0' <(opt_in_warning "$ENV_ROOT")
+# shellcheck disable=SC2016  # expanded by the inner shell, on purpose
+expect_ok "the refusal names the line it did not read" \
+    grep -qF 'Not read from .env:' <(env -u CITE_ALLOW_HARDWARE bash -c '
+        source "$1"; REPO_ROOT="$2"; resolve_hardware_opt_in; require_explicit_hardware_opt_in
+    ' _ "${REPO_ROOT}/scripts/_lib.sh" "$ENV_ROOT" 2>&1)
 printf 'CITE_ALLOW_HARDWARE=1\n' > "${ENV_ROOT}/.env"
 expect_ok "a resolved 1 from .env is what exec_in_container hands the container" \
     grep -qxF -- "CITE_ALLOW_HARDWARE=1" <(exec_given "$ENV_ROOT" resolve)
@@ -603,9 +680,31 @@ expect_fail "and no CI workflow resolves it" \
     grep -rqs 'resolve_hardware_opt_in' "${REPO_ROOT}/.github"
 expect_eq "_lib.sh spells the opt-in's default in exactly one place" \
     "1" "$(grep -c 'CITE_ALLOW_HARDWARE:-' "${REPO_ROOT}/scripts/_lib.sh")"
+opt_in_body() { # opt_in_body <function> — that function's body in _lib.sh
+    awk -v head="$1() {" '$0 == head { on = 1; next } on && $0 == "}" { exit } on' \
+        "${REPO_ROOT}/scripts/_lib.sh"
+}
+# R-06: the resolver and the .env reader spell no default of their own; the
+# resolved value goes through `hardware_opt_in`.
+expect_fail "resolve_hardware_opt_in spells no default of its own" \
+    grep -qE ':-[^}]*}' <(opt_in_body resolve_hardware_opt_in)
+expect_fail "nor does the .env reader" \
+    grep -qE ':-[^}]*}' <(opt_in_body env_file_opt_in)
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok "resolve_hardware_opt_in takes the resolved value through hardware_opt_in" \
+    grep -qxF '    CITE_ALLOW_HARDWARE="$(hardware_opt_in)"' <(opt_in_body resolve_hardware_opt_in)
+# R-01: _lib.sh itself never resolves — not in compose, exec_in_container,
+# require_ros_env or anywhere else — outside the resolver's own definition.
+expect_eq "_lib.sh calls resolve_hardware_opt_in nowhere outside its definition" \
+    "0" "$(grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/_lib.sh" \
+        | grep -v '^resolve_hardware_opt_in() {$' | grep -c 'resolve_hardware_opt_in' || true)"
+# R-02: awk, not `grep -zP`, which neither BSD grep nor macOS has.
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok "./scripts/sim resolves it only for a pair" \
-    grep -qzP 'if \[ "\$PAIR" -eq 1 \]; then\n    resolve_hardware_opt_in\nfi' "${REPO_ROOT}/scripts/sim"
+    awk 'p2 == "if [ \"$PAIR\" -eq 1 ]; then" && p1 == "    resolve_hardware_opt_in" && $0 == "fi" { f = 1 }
+         { p2 = p1; p1 = $0 } END { exit !f }' "${REPO_ROOT}/scripts/sim"
+expect_eq "and resolves it nowhere else" \
+    "1" "$(grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/sim" | grep -c 'resolve_hardware_opt_in' || true)"
 enter_line_of() { awk -v text="$1" 'index($0, text) { print NR; exit }' "${REPO_ROOT}/scripts/enter"; }
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok "./scripts/enter resolves it inside the hardware branch, before the check" \

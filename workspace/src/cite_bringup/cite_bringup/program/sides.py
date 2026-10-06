@@ -143,7 +143,8 @@ def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
         return (
             f"{', '.join(physical)} is physical, and nothing is brought up without "
             f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} set in the shell that runs this "
-            "or in the repository-root .env, "
+            "or in the repository-root .env (read on the host by ./scripts/program, "
+            "./scripts/sim --pair, ./scripts/enter hardware), "
             f"once the cell is confirmed clear. {refusal}"
         )
     return None
