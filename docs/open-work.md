@@ -1930,6 +1930,11 @@ safety-auditor passes on `feat/real-counterpart`:
 - The program reads the twin's mode once before waiting up to the readiness ceiling for the
   carriage; a second `SetMode` client in that window is not seen. The operating precondition
   is that the program is the only `SetMode` client.
+- The `.env` opt-in reader (`env_file_opt_in`, owner decision 2026-10-06) is line-based: an
+  exact `CITE_ALLOW_HARDWARE=1` line inside another key's quoted multi-line value still arms;
+  a BOM is reported as an unrecognised form and a lowercase or look-alike key is read as 0
+  with no warning (both fail closed). The self-test that the warning echoes no other value
+  places that value on a line the reader never reports, so it cannot fail.
 
 ---
 
