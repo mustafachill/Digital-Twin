@@ -126,6 +126,7 @@ from cite_twin.mode import (
 )
 from cite_twin.physical_readiness import PhysicalSideWatch, unready as physical_unready
 from cite_twin.routing import (
+    commanded_sides,
     COUNTERPART_SIDE,
     PLANT_SIDE,
     reverse_state_flow,
@@ -134,7 +135,6 @@ from cite_twin.routing import (
 from cite_twin.track_arrival import (
     apart as tracks_apart,
     arrival as track_arrival,
-    elsewhere as track_elsewhere,
     unheard as track_unheard,
 )
 from control_msgs.msg import JointTrajectoryControllerState
@@ -980,10 +980,20 @@ class TwinBoundary:
     def _on_track_arrived(
         self, request: TrackArrived.Request, response: TrackArrived.Response
     ) -> TrackArrived.Response:
-        """Answer whether every side the mode commands stands at the target (SA2c-S-02 c)."""
+        """Answer whether every commanded side, and every physical one, stands at the target.
+
+        SA2c-S-02 c. The sides are `commanded_sides(mode)`, not the sides a
+        goal is routed to, so REAL and SHADOW judge the physical side; a
+        physical side is judged in every mode, so the program's ask in SIM,
+        before a person is asked into the cell, is answered UNHEARD until its
+        carriage is heard fresh and AWAY once it is heard elsewhere (S-08).
+        ``routed`` says whether this mode carries a track command through the
+        twin at all, so a track step in any other mode fails (R-03).
+        """
         asset = self._track_asset_by_joint.get(request.joint)
         if asset is None:
             response.arrived = False
+            response.reason = TrackArrived.Response.NOT_A_TRACK
             response.detail = f"{request.joint!r} is no track joint this zone's plan names"
             return response
         with self._lock:
@@ -994,48 +1004,24 @@ class TwinBoundary:
                 if (position := self._track_positions.get((side_name, request.joint)))
                 is not None
             }
-        chosen = route(mode)
-        # In a mode that routes no command, the plant's carriage - the one the
-        # program reads - is the side asked about, beside the physical one below.
-        sides = chosen.sides if chosen.accepted else (PLANT_SIDE,)
         physical = [COUNTERPART_SIDE] if asset in self._physical_watches else []
-        now = time.monotonic()
-        reason = track_arrival(
+        commanded = commanded_sides(mode)
+        sides = (*commanded, *(side for side in physical if side not in commanded))
+        reason, detail = track_arrival(
             sides,
             heard,
             physical,
             request.position_m,
             request.tolerance_m,
-            now,
+            time.monotonic(),
             self._state_max_age_s,
         )
-        # A physical carriage the mode does not command counts too, but only
-        # once it is heard fresh and standing elsewhere: before a person is
-        # asked into the cell the program asks this in SIM, and is refused
-        # then rather than after they confirmed it clear (S-08).
-        uncommanded = [
-            found
-            for side_name in physical
-            if side_name not in sides
-            and (
-                found := track_elsewhere(
-                    side_name,
-                    heard.get(side_name),
-                    request.position_m,
-                    request.tolerance_m,
-                    now,
-                    self._state_max_age_s,
-                )
-            )
-            is not None
-        ]
-        reason = "; ".join([found for found in (reason, *uncommanded) if found]) or None
-        response.arrived = reason is None
-        response.detail = reason or (
-            "every commanded side is at the target"
-            if chosen.accepted
-            else f"in {MODE_NAMES.get(mode, mode)} no side is commanded; the plant's carriage "
-            "is at the target and no physical carriage is heard standing elsewhere"
+        response.reason = reason
+        response.arrived = reason == TrackArrived.Response.ARRIVED
+        response.routed = route(mode).accepted
+        response.detail = detail or (
+            f"in {MODE_NAMES.get(mode, mode)} every side asked about ({', '.join(sides)}) "
+            "is at the target"
         )
         return response
 

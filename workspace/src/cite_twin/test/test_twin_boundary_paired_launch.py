@@ -552,14 +552,17 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertFalse(at_plant.arrived)
         self.assertIn("counterpart: stands at 750.0 mm", at_plant.detail)
         self.assertNotIn("plant:", at_plant.detail)
+        self.assertEqual(at_plant.reason, TrackArrived.Response.AWAY)
+        self.assertTrue(at_plant.routed)
         self.assertTrue(self._arrived(0.5, 0.3).arrived)
         response = self._request(TwinMode.MODE_SIM, "no side commanded")
         self.assertTrue(response.accepted, response.result.detail)
-        # In SIM no side is commanded through L5: the plant's carriage, which
-        # the program reads, is asked about, and a simulated counterpart is not
-        # (S-08: only a PHYSICAL carriage heard elsewhere counts there).
+        # In SIM the plant is the commanded side and no track command is routed
+        # through L5 (R-02, R-03): the plant's carriage is asked about, and a
+        # SIMULATED counterpart is not (only a physical side is judged there).
         in_sim = self._arrived(0.25, 0.001)
         self.assertTrue(in_sim.arrived, in_sim.detail)
+        self.assertFalse(in_sim.routed)
         away = self._arrived(0.75, 0.001)
         self.assertFalse(away.arrived)
         self.assertIn("plant: stands at 250.0 mm", away.detail)

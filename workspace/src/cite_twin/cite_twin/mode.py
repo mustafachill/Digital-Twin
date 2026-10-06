@@ -496,10 +496,10 @@ class ModeAuthority:
 
     def _require_physical_side_ready(self, mode: int, asset_id: str) -> None:
         """Refuse ``mode`` while a physical side it commands is not ready (ADR-0070 item 6)."""
-        if self._physical_side_unready is None:
-            return
         if not self._deployment.physical_sides_commanded(mode, asset_id):
             return
+        # Each question on its own: a carriage apart is refused whether or not
+        # a readiness question was given (R-07).
         apart = (
             None if self._physical_carriage_apart is None else self._physical_carriage_apart()
         )
@@ -510,7 +510,7 @@ class ModeAuthority:
                 f"where the plant's does - {apart}. Refused for good: it does not clear "
                 "by itself",
             )
-        unready = self._physical_side_unready()
+        unready = None if self._physical_side_unready is None else self._physical_side_unready()
         if unready is not None:
             raise ModeError(
                 ResultCode.PRECONDITION_FAILED,

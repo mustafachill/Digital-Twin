@@ -20,7 +20,12 @@ through `TrackArrived` before it starts the next step.
 
 from __future__ import annotations
 
+from cite_interfaces.srv import TrackArrived
 from cite_twin.track_arrival import apart, arrival, elsewhere, unheard
+
+ARRIVED = TrackArrived.Response.ARRIVED
+AWAY = TrackArrived.Response.AWAY
+UNHEARD = TrackArrived.Response.UNHEARD
 
 SIDES = ("plant", "counterpart")
 AGE = 0.25
@@ -31,29 +36,40 @@ def _ask(heard, physical=("counterpart",), now=10.0, target=0.65, tolerance=0.00
 
 
 def test_every_side_at_the_target_has_arrived() -> None:
-    assert _ask({"plant": (0.65, 10.0), "counterpart": (0.6505, 9.9)}) is None
+    assert _ask({"plant": (0.65, 10.0), "counterpart": (0.6505, 9.9)}) == (ARRIVED, None)
 
 
 def test_the_plant_alone_at_the_target_has_not() -> None:
-    reason = _ask({"plant": (0.65, 10.0), "counterpart": (0.30, 9.9)})
-    assert reason is not None
-    assert "counterpart: stands at 300.0 mm" in reason
-    assert "plant" not in reason.replace("counterpart", "")
+    reason, detail = _ask({"plant": (0.65, 10.0), "counterpart": (0.30, 9.9)})
+    assert reason == AWAY
+    assert "counterpart: stands at 300.0 mm" in detail
+    assert "plant" not in detail.replace("counterpart", "")
 
 
 def test_a_side_never_heard_has_not_arrived() -> None:
-    assert "counterpart: no track position heard" in _ask({"plant": (0.65, 10.0)})
+    reason, detail = _ask({"plant": (0.65, 10.0)})
+    assert reason == UNHEARD and "counterpart: no track position heard" in detail
 
 
 def test_a_stale_physical_position_does_not_count() -> None:
     """A carriage read too long ago may be anywhere since."""
-    reason = _ask({"plant": (0.65, 0.0), "counterpart": (0.65, 10.0 - AGE - 0.01)})
-    assert reason is not None and "counterpart" in reason and "old" in reason
+    reason, detail = _ask({"plant": (0.65, 0.0), "counterpart": (0.65, 10.0 - AGE - 0.01)})
+    assert reason == UNHEARD and "counterpart" in detail and "old" in detail
+
+
+def test_away_outranks_unheard() -> None:
+    """R-01: a carriage heard elsewhere does not clear by itself; one unheard does."""
+    reason, detail = _ask({"plant": (0.30, 10.0)})
+    assert reason == AWAY
+    assert "plant: stands at 300.0 mm" in detail and "no track position heard" in detail
 
 
 def test_a_simulated_position_is_its_simulators_however_old() -> None:
     """A simulated side's carriage is held by its own controller; its clock may crawl."""
-    assert _ask({"plant": (0.65, 0.0), "counterpart": (0.65, 0.0)}, physical=()) is None
+    assert _ask({"plant": (0.65, 0.0), "counterpart": (0.65, 0.0)}, physical=()) == (
+        ARRIVED,
+        None,
+    )
 
 
 # SA-S-01 b: VALIDATED waits until the physical carriage stands where the plant's does.

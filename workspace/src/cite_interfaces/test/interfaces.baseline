@@ -118,7 +118,13 @@ srv/TrackArrived.srv
   float64 position_m
   float64 tolerance_m
   ---
+  uint8 ARRIVED=0
+  uint8 AWAY=1
+  uint8 UNHEARD=2
+  uint8 NOT_A_TRACK=3
   bool arrived
+  uint8 reason
+  bool routed
   string detail
 action/Grasp.action
   float64 width_m

@@ -17,13 +17,16 @@
 The program reads arrival on its own domain, which through the twin is the
 plant's. The counterpart's carriage - the physical one - is read only by the
 boundary, so the boundary answers `TrackArrived` for every side the mode
-commands. Pure logic with no node, so it is tested without a graph; the
-boundary feeds it what it has heard, under its own lock.
+commands and every physical side, with why: AWAY, which does not clear by
+itself, or UNHEARD, which does (S-08). Pure logic with no node, so it is tested
+without a graph; the boundary feeds it what it has heard, under its own lock.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+
+from cite_interfaces.srv import TrackArrived
 
 
 def _unheard(
@@ -67,23 +70,29 @@ def arrival(
     tolerance_m: float,
     now: float,
     max_age_s: float | None,
-) -> str | None:
-    """Return why the track has not arrived on every side, or `None` when it has.
+) -> tuple[int, str | None]:
+    """Return the `TrackArrived` reason for ``sides``, and why, or `(ARRIVED, None)`.
 
     ``heard`` is each side's last track position and its steady-clock arrival.
     A side in ``physical`` counts only with a position younger than
-    ``max_age_s`` (`_unheard`).
+    ``max_age_s`` (`_unheard`). AWAY outranks UNHEARD: a side heard standing
+    elsewhere does not clear by itself, a position not heard yet does.
     """
     stale_bound = set(physical)
-    reasons = []
+    away = []
+    unheard_sides = []
     for side in sides:
         position = heard.get(side)
         reason = _unheard(side, position, side in stale_bound, now, max_age_s)
-        if reason is None:
-            reason = _away(side, position[0], target_m, tolerance_m)
         if reason is not None:
-            reasons.append(reason)
-    return "; ".join(reasons) if reasons else None
+            unheard_sides.append(reason)
+        elif (reason := _away(side, position[0], target_m, tolerance_m)) is not None:
+            away.append(reason)
+    if away:
+        return TrackArrived.Response.AWAY, "; ".join(away + unheard_sides)
+    if unheard_sides:
+        return TrackArrived.Response.UNHEARD, "; ".join(unheard_sides)
+    return TrackArrived.Response.ARRIVED, None
 
 
 def elsewhere(

@@ -29,6 +29,8 @@ from cite_bringup.program.__main__ import main as program_main
 from cite_bringup.program.cell import (
     ask_until_accepted,
     await_arrival,
+    await_heard,
+    carriage_verdict,
     holding_refusal,
     RosCell,
     state_topic,
@@ -50,6 +52,7 @@ from cite_bringup.program.steps import (
 )
 from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import RobotState
+from cite_interfaces.srv import TrackArrived
 import pytest
 
 ZONE = "cell_b"
@@ -283,8 +286,20 @@ def test_a_side_that_never_arrives_fails_the_track_step() -> None:
     await_arrival(lambda: next(answers), lambda: None, deadline=5.0, what="t", clock=lambda: 0.0)
 
 
-def _tracking(cell, plant_m: float, answers: list[tuple[bool, str]]):
-    """Build a twin-driven cell, its plant carriage at ``plant_m``, the twin saying ``answers``."""
+def _answer(arrived: bool, detail: str, reason: int | None = None, routed: bool = True):
+    """Build a `TrackArrived` answer; AWAY when not arrived unless ``reason`` says otherwise."""
+    if reason is None:
+        reason = TrackArrived.Response.ARRIVED if arrived else TrackArrived.Response.AWAY
+    return TrackArrived.Response(arrived=arrived, reason=reason, routed=routed, detail=detail)
+
+
+def _tracking(cell, plant_m: float, answers: list):
+    """Build a twin-driven cell, its plant carriage at ``plant_m``, the twin saying ``answers``.
+
+    Each answer is a `TrackArrived.Response`, or `(arrived, detail)` for a
+    routed one.
+    """
+    answers = [_answer(*a) if isinstance(a, tuple) else a for a in answers]
     ros = object.__new__(RosCell)
     ros.node = None
     ros._via = "twin"
@@ -302,6 +317,7 @@ def _tracking(cell, plant_m: float, answers: list[tuple[bool, str]]):
         return lambda: answers.pop(0)
 
     ros._ask_arrival = ask_arrival
+    ros._pause_between_asks = lambda: None
     return ros, asked
 
 
@@ -339,6 +355,34 @@ def test_a_track_step_with_the_plant_away_moves_and_waits_for_every_side(
     (sent,) = ros._track_command.sent
     assert [list(point.positions) for point in sent.points] == [[0.0], [0.65]]
     assert asked == [0.65, 0.65]
+
+
+def test_a_track_step_in_a_mode_that_routes_no_track_command_fails(cell) -> None:
+    """R-03: in SIM the plant alone "arrived" is not the step done."""
+    ros, _ = _tracking(cell, 0.65, [_answer(True, "in SIM every side", routed=False)])
+    with pytest.raises(StepFailed, match="not in a mode that routes"):
+        ros.track(0.65, 0.1)
+    assert ros._track_command.sent == []
+
+
+def test_a_drop_to_sim_while_a_track_step_waits_fails_it(cell, monkeypatch) -> None:
+    """R-03: a mid-run drop to SIM is never taken for both sides arriving."""
+    import cite_bringup.program.cell as cell_module
+
+    ros, _ = _tracking(
+        cell,
+        0.0,
+        [(False, "plant: stands at 0.0 mm"), _answer(True, "in SIM every side", routed=False)],
+    )
+    ros._track_command.get_subscription_count = lambda: 1
+    ros._track_command.topic_name = "t"
+
+    def carriage_arrives(*_args, **_kwargs) -> None:
+        ros._track_position = 0.65
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", carriage_arrives)
+    with pytest.raises(StepFailed, match="not in a mode that routes"):
+        ros.track(0.65, 0.1)
 
 
 def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
@@ -744,6 +788,52 @@ def test_the_carriages_are_asked_of_the_twin_at_the_plants_own_position(cell) ->
     assert ros.carriage_refusal() is None
 
 
+def test_an_unheard_physical_carriage_is_waited_for_before_the_operator(cell) -> None:
+    """R-01: an unheard carriage is never taken for one in agreement."""
+    unheard = TrackArrived.Response.UNHEARD
+    ros, asked = _tracking(
+        cell,
+        0.65,
+        [
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(True, "in SIM every side", routed=False),
+        ],
+    )
+    assert ros.carriage_refusal() is None
+    assert asked == [0.65]
+    ros, _ = _tracking(
+        cell,
+        0.65,
+        [
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(False, "counterpart: stands at 0.0 mm", routed=False),
+        ],
+    )
+    assert "home it" in ros.carriage_refusal()
+
+
+def test_a_physical_carriage_never_heard_refuses_at_the_ceiling_and_says_so() -> None:
+    """R-01, R-04: never heard in time refuses, and is not said as "home it"."""
+    now = {"t": 0.0}
+
+    def pause() -> None:
+        now["t"] += 10.0
+
+    never = _answer(
+        False, "counterpart: no track position heard", TrackArrived.Response.UNHEARD
+    )
+    answer = await_heard(lambda: never, pause, deadline=120.0, clock=lambda: now["t"])
+    assert answer is never and now["t"] > 120.0
+    refusal = carriage_verdict(answer, 0.65, 120.0)
+    assert refusal is not None
+    assert "did not hear the physical carriage" in refusal
+    assert "home it" not in refusal
+    assert "No one is asked into the cell" in refusal
+    assert carriage_verdict(_answer(True, ""), 0.65, 120.0) is None
+    assert "home it" in carriage_verdict(_answer(False, "counterpart: away"), 0.65, 120.0)
+
+
 def test_a_run_whose_carriages_disagree_never_asks_and_never_enters_validated(
     monkeypatch,
 ) -> None:
@@ -772,6 +862,15 @@ def test_a_physical_side_without_the_exact_opt_in_is_refused_before_bring_up(
     assert sides.main(["--zone", ZONE, "--hardware-opt-in"]) == 2
     said = capsys.readouterr().err
     assert "counterpart is physical" in said and "CITE_ALLOW_HARDWARE=1" in said
+
+
+def test_a_physical_side_with_the_exact_opt_in_passes(monkeypatch, capsys) -> None:
+    """R-05: the one value that permits it, checked in-process; nothing is brought up."""
+    from cite_bringup.program import sides
+
+    monkeypatch.setenv("CITE_ALLOW_HARDWARE", "1")
+    assert sides.main(["--zone", ZONE, "--hardware-opt-in"]) == 0
+    assert capsys.readouterr().err == ""
 
 
 def test_the_script_checks_the_opt_in_before_it_brings_anything_up() -> None:

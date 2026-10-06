@@ -136,6 +136,58 @@ def await_arrival(ask, pause, deadline: float, what: str, clock=time.monotonic) 
         pause()
 
 
+def _require_routed(answer, what: str) -> None:
+    """Fail a track step the twin's mode carries no track command for (R-03).
+
+    In SIM, REAL or SHADOW the boundary drops a track command, so an answer
+    "arrived" there would end the step on a move nobody made.
+    """
+    if not answer.routed:
+        raise StepFailed(
+            f"{what}: the twin is not in a mode that routes a track command to its "
+            f"sides ({answer.detail}); the step is not done"
+        )
+
+
+def await_heard(ask, pause, deadline: float, clock=time.monotonic):
+    """Ask `TrackArrived` until its answer is not UNHEARD, or ``deadline`` passes.
+
+    R-01: a physical carriage whose position the twin has not heard fresh is
+    neither agreeing nor apart, so the check before the operator waits for it,
+    as VALIDATED waits for the rest of the physical side. A ceiling on a
+    failure, not a schedule. Returns the last answer, whatever it says.
+    """
+    while True:
+        answer = ask()
+        if answer.reason != TrackArrived.Response.UNHEARD or clock() > deadline:
+            return answer
+        pause()
+
+
+def carriage_verdict(answer, plant_m: float, ceiling_s: float) -> str | None:
+    """Say why the operator may not be asked in, from the twin's last answer, or None.
+
+    AWAY never clears by itself, so it says what to do from outside the cell;
+    UNHEARD is said as unheard, never as "home it" (R-04).
+    """
+    if answer.reason == TrackArrived.Response.ARRIVED:
+        return None
+    if answer.reason == TrackArrived.Response.AWAY:
+        return (
+            f"the physical carriage does not stand where the plant's does ({answer.detail}). "
+            f"Bring the physical carriage to {plant_m * 1000:.0f} mm (home it) - from "
+            "outside the cell - and run the program again; no one is asked into the cell"
+        )
+    if answer.reason == TrackArrived.Response.UNHEARD:
+        return (
+            f"the twin did not hear the physical carriage's position fresh within "
+            f"{ceiling_s:.0f} s ({answer.detail}), so whether it stands where the plant's "
+            "does is unknown; is the physical side up and publishing its joint states? "
+            "No one is asked into the cell"
+        )
+    return f"the twin cannot judge the carriages ({answer.detail}); no one is asked into the cell"
+
+
 def holding_refusal(state: RobotState | None, topic: str) -> str | None:
     """Say why the program may not start on this arm state, or None if it may.
 
@@ -334,12 +386,12 @@ class RosCell:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).
 
         Asked in SIM, before the operator is: the twin answers `TrackArrived`
-        for the plant's own track position, and a physical carriage it has
-        heard standing elsewhere is not where the plant's is. That never clears
-        by itself, so it is said now, with what to do - from outside the cell -
-        rather than once VALIDATED is asked of an operator who confirmed it
-        clear. A position the twin has not heard yet is not this refusal: it is
-        waited for after the answer, as the rest of the physical side is.
+        for the plant's own track position, judging every physical carriage.
+        One not heard fresh yet is waited for, within
+        `PHYSICAL_SIDE_READY_CEILING_S` (R-01); one heard standing elsewhere
+        never clears by itself, so it is said now, with what to do - from
+        outside the cell - rather than once VALIDATED is asked of an operator
+        who confirmed it clear. Never heard in time refuses too.
         """
         if self._track_arrived is None or self._track is None:
             return None
@@ -348,14 +400,12 @@ class RosCell:
             f"{self._track.joint} on the arm's joint states",
         )
         plant_m = self._track_position
-        arrived, detail = self._ask_arrival(plant_m, "the carriages before the operator")()
-        if arrived:
-            return None
-        return (
-            f"the physical carriage does not stand where the plant's does ({detail}). "
-            f"Bring the physical carriage to {plant_m * 1000:.0f} mm (home it) - from "
-            "outside the cell - and run the program again; no one is asked into the cell"
+        answer = await_heard(
+            self._ask_arrival(plant_m, "the carriages before the operator"),
+            self._pause_between_asks,
+            time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S,
         )
+        return carriage_verdict(answer, plant_m, PHYSICAL_SIDE_READY_CEILING_S)
 
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).
@@ -442,7 +492,9 @@ class RosCell:
         no move can be commanded - its duration is the plant's distance, which
         is none, and the boundary returns verdicts rather than positions
         (ADR-0050 decision 1b) - so the step fails and says which carriage to
-        bring to the target.
+        bring to the target. A twin in a mode that routes no track command -
+        SIM, REAL, SHADOW - fails the step at every ask, so a drop to SIM
+        mid-run is never taken for an arrival (R-03).
         """
         if self._track is None or self._track_command is None:
             raise StepFailed("this arm rides no track")
@@ -456,7 +508,9 @@ class RosCell:
         distance = abs(position_m - self._track_position)
         plant_there = distance <= self._track.goal_tolerance_m
         if self._track_arrived is not None:
-            arrived, detail = self._ask_arrival(position_m, what)()
+            answer = self._ask_arrival(position_m, what)()
+            _require_routed(answer, what)
+            arrived, detail = answer.arrived, answer.detail
             if arrived:
                 return
             if plant_there:
@@ -522,7 +576,7 @@ class RosCell:
     # --------------------------------------------------------------- mechanism
 
     def _ask_arrival(self, position_m: float, what: str):
-        """Return a call asking the twin whether every commanded side stands at ``position_m``."""
+        """Return a call answering the twin's `TrackArrived` for ``position_m``, whole."""
         client = self._track_arrived
         assert client is not None and self._track is not None
         if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
@@ -533,23 +587,27 @@ class RosCell:
             tolerance_m=float(self._track.goal_tolerance_m),
         )
 
-        def ask() -> tuple[bool, str]:
-            response = self._until(client.call_async(request), f"{what}: TrackArrived")
-            return response.arrived, response.detail
+        def ask():
+            return self._until(client.call_async(request), f"{what}: TrackArrived")
 
         return ask
 
+    def _pause_between_asks(self) -> None:
+        # Bounded by the wall clock: `spin_once` returns on any callback, and
+        # this node hears `/clock`.
+        again = time.monotonic() + _ARRIVAL_ASK_S
+        while time.monotonic() < again:
+            rclpy.spin_once(self.node, timeout_sec=_ARRIVAL_ASK_S)
+
     def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
-        ask = self._ask_arrival(position_m, what)
+        ask_twin = self._ask_arrival(position_m, what)
 
-        def pause() -> None:
-            # Bounded by the wall clock: `spin_once` returns on any callback,
-            # and this node hears `/clock`.
-            again = time.monotonic() + _ARRIVAL_ASK_S
-            while time.monotonic() < again:
-                rclpy.spin_once(self.node, timeout_sec=_ARRIVAL_ASK_S)
+        def ask() -> tuple[bool, str]:
+            answer = ask_twin()
+            _require_routed(answer, what)
+            return answer.arrived, answer.detail
 
-        await_arrival(ask, pause, wall_end, what)
+        await_arrival(ask, self._pause_between_asks, wall_end, what)
 
     def _on_joint_state(self, message: JointState) -> None:
         if self._track is not None and self._track.joint in message.name:

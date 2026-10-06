@@ -286,17 +286,61 @@ def _track_arrived(boundary: TwinBoundary, mode: int, position_m: float):
 
 def test_in_sim_a_physical_carriage_heard_elsewhere_has_not_arrived() -> None:
     """S-08: what the program asks before the operator, at the plant's own position."""
+    from cite_interfaces.srv import TrackArrived
+
     answer = _track_arrived(_boundary_with_carriages(0.0, 0.30), TwinMode.MODE_SIM, 0.0)
     assert not answer.arrived and "counterpart: stands at 300.0 mm" in answer.detail
+    assert answer.reason == TrackArrived.Response.AWAY and not answer.routed
     answer = _track_arrived(_boundary_with_carriages(0.30, 0.3005), TwinMode.MODE_SIM, 0.30)
-    assert answer.arrived
+    assert answer.arrived and answer.reason == TrackArrived.Response.ARRIVED
 
 
-def test_in_sim_a_physical_carriage_not_heard_fresh_is_left_to_the_readiness_wait() -> None:
-    boundary = _boundary_with_carriages(0.0, 0.30, counterpart_age_s=2 * AGE)
-    assert _track_arrived(boundary, TwinMode.MODE_SIM, 0.0).arrived
+def test_in_sim_a_physical_carriage_not_heard_fresh_has_not_arrived() -> None:
+    """R-01: unheard is never agreement; it is UNHEARD, which the program waits on."""
+    from cite_interfaces.srv import TrackArrived
+
+    boundary = _boundary_with_carriages(0.0, 0.0, counterpart_age_s=2 * AGE)
+    answer = _track_arrived(boundary, TwinMode.MODE_SIM, 0.0)
+    assert not answer.arrived and answer.reason == TrackArrived.Response.UNHEARD
+    assert "old" in answer.detail
+    del boundary._track_positions[("counterpart", "picker_track_joint")]
+    answer = _track_arrived(boundary, TwinMode.MODE_SIM, 0.0)
+    assert answer.reason == TrackArrived.Response.UNHEARD
+    assert "no track position heard" in answer.detail
 
 
 def test_in_sim_the_plants_carriage_is_still_asked_about() -> None:
     answer = _track_arrived(_boundary_with_carriages(0.0, 0.0), TwinMode.MODE_SIM, 0.30)
     assert not answer.arrived and "plant: stands at 0.0 mm" in answer.detail
+
+
+@pytest.mark.parametrize("mode", [TwinMode.MODE_REAL, TwinMode.MODE_SHADOW])
+def test_in_real_and_shadow_the_physical_side_is_judged_strictly(mode) -> None:
+    """R-02: the commanded side there is the counterpart, so its staleness counts."""
+    from cite_interfaces.srv import TrackArrived
+
+    stale = _boundary_with_carriages(0.30, 0.30, counterpart_age_s=2 * AGE)
+    answer = _track_arrived(stale, mode, 0.30)
+    assert not answer.arrived and answer.reason == TrackArrived.Response.UNHEARD
+    assert not answer.routed
+    # The plant is not commanded there, so it is not asked about.
+    answer = _track_arrived(_boundary_with_carriages(0.0, 0.30), mode, 0.30)
+    assert answer.arrived, answer.detail
+    assert "no side is commanded" not in answer.detail
+
+
+def test_in_validated_a_track_command_is_routed() -> None:
+    answer = _track_arrived(_boundary_with_carriages(0.30, 0.30), TwinMode.MODE_VALIDATED, 0.30)
+    assert answer.arrived and answer.routed
+
+
+def test_a_carriage_apart_is_refused_without_a_readiness_question() -> None:
+    """R-07: the carriage check stands on its own."""
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    machine = ModeAuthority(
+        Deployment.paired({"picker": True}),
+        lambda: None,
+        physical_carriage_apart=boundary._physical_carriage_apart,
+    )
+    verdict = machine.request(TwinMode.MODE_VALIDATED, "", "go", False)
+    assert not verdict.accepted and "home it" in verdict.detail
