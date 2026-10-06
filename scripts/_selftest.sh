@@ -1291,6 +1291,16 @@ expect_ok   "./scripts/program starts the pair in its own process group" \
 expect_ok   "and stops it with the SIGKILL fallback" \
             grep -qF 'stop_own_group "$PAIR_PID" "$PAIR_STOP_CEILING_S"' \
             "${REPO_ROOT}/scripts/program"
+# T-01: a physical side without CITE_ALLOW_HARDWARE=1 is refused before bring-up,
+# by the plan's own rule (`cite_bringup.program.sides --hardware-opt-in`), not
+# found later in a side's launch log. A grep, because driving it needs ROS.
+program_line_of() { awk -v text="$1" 'index($0, text) { print NR; exit }' "${REPO_ROOT}/scripts/program"; }
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+OPT_IN_LINE="$(program_line_of 'cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in')"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+BRING_UP_LINE="$(program_line_of 'start_in_own_group "$PAIR_LOG"')"
+expect_ok   "./scripts/program asks the hardware opt-in before it brings anything up" \
+            test "${OPT_IN_LINE:-999999}" -lt "${BRING_UP_LINE:-0}"
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "./scripts/program's teardown commands every side's belt to zero" \
             grep -qF 'python3 -m cite_bringup.program.belt --zone "$ZONE" --stop' \

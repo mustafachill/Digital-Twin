@@ -125,6 +125,10 @@ fi
 # physical and none was named (S-04, R-06): before anything is brought up.
 SPEED_SCALE="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --speed-scale "$SPEED_SCALE")" \
     || die "refused before bring-up (see above)."
+# The hardware opt-in, by the plan's own rule (`require_hardware_opt_in`), named
+# here rather than found later in a side's launch log (T-01).
+python3 -m cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in \
+    || die "refused before bring-up (see above)."
 
 # How long the pair may take to stop after its SIGINT before SIGKILL goes to
 # its process group. A ceiling on a failure, not a schedule. It sits above the

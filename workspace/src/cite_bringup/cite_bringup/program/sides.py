@@ -17,6 +17,7 @@
     --zone cell_b --physical      the sides whose hardware is physical, one per line
     --zone cell_b --simulated     the others
     --zone cell_b --speed-scale S the speed scale to run at, or a refusal
+    --zone cell_b --hardware-opt-in  refuse unless the shell opted in to a physical side
 
 `./scripts/program` asks this before every Gazebo-only step (ADR-0070 item 7):
 it spawns a box, removes one, reads a model's pose and runs a belt only on a
@@ -28,9 +29,18 @@ never an asset's type or a backend's name.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from cite_bringup.plan import default_plan_path, load, Plan
+from cite_bringup.plan import (
+    default_plan_path,
+    HARDWARE_OPT_IN_ENV,
+    HARDWARE_OPT_IN_VALUE,
+    HardwareNotPermittedError,
+    load,
+    Plan,
+    require_hardware_opt_in,
+)
 from cite_bringup.program.steps import speed_scale
 from cite_hardware.mapping import slowest_speed_mps
 import yaml
@@ -117,6 +127,27 @@ def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
     return value
 
 
+def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
+    """Say why a run may not bring up this plan's physical sides, or None if it may (T-01).
+
+    The rule is `require_hardware_opt_in`'s, asked of the physical sides only;
+    this adds the words `./scripts/program` says before bring-up, so the
+    refusal is not found deep in a side's launch log instead.
+    """
+    physical = physical_sides(plan)
+    if not physical:
+        return None
+    try:
+        require_hardware_opt_in(plan, environ, physical)
+    except HardwareNotPermittedError as refusal:
+        return (
+            f"{', '.join(physical)} is physical, and nothing is brought up without "
+            f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} set in the shell that runs this, "
+            f"once the cell is confirmed clear. {refusal}"
+        )
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m cite_bringup.program.sides", description="List a zone's sides by kind."
@@ -130,8 +161,19 @@ def main(argv: list[str] | None = None) -> int:
         metavar="S",
         help="Print the speed scale to run at (S as typed, empty if not given), or refuse.",
     )
+    kind.add_argument(
+        "--hardware-opt-in",
+        action="store_true",
+        help=f"Refuse unless {HARDWARE_OPT_IN_ENV} permits bringing up every physical side.",
+    )
     args = parser.parse_args(argv)
     plan = load(default_plan_path(args.zone))
+    if args.hardware_opt_in:
+        refusal = hardware_opt_in_refusal(plan, os.environ)
+        if refusal is not None:
+            print(refusal, file=sys.stderr)
+            return 2
+        return 0
     if args.speed_scale is not None:
         try:
             print(f"{required_speed_scale(plan, args.speed_scale):g}")

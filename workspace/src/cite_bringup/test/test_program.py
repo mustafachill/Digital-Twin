@@ -754,3 +754,27 @@ def test_a_run_whose_carriages_disagree_never_asks_and_never_enters_validated(
     )
     assert status == 1
     assert _PairCell.calls == []
+
+
+# T-01: `./scripts/program` refuses a physical side without the opt-in, before bring-up.
+
+
+@pytest.mark.parametrize("value", [None, "", "0", "true", " 1", "1 "])
+def test_a_physical_side_without_the_exact_opt_in_is_refused_before_bring_up(
+    monkeypatch, capsys, value
+) -> None:
+    from cite_bringup.program import sides
+
+    if value is None:
+        monkeypatch.delenv("CITE_ALLOW_HARDWARE", raising=False)
+    else:
+        monkeypatch.setenv("CITE_ALLOW_HARDWARE", value)
+    assert sides.main(["--zone", ZONE, "--hardware-opt-in"]) == 2
+    said = capsys.readouterr().err
+    assert "counterpart is physical" in said and "CITE_ALLOW_HARDWARE=1" in said
+
+
+def test_the_script_checks_the_opt_in_before_it_brings_anything_up() -> None:
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
+    check = script.index('cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in')
+    assert check < script.index("start_in_own_group")

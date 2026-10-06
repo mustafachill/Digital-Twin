@@ -113,8 +113,9 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 > up from a clean checkout.
 >
 > **The counterpart is the physical arm** ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)).
-> Without `CITE_ALLOW_HARDWARE=1` the commands below are refused at the counterpart side, and
-> nothing physical starts; with it they drive the real arm. Read *Physical cell — Phase 2.B*
+> Without `CITE_ALLOW_HARDWARE=1` the commands below are refused and nothing physical starts:
+> `./scripts/program` before it brings anything up, naming the physical side and the opt-in;
+> `./scripts/sim --pair` at the counterpart side. With it they drive the real arm. Read *Physical cell — Phase 2.B*
 > below first.
 >
 > **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
