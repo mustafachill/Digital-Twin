@@ -357,6 +357,7 @@ def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
                 on_exit=gate(
                     skill_servers(
                         plan,
+                        side=side,
                         descriptions=descriptions,
                         use_sim_time=USE_SIM_TIME,
                         on_exit=side_down_on_exit,

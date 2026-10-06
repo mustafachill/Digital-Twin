@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order): see "Amendment — what was built" at the end)
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip executed, not judged): see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -222,3 +222,12 @@ so the record says what the tree does. The text above is kept as written.
   supervised with the hardware E-stop tested and in hand. It **is** required before any
   Cartesian motion on the physical side, any claim about the physical side that depends on the
   planning scene, and any divergence number.
+- **2026-10-06, owner decision: the physical side's grip is executed, not judged, as the real
+  program does.** A close expecting a part on the physical side succeeds once the gripper command
+  completes; ADR-0052's grasp-evidence predicate is still evaluated, reported in `holding` and
+  logged there, but does not fail the step. A relay refusal (deadman gate included), vendor
+  abort or timeout still fails it. The plant keeps its judgement unchanged. The skill server's
+  `gripper_judges_grasp` carries it, from the plan's per-side hardware fact
+  (`cite_bringup.side_launch.skill_parameters`); `cite_skills::grasp_verdict` decides. Prompted by
+  the first physical run, whose step 11 failed with the real box held (commanded 60.9 mm,
+  reached 62.8 mm, `stalled=false`).

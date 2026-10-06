@@ -343,6 +343,9 @@ parameters.
    mode that forwards no track command (for example SIM mid-run), rather than counting as
    arrived.
 6. One cycle of the real program then runs on both arms, at the scale you gave.
+7. On the physical side a close expecting a part is executed, not judged (owner decision
+   2026-10-06, ADR-0070): it succeeds once the gripper command completes, the reached width is
+   logged, and only a relay refusal, vendor abort or timeout fails the step.
 
 **If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
 Critical safety finding.

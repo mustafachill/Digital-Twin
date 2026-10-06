@@ -297,7 +297,7 @@ def _bring_up(context: LaunchContext) -> list:
             OnProcessExit(
                 target_action=last_step,
                 on_exit=_gate(
-                    _skills(plan)
+                    _skills(plan, side=side)
                     + _grasp_hold_bridges(plan, side, gz_env)
                     + [witness],
                     "the skill servers",

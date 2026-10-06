@@ -160,4 +160,16 @@ bool gripper_is_holding(
          reached_width_m < parts.widest_m + travel.stall_band_wide_m;
 }
 
+GraspVerdict grasp_verdict(
+  bool command_succeeded, bool expect_object, bool holding, bool judges_grasp)
+{
+  if (!command_succeeded) {
+    return GraspVerdict::kCommandFailed;
+  }
+  if (expect_object && !holding && judges_grasp) {
+    return GraspVerdict::kEmpty;
+  }
+  return GraspVerdict::kDone;
+}
+
 }  // namespace cite_skills

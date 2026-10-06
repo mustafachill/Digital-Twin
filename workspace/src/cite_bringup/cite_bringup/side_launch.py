@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from cite_bringup.plan import Plan
+from cite_bringup.plan import Plan, PLANT_SIDE
 from launch import LaunchContext
 from launch.actions import LogInfo, OpaqueFunction, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
@@ -471,6 +471,7 @@ def facility_nodes(
 def skill_servers(
     plan: Plan,
     *,
+    side: str = PLANT_SIDE,
     descriptions: Mapping[str, object] | None = None,
     use_sim_time: bool = True,
     on_exit=None,
@@ -487,6 +488,8 @@ def skill_servers(
     loads it; by default the plant's, expanded by xacro at launch (see
     `description_of`). ``on_exit`` builds the exit handler from a label; by
     default `fatal_on_exit`, and a physical side passes `side_down_on_exit`.
+    ``side`` is the side this launch starts, which `skill_parameters` asks the
+    plan about.
     """
     actions: list = []
     for manager in plan.controller_managers:
@@ -517,7 +520,7 @@ def skill_servers(
                         manager.moveit.kinematics, prefix="robot_description_kinematics"
                     ),
                     planning_limits(manager.moveit),
-                    skill_parameters(plan, manager, use_sim_time=use_sim_time),
+                    skill_parameters(plan, manager, side=side, use_sim_time=use_sim_time),
                 ],
                 remappings=[("/tf", "/tf"), ("/tf_static", "/tf_static")],
                 output="screen",
@@ -532,7 +535,9 @@ def skill_servers(
     return actions
 
 
-def skill_parameters(plan: Plan, manager, *, use_sim_time: bool = True) -> dict:
+def skill_parameters(
+    plan: Plan, manager, *, side: str = PLANT_SIDE, use_sim_time: bool = True
+) -> dict:
     """Everything one skill server is told about its arm, all of it from L0.
 
     The gripper half used to be four keys written out by hand, and one of those
@@ -564,6 +569,11 @@ def skill_parameters(plan: Plan, manager, *, use_sim_time: bool = True) -> dict:
         "fallback_planner_id": manager.moveit.fallback_planner_id,
         "cartesian_planner_ids": list(manager.moveit.cartesian_planner_ids),
         "use_sim_time": use_sim_time,
+        # Whether an empty close that expected a part fails the step. Not where
+        # this side's arm is physical, by owner decision 2026-10-06 (ADR-0070
+        # amendment): there the close is executed, not judged, as the real
+        # robot's own program does it. Asked of the plan, never of an asset name.
+        "gripper_judges_grasp": not manager.commands_physical_hardware_on(side),
         **manager.gripper,
         **manager.arm,
         # How wide the parts this facility handles are (ADR-0052 option F). It

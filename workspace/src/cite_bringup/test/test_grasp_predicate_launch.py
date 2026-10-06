@@ -202,6 +202,18 @@ COMMANDED_M = MANAGER.gripper['gripper_default_grasp_width_m']
 STOPS = {
     'inside': NARROWEST_M,
     'outside': WINDOW_LOW_M - OUTSIDE_MARGIN_M,
+    'outside_physical': WINDOW_LOW_M - OUTSIDE_MARGIN_M,
+}
+
+#: Whether the server judges an empty close that expected a part, by case. The
+#: third case is the outside stop on a server configured as a PHYSICAL side's is
+#: (owner decision 2026-10-06, ADR-0070): the predicate's answer is unchanged and
+#: only its power to fail the step is withdrawn. The value the plan delivers per
+#: side is held by `test_hardware_launch.py`; here it is the one thing varied.
+JUDGES = {
+    'inside': True,
+    'outside': True,
+    'outside_physical': False,
 }
 
 
@@ -390,7 +402,7 @@ def generate_test_description(case):
                 # the work-piece interval, which are the four values this whole
                 # file is about.
                 SIM._skill_parameters(PLAN, MANAGER),
-                {'use_sim_time': False},
+                {'use_sim_time': False, 'gripper_judges_grasp': JUDGES[case]},
             ],
             remappings=[('/tf', '/tf'), ('/tf_static', '/tf_static')],
             output='screen',
@@ -429,7 +441,7 @@ class TestTheWindowIsAppliedByTheRunningNode(unittest.TestCase):
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=ceiling_s)
         return future.result()
 
-    def _grasp(self, width_m):
+    def _grasp(self, width_m, expect_object=False):
         """Close to `width_m` and return the result, without asserting on it.
 
         `expect_object` is FALSE deliberately. With it true the server turns
@@ -446,7 +458,7 @@ class TestTheWindowIsAppliedByTheRunningNode(unittest.TestCase):
         goal = Grasp.Goal()
         goal.width_m = width_m
         goal.max_effort_n = 60.0
-        goal.expect_object = False
+        goal.expect_object = expect_object
 
         handle = self._spin(self.client.send_goal_async(goal), GOAL_CEILING_S)
         self.assertIsNotNone(handle, 'the skill server never answered the goal request')
@@ -536,4 +548,25 @@ class TestTheWindowIsAppliedByTheRunningNode(unittest.TestCase):
             f'case {case!r} changed its verdict when only the COMMANDED width '
             f'changed. The command is a policy value and the error is about where '
             f'the part is, which is the whole of ADR-0052.',
+        )
+
+    def test_3_an_expected_part_fails_only_where_the_side_judges(self, case):
+        """Owner decision 2026-10-06 (ADR-0070): a physical close is executed, not judged.
+
+        With a part expected, a judging server turns "not holding" into
+        EXECUTION_FAILED exactly as before; a server configured as a physical
+        side's reports SUCCESS on the same stall, with `holding` still the
+        predicate's own answer.
+        """
+        result = self._grasp(COMMANDED_M, expect_object=True)
+        holding = case == 'inside'
+        self.assertEqual(result.holding, holding)
+        expected = (
+            ResultCode.SUCCESS if holding or not JUDGES[case]
+            else ResultCode.EXECUTION_FAILED
+        )
+        self.assertEqual(
+            result.result.code, expected,
+            f'case {case!r}: judges={JUDGES[case]}, holding={result.holding}, '
+            f'detail: {result.result.detail}',
         )

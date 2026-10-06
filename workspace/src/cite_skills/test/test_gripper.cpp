@@ -636,3 +636,39 @@ TEST(GripperPadPlane, MovesWithTheEndEffectorRatherThanBeingBakedIn)
     cite_skills::gripper_pad_plane_offset_m(0.4, travel()),
     0.010, kTolerance);
 }
+
+// What a completed close is turned into (owner decision 2026-10-06, ADR-0070).
+// `holding=false` with a part expected is the case the 2026-10-06 physical run
+// failed on: commanded 60.9 mm, reached 62.8 mm, outside the window, while the
+// real box was held.
+
+TEST(GraspVerdict, APhysicalSideExecutesAnEmptyCloseRatherThanJudgingIt)
+{
+  EXPECT_EQ(
+    cite_skills::grasp_verdict(true, true, false, false), cite_skills::GraspVerdict::kDone);
+}
+
+TEST(GraspVerdict, AJudgingSideStillFailsAnEmptyClose)
+{
+  EXPECT_EQ(
+    cite_skills::grasp_verdict(true, true, false, true), cite_skills::GraspVerdict::kEmpty);
+  EXPECT_EQ(
+    cite_skills::grasp_verdict(true, true, true, true), cite_skills::GraspVerdict::kDone);
+  EXPECT_EQ(
+    cite_skills::grasp_verdict(true, false, false, true), cite_skills::GraspVerdict::kDone);
+}
+
+TEST(GraspVerdict, AFailedCommandFailsOnEverySide)
+{
+  // Refused by the relay or its deadman gate, aborted by the vendor, or timed
+  // out: not judging the grasp never excuses the command.
+  for (const bool judges : {true, false}) {
+    for (const bool expect : {true, false}) {
+      for (const bool holding : {true, false}) {
+        EXPECT_EQ(
+          cite_skills::grasp_verdict(false, expect, holding, judges),
+          cite_skills::GraspVerdict::kCommandFailed);
+      }
+    }
+  }
+}

@@ -47,7 +47,7 @@ from cite_bringup.plan import (
 )
 from cite_bringup.readiness import READY_TOKEN
 from cite_bringup.readiness_witness import endpoints, physical_endpoints
-from cite_bringup.side_launch import FailTheLaunch
+from cite_bringup.side_launch import FailTheLaunch, skill_parameters
 from control_msgs.action import FollowJointTrajectory, GripperCommand
 from launch import LaunchContext
 from launch.actions import (
@@ -427,6 +427,29 @@ def test_every_node_runs_on_the_wall_clock(module, context) -> None:
         for parameters in _parameters(node, context):
             if isinstance(parameters, dict):
                 assert parameters.get("use_sim_time", False) is False, _executable(node)
+
+
+def test_the_physical_sides_skill_server_executes_its_grasps_unjudged(module, context) -> None:
+    """Owner decision 2026-10-06 (ADR-0070): a physical close is executed, not judged.
+
+    Asked of the plan through the production builder, on both sides of the one
+    shipped plan: the physical counterpart's skill server is told not to judge,
+    and the plant's keeps judging exactly as before.
+    """
+    servers = [n for n in _nodes(_structure(module), context) if _executable(n) == "skill_server"]
+    assert servers, "the physical side starts no skill server"
+    for node in servers:
+        delivered = {
+            key: value
+            for parameters in _parameters(node, context)
+            if isinstance(parameters, dict)
+            for key, value in parameters.items()
+        }
+        assert delivered.get("gripper_judges_grasp") is False
+    plan = _plan()
+    for manager in plan.controller_managers:
+        if manager.moveit is not None:
+            assert skill_parameters(plan, manager, side=PLANT_SIDE)["gripper_judges_grasp"] is True
 
 
 # --- Which launch a side gets, and what its witness waits on -----------------

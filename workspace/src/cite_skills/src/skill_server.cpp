@@ -338,6 +338,12 @@ public:
     declare_parameter("gripper_stall_band_wide_m", 0.0);
     declare_parameter("workpiece_narrowest_width_m", 0.0);
     declare_parameter("workpiece_widest_width_m", 0.0);
+    // Whether an empty close that expected a part FAILS the step (see
+    // `cite_skills::grasp_verdict`). True by default and on every simulated
+    // side; false only where the plan says this side's arm is physical, by owner
+    // decision 2026-10-06 (ADR-0070 amendment): there the close is executed, not
+    // judged, as the real robot's own program does it.
+    declare_parameter("gripper_judges_grasp", true);
     // How many seeds IK is tried from before a pose is called unreachable
     // (ADR-0026). Seed 0 is the arm's current state; the rest are random within
     // the joint limits, which is what recovers the choice of IK branch that a
@@ -440,6 +446,7 @@ public:
     travel_.stall_band_wide_m = get_parameter("gripper_stall_band_wide_m").as_double();
     parts_.narrowest_m = get_parameter("workpiece_narrowest_width_m").as_double();
     parts_.widest_m = get_parameter("workpiece_widest_width_m").as_double();
+    judges_grasp_ = get_parameter("gripper_judges_grasp").as_bool();
     if (!gripper_action_.empty() &&
       (travel_.stall_band_narrow_m <= 0.0 || travel_.stall_band_wide_m <= 0.0))
     {
@@ -1059,7 +1066,10 @@ private:
     // unestablished. Typing these three as optional is a contract change (P3) with
     // no consumer today, exactly as ADR-0045 decision 4 says of `holding`; it is
     // recorded here so that whoever gains one knows what they are reading.
-    if (gripper.result.code != ResultCode::SUCCESS) {
+    const auto verdict = cite_skills::grasp_verdict(
+      gripper.result.code == ResultCode::SUCCESS, goal->expect_object, result->holding,
+      judges_grasp_);
+    if (verdict == cite_skills::GraspVerdict::kCommandFailed) {
       terminate(handle, result, gripper.result);
       return;
     }
@@ -1067,12 +1077,20 @@ private:
     // Closing on nothing is not a successful grasp. Without this the line would
     // carry an imaginary work-piece all the way to the next station and fail
     // there instead, which is much harder to attribute.
-    if (goal->expect_object && !result->holding) {
+    if (verdict == cite_skills::GraspVerdict::kEmpty) {
       const auto outcome =
         make_result(ResultCode::EXECUTION_FAILED, describe_empty_grasp(gripper));
       result->result = outcome;
       terminate(handle, result, outcome);
       return;
+    }
+    // A physical side does not judge (owner decision 2026-10-06, ADR-0070): the
+    // close completed, so the step succeeds, and what the predicate would have
+    // said is logged as information rather than acted on.
+    if (goal->expect_object && !result->holding) {
+      RCLCPP_INFO(
+        get_logger(), "grasp executed, not judged (this side's arm is physical): %s",
+        describe_empty_grasp(gripper).c_str());
     }
 
     holding_ = result->holding;
@@ -2905,6 +2923,7 @@ private:
   /// `plan:` block. An interval and never a part: nothing carries which one is in
   /// the jaws (ADR-0052 §A.5).
   cite_skills::WorkpieceWidths parts_;
+  bool judges_grasp_{true};
   double default_grasp_width_m_{0.0};
 
   //: The drive-joint position the gripper last closed to while holding something.
