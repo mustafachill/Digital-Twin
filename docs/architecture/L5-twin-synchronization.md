@@ -27,23 +27,30 @@
     it is sent under the same lock as the command path. The physical side's deadman watches it.
   - **Joint states.** The boundary merges each side's joint states per joint name and keeps
     each joint's arrival time, because the physical side publishes them from three sources.
-  - **Track.** `TrackArrived` (`cite_interfaces/srv`) answers whether every side's carriage is
-    at a target, physical positions counting only while fresh. The program asks it first on
-    every track step: if every side is there the step is done, and if the plant's carriage is
-    at the target but another side's is not, the step fails ("home it") instead of commanding
-    a zero-length move. An empty track trajectory is a stop: in every mode the boundary turns
-    it into a hold at each side's own last position.
-  - **Readiness.** A mode that commands a physical side is refused until that side's deadman
-    is HEALTHY with `arm_enabled`, its controller state and joint states are fresh, and its
-    carriage stands within the track's goal tolerance of the plant's. This is re-checked
-    whenever the mode is asserted again, not only on a change.
+  - **Track.** `TrackArrived` (`cite_interfaces/srv`) answers whether every side the mode
+    commands, and every physical side, has its carriage at a target, physical positions
+    counting only while fresh; its `reason` is ARRIVED, AWAY, UNHEARD or NOT_A_TRACK, and
+    `routed` says whether the mode carries a track command through the twin. Before the
+    operator prompt the program asks it in SIM at the plant's own position: it waits while the
+    answer is UNHEARD, within the physical-side readiness ceiling, and refuses the run before
+    the prompt if the physical carriage is AWAY or never heard. On every track step it asks
+    first: a mode that routes no track command fails the step; if every side is there the step
+    is done, and if the plant's carriage is at the target but another side's is not, the step
+    fails ("home it") instead of commanding a zero-length move. An empty track trajectory is a
+    stop: in every mode the boundary turns it into a hold at each side's own last position.
+  - **Readiness.** A mode that commands a physical side is refused while that side's deadman
+    is not HEALTHY with `arm_enabled`, or its controller state, joint states or carriage
+    position are not fresh; the program waits on this, and it is re-checked whenever the mode
+    is asserted again, not only on a change. A physical carriage heard standing outside the
+    track's goal tolerance of the plant's is a separate, FINAL refusal: it never clears by
+    itself, is not waited on, and the program checks it before the prompt.
   - **Between cycles.** At the end of each run the program puts the twin in SIM; a failed
     return to SIM fails the run. Before the next run it asks the operator to place the part
     only once it has read the twin's mode as SIM, then asks for VALIDATED again through that
     check.
 
-  Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` and `./scripts/program` are refused at
-  the physical counterpart.
+  Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` is refused at the physical
+  counterpart, and `./scripts/program` is refused before it brings anything up.
   **Not built:** an automated gate. **Nothing in CI brings a boundary up** — CI drives the
   plant alone (`bringup`, `program_cycle`) — because `launch_test` holds one context on one
   domain, so a paired scenario cannot take today's shape; that is ADR-0057's unmet promotion

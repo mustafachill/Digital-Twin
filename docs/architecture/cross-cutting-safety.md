@@ -66,9 +66,12 @@
     `TrackArrived` confirms every side's carriage arrived.
 
   **The boundary's readiness gate.** VALIDATED, or any mode commanding the physical side, is
-  refused until the deadman is HEALTHY **with the arm enabled**, the side's controller state
-  and joint states are fresh, and every physical carriage stands within the track's goal
-  tolerance of the plant's. This is re-checked whenever the mode is asserted again.
+  refused until the deadman is HEALTHY **with the arm enabled** and the side's controller
+  state, joint states and carriage position are fresh; this is waited on, and re-checked
+  whenever the mode is asserted again. A physical carriage heard outside the track's goal
+  tolerance of the plant's is a separate, final refusal, never waited on: the program asks
+  `TrackArrived` in SIM before the operator prompt, waits while the carriage is unheard, and
+  refuses the run there if it stands elsewhere or is never heard.
   **Residuals, stated rather than fixed:**
   - The vendor's gripper action is always served and is reachable on the physical domain
     without the relay's gate.

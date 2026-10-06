@@ -193,9 +193,10 @@ so the record says what the tree does. The text above is kept as written.
   - **Track step.** Through the twin, a track step asks `TrackArrived` first. It fails ("home
     it") when the plant's carriage is at the target and another side's is not, so a physical
     carriage is never left unchecked because the plant was already there.
-  - **Carriage agreement.** The boundary's readiness for a mode that commands a physical side
-    also requires each physical carriage to stand within the track's goal tolerance of the
-    plant's.
+  - **Carriage agreement.** A mode that commands a physical side is refused, finally and not
+    as "not ready", while a physical carriage heard fresh stands outside the track's goal
+    tolerance of the plant's; the program checks this before the operator prompt, after waiting
+    for the carriage to be heard. A carriage not heard fresh is part of the waited-on readiness.
   - **Speed write.** The track adapter writes the speed explicitly (`set_linear_motor_speed`,
     now on the vendor allow-list) before a move whose speed differs from the last one the
     vendor acknowledged, and sends the move only on `ret == 0`. The vendor SDK caches the
