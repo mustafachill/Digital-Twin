@@ -21,9 +21,11 @@
   ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It is resolved
   once, by `resolve_hardware_opt_in` (`scripts/_lib.sh`), shell first, then the repository-root
   `.env`, default `0` — and only for `./scripts/program`, `./scripts/sim --pair` and
-  `./scripts/enter hardware` (owner decision 2026-10-06, ADR-0070 amendment item 2); every other
-  command takes the shell's value alone. Every container exec carries the resolved value, so a
-  stale container cannot carry it over. `simulation.launch.py` refuses a
+  `./scripts/enter hardware` (owner decision 2026-10-06, ADR-0070 amendment item 2), reading
+  `.env` fail closed (one plain `CITE_ALLOW_HARDWARE=1` line arms; anything else naming the key
+  is `0`, with a warning naming its line); every other command takes the shell's value alone
+  — except when run inside `./scripts/enter hardware`, which carries the resolved value. Every
+  container exec carries the resolved value, so a stale container cannot carry it over. `simulation.launch.py` refuses a
   physical side whatever the opt-in says, so a simulation never stands in for the arm. The
   opt-in rests on a declaration: the side-parity tests assert that each side's description
   carries the plugin L0 declares (open-work #65 closed), but nothing proves the arm at the

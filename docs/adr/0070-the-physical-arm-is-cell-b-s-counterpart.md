@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05: see "Amendment — what was built" at the end)
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order): see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -151,8 +151,10 @@ so the record says what the tree does. The text above is kept as written.
   *2026-10-06, owner decision:* this reverses the shell-only rule. For `./scripts/program`,
   `./scripts/sim --pair` and `./scripts/enter hardware` the opt-in is read shell > repository-root
   `.env` > `0`, resolved once by `resolve_hardware_opt_in` in `scripts/_lib.sh` and passed to
-  every container command explicitly. Test, scenario, lint, build and CI never read it from
-  `.env`.
+  every container command explicitly. `.env` is read fail closed: only one well-formed
+  `CITE_ALLOW_HARDWARE=1` line arms, and any other line naming the key resolves to `0` with a
+  warning naming its line number. Test, scenario, lint, build and CI never read it from `.env`
+  — except when run inside `./scripts/enter hardware`, which carries the resolved value.
 - **Item 3: the track adapter commands bounded segments, not the final point.** The command
   carries its start and target. The vendor speed is never above the commanded speed (rounded
   down to the vendor's 1 mm/s resolution). Moves are
@@ -214,3 +216,9 @@ so the record says what the tree does. The text above is kept as written.
     explicit-speed-scale rule. It asks the operator's go-ahead only once it has read the twin
     in SIM, and a failed return to SIM at the end of a run fails the run. `./scripts/program`
     hands it the terminal and is the supported entry point.
+- **2026-10-06, owner decision: registration order.** Registration
+  ([`../operations/calibration-and-registration.md`](../operations/calibration-and-registration.md))
+  is **not** required before the program's joint-space motion on the physical side, run
+  supervised with the hardware E-stop tested and in hand. It **is** required before any
+  Cartesian motion on the physical side, any claim about the physical side that depends on the
+  planning scene, and any divergence number.

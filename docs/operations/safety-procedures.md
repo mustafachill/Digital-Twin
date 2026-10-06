@@ -22,12 +22,16 @@ operate**, and nothing in this document should be read as suggesting otherwise.
 set deliberately, in the current shell or in the repository-root `.env`.**
 
 Never set it in a shell profile, a Dockerfile, a launch default, or CI. It exists so that
-reaching hardware requires a conscious act, and putting it in a profile destroys the only
-protection it provides. **`.env` is allowed, by owner decision (2026-10-06):** `./scripts/program`,
+reaching hardware requires a conscious act; set there, it would arm commands and machines
+nobody chose to arm. **`.env` is allowed, by owner decision (2026-10-06):** `./scripts/program`,
 `./scripts/sim --pair` and `./scripts/enter hardware` read it there when the shell does not set
-it (the shell wins, even when it sets it empty), and say so when `.env` arms them. A `1` in
-`.env` arms every physical bring-up from this checkout until it is removed. Test, scenario,
-lint, build and CI never read it from `.env`. Every container command carries the value the
+it (the shell wins, even when it sets it empty), and say so when `.env` arms them. `.env` is
+read fail closed: only one plain `CITE_ALLOW_HARDWARE=1` line arms; any other line naming the
+key (`export …`, spaces around `=`, the key twice, an unrecognised value) is read as `0`, with
+a warning naming its line number. A `1` in `.env` keeps every physical bring-up from this
+checkout armed — remove it when you are not working at the cell. Test, scenario, lint, build
+and CI never read it from `.env` — except when run inside `./scripts/enter hardware`, which
+carries the resolved value. Every container command carries the value the
 command resolved, so a container left running from an earlier session cannot carry it over.
 
 **When it binds.** It binds:
