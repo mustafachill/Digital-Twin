@@ -117,7 +117,11 @@ if [ ! -d "${REPO_ROOT}/workspace/install" ]; then
 fi
 source_overlay
 
-PAIR_LOG="$(mktemp -t cite-program-pair.XXXXXX.log)"
+# The pair's log lives in the checkout's gitignored workspace/log/, which is
+# bind-mounted, so it outlives the container: a failure on the physical side
+# can only be diagnosed from it.
+mkdir -p "${REPO_ROOT}/workspace/log/program"
+PAIR_LOG="$(mktemp "${REPO_ROOT}/workspace/log/program/pair.XXXXXX.log")"
 
 # Which sides are physical, read from the plan and never from an asset's type
 # (ADR-0070 item 7): each Gazebo-only step below is skipped there, and said.
