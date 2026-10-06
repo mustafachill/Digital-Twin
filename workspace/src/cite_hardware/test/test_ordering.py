@@ -513,3 +513,31 @@ def test_the_first_move_after_a_poll_found_the_gate_closed_writes_its_speed_agai
         assert _sent(log)[-1] == "set_linear_motor_pos"
     finally:
         node.destroy_node()
+
+
+@pytest.mark.parametrize("closes", ["the deadman", "a poll"])
+def test_a_speed_acknowledged_across_a_closure_is_not_trusted(closes):
+    """SA R-1: the gate closes and reopens while the speed write is in flight.
+
+    The vendor's 0 answers the write, but a trip after it may have reset the
+    speed: it is not recorded, and the move behind it is not sent.
+    """
+    gate = StubGate()
+    node, log = _track(gate, speed_answer=None)
+    try:
+        node._on_command(_command(0.3, 2))
+        assert _sent(log) == ["set_linear_motor_speed"]
+        gate.open = False
+        if closes == "the deadman":
+            node._on_gate_closed("tripped by the test")
+        else:
+            node._poll()
+        gate.open = True
+        _answer(node._speed_client.futures[-1], 0, SetInt16)
+        assert node._acked_speed is None
+        assert _moves(log) == [], f"a move sent at a speed a closure may have reset: {log}"
+        assert not node._set_in_flight
+        _reopen_and_move(node, gate)
+        assert _sent(log).count("set_linear_motor_speed") == 2, log
+    finally:
+        node.destroy_node()

@@ -259,6 +259,12 @@ class TrackAdapter(LifecycleNode):
         #: the gate is found closed, so the next move writes its speed first
         #: (SA-S-03, SA-S-09).
         self._acked_speed: int | None = None
+        #: Counts every time `_acked_speed` is forgotten because the gate was
+        #: found closed or the adapter re-activated. A speed write carries the
+        #: count it was sent under, and its acknowledgement is recorded only if
+        #: no closure came since: a trip landing while the write is in flight
+        #: may reset the vendor after it (SA R-1).
+        self._speed_epoch = 0
         #: A position command may have been sent since the last ACKNOWLEDGED
         #: stop: the carriage may be moving. Set before the move is sent and
         #: cleared only by a stop the vendor answered with success, sent after
@@ -353,6 +359,7 @@ class TrackAdapter(LifecycleNode):
             # The vendor's speed is not taken on trust across an inactive
             # period: the first move after activation writes it.
             self._acked_speed = None
+            self._speed_epoch += 1
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
@@ -576,14 +583,19 @@ class TrackAdapter(LifecycleNode):
             return
         with self._lock:
             active = self._active
+            epoch = self._speed_epoch
             if active:
                 future = client.call_async(SetInt16.Request(data=request.speed))
         if not active:
             self._drop_in_flight("the adapter is not active", request)
             return
-        future.add_done_callback(lambda done: self._on_speed_answered(request, hold, done))
+        future.add_done_callback(
+            lambda done: self._on_speed_answered(request, hold, done, epoch)
+        )
 
-    def _on_speed_answered(self, request: LinearMotorSetPos.Request, hold: int, future) -> None:
+    def _on_speed_answered(
+        self, request: LinearMotorSetPos.Request, hold: int, future, epoch: int
+    ) -> None:
         error = future.exception()
         response = None if error is not None else future.result()
         if response is None or response.ret != 0:
@@ -598,7 +610,18 @@ class TrackAdapter(LifecycleNode):
             )
             return
         with self._lock:
-            self._acked_speed = request.speed
+            # Recorded only if the gate was not found closed since the write
+            # was sent (SA R-1): a trip after it may have reset the vendor, and
+            # the move behind it is dropped rather than sent at a speed unknown.
+            current = epoch == self._speed_epoch
+            if current:
+                self._acked_speed = request.speed
+        if not current:
+            self._drop_in_flight(
+                f"the gate closed while set_linear_motor_speed({request.speed}) was in flight",
+                request,
+            )
+            return
         self._send_position(request, hold)
 
     def _drop_in_flight(self, why: str, request: LinearMotorSetPos.Request) -> None:
@@ -802,6 +825,7 @@ class TrackAdapter(LifecycleNode):
             # A trip or an E-stop may leave the vendor at another speed: the
             # next move writes its own again (SA-S-09).
             self._acked_speed = None
+            self._speed_epoch += 1
         if dropped is not None:
             self.get_logger().warning(f"held track target {dropped.pos} dropped: {reason}")
         self._stop_if_moving(f"the deadman gate closed: {reason}")
@@ -829,6 +853,7 @@ class TrackAdapter(LifecycleNode):
             with self._lock:
                 self._target = None
                 self._acked_speed = None
+                self._speed_epoch += 1
             why = gate.why_closed() if gate is not None else "no deadman gate"
             self._stop_if_moving(f"motion is not permitted: {why}", repeated=True)
         elif holding:
