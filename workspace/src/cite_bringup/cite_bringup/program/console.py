@@ -17,20 +17,27 @@
 ADR-0071 option C. A managed node, `cell_console`, on the PLANT's domain, that
 serves the operator's buttons as typed contracts and publishes what it is doing:
 
-    /cite/<zone>/console/start_robot    cite_interfaces/srv/StartRobot
-    /cite/<zone>/console/home           cite_interfaces/action/HomeRobot
-    /cite/<zone>/console/run_program    cite_interfaces/action/RunProgram
-    /cite/<zone>/console/confirm_part   cite_interfaces/srv/ConfirmPart
-    /cite/<zone>/console/stop           cite_interfaces/srv/StopCell
-    /cite/<zone>/console/state          cite_interfaces/msg/ConsoleState (LATCHED)
+    console.start_robot       cite_interfaces/srv/StartRobot
+    console.home              cite_interfaces/action/HomeRobot
+    console.run_program       cite_interfaces/action/RunProgram
+    console.confirm_operator  cite_interfaces/srv/ConfirmOperator
+    console.stop              cite_interfaces/srv/StopCell
+    console.state             cite_interfaces/msg/ConsoleState (LATCHED)
 
-composed by `console_name` from the constants the definitions carry. Every
-decision is `console_machine.ConsoleMachine`'s; this module is the ROS wrapper
-around it and the process around that. A panel (the Gazebo plugin of ADR-0071
-decision 5, or anything else) only sends requests and shows the state.
+under the names the zone's bring-up plan states (`/cite/<zone>/console/...`,
+formed once by the generator; `plan.ConsoleNames`). Every decision is
+`console_machine.ConsoleMachine`'s; this module is the ROS wrapper around it
+and the process around that. A panel (the Gazebo plugin of ADR-0071 decision
+5, or anything else) only sends requests and shows the state.
 
-The pair supervisor starts it once the twin boundary has announced
-(`pair.console_spec`), and it starts NO motion: it waits for an operator.
+The pair supervisor starts it only when asked to (`./scripts/sim --pair
+--console`, `pair.console_spec`), once the twin boundary has announced, and it
+starts NO motion: it waits for an operator. It is a client of more than one
+domain: its requests go through the boundary on the plant's, while Start robot
+and Home call each physical side's `InitializeAsset` (and that side's track
+stop) on THAT side's domain, and Start program commands each simulated side's
+belt and spawns its work-piece on that side (`program.home`, `program.belt`,
+`program.part`).
 
 **Lifecycle.** It offers nothing before `activate`: every endpoint above is
 created there and destroyed on `deactivate`, which is refused while a request
@@ -51,30 +58,43 @@ and is, by its own admission rule, for a process that commands no actuator.
 This one does. SIGINT and SIGTERM here ask the machine to stop the request in
 flight - the goal cancelled, the track held, the belts it started stopped -
 wait for that within `SHUTDOWN_CEILING_S`, and only then shut the context down.
+A lifecycle `shutdown` does the same before it withdraws anything.
 """
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 import signal
 import sys
 import threading
 
-from cite_bringup.plan import default_plan_path, load, Plan, PlanError
-from cite_bringup.program.belt import set_belts
-from cite_bringup.program.cell import ROOT, RosCell
+from cite_bringup.pair import STOP_GRACE_S
+from cite_bringup.plan import (
+    COUNTERPART_SIDE,
+    default_plan_path,
+    load,
+    Plan,
+    PlanError,
+    PLANT_SIDE,
+)
+from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
+from cite_bringup.program.cell import RosCell
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, start_pose
 from cite_bringup.program.part import place_on_simulated_sides
-from cite_bringup.program.sides import physical_sides
+from cite_bringup.program.sides import (
+    minimum_speed_scale,
+    physical_sides,
+    required_speed_scale,
+    simulated_sides,
+)
 from cite_bringup.readiness import console_announcement
 from cite_interfaces.action import HomeRobot, RunProgram
 from cite_interfaces.msg import ConsoleState, TwinMode
 from cite_interfaces.qos import LATCHED
-from cite_interfaces.srv import ConfirmPart, StartRobot, StopCell
+from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -89,9 +109,28 @@ from rclpy.signals import SignalHandlerOptions
 EXECUTOR_THREADS = 4
 
 #: How long the end of the process waits for the request in flight to stop, in
-#: wall seconds: a cancel and a return to SIM, each bounded by the cell's own
-#: `CANCEL_CEILING_S`, and the belts' stop. A ceiling on a failure.
-SHUTDOWN_CEILING_S = 120.0
+#: wall seconds: a cancel, the cancelled goal's end and a return to SIM, each
+#: answered at once on a working cell. A ceiling on a failure.
+SHUTDOWN_CEILING_S = 40.0
+
+#: How long the end of the process waits for each simulated side's belt
+#: subscriber before it stops that belt, in wall seconds; each side then waits
+#: up to `belt.ACK_CEILING_S` for the stop to be acknowledged.
+SHUTDOWN_BELT_MATCH_S = 10.0
+
+#: The longest the end of the process can take before it shuts its context down:
+#: the request's stop, then each side's belt stop. It is STRICTLY BELOW the pair
+#: supervisor's `STOP_GRACE_S`, the time the supervisor gives a participant
+#: after its SIGINT before escalating, so the supervisor never kills a console
+#: still stopping what it started. Two sides at most (plant and counterpart).
+SHUTDOWN_WORST_S = SHUTDOWN_CEILING_S + len((PLANT_SIDE, COUNTERPART_SIDE)) * (
+    SHUTDOWN_BELT_MATCH_S + ACK_CEILING_S
+)
+if not SHUTDOWN_WORST_S < STOP_GRACE_S:
+    raise ImportError(
+        f"the console's shutdown ({SHUTDOWN_WORST_S:g} s) must end before the pair "
+        f"supervisor's STOP_GRACE_S ({STOP_GRACE_S:g} s)"
+    )
 
 #: How soon the announcement asks the executor to call it back, in seconds. Not
 #: a schedule: it fires once, on the executor's first turn.
@@ -99,39 +138,6 @@ _ANNOUNCE_PERIOD_S = 0.01
 
 #: The name of the node each request's cell creates.
 _CELL_NODE = "cell_console_program"
-
-
-def console_name(zone: str, leaf: str) -> str:
-    """`(cell_b, state)` -> `/cite/cell_b/console/state`: every console name, once.
-
-    The root is the one `program.cell` reads off the twin's own contract, and
-    the scope and the leaves are the definitions' constants (ConsoleState.msg).
-    """
-    return f"{ROOT}/{zone}/{ConsoleState.SCOPE}/{leaf}"
-
-
-@dataclass(frozen=True)
-class ConsoleNames:
-    """Every name the console serves, for one zone."""
-
-    state: str
-    start_robot: str
-    confirm_part: str
-    stop: str
-    home: str
-    run_program: str
-
-
-def console_names(zone: str) -> ConsoleNames:
-    """Return every name the console serves for ``zone``, from `console_name`."""
-    return ConsoleNames(
-        state=console_name(zone, ConsoleState.NAME),
-        start_robot=console_name(zone, StartRobot.Request.NAME),
-        confirm_part=console_name(zone, ConfirmPart.Request.NAME),
-        stop=console_name(zone, StopCell.Request.NAME),
-        home=console_name(zone, HomeRobot.Goal.NAME),
-        run_program=console_name(zone, RunProgram.Goal.NAME),
-    )
 
 
 class CellConsole(LifecycleNode):
@@ -144,7 +150,7 @@ class CellConsole(LifecycleNode):
             "cell_console", parameter_overrides=[Parameter("use_sim_time", value=True)]
         )
         self._plan = plan
-        self._names = console_names(plan.zone)
+        self._names = plan.console
         self._machine: ConsoleMachine | None = None
         #: The long requests' handlers, and the action servers' every callback:
         #: reentrant, so a cancel is served while its goal executes.
@@ -152,6 +158,8 @@ class CellConsole(LifecycleNode):
         #: Everything that must answer at once.
         self._quick = ReentrantCallbackGroup()
         self._publish_lock = threading.Lock()
+        #: Guards `_twin_mode` alone, so the machine may read it under its own lock.
+        self._mode_lock = threading.Lock()
         self._twin_mode = ConsoleState.TWIN_MODE_UNKNOWN
         self._last: Snapshot | None = None
         self._publisher = None
@@ -168,16 +176,24 @@ class CellConsole(LifecycleNode):
         """Read the program, its start and the physical sides off the plan; serve nothing."""
         plan = self._plan
         try:
+            if self._names is None:
+                raise PlanError(
+                    f"the plan for {plan.zone} states no `console:` names; a console runs "
+                    "only on a paired zone"
+                )
             cell = target(plan)
             homing = home_steps(cell)
             start = start_pose(cell, homing)
             steps = program(cell)
             physical = physical_sides(plan)
-        except (ValueError, PlanError) as error:
+            # The floor `required_speed_scale` applies, shown to the panel.
+            minimum = (minimum_speed_scale(plan) if physical else None) or 0.0
+        except (ValueError, PlanError, OSError, KeyError) as error:
             self.get_logger().error(f"cannot configure: {error}")
             return TransitionCallbackReturn.FAILURE
         self._machine = ConsoleMachine(
             physical=physical,
+            simulated=simulated_sides(plan),
             home_steps=homing,
             start=start,
             steps=steps,
@@ -185,10 +201,21 @@ class CellConsole(LifecycleNode):
             initialize_physical=lambda say, interrupted: initialize(
                 plan, physical, say, interrupted=interrupted
             ),
-            place_parts=lambda remove_first, say: place_on_simulated_sides(
-                plan.zone, remove_first, say
+            place_parts=lambda may_hold, say, interrupted: place_on_simulated_sides(
+                plan.zone, may_hold, say, interrupted
             ),
-            set_belts=lambda running, say: set_belts(plan, not running, say),
+            set_belts=lambda running, say, interrupted, ceiling: set_belts(
+                plan,
+                not running,
+                say,
+                interrupted=interrupted,
+                match_ceiling_s=MATCH_CEILING_S if ceiling is None else ceiling,
+            ),
+            heard_twin_mode=self._heard_twin_mode,
+            # The command line's own rule, floor included (SA-S-07), on the
+            # value exactly as the goal carries it.
+            check_scale=lambda scale: required_speed_scale(plan, repr(float(scale))),
+            minimum_speed_scale=minimum,
             on_change=self._publish,
             log=lambda text: self.get_logger().info(text),
         )
@@ -212,7 +239,7 @@ class CellConsole(LifecycleNode):
                 callback_group=self._work,
             ),
             self.create_service(
-                ConfirmPart, names.confirm_part, self._on_confirm_part,
+                ConfirmOperator, names.confirm_operator, self._on_confirm_operator,
                 callback_group=self._quick,
             ),
             self.create_service(
@@ -261,6 +288,17 @@ class CellConsole(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
+        """Stop what is in progress and wait for it, as the process's end does; then withdraw.
+
+        The machine refuses every request from the moment this begins, so
+        nothing new starts while the endpoints are still there.
+        """
+        if self._machine is not None and not self._machine.shutdown(
+            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S
+        ):
+            self.get_logger().error(
+                "shutdown: what was in progress, or a belt, did not confirm its stop"
+            )
         self._withdraw()
         return TransitionCallbackReturn.SUCCESS
 
@@ -312,8 +350,8 @@ class CellConsole(LifecycleNode):
         response.success, response.detail = outcome.success, outcome.detail
         return response
 
-    def _on_confirm_part(self, request, response):
-        outcome = self._machine.confirm_part()
+    def _on_confirm_operator(self, request, response):
+        outcome = self._machine.confirm_operator()
         response.success, response.detail = outcome.success, outcome.detail
         return response
 
@@ -331,10 +369,14 @@ class CellConsole(LifecycleNode):
         return GoalResponse.ACCEPT
 
     def _on_cancel(self, goal_handle) -> CancelResponse:
-        """Stop the request in flight: a cancel is the same software stop as StopCell."""
-        if not self._machine.snapshot().busy:
-            return CancelResponse.REJECT
-        outcome = self._machine.stop()
+        """Stop the request THIS goal owns: the same software stop as StopCell.
+
+        A cancel of any other goal - one not yet started, or one that lost the
+        race for the request - is accepted and stops nothing else: that goal
+        reads its own cancel when it starts (`_owner`), and the request in
+        progress, owned by another goal, runs on (ADR-0071).
+        """
+        outcome = self._machine.stop(owner=_owner(goal_handle))
         self.get_logger().warning(f"cancel: {outcome.detail}")
         return CancelResponse.ACCEPT
 
@@ -342,6 +384,8 @@ class CellConsole(LifecycleNode):
         outcome = self._machine.home(
             goal_handle.request.speed_scale,
             feedback=lambda text: goal_handle.publish_feedback(HomeRobot.Feedback(step=text)),
+            owner=_owner(goal_handle),
+            cancelled=lambda: goal_handle.is_cancel_requested,
         )
         self._settle(goal_handle, outcome)
         return HomeRobot.Result(success=outcome.success, detail=outcome.detail)
@@ -353,7 +397,11 @@ class CellConsole(LifecycleNode):
             )
 
         outcome = self._machine.run_program(
-            goal_handle.request.speed_scale, goal_handle.request.cycles, feedback
+            goal_handle.request.speed_scale,
+            goal_handle.request.cycles,
+            feedback,
+            owner=_owner(goal_handle),
+            cancelled=lambda: goal_handle.is_cancel_requested,
         )
         self._settle(goal_handle, outcome)
         return RunProgram.Result(
@@ -364,23 +412,46 @@ class CellConsole(LifecycleNode):
 
     @staticmethod
     def _settle(goal_handle, outcome: Outcome) -> None:
-        if goal_handle.is_cancel_requested:
-            goal_handle.canceled()
-        elif outcome.success:
+        """End the goal as the request ended: a request that completed SUCCEEDED.
+
+        A cancel that came after the request's last point that can be
+        interrupted changed nothing, and the goal says so rather than
+        reporting a stop that did not happen (ADR-0071).
+        """
+        if outcome.success:
             goal_handle.succeed()
+        elif goal_handle.is_cancel_requested:
+            goal_handle.canceled()
         else:
             goal_handle.abort()
 
     # ---------------------------------------------------------------- state
 
     def _on_twin_mode(self, message: TwinMode) -> None:
-        with self._publish_lock:
+        with self._mode_lock:
             self._twin_mode = message.mode
-        if self._machine is not None:
-            self._publish(self._machine.snapshot())
+        machine = self._machine
+        if machine is not None:
+            self._publish(machine.snapshot())
+
+    def _heard_twin_mode(self) -> int | None:
+        """Return the twin's mode as last heard, or None before any."""
+        with self._mode_lock:
+            mode = self._twin_mode
+        return None if mode == ConsoleState.TWIN_MODE_UNKNOWN else mode
 
     def _publish(self, snapshot: Snapshot) -> None:
+        """Publish ``snapshot``, unless a later one was already published.
+
+        Snapshots are taken under the machine's lock and numbered there, but
+        handed here from several threads; without the order kept, an older one
+        published last would be the latched state a late panel receives.
+        """
+        with self._mode_lock:
+            twin_mode = self._twin_mode
         with self._publish_lock:
+            if self._last is not None and snapshot.sequence < self._last.sequence:
+                return
             self._last = snapshot
             if self._publisher is None:
                 return
@@ -388,14 +459,22 @@ class CellConsole(LifecycleNode):
                 state=snapshot.state,
                 robot_started=snapshot.robot_started,
                 busy=snapshot.busy,
+                at_start=snapshot.at_start,
                 step=snapshot.step,
+                prompt=snapshot.prompt,
                 last_error=snapshot.last_error,
-                twin_mode=self._twin_mode,
+                twin_mode=twin_mode,
                 physical_sides=self._machine.physical if self._machine else [],
                 speed_scale=float(snapshot.speed_scale),
+                minimum_speed_scale=float(snapshot.minimum_speed_scale),
             )
             message.stamp = self.get_clock().now().to_msg()
             self._publisher.publish(message)
+
+
+def _owner(goal_handle) -> bytes:
+    """Return an action goal's id, as the owner of the request it starts."""
+    return bytes(goal_handle.goal_id.uuid)
 
 
 def _arguments(argv: list[str] | None) -> argparse.Namespace:
@@ -456,10 +535,12 @@ def main(argv: list[str] | None = None) -> int:
                 status = 1
                 break
         machine = node.machine
-        if machine is not None and not machine.shutdown(SHUTDOWN_CEILING_S):
+        if machine is not None and not machine.shutdown(
+            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S
+        ):
             print(
                 "cell_console: what was in progress, or a belt, did not confirm its stop "
-                f"within {SHUTDOWN_CEILING_S:.0f} s",
+                f"within {SHUTDOWN_WORST_S:.0f} s",
                 file=sys.stderr,
             )
             status = 1

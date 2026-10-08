@@ -41,11 +41,13 @@ where the plan is — and gains no branch on modes, routing, skills or divergenc
 A change here that passes a mode, a side preference or a skill list has crossed
 that line and needs its own record.
 
-**It starts the operator console the same way, one step later** (ADR-0071):
-`cell_console`, on the plant's domain, once the boundary has announced, because
-every request the console serves goes through the boundary. It is handed the
-zone, the plan and the plant's domain, and starts no motion. Stopping the pair
-stops it first, the boundary next and the sides last.
+**It starts the operator console the same way, one step later, ONLY WHEN ASKED**
+(ADR-0071, `--console`; `./scripts/sim --pair --console`): `cell_console`, with
+the plant's domain as its own, once the boundary has announced, because every
+request the console serves goes through the boundary. It is handed the zone,
+the plan and the plant's domain, and starts no motion. Stopping the pair stops
+it first, the boundary next and the sides last. `./scripts/program` never asks
+for it: a pair that did not request a console has none to end it.
 
 **That dependency is one argument vector, and it is deliberately not declared in
 `package.xml`.** `cite_twin` build-depends on this package, so an `exec_depend`
@@ -180,9 +182,27 @@ BOUNDARY_CEILING_S = 120.0
 #: measuring. Stopping them concurrently would divide it and is deliberately not
 #: done here, because ending a pair is the path along which evidence is most
 #: easily lost (ADR-0038) and a sequential stop keeps each participant's teardown
-#: readable in the console.
+#: readable in the console. `teardown_ceiling_s` states that worst case for a
+#: caller that has to wait it out (`./scripts/program`), from these numbers.
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
+
+
+def participants(plan: Plan, console: bool) -> int:
+    """Count the participants a pair of ``plan`` stops: each side, the boundary, any console."""
+    return len(plan.sides) + 1 + (1 if console else 0)
+
+
+def teardown_ceiling_s(count: int) -> float:
+    """How long a caller waits for a pair of ``count`` participants to stop after its SIGINT.
+
+    The supervisor's own worst case - each participant, one after another,
+    given `STOP_GRACE_S + STOP_KILL_S` - and one more `2 * STOP_KILL_S` above
+    it, so that a supervisor still escalating on its own is not cut short. A
+    ceiling on a failure, never a schedule.
+    """
+    return count * (STOP_GRACE_S + STOP_KILL_S) + 2 * STOP_KILL_S
+
 
 #: How often the sweep below asks whether a process group has emptied.
 #:
@@ -443,14 +463,19 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
 
 
 def console_spec(plan: Plan, path: Path | str, environ: Mapping[str, str]) -> SideSpec:
-    """Return the fourth participant: the operator console, on the plant's domain (ADR-0071).
+    """Return the fourth participant, when asked for: the operator console (ADR-0071).
 
     Started once the boundary has announced, because every request it serves
     goes through the boundary's `/cite/twin/...` names on the plant's domain.
     The same two facts the boundary is handed - the zone and the plan - and the
-    one environment value a side is handed, its domain: the console is a
-    client on ONE domain, the plant's, resolved through `resolve_domain_id`
-    like a side's. Starting it commands nothing; it waits for an operator.
+    one environment value a side is handed, its domain: the plant's, resolved
+    through `resolve_domain_id` like a side's, where its node and its requests
+    live. It is nonetheless a CROSS-DOMAIN CLIENT, as `program.home` and
+    `program.belt` are: Start robot and Home call each physical side's
+    `InitializeAsset` (and that side's track stop) on that side's own domain,
+    and Start program commands each simulated side's belt on that side's
+    domain - each from the plan, in a context of its own. Starting it commands
+    nothing; it waits for an operator.
     """
     domain = resolve_domain_id(plan, PLANT_SIDE, domain_base(environ))
     return SideSpec(
@@ -717,10 +742,13 @@ def supervise(
                                           PAIR_ENDED - see :func:`_verdict`
     ==================================== =========================================
 
-    ``console`` (ADR-0071) is started the same way one step later: once the
-    boundary has announced, on that event, under the boundary's ceiling, and
-    it is a participant like the others - its exit ends the pair. It needs a
-    boundary, and is ignored without one.
+    ``console`` (ADR-0071) is started the same way one step later, and only
+    when the caller asked for one (`--console`): once the boundary has
+    announced, on that event, under the boundary's ceiling. Asked for, it is a
+    participant like the others - its exit ends the pair, because a pair whose
+    operator surface died is a cell nobody can stop from where they stand, and
+    ending it stops everything the console started; not asked for, there is no
+    console to end anything. It needs a boundary, and is ignored without one.
 
     ``boundary`` is optional, and a supervisor given none joins two sides and
     stops there. That is not a mode: it is what keeps ADR-0047's membership test
@@ -1143,6 +1171,11 @@ def main(argv: list[str] | None = None) -> int:
     # ceiling in this file says never to do. A test that needs a shorter one
     # passes `boundary_ceiling_s` to `supervise` directly.
     parser.add_argument("--ceiling", type=float, default=READY_CEILING_S)
+    parser.add_argument(
+        "--console",
+        action="store_true",
+        help="Also start the operator console once the boundary is up (ADR-0071).",
+    )
     args = parser.parse_args(
         _flags(sys.argv[1:] if argv is None else argv, parser)
     )
@@ -1170,11 +1203,13 @@ def main(argv: list[str] | None = None) -> int:
     # time from the zone would be the same lookup written twice, and the two
     # copies disagree the first time one of them is pointed elsewhere - which is
     # exactly what a test does.
-    try:
-        console = console_spec(plan, path, os.environ)
-    except PlanError as exc:
-        print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
-        return 1
+    console = None
+    if args.console:
+        try:
+            console = console_spec(plan, path, os.environ)
+        except PlanError as exc:
+            print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
+            return 1
     return supervise(
         specs,
         boundary=boundary_spec(plan, path),

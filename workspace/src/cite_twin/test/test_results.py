@@ -485,6 +485,15 @@ class TestATransitionMayNotOutrunTheCell:
         assert verdict.mode == TwinMode.MODE_VALIDATED
         assert not verdict.commands_hardware
 
+    def test_the_refusal_carries_the_word_a_return_to_sim_waits_on(self) -> None:
+        """ADR-0071, S-03: after a cancel the program asks SIM again on THIS refusal only."""
+        from cite_bringup.readiness import waits_for_goals_to_end
+
+        verdict = _a_transition_may_not_outrun_the_cell(
+            TwinMode.MODE_VALIDATED, TwinMode.MODE_SIM, ["/cite/twin/x"]
+        )
+        assert waits_for_goals_to_end(verdict.detail)
+
 
 class TestTheFieldsNothingComputes:
     """**S-07.** A zero is a measurement of zero, and these were never measured."""

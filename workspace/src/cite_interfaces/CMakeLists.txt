@@ -23,7 +23,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/SafetyState.msg
   msg/TwinHeartbeat.msg
   msg/TwinMode.msg
-  srv/ConfirmPart.srv
+  srv/ConfirmOperator.srv
   srv/GetModelVersion.srv
   srv/InitializeAsset.srv
   srv/JointsAt.srv

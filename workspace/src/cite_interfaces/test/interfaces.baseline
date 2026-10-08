@@ -1,11 +1,9 @@
 msg/ConsoleState.msg
-  string SCOPE="console"
-  string NAME="state"
   uint8 NOT_STARTED=0
   uint8 STARTING=1
   uint8 READY=2
   uint8 HOMING=3
-  uint8 AWAITING_PART=4
+  uint8 AWAITING_OPERATOR=4
   uint8 RUNNING=5
   uint8 STOPPING=6
   uint8 FAULT=7
@@ -14,11 +12,14 @@ msg/ConsoleState.msg
   uint8 state
   bool robot_started
   bool busy
+  bool at_start
   string step
+  string prompt
   string last_error
   uint8 twin_mode
   string[] physical_sides
   float64 speed_scale
+  float64 minimum_speed_scale
 msg/DeadmanState.msg
   uint8 STATE_INACTIVE=0
   uint8 STATE_AWAITING=1
@@ -121,8 +122,7 @@ msg/TwinMode.msg
   uint8 requested_mode
   bool transition_in_progress
   string reason
-srv/ConfirmPart.srv
-  string NAME="confirm_part"
+srv/ConfirmOperator.srv
   ---
   bool success
   string detail
@@ -157,12 +157,10 @@ srv/SetMode.srv
   ResultCode result
   uint8 current_mode
 srv/StartRobot.srv
-  string NAME="start_robot"
   ---
   bool success
   string detail
 srv/StopCell.srv
-  string NAME="stop"
   ---
   bool success
   string detail
@@ -193,7 +191,6 @@ action/Grasp.action
   float64 current_width_m
   float64 current_effort_n
 action/HomeRobot.action
-  string NAME="home"
   float64 speed_scale
   ---
   bool success
@@ -251,7 +248,6 @@ action/Place.action
   uint8 phase
   float64 fraction_complete
 action/RunProgram.action
-  string NAME="run_program"
   float64 speed_scale
   uint32 cycles
   ---

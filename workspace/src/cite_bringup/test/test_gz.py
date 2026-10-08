@@ -28,6 +28,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import time
 
 from cite_bringup import gz
 from cite_bringup.plan import (
@@ -258,3 +259,32 @@ def test_the_module_does_not_read_the_partition_from_the_shell() -> None:
     assert f"environ[{GZ_PARTITION_ENV}]" not in source
     # The module merges os.environ; it never reads the partition out of it.
     assert os.environ is not None
+
+
+def test_a_command_run_with_a_stop_is_killed_when_the_stop_comes() -> None:
+    """ADR-0071: the console's stop reaches a spawn in flight rather than waiting it out."""
+    asked: list[int] = []
+
+    def interrupted() -> bool:
+        asked.append(1)
+        return len(asked) > 2
+
+    started = time.monotonic()
+    with pytest.raises(gz.CommandInterrupted):
+        gz.run(["sleep", "30"], zone=ZONE, timeout=60, interrupted=interrupted)
+    assert time.monotonic() - started < 10.0
+
+
+def test_a_command_run_with_a_stop_answers_as_without_one() -> None:
+    result = gz.run(
+        ["sh", "-c", "echo out; echo err >&2; exit 3"],
+        zone=ZONE,
+        timeout=30,
+        interrupted=lambda: False,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (3, "out\n", "err\n")
+
+
+def test_a_command_run_with_a_stop_still_has_its_ceiling() -> None:
+    with pytest.raises(subprocess.TimeoutExpired):
+        gz.run(["sleep", "30"], zone=ZONE, timeout=0.3, interrupted=lambda: False)

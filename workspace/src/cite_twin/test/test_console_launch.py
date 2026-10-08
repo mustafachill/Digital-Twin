@@ -52,14 +52,13 @@ import unittest
 
 from cite_bringup.plan import load
 from cite_bringup.program.cell import state_topic
-from cite_bringup.program.console import console_names
 from cite_bringup.program.from_plan import target
 from cite_bringup.program.home import arm_joints
 from cite_bringup.readiness import console_announcement
 from cite_interfaces.action import HomeRobot, RunProgram
 from cite_interfaces.msg import ConsoleState, RobotState, TwinMode
 from cite_interfaces.qos import LATCHED
-from cite_interfaces.srv import ConfirmPart, StartRobot, StopCell
+from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
 import launch
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
@@ -92,7 +91,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 PLAN_PATH = importlib.import_module("test_twin_boundary_paired_launch")._paired_plan()
 PLAN = load(PLAN_PATH)
 CELL = target(PLAN)
-NAMES = console_names(ZONE)
+#: The console's names, as the generated plan states them (ADR-0071).
+NAMES = PLAN.console
 ARM = CELL.arm.asset
 _DOCUMENT = yaml.safe_load(PLAN_PATH.read_text())["plan"]
 _TRACK = _DOCUMENT["controller_managers"][0]["track"]
@@ -166,7 +166,7 @@ class TestTheConsole(unittest.TestCase):
         cls.custody = cls.node.create_publisher(RobotState, state_topic(CELL.arm), LATCHED)
         cls.custody.publish(RobotState(gripper_holding=False))
         cls.start_robot = cls.node.create_client(StartRobot, NAMES.start_robot)
-        cls.confirm_part = cls.node.create_client(ConfirmPart, NAMES.confirm_part)
+        cls.confirm_operator = cls.node.create_client(ConfirmOperator, NAMES.confirm_operator)
         cls.stop = cls.node.create_client(StopCell, NAMES.stop)
         cls.home = ActionClient(cls.node, HomeRobot, NAMES.home)
         cls.run_program = ActionClient(cls.node, RunProgram, NAMES.run_program)
@@ -229,7 +229,7 @@ class TestTheConsole(unittest.TestCase):
         self.assertFalse(handle.accepted, "Home was accepted before Start robot")
         handle = self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1))
         self.assertFalse(handle.accepted, "Start program was accepted before Start robot")
-        self.assertFalse(self._call(self.confirm_part, ConfirmPart.Request()).success)
+        self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)
         self.assertFalse(self._call(self.stop, StopCell.Request()).success)
 
         # Start robot: nothing physical to initialize; custody read, empty.
@@ -237,6 +237,13 @@ class TestTheConsole(unittest.TestCase):
         self.assertTrue(response.success, response.detail)
         ready = self._state(ConsoleState.READY, "READY after Start robot")
         self.assertTrue(ready.robot_started)
+        # Not at the program's start until a Home says so: Start program is refused.
+        self.assertFalse(ready.at_start)
+        self.assertEqual(ready.prompt, "")
+        self.assertEqual(ready.minimum_speed_scale, 0.0)
+        self.assertFalse(
+            self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1)).accepted
+        )
 
         # The scale and the cycle count are refused at the goal, never defaulted.
         for goal in (
@@ -295,6 +302,7 @@ class TestTheConsole(unittest.TestCase):
         after = self._state(ConsoleState.READY, "READY after the cancel")
         self.assertTrue(after.robot_started)
         self.assertFalse(after.busy)
+        self.assertFalse(after.at_start)
         self.assertEqual(after.last_error, "")
         self.assertTrue(any(state.state == ConsoleState.STOPPING for state in self.states))
         # And no homing move followed the stop (ADR-0037): the first move was

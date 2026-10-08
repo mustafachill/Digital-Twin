@@ -73,7 +73,6 @@ from cite_bringup.program.from_plan import program, Target, target
 from cite_bringup.program.steps import (
     _interrupts_ignored,
     execute,
-    EXIT_INTERRUPTED,
     Interrupted,
     Step,
     StepFailed,
@@ -319,6 +318,15 @@ def _call_on_domain(
     long to wait for its answer (`initializer_stop`) - before the failure is
     re-raised (S-01). ``interrupted`` returning True while the answer is
     awaited is such an interrupt (ADR-0071).
+
+    **An interrupt is not the initializer's end** (ADR-0071, S-02). The
+    initializer goes on with its sequence after the client stops listening,
+    and a later step of it may move the carriage again after the first track
+    stop. So after an interrupt the answer is still awaited, within the same
+    ``ceiling_s`` the call was given, and the track is stopped a second time
+    once it comes (or the ceiling passes); only then is the interrupt
+    re-raised, so nothing reports the stop done while the initializer may still
+    move. Neither stop nor the wait is itself interrupted.
     """
     from cite_interfaces.srv import InitializeAsset
     import rclpy
@@ -347,23 +355,41 @@ def _call_on_domain(
                 raise Interrupted(f"stopped from the operator console before {service}")
             executor.spin_once(timeout_sec=0.1)
         future = client.call_async(InitializeAsset.Request())
+        deadline = time.monotonic() + ceiling_s
         try:
-            deadline = time.monotonic() + ceiling_s
             while not future.done():
                 if time.monotonic() > deadline:
                     raise StepFailed(f"{service} did not answer within {ceiling_s:g} s")
                 if interrupted is not None and interrupted():
                     raise Interrupted(f"stopped from the operator console during {service}")
                 executor.spin_once(timeout_sec=0.1)
-        except BaseException:
+        except KeyboardInterrupt:
             # A second Ctrl-C (the terminal's and the script's) must not
             # abandon the stop half-way, as in `steps.run`.
+            with _interrupts_ignored():
+                _stop_track(executor, stopper, stop[1])
+                if _await_answer(executor, future, deadline):
+                    say_now(f"{service} answered after the interrupt")
+                else:
+                    say_now(f"{service} did not answer within {ceiling_s:g} s of its call")
+                _stop_track(executor, stopper, stop[1])
+            raise
+        except BaseException:
             with _interrupts_ignored():
                 _stop_track(executor, stopper, stop[1])
             raise
         return future.result()
     finally:
         context.try_shutdown()
+
+
+def _await_answer(executor, future, deadline: float) -> bool:
+    """Spin until ``future`` is done or ``deadline`` (monotonic) passes; return whether done."""
+    while not future.done():
+        if time.monotonic() > deadline:
+            return False
+        executor.spin_once(timeout_sec=0.1)
+    return True
 
 
 def _stop_track(executor, stopper, ceiling_s: float) -> None:
@@ -397,7 +423,8 @@ def say_now(text: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from cite_bringup.program.operator import confirm_operator
+    # Here, not at the top: `cycle` builds on this module.
+    from cite_bringup.program import cycle
     from cite_bringup.program.sides import physical_sides, required_speed_scale
     from cite_bringup.program.steps import install_interrupt_handlers
 
@@ -424,33 +451,20 @@ def main(argv: list[str] | None = None) -> int:
 
     install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-    status = 1
     try:
         ros = RosCell(cell.arm, "twin", track=cell.track, speed=scale)
-        try:
-            if physical:
-                confirm_operator(
-                    ros.twin_mode(),
-                    physical,
-                    scale,
-                    say_now,
-                    input,
-                    lambda: ros.carriage_refusal(homing=True),
-                    prompt=HOME_PROMPT,
-                )
-            bring_to_start(
-                steps, start, ros, lambda: initialize(plan, physical, say_now), say_now
-            )
-            say_now("done: both arms are at the program's start")
-            status = 0
-        except StepFailed as failure:
-            say_now(f"FAILED: {failure}")
-        except KeyboardInterrupt:
-            say_now("interrupted")
-            status = EXIT_INTERRUPTED
-        if physical and not ros.leave_validated():
-            return status or 1
-        return status
+        ended = cycle.home(
+            ros,
+            steps,
+            start,
+            physical=physical,
+            scale=scale,
+            say=say_now,
+            await_operator=input,
+            initialize_physical=lambda: initialize(plan, physical, say_now),
+            prompt=HOME_PROMPT,
+        )
+        return ended.status
     finally:
         rclpy.try_shutdown()
 

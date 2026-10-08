@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import signal
+import time
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program import belt as belt_command
@@ -407,6 +408,10 @@ def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
             Handle.cancelled = True
             return Done(None)
 
+        def get_result_async(self):
+            # The cancelled goal's end, which a cancel now reads (S-03).
+            return Done(None)
+
     monkeypatch.setattr(cell_module.rclpy, "spin_until_future_complete", lambda *a, **k: None)
     ros = object.__new__(RosCell)
     ros.node = None
@@ -565,7 +570,7 @@ def test_no_belt_is_commanded_on_a_physical_side(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         belt_command,
         "_set_on_one_side",
-        lambda topic, speed, domain, side: commanded.append(side) or True,
+        lambda topic, speed, domain, side, *_rest: commanded.append(side) or True,
     )
     assert belt_command.main(["--zone", ZONE]) == 0
     assert commanded == ["plant"]
@@ -652,9 +657,10 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     (request,) = sent
     assert request.mode == TwinMode.MODE_SIM
     assert "nothing crosses to the physical side" in capsys.readouterr().out
-    main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
-    text = main_source.read_text()
-    assert text.index("status = run(") < text.rindex("ros.leave_validated()")
+    # The sequencer `__main__` runs (`program.cycle`) asks for SIM after the run.
+    cycle_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/cycle.py")
+    text = cycle_source.read_text()
+    assert text.index("status = run(") < text.rindex("cell.leave_validated()")
 
 
 def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
@@ -746,6 +752,7 @@ def _main_on_a_pair(
 
     import cite_bringup.program.__main__ as program_module
     import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.cycle as cycle_module
     import cite_bringup.program.home as home_module
     import rclpy
 
@@ -757,7 +764,7 @@ def _main_on_a_pair(
     monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
     monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
     monkeypatch.setattr(
-        program_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
+        cycle_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
     )
 
     def initialize(_plan, sides, _say):
@@ -1306,3 +1313,157 @@ def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
     _PairCell.away = ["arm away", "still away"]
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
     assert _PairCell.calls[-2:] == ["measure zero", "leave_validated"]
+
+
+# --- S-03 (ADR-0071): a stop is done when the goal has ENDED and SIM is back ---
+
+
+class _Later:
+    """A future that is done after ``spins`` spins of the cell."""
+
+    def __init__(self, spins: int, value=None) -> None:
+        self.left = spins
+        self._value = value
+
+    def done(self) -> bool:
+        return self.left <= 0
+
+    def result(self):
+        return self._value
+
+
+def _spinning(monkeypatch, futures: list) -> list[str]:
+    """Make each spin advance the first future in ``futures`` that is not done."""
+    import cite_bringup.program.cell as cell_module
+
+    order: list[str] = []
+
+    def spin_once(_node, timeout_sec=None) -> None:
+        for name, future in futures:
+            if not future.done():
+                future.left -= 1
+                if future.done():
+                    order.append(name)
+                return
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", spin_once)
+    return order
+
+
+def test_a_cancel_reads_the_cancelled_goals_end_before_it_returns(monkeypatch) -> None:
+    answer, end = _Later(2), _Later(3)
+    order = _spinning(monkeypatch, [("cancel answered", answer), ("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    ros.cancel()
+    assert order == ["cancel answered", "goal ended"]
+    assert ros._result is None and ros._active is None
+
+
+def test_a_cancelled_goal_that_never_ends_fails_the_cancel_at_its_ceiling(monkeypatch) -> None:
+    import cite_bringup.program.cell as cell_module
+
+    monkeypatch.setattr(cell_module, "CANCEL_CEILING_S", 0.05)
+    answer, end = _Later(0), _Later(10**9)
+    _spinning(monkeypatch, [("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    with pytest.raises(StepFailed, match="the end of the cancelled goal"):
+        ros.cancel()
+
+
+def _asking_for_sim(monkeypatch, answers: list) -> tuple[RosCell, list]:
+    import cite_bringup.program.cell as cell_module
+    from cite_interfaces.msg import ResultCode
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", lambda *_a, **_k: None)
+    monkeypatch.setattr(cell_module, "_ARRIVAL_ASK_S", 0.0)
+    sent: list = []
+
+    class Response:
+        def __init__(self, mode: int, detail: str) -> None:
+            self.accepted = detail == ""
+            self.current_mode = mode
+            self.result = ResultCode(detail=detail)
+
+    class Client:
+        def wait_for_service(self, timeout_sec):
+            return True
+
+        def call_async(self, request):
+            sent.append(request)
+            return _Later(0, Response(*answers.pop(0)))
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    return ros, sent
+
+
+def test_sim_is_asked_again_while_the_boundary_still_has_goals_in_flight(monkeypatch) -> None:
+    """After a cancel the boundary refuses SIM until the goal ends; that clears by itself."""
+    from cite_bringup.readiness import GOALS_STILL_RUNNING
+    from cite_interfaces.msg import TwinMode
+
+    refused = (TwinMode.MODE_VALIDATED, f"SIM describes a cell in which 1 {GOALS_STILL_RUNNING}")
+    ros, sent = _asking_for_sim(
+        monkeypatch, [refused, refused, (TwinMode.MODE_SIM, "")]
+    )
+    assert ros.leave_validated()
+    assert len(sent) == 3
+
+
+def test_any_other_refusal_of_sim_is_final(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    ros, sent = _asking_for_sim(
+        monkeypatch, [(TwinMode.MODE_VALIDATED, "refused for another reason")]
+    )
+    assert not ros.leave_validated()
+    assert len(sent) == 1
+
+
+def test_sim_refused_for_goals_that_never_end_fails_at_the_cancel_ceiling(monkeypatch) -> None:
+    import cite_bringup.program.cell as cell_module
+    from cite_bringup.readiness import GOALS_STILL_RUNNING
+    from cite_interfaces.msg import TwinMode
+
+    monkeypatch.setattr(cell_module, "CANCEL_CEILING_S", 0.05)
+    refused = (TwinMode.MODE_VALIDATED, f"1 {GOALS_STILL_RUNNING}")
+    ros, sent = _asking_for_sim(monkeypatch, [refused] * 100000)
+    assert not ros.leave_validated()
+    assert len(sent) >= 1
+
+
+def test_a_stop_reaches_a_belt_whose_subscriber_is_awaited(monkeypatch) -> None:
+    """S-08 (ADR-0071): the console's stop is asked while a side's belt is matched."""
+    from cite_bringup.program.steps import Interrupted
+
+    started = time.monotonic()
+    with pytest.raises(Interrupted):
+        belt_command._set_on_one_side(
+            "/cite/cell_b/nobody_subscribes", 0.0, 90 + os.getpid() % 9, "plant",
+            interrupted=lambda: True,
+        )
+    assert time.monotonic() - started < belt_command.MATCH_CEILING_S

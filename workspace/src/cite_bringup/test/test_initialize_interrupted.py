@@ -21,6 +21,11 @@ the failure is re-raised (`program.home._call_on_domain`). The initializer and
 the vendor's stop are faked in this test's node, on a domain of its own; an
 initializer that never answers is what an in-flight motion looks like from the
 client. **Nothing here reaches hardware.**
+
+An interrupt is not the initializer's end (ADR-0071, S-02): after it the
+answer is still awaited within the call's own ceiling, and the track is
+stopped a second time once it comes, so nothing reports the stop done while
+the initializer may still be moving the carriage.
 """
 
 from __future__ import annotations
@@ -33,7 +38,7 @@ import sys
 import threading
 
 from cite_bringup.program import home
-from cite_bringup.program.steps import StepFailed
+from cite_bringup.program.steps import Interrupted, StepFailed
 from cite_interfaces.srv import InitializeAsset
 import pytest
 
@@ -44,6 +49,9 @@ DOMAIN = 10 + os.getpid() % 80
 VENDOR = "/test_vendor/xarm"
 SERVICE = "/test/picker/initialize"
 STOP = (f"{VENDOR}/{FakeTrack.STOP}", 2.0)
+
+#: The fake initializer's release and its answers, for the case that answers it.
+_SHARED: dict = {}
 
 
 @pytest.fixture(scope="module")
@@ -71,6 +79,7 @@ def rig():
     harness.node.create_service(
         InitializeAsset, SERVICE, never_answers, callback_group=harness.group
     )
+    _SHARED["release"], _SHARED["answered"] = release, answered
     try:
         yield track, interrupt, received
     finally:
@@ -78,6 +87,39 @@ def rig():
         Harness.wait_for(lambda: len(answered) == len(received), "the fake released")
         signal.signal(signal.SIGINT, previous)
         harness.close()
+
+
+def test_a_console_stop_awaits_the_initializers_answer_between_two_track_stops(rig) -> None:
+    """S-02: the stop is not reported while the initializer may still move the carriage.
+
+    First in this file, so that no earlier case's request still holds one of
+    the fake's executor threads.
+    """
+    track, interrupt, received = rig
+    interrupt.clear()
+    calls, stops, answered = len(received), track.stops, len(_SHARED["answered"])
+    order: list[str] = []
+
+    def answer_after_the_first_stop() -> None:
+        Harness.wait_for(lambda: track.stops == stops + 1, "the first track stop")
+        order.append("first stop")
+        # The initializer answers only now: until then the client must wait.
+        _SHARED["release"].set()
+
+    helper = threading.Thread(target=answer_after_the_first_stop)
+    helper.start()
+    try:
+        with pytest.raises(Interrupted):
+            home._call_on_domain(
+                SERVICE, DOMAIN, 30.0, STOP, interrupted=lambda: len(received) > calls
+            )
+        order.append("re-raised")
+    finally:
+        helper.join(timeout=30.0)
+        _SHARED["release"].clear()
+    assert order == ["first stop", "re-raised"]
+    assert len(_SHARED["answered"]) > answered, "re-raised before the initializer answered"
+    assert track.stops == stops + 2, "the track was stopped again after the answer"
 
 
 def test_an_unanswered_initialization_stops_the_track(rig) -> None:
@@ -91,9 +133,10 @@ def test_an_unanswered_initialization_stops_the_track(rig) -> None:
 
 
 def test_an_interrupted_initialization_stops_the_track_then_re_raises(rig) -> None:
+    """Ctrl-C: stopped at once, the answer awaited to the ceiling, stopped again."""
     track, interrupt, received = rig
     interrupt.set()
     stops = track.stops
     with pytest.raises(KeyboardInterrupt):
-        home._call_on_domain(SERVICE, DOMAIN, 30.0, STOP)
-    assert track.stops == stops + 1, "stopped before the interrupt was re-raised"
+        home._call_on_domain(SERVICE, DOMAIN, 3.0, STOP)
+    assert track.stops == stops + 2, "stopped twice before the interrupt was re-raised"

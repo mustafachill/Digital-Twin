@@ -1471,3 +1471,71 @@ def test_the_console_token_is_not_the_boundarys_or_a_sides() -> None:
     assert announced_side(console_line) is None
     assert announced_console(boundary_announcement(ZONE)) is None
     assert announced_console(ready_announcement("plant", ZONE)) is None
+
+
+# --- ADR-0071 remediation: the console only on request, and the teardown sums --
+
+
+def _main_against(tmp_path: Path, monkeypatch, argv: list[str]) -> dict:
+    """Run `pair.main` up to `supervise`, which is captured rather than run."""
+    plan = _paired_plan(tmp_path)
+    path = tmp_path / "plan.yaml"
+    assert load(path).zone == plan.zone
+    monkeypatch.setattr(pair, "default_plan_path", lambda zone: path)
+    monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
+    captured: dict = {}
+
+    def supervise(specs, **kwargs):
+        captured.update(kwargs, specs=specs)
+        return 0
+
+    monkeypatch.setattr(pair, "supervise", supervise)
+    assert pair.main(argv) == 0
+    return captured
+
+
+def test_a_pair_starts_no_console_unless_asked(tmp_path: Path, monkeypatch) -> None:
+    """D2: `./scripts/program` asks for no console, so its pair has none to end it."""
+    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE])
+    assert captured["console"] is None
+    assert captured["boundary"] is not None
+
+
+def test_a_pair_asked_for_a_console_starts_one(tmp_path: Path, monkeypatch) -> None:
+    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE, "--console"])
+    assert captured["console"].name == pair.CONSOLE_NAME
+    assert "cell_console.py" in captured["console"].argv
+
+
+def test_scripts_sim_passes_console_only_with_pair_and_program_never_asks() -> None:
+    root = Path(__file__).resolve().parents[4]
+    sim = (root / "scripts" / "sim").read_text()
+    assert "PAIR_ARGS=(--console" in sim
+    assert "--console needs --pair" in sim
+    program = (root / "scripts" / "program").read_text()
+    assert "--console" not in program
+
+
+def test_the_teardown_ceiling_is_the_supervisors_own_worst_case_and_more(
+    tmp_path: Path,
+) -> None:
+    """D8: `./scripts/program` derives its ceiling here rather than restating 420."""
+    plan = _paired_plan(tmp_path)
+    assert pair.participants(plan, console=False) == 3
+    assert pair.participants(plan, console=True) == 4
+    worst = 3 * (pair.STOP_GRACE_S + pair.STOP_KILL_S)
+    assert pair.teardown_ceiling_s(3) > worst
+    root = Path(__file__).resolve().parents[4]
+    program = (root / "scripts" / "program").read_text()
+    assert "teardown_ceiling_s(participants(" in program
+    assert "PAIR_STOP_CEILING_S=4" not in program
+
+
+def test_the_consoles_shutdown_ends_before_the_supervisor_escalates() -> None:
+    """D8: the console stops what it started before the pair's SIGINT grace runs out."""
+    from cite_bringup.program import console
+
+    assert console.SHUTDOWN_WORST_S < pair.STOP_GRACE_S
+    assert console.SHUTDOWN_WORST_S == console.SHUTDOWN_CEILING_S + 2 * (
+        console.SHUTDOWN_BELT_MATCH_S + console.ACK_CEILING_S
+    )

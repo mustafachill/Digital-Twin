@@ -132,8 +132,8 @@ def announced_boundary(line: str) -> str | None:
 
 
 #: The fixed word the operator console prints once it is being served
-#: (ADR-0071). A third word for a third fact: *the console spanning nothing but
-#: the plant's domain is serving its requests*. The supervisor starts it only
+#: (ADR-0071). A third word for a third fact: *the console, whose node lives on
+#: the plant's domain, is serving its requests*. The supervisor starts it only
 #: after the boundary announced, because every request it serves goes through
 #: the boundary; a word shared with the boundary's would let one announcement be
 #: read as both.
@@ -179,3 +179,17 @@ PHYSICAL_SIDE_NOT_READY = "physical side not ready"
 def waits_for_a_physical_side(detail: str) -> bool:
     """Whether a refusal's detail says only that a physical side is not ready yet."""
     return detail.startswith(PHYSICAL_SIDE_NOT_READY)
+
+
+#: Part of the detail of a `SetMode` refusal that clears once the goals the
+#: twin boundary dispatched have ended: it will not publish a mode ahead of a
+#: cell whose goals are still running (`cite_twin.twin_boundary`,
+#: `_a_transition_may_not_outrun_the_cell`). Stated here for the reason
+#: `PHYSICAL_SIDE_NOT_READY` is: the boundary writes it and the program's
+#: return to SIM after a cancel (`cite_bringup.program.cell`) waits on it.
+GOALS_STILL_RUNNING = "goal(s) L5 dispatched are still running"
+
+
+def waits_for_goals_to_end(detail: str) -> bool:
+    """Whether a refusal's detail says only that dispatched goals are still running."""
+    return GOALS_STILL_RUNNING in detail

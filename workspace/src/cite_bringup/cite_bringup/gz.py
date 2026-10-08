@@ -42,9 +42,10 @@ does — see this package's README.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import os
 import subprocess
+import time
 
 from cite_bringup.plan import (
     default_plan_path,
@@ -145,12 +146,23 @@ def process_environment(
     return merged
 
 
+#: How often a command run with ``interrupted`` is asked whether to go on, in
+#: wall seconds: how soon an interruption is seen. Not a schedule - the wait
+#: ends the moment the command exits - and not a ceiling, which is ``timeout``.
+_INTERRUPT_POLL_S = 0.1
+
+
+class CommandInterrupted(RuntimeError):
+    """A command `run` killed because its caller's ``interrupted`` said to stop."""
+
+
 def run(
     argv: Sequence[str],
     *,
     zone: str,
     timeout: float,
     side: str = PLANT_SIDE,
+    interrupted: Callable[[], bool] | None = None,
     **kwargs: object,
 ) -> subprocess.CompletedProcess:
     """Run a Gazebo-transport command in ``zone``'s partition and capture it.
@@ -171,15 +183,50 @@ def run(
     loop asking for a list of world names until something kills them, which is
     how this defect presented (`subprocess.TimeoutExpired` after 120 s), and a
     caller that forgot a timeout would hang the run instead of failing it.
+
+    ``interrupted``, when given, is asked while the command runs - the
+    operator console's stop (ADR-0071) - and True there kills the command and
+    raises `CommandInterrupted`, rather than holding the stop for up to
+    ``timeout``. The command is killed as a timeout kills it.
     """
-    return subprocess.run(
+    environment = process_environment(plan_for(zone), side=side)
+    if interrupted is None:
+        return subprocess.run(
+            list(argv),
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            **kwargs,
+        )
+    deadline = time.monotonic() + timeout
+    with subprocess.Popen(
         list(argv),
-        env=process_environment(plan_for(zone), side=side),
-        capture_output=True,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
         **kwargs,
-    )
+    ) as process:
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=_INTERRUPT_POLL_S)
+            except subprocess.TimeoutExpired:
+                pass
+            else:
+                return subprocess.CompletedProcess(
+                    list(argv), process.returncode, stdout, stderr
+                )
+            if interrupted():
+                process.kill()
+                process.communicate()
+                raise CommandInterrupted(f"{argv[0]} was stopped before it finished")
+            if time.monotonic() > deadline:
+                process.kill()
+                stdout, stderr = process.communicate()
+                raise subprocess.TimeoutExpired(
+                    list(argv), timeout, output=stdout, stderr=stderr
+                )
 
 
 class ModelPoses:

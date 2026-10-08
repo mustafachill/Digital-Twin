@@ -39,7 +39,7 @@ from typing import Callable
 from cite_bringup import track_command
 from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
 from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, StepFailed
-from cite_bringup.readiness import waits_for_a_physical_side
+from cite_bringup.readiness import waits_for_a_physical_side, waits_for_goals_to_end
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
@@ -297,6 +297,8 @@ class RosCell:
     #: operator console's stop, so a cell assembled without it never stops.
     _interrupted: Callable[[], bool] | None = None
     _uninterruptible = 0
+    #: The result of the goal in flight, awaited by a cancel for the goal's end.
+    _result = None
 
     def __init__(
         self,
@@ -420,14 +422,28 @@ class RosCell:
             mode=TwinMode.MODE_SIM,
             reason="the program ended; a person may enter the physical cell",
         )
-        try:
-            response = self._until(client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S)
-        except StepFailed as failure:
-            print(f"could not leave VALIDATED: {failure}", flush=True)
-            return False
-        if not response.accepted or response.current_mode != TwinMode.MODE_SIM:
-            print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
-            return False
+        # The boundary refuses a transition while a goal it dispatched is still
+        # running (`waits_for_goals_to_end`): after a cancel that refusal clears
+        # once the goal ends on every side, so it is asked again within the
+        # cancel's own ceiling, and any other refusal is final (ADR-0071).
+        deadline = time.monotonic() + CANCEL_CEILING_S
+        while True:
+            try:
+                response = self._until(
+                    client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S
+                )
+            except StepFailed as failure:
+                print(f"could not leave VALIDATED: {failure}", flush=True)
+                return False
+            if response.accepted and response.current_mode == TwinMode.MODE_SIM:
+                break
+            if (
+                not waits_for_goals_to_end(response.result.detail)
+                or time.monotonic() > deadline
+            ):
+                print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
+                return False
+            self._pause_between_asks()
         print("the twin is in SIM: nothing crosses to the physical side", flush=True)
         return True
 
@@ -671,14 +687,24 @@ class RosCell:
                 )
         handle, self._active = self._active, None
         sent, self._sent = self._sent, None
+        result, self._result = self._result, None
         if handle is None and sent is not None:
             # Interrupted before the server answered: the goal may still be
             # accepted, and an accepted goal nobody cancels runs to its end.
             handle = self._until(sent, "the acceptance of the goal to cancel", CANCEL_CEILING_S)
             if not handle.accepted:
                 return
+            result = None
         if handle is not None:
             self._until(handle.cancel_goal_async(), "the cancel", CANCEL_CEILING_S)
+            # A cancel ANSWERED is not a goal ENDED: the goal ends on every side
+            # after it, and until then the twin refuses SIM for it and the arm
+            # may still be moving. Its terminal status is read, within the same
+            # ceiling, before the stop counts as done (ADR-0071, S-03); unread,
+            # the cancel fails and says so.
+            if result is None:
+                result = handle.get_result_async()
+            self._until(result, "the end of the cancelled goal", CANCEL_CEILING_S)
 
     # --------------------------------------------------------------- mechanism
 
@@ -747,8 +773,10 @@ class RosCell:
         self._sent = None
         if not handle.accepted:
             raise StepFailed(f"{what}: {client._action_name} rejected the goal")
-        wrapped = self._until(handle.get_result_async(), what)
+        self._result = handle.get_result_async()
+        wrapped = self._until(self._result, what)
         self._active = None
+        self._result = None
         code = wrapped.result.result
         if code.code != ResultCode.SUCCESS:
             raise StepFailed(f"{what}: result code {code.code}: {code.detail}")

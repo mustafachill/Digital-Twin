@@ -34,9 +34,14 @@ import time
 
 from cite_bringup.plan import default_plan_path, domain_base, load, Plan, resolve_domain_id
 from cite_bringup.program.sides import is_physical
+from cite_bringup.program.steps import Interrupted
 
 #: How long to wait for the belt's subscriber, in wall seconds. A hang detector.
 MATCH_CEILING_S = 60.0
+
+#: How long to wait for the middleware to acknowledge the setpoint to the
+#: matched subscriber, in wall seconds. A hang detector.
+ACK_CEILING_S = 10.0
 
 
 def set_belts(
@@ -44,6 +49,9 @@ def set_belts(
     stop: bool,
     say: Callable[[str], None],
     sides: Sequence[str] | None = None,
+    *,
+    interrupted: Callable[[], bool] | None = None,
+    match_ceiling_s: float = MATCH_CEILING_S,
 ) -> bool:
     """Command each simulated side's belt on that side; return whether every one took it.
 
@@ -52,6 +60,12 @@ def set_belts(
     is no physical belt driver, and the belt is not twinned (ADR-0067,
     ADR-0070 item 7). Named or not, one is skipped and said so. Shared by this
     command and the operator console (ADR-0071).
+
+    ``interrupted`` is the operator console's stop, asked while a side's
+    subscriber is awaited: True there raises `steps.Interrupted` before that
+    side's setpoint is sent. ``match_ceiling_s`` bounds that wait per side; the
+    console's shutdown passes a shorter one (`console.SHUTDOWN_BELT_MATCH_S`).
+    Each side then costs at most ``match_ceiling_s + ACK_CEILING_S``.
     """
     named = [plan.side_named(name).name for name in (sides or [])]
     chosen = []
@@ -68,7 +82,9 @@ def set_belts(
     every = True
     for side in chosen:
         domain = resolve_domain_id(plan, side, base)
-        if not _set_on_one_side(conveyor.command_topic, speed, domain, side):
+        if not _set_on_one_side(
+            conveyor.command_topic, speed, domain, side, interrupted, match_ceiling_s
+        ):
             every = False
         else:
             say(f"  ok  {side}: {conveyor.asset} at {speed:g} m/s")
@@ -94,7 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if every else 1
 
 
-def _set_on_one_side(topic: str, speed: float, domain: int, side: str) -> bool:
+def _set_on_one_side(
+    topic: str,
+    speed: float,
+    domain: int,
+    side: str,
+    interrupted: Callable[[], bool] | None = None,
+    match_ceiling_s: float = MATCH_CEILING_S,
+) -> bool:
     """Publish one setpoint on ``domain``, in a context of its own, once matched."""
     # Imported here so that the argument errors above need no ROS at all.
     from cite_interfaces.qos import COMMAND
@@ -112,20 +135,22 @@ def _set_on_one_side(topic: str, speed: float, domain: int, side: str) -> bool:
         executor = SingleThreadedExecutor(context=context)
         executor.add_node(node)
         publisher = node.create_publisher(Float64, topic, COMMAND)
-        deadline = time.monotonic() + MATCH_CEILING_S
+        deadline = time.monotonic() + match_ceiling_s
         while publisher.get_subscription_count() == 0:
             if time.monotonic() > deadline:
                 print(
                     f"{side}: nothing subscribes to {topic} on domain {domain} after "
-                    f"{MATCH_CEILING_S:.0f} s; is that side up?",
+                    f"{match_ceiling_s:.0f} s; is that side up?",
                     file=sys.stderr,
                 )
                 return False
+            if interrupted is not None and interrupted():
+                raise Interrupted(f"stopped while {side}'s belt was awaited")
             executor.spin_once(timeout_sec=0.1)
         publisher.publish(Float64(data=float(speed)))
         # Reliable delivery to a matched subscriber is asynchronous; wait for the
         # middleware to acknowledge it rather than exiting on a sleep.
-        return publisher.wait_for_all_acked(Duration(seconds=10.0))
+        return publisher.wait_for_all_acked(Duration(seconds=ACK_CEILING_S))
     finally:
         context.try_shutdown()
 

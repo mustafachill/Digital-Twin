@@ -1,20 +1,21 @@
 # Home: bring both arms to the program's start, through the twin (ADR-0071).
 #
-# `cite_bringup.program.home.bring_to_start`: initialize every physical arm,
-# measure the start on every side, and only where a side is not there move
-# both arms there with one signal; then measure again. Nothing is retried. On a
-# pair with a physical side the console first reads the twin's mode as SIM and
-# asks the operator to clear the cell (ConfirmPart), and puts the twin back in
-# SIM afterwards. Rejected unless Start robot has succeeded and the console is
-# READY. Cancelling the goal is the same software stop as StopCell.
+# `cite_bringup.program.cycle.home`, the sequence `./scripts/home` runs:
+# initialize every physical arm, measure the start on every side, and only where
+# a side is not there move both arms there with one signal; then measure again.
+# Nothing is retried. On a pair with a physical side the console first reads the
+# twin's mode as SIM and asks the operator to clear the cell (ConfirmOperator),
+# and puts the twin back in SIM afterwards. Rejected unless Start robot has
+# succeeded and the console is READY. Cancelling the goal is the same software
+# stop as StopCell. A success sets ConsoleState.at_start.
 #
-# Served under `/cite/<zone>/console/<NAME>` (ConsoleState.msg).
-
-string NAME="home"
+# Served under the plan's `console.home` (ConsoleState.msg).
 
 float64 speed_scale     # (0, 1] of the program's own speed, sent explicitly by
                         # the operator's panel. Never defaulted: a goal with 0, or
-                        # any value outside (0, 1], is rejected (ADR-0071 decision 2)
+                        # any value outside (0, 1] or below
+                        # ConsoleState.minimum_speed_scale, is rejected (ADR-0071
+                        # decision 2)
 ---
 bool success
 string detail           # what was done, or which step failed and why

@@ -49,6 +49,7 @@ obvious and reading it the wrong way would be worse than not knowing.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -213,17 +214,19 @@ def frame(plan: Plan, name: str) -> tuple[float, float, float]:
 
 
 def spawn(zone: str, side: str, name: str, at: tuple[float, float, float],
-          sdf: Path, timeout_s: float) -> str | None:
+          sdf: Path, timeout_s: float,
+          interrupted: Callable[[], bool] | None = None) -> str | None:
     """Put one work-piece into one side's world. Returns None on success, else why not.
 
     Returns rather than raises: a caller that cannot spawn should say so and go on
     to tear the cell down, not traceback over a running pair. Through
-    `cite_bringup.gz.run`, the one door into Gazebo transport (ADR-0042).
+    `cite_bringup.gz.run`, the one door into Gazebo transport (ADR-0042), which
+    raises `gz.CommandInterrupted` once ``interrupted`` says to stop.
     """
     result = run(
         ["ros2", "run", "ros_gz_sim", "create", "-file", str(sdf), "-name", name,
          "-x", f"{at[0]}", "-y", f"{at[1]}", "-z", f"{at[2]}"],
-        zone=zone, side=side, timeout=timeout_s,
+        zone=zone, side=side, timeout=timeout_s, interrupted=interrupted,
     )
     if result.returncode == 0:
         return None

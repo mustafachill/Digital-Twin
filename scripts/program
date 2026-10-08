@@ -141,14 +141,22 @@ python3 -m cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in \
 
 # How long the pair may take to stop after its SIGINT before SIGKILL goes to
 # its process group. A ceiling on a failure, not a schedule. It sits above the
-# supervisor's own stated worst case — three participants stopped one after
-# another, each given `STOP_GRACE_S + STOP_KILL_S` in `cite_bringup/pair.py`
-# (ADR-0057) — so that a supervisor still escalating on its own is not cut
-# short. The SIGKILL reaches the supervisor's group only: each side leads a
-# session of its own (`start_new_session` in `pair.py`), so what reaches the
-# sides if the supervisor itself is killed is this script's container ending
+# supervisor's own stated worst case — every participant stopped one after
+# another, each given `STOP_GRACE_S + STOP_KILL_S` — so that a supervisor still
+# escalating on its own is not cut short. Derived, not restated: the pair this
+# script starts is each side and the boundary, never the operator console
+# (ADR-0071), and `cite_bringup.pair.teardown_ceiling_s` is the one statement of
+# the arithmetic. The SIGKILL reaches the supervisor's group only: each side
+# leads a session of its own (`start_new_session` in `pair.py`), so what reaches
+# the sides if the supervisor itself is killed is this script's container ending
 # with the script.
-PAIR_STOP_CEILING_S=420
+PAIR_STOP_CEILING_S="$(python3 - "$ZONE" <<'PY'
+import sys
+from cite_bringup.pair import participants, teardown_ceiling_s
+from cite_bringup.plan import default_plan_path, load
+print(int(teardown_ceiling_s(participants(load(default_plan_path(sys.argv[1])), console=False))))
+PY
+)" || die "could not read the pair's teardown ceiling from cite_bringup.pair"
 BELT_STARTED=0
 PAIR_PID=""
 TAIL_PID=""

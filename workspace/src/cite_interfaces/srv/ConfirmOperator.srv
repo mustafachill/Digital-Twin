@@ -1,13 +1,14 @@
-# The operator's go-ahead: the part is on the table and the cell is clear (ADR-0071).
+# The operator's go-ahead: they did what ConsoleState.prompt asked (ADR-0071).
 #
 # Replaces the Enter keypress `cite_bringup.program.operator` asked for at a
-# terminal. Accepted ONLY while the console is AWAITING_PART, which it enters
-# only after reading the twin's mode as SIM; refused in every other state, so a
-# confirmation sent early is never held over for a later question.
+# terminal: before a home or a Start robot on a physical side, that the cell is
+# clear; before a cycle, that the part is placed by hand and the cell clear.
+# Accepted ONLY while the console is AWAITING_OPERATOR, which it enters only
+# after reading the twin's mode as SIM, and only while the twin is STILL heard
+# in SIM; refused in every other state, so a confirmation sent early is never
+# held over for a later question.
 #
-# Served under `/cite/<zone>/console/<NAME>` (ConsoleState.msg).
-
-string NAME="confirm_part"
+# Served under the plan's `console.confirm_operator` (ConsoleState.msg).
 ---
 bool success   # the confirmation answered the question the console was asking
 string detail  # or why it was refused

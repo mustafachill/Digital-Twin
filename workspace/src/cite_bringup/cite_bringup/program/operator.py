@@ -36,7 +36,7 @@ PLACE_PROMPT = "Place the part on the table by hand, clear the cell, then press 
 def confirm_operator(
     mode: int | None,
     physical: Sequence[str],
-    scale: float,
+    scale: float | None,
     say: Callable[[str], None],
     read: Callable[[str], str],
     carriage_refusal: Callable[[], str | None],
@@ -50,6 +50,9 @@ def confirm_operator(
     physical carriage standing away from the plant's refuses the run before the
     operator is asked, never after (S-08). ``read`` is `input`: an end of input
     is no answer, and refuses. ``prompt`` is what the operator is asked.
+    ``scale`` is None where nothing is run at a scale (the console's Start
+    robot, whose initializer moves the track at its own speed), and then no
+    scale is said.
     """
     if mode is None:
         raise StepFailed(
@@ -66,7 +69,8 @@ def confirm_operator(
     if refusal is not None:
         raise StepFailed(refusal)
     for side in physical:
-        say(f"{side} is physical and runs at speed scale {scale:g}.")
+        if scale is not None:
+            say(f"{side} is physical and runs at speed scale {scale:g}.")
         say(
             f"The twin is in SIM and forwards nothing to {side}, but its ARM IS ENABLED "
             "and holds where it stands."

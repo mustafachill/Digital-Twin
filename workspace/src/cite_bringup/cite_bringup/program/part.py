@@ -33,15 +33,15 @@ the part there by hand.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, MutableSet
 from pathlib import Path
 import subprocess
 import sys
 from tempfile import NamedTemporaryFile
 
-from cite_bringup.gz import plan_for, run
-from cite_bringup.program.sides import is_physical
-from cite_bringup.program.steps import StepFailed
+from cite_bringup.gz import CommandInterrupted, plan_for, run
+from cite_bringup.program.sides import is_physical, simulated_sides
+from cite_bringup.program.steps import Interrupted, StepFailed
 from cite_bringup.workpiece import (
     frame,
     part_of,
@@ -62,13 +62,25 @@ REMOVE_CEILING_S = 60.0
 
 
 def place_on_simulated_sides(
-    zone: str, remove_first: bool, say: Callable[[str], None]
+    zone: str,
+    may_hold: MutableSet[str],
+    say: Callable[[str], None],
+    interrupted: Callable[[], bool] | None = None,
 ) -> None:
     """Spawn one work-piece on every simulated side's pick table, or raise StepFailed.
 
-    ``remove_first`` takes the previous one off that side first. Each side is
-    reached through `cite_bringup.gz.run`, the one door into its Gazebo
-    partition (ADR-0042).
+    ``may_hold`` is the sides whose world may still hold the previous
+    work-piece, BY SIDE: each of them has it taken off first, and is dropped
+    from the set once it has. A side is added BEFORE its spawn is attempted, so
+    a spawn that failed, timed out or was stopped half-way - which may or may
+    not have created the box - is cleared before the next one, and one side's
+    failure never leaves another side's box unaccounted for (ADR-0071). A
+    removal of a model that is not there is accepted: Gazebo queues the
+    removal and answers it, and the create that follows is what fails if the
+    name is still taken. ``interrupted`` is the operator console's stop:
+    True raises `steps.Interrupted`, killing a spawn or removal in flight.
+    Each side is reached through `cite_bringup.gz.run`, the one door into its
+    Gazebo partition (ADR-0042).
     """
     plan = plan_for(zone)
     world = world_name(plan.world)
@@ -82,14 +94,26 @@ def place_on_simulated_sides(
             if is_physical(plan, side.name):
                 say(f"  --  {side.name}: physical; no box is spawned or removed there")
                 continue
-            if remove_first:
-                _remove(zone, side.name, world)
+            if interrupted is not None and interrupted():
+                raise Interrupted("stopped while the work-pieces were placed")
+            if side.name in may_hold:
+                _remove(zone, side.name, world, interrupted)
+                may_hold.discard(side.name)
+            may_hold.add(side.name)
             try:
                 problem = spawn(
-                    zone, side.name, WORKPIECE, at, Path(sdf.name), timeout_s=SPAWN_CEILING_S
+                    zone,
+                    side.name,
+                    WORKPIECE,
+                    at,
+                    Path(sdf.name),
+                    timeout_s=SPAWN_CEILING_S,
+                    interrupted=interrupted,
                 )
             except subprocess.TimeoutExpired:
                 problem = f"no answer within {SPAWN_CEILING_S:.0f} s; is that side's world up?"
+            except CommandInterrupted:
+                raise Interrupted(f"stopped while {side.name}'s work-piece was spawned") from None
             if problem is not None:
                 raise StepFailed(f"{side.name}: {problem}")
             say(f"  ok  {side.name}: a {WORKPIECE} on the pick table")
@@ -97,7 +121,14 @@ def place_on_simulated_sides(
         Path(sdf.name).unlink(missing_ok=True)
 
 
-def _remove(zone: str, side: str, world: str) -> None:
+def every_simulated_side(zone: str) -> set[str]:
+    """Every simulated side of ``zone``: what may hold a work-piece nobody here placed."""
+    return set(simulated_sides(plan_for(zone)))
+
+
+def _remove(
+    zone: str, side: str, world: str, interrupted: Callable[[], bool] | None = None
+) -> None:
     """Take the previous work-piece out of ``side``'s world, or raise StepFailed.
 
     Queued in the world ahead of the create that follows, so the name is free
@@ -109,13 +140,15 @@ def _remove(zone: str, side: str, world: str) -> None:
             ["gz", "service", "-s", f"/world/{world}/remove",
              "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
              "--timeout", "5000", "--req", f'name: "{WORKPIECE}" type: MODEL'],
-            zone=zone, side=side, timeout=REMOVE_CEILING_S,
+            zone=zone, side=side, timeout=REMOVE_CEILING_S, interrupted=interrupted,
         )
     except subprocess.TimeoutExpired:
         raise StepFailed(
             f"{side}: could not remove the previous {WORKPIECE}: no answer within "
             f"{REMOVE_CEILING_S:.0f} s"
         ) from None
+    except CommandInterrupted:
+        raise Interrupted(f"stopped while {side}'s previous work-piece was removed") from None
     if "data: true" not in removed.stdout:
         raise StepFailed(
             f"{side}: could not remove the previous {WORKPIECE}: "
@@ -134,7 +167,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        place_on_simulated_sides(args.zone, args.replace, lambda text: print(text, flush=True))
+        place_on_simulated_sides(
+            args.zone,
+            every_simulated_side(args.zone) if args.replace else set(),
+            lambda text: print(text, flush=True),
+        )
     except StepFailed as failure:
         print(failure, file=sys.stderr)
         return 1
