@@ -550,6 +550,25 @@ def _workpiece_models(cell: ResolvedCell) -> tuple[_WorkpieceModelView, ...]:
     return tuple(views)
 
 
+def _console(cell: ResolvedCell) -> tuple[tuple[str, str], ...]:
+    """Every name the zone's operator console serves, by its key (ADR-0071).
+
+    Formed here, by `ids.zone_scope`, and nowhere else: the console
+    (`cite_bringup.program.console`) and its panel read them off the plan. Only
+    a paired zone runs a console, because every request it serves goes through
+    the twin boundary.
+    """
+    leaves = (
+        ("state", ids.CONSOLE_STATE),
+        ("start_robot", ids.CONSOLE_START_ROBOT),
+        ("confirm_operator", ids.CONSOLE_CONFIRM_OPERATOR),
+        ("stop", ids.CONSOLE_STOP),
+        ("home", ids.CONSOLE_HOME),
+        ("run_program", ids.CONSOLE_RUN_PROGRAM),
+    )
+    return tuple((key, ids.zone_scope(cell.zone, ids.CONSOLE_SCOPE, leaf)) for key, leaf in leaves)
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     managers = tuple(
         _ManagerView(
@@ -700,6 +719,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             programs=_programs(cell),
             workpiece_models=_workpiece_models(cell),
             twin=cell.twin if cell.is_paired else None,
+            console=_console(cell) if cell.is_paired else (),
             package_uri=_package_uri,
         )
     )

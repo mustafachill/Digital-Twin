@@ -125,6 +125,19 @@ plan:
     state_max_age_s: {{ twin.physical_side.state_max_age_s | f }}
 {% endif %}
 {% endif %}
+{% if console %}
+
+  # The operator console's names (ADR-0071), formed once by `ids.zone_scope`:
+  # `cell_console` serves them on the plant's domain and its panel calls them.
+  # Only on a paired zone, because every request it serves goes through the
+  # twin boundary. `state` is its latched ConsoleState topic; `start_robot`,
+  # `confirm_operator` and `stop` its services; `home` and `run_program` its
+  # actions.
+  console:
+{% for key, name in console %}
+    {{ key }}: {{ name }}
+{% endfor %}
+{% endif %}
 
   controller_managers:
 {% for manager in managers %}

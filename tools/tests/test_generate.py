@@ -1841,3 +1841,45 @@ class TestTwinSidesAndTheGazeboPartition:
             if m["counterpart_backend"] != "sim"
         }
         assert physical == {"picker": "real"}
+
+
+class TestTheConsoleNames:
+    """ADR-0071: the operator console's names reach the plan, formed by `ids` alone."""
+
+    def test_a_paired_zone_states_the_console_names(self, real_model: Path) -> None:
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        leaves = {
+            "state": ids.CONSOLE_STATE,
+            "start_robot": ids.CONSOLE_START_ROBOT,
+            "confirm_operator": ids.CONSOLE_CONFIRM_OPERATOR,
+            "stop": ids.CONSOLE_STOP,
+            "home": ids.CONSOLE_HOME,
+            "run_program": ids.CONSOLE_RUN_PROGRAM,
+        }
+        assert plan["console"] == {
+            key: ids.zone_scope("cell_b", ids.CONSOLE_SCOPE, leaf) for key, leaf in leaves.items()
+        }
+
+    def test_an_unpaired_zone_states_none(self, real_model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            real_model / "facility/zones.yaml",
+            lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+        )
+
+        def one_backend(document: dict) -> None:
+            for asset in document["assets"]:
+                asset["hardware"].pop("counterpart_backend", None)
+
+        for instances in sorted((real_model / "assets/instances").glob("*.yaml")):
+            edit_yaml(instances, one_backend)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        assert "console" not in plan
+
+    def test_an_asset_named_like_the_console_scope_is_refused(self, minimal_model: Path) -> None:
+        """The validator's resolve step refuses it: it would share `/cite/<zone>/console`."""
+        for path in minimal_model.rglob("*.yaml"):
+            text = path.read_text()
+            if "arm_1" in text:
+                path.write_text(text.replace("arm_1", ids.CONSOLE_SCOPE))
+        with pytest.raises(ids.InvalidIdentifierError, match="reserved inside every zone"):
+            resolve(load(minimal_model), "cell_a")

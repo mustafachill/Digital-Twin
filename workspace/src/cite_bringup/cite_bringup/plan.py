@@ -527,6 +527,22 @@ class TwinTiming:
 
 
 @dataclass(frozen=True)
+class ConsoleNames:
+    """Every name the zone's operator console serves, from the plan's `console:` (ADR-0071).
+
+    Formed once, by the generator (`cite_tools.model.ids.zone_scope`), and read
+    here; nothing in bring-up composes one.
+    """
+
+    state: str
+    start_robot: str
+    confirm_operator: str
+    stop: str
+    home: str
+    run_program: str
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -934,6 +950,8 @@ class Plan:
     programs: tuple[Program, ...] = ()
     #: The twin boundary's timing; `None` on a zone that runs no boundary.
     twin: TwinTiming | None = None
+    #: The operator console's names; `None` on a zone that runs no console.
+    console: ConsoleNames | None = None
 
     def side_named(self, name: str) -> Side:
         """Return the side called ``name``, or refuse.
@@ -1102,7 +1120,22 @@ def load(path: Path) -> Plan:
             _program(entry, index) for index, entry in enumerate(_sequence(plan, "programs"))
         ),
         twin=_twin(_optional(plan, "twin")),
+        console=_console(_optional(plan, "console")),
     )
+
+
+def _console(entry: object | None) -> ConsoleNames | None:
+    """Read the operator console's names, or `None` where the plan states none."""
+    if entry is None:
+        return None
+    names = {
+        key: _require(entry, key, "console")
+        for key in ("state", "start_robot", "confirm_operator", "stop", "home", "run_program")
+    }
+    for key, name in names.items():
+        if not isinstance(name, str) or not name.startswith("/"):
+            raise PlanError(f"console: {key!r} must be an absolute name, not {name!r}")
+    return ConsoleNames(**names)
 
 
 def _twin(entry: object | None) -> TwinTiming | None:

@@ -66,6 +66,23 @@ FRAME_SEP = "__"
 #: `naming-and-namespaces.md`, "Reserved names".
 RESERVED_SCOPES = ("facility", "twin", "line")
 
+#: Namespaces reserved INSIDE a zone, beside its assets: `/cite/<zone>/<scope>`.
+#: An asset with one of these ids would share its namespace, so none may take
+#: one (:func:`namespace`). `console` is the operator console's (ADR-0071).
+ZONE_SCOPES = ("console",)
+
+#: The operator console's scope inside a zone, and the leaf of each name it
+#: serves there (ADR-0071). Leaves, formed into names by :func:`zone_scope` and
+#: by nothing else; the generator emits the names into the bring-up plan, and
+#: the console and its panel read them there.
+CONSOLE_SCOPE = "console"
+CONSOLE_STATE = "state"
+CONSOLE_START_ROBOT = "start_robot"
+CONSOLE_CONFIRM_OPERATOR = "confirm_operator"
+CONSOLE_STOP = "stop"
+CONSOLE_HOME = "home"
+CONSOLE_RUN_PROGRAM = "run_program"
+
 #: `lower_snake_case`: no hyphens, no camel case, no leading digit.
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -117,7 +134,30 @@ def namespace(zone: str, asset_id: str) -> str:
     """`/cite/<zone>/<asset_id>` — the namespace an asset's interfaces live in."""
     validate_identifier(zone, kind="zone")
     validate_identifier(asset_id, kind="asset id")
+    if asset_id in ZONE_SCOPES:
+        raise InvalidIdentifierError(
+            f"asset id {asset_id!r} is a scope reserved inside every zone "
+            f"({', '.join(ZONE_SCOPES)}): /{ROOT}/{zone}/{asset_id} is not an asset's "
+            "namespace, and an asset there would share it."
+        )
     return f"/{ROOT}/{zone}/{asset_id}"
+
+
+def zone_scope(zone: str, reserved: str, name: str) -> str:
+    """`/cite/<zone>/<reserved>/<name>` — zone-wide state that belongs to no asset.
+
+    The zone-level sibling of :func:`scope`, for a namespace reserved inside a
+    zone (``ZONE_SCOPES``): the operator console's `/cite/cell_b/console/state`.
+    """
+    validate_identifier(zone, kind="zone")
+    if reserved not in ZONE_SCOPES:
+        raise InvalidIdentifierError(
+            f"{reserved!r} is not a scope reserved inside a zone. Expected one of "
+            f"{ZONE_SCOPES}."
+        )
+    for part in name.split("/"):
+        validate_identifier(part, kind="interface name part")
+    return f"/{ROOT}/{zone}/{reserved}/{name}"
 
 
 def interface(zone: str, asset_id: str, name: str) -> str:
