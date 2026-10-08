@@ -1942,6 +1942,13 @@ Also open from the last review of the hold-gate fix (Medium, test quality only):
 "exactly one STOP when the vendor answers at once", and the per-call-bound test accepts any
 positive number.
 
+### #99 — A Ctrl-C at the very start of an initialize can be overtaken (2026-10-08)
+`InitializeAsset` is a service and cannot be cancelled. A Ctrl-C that lands while the
+initializer is still on its enable and zero reads sends the vendor stop to a track that is not
+moving yet; the initializer then homes and/or moves the carriage to the program's start at the
+L0 initialize speed, bounded by `initialize_deadline_s`. Closing it means an abort the client
+can call (or `InitializeAsset` as an action with cancel).
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
