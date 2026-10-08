@@ -407,6 +407,17 @@ not a campaign:
   Joint Current`) about two seconds into the first move, with no reported contact. The open
   question is the cause: real contact, or the 150 Hz servo stream over Wi-Fi (the control loop
   reads late about once a second). Recorded in [`../open-work.md`](../open-work.md) #98.
+- **Subsequent paired attempt at `--speed-scale 0.1 --cycles 1`:** after the operator
+  confirmed session checks and no motion during observation bring-up, steps 1–12 completed
+  through the twin boundary. Step 13, the track transfer to 650 mm, repeatedly returned vendor
+  code 82 on the physical side. The pinned SDK calls this `LINEAR_MOTOR_NOT_INIT`: its track
+  status read succeeded but `on_zero` was not set. Position zero alone did not establish
+  homing readiness. The run was cancelled with Ctrl-C; the program confirmed SIM, stopped the
+  simulated belt and brought the pair down. No full cycle completed and no homing or reset was
+  commanded. The physical grip command reported 62.5 mm; the operator confirmed that the
+  arm picked up and lifted the part and still held it after shutdown. The original log is
+  `workspace/log/program/pair.9XfsGM.log` in the
+  container log volume. Both sides showed the known MoveIt teardown crash (#96).
 
 ### Step 1 of the 2.B plan: reading the arm without moving it (2026-10-05)
 

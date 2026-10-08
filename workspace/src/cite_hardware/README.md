@@ -13,9 +13,11 @@ and 5).
   generated from L0 into `cite_generated/control/counterpart/<zone>_<arm>_adapters.yaml`
   (ADR-0070 items 6–7). The deadman starts first; any of these nodes exiting brings the side
   down, and none respawns.
-- **No physical arm, track or gripper has been driven through them.** Every test runs against
-  fake vendor services and a fake vendor action held by the test process. What the tests show
-  is the translation and the state machines, not the machine's behaviour.
+- **Supervised physical runs have exercised the arm and gripper; no full physical cycle
+  has completed.** The track-transfer attempt was refused by the vendor. Observations are in
+  [`bring-up.md`](../../../docs/operations/bring-up.md), "First physical runs". Automated
+  adapter tests use fake vendor services and actions; they prove translation and state
+  machines, not the machine's behaviour.
 - **Python, not C++**, against CLAUDE.md §6's "C++ for real-time and control paths": none of
   the three is a control loop. Each relays a command to a vendor service or action that the
   vendor's own driver executes, or watches a heartbeat at a rate set in tenths of a second.
@@ -174,6 +176,11 @@ refuses `use_sim_time`.
   limits would clamp it, and said in the log.
 - **A vendor service that is not advertised refuses the command** (no wait, no retry), and a
   vendor error return is logged with its code; the next command is handled normally.
+- **A failed track position call ends the accepted track command.** Its target and queued
+  segments are discarded, and conservative stop handling remains in force. Fresh position
+  reports cannot retry that rejected command; a new command still requires the normal gate.
+  This topic-based interface does not return a typed rejection to its sender, which may wait
+  until its existing arrival deadline.
 - **A track position the vendor will not read is not published**, rather than a stale one.
 - **Every gripper goal is bounded by `result_timeout_s`**, because the vendor's error path
   leaves its own goal running forever (it calls `canceled()` on a goal no one asked to cancel,

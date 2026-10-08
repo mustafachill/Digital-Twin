@@ -247,8 +247,9 @@ class TrackAdapter(LifecycleNode):
         self._get_future = None
         self._get_deadline_ns = 0
         self._pending: LinearMotorSetPos.Request | None = None
-        #: Counts every hold commanded. A move carries the count it was
-        #: accepted under, and one accepted before the latest hold is never
+        #: Counts every hold commanded and failed position call. A move
+        #: carries the count it was accepted under, and one accepted before
+        #: the latest hold or rejection is never
         #: sent, wherever it is in the pipeline (SA-S-06).
         self._hold_sequence = 0
         #: The hold count the move in progress, and the held move, were accepted under.
@@ -515,8 +516,8 @@ class TrackAdapter(LifecycleNode):
                 self._holding = False
         if superseded:
             self.get_logger().warning(
-                f"track command to {target.position_m:.4f} m dropped: a hold was commanded "
-                "after it arrived"
+                f"track command to {target.position_m:.4f} m dropped: a hold or vendor "
+                "rejection arrived after it"
             )
             return
         self._advance(position)
@@ -553,6 +554,10 @@ class TrackAdapter(LifecycleNode):
 
     def _submit(self, request: LinearMotorSetPos.Request, hold: int) -> None:
         with self._lock:
+            # A rejection can land after a segment was planned but before it
+            # reached this lock. It must not revive the discarded move.
+            if hold != self._hold_sequence:
+                return
             if self._set_in_flight:
                 if self._pending is not None:
                     self.get_logger().info(
@@ -700,20 +705,31 @@ class TrackAdapter(LifecycleNode):
 
     def _on_set_answered(self, request: LinearMotorSetPos.Request, future) -> None:
         error = future.exception()
-        if error is not None:
-            self.get_logger().error(f"set_linear_motor_pos({request.pos}) failed: {error}")
-        elif future.result().ret != 0:
-            response = future.result()
-            self.get_logger().error(
-                f"set_linear_motor_pos({request.pos}) returned vendor code {response.ret}: "
-                f"{response.message}"
-            )
+        response = None if error is not None else future.result()
+        failed = response is None or response.ret != 0
         with self._lock:
+            if failed:
+                # Abort the entire accepted pipeline, including a successor
+                # queued before this answer. Invalidate segments and commands
+                # concurrently being checked before they can reintroduce it.
+                self._hold_sequence += 1
+                self._target = None
+                self._pending = None
+                self._holding = True
             follow = self._pending if self._active else None
             follow_hold = self._pending_hold
             self._pending = None
             self._set_in_flight = follow is not None
             stopping = not self._active or self._holding
+        if error is not None:
+            self.get_logger().error(f"set_linear_motor_pos({request.pos}) failed: {error}")
+        elif response is None:
+            self.get_logger().error(f"set_linear_motor_pos({request.pos}) returned no response")
+        elif response.ret != 0:
+            self.get_logger().error(
+                f"set_linear_motor_pos({request.pos}) returned vendor code {response.ret}: "
+                f"{response.message}"
+            )
         if follow is None:
             if stopping:
                 # Answered after the carriage was told to stop: a stop sent

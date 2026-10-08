@@ -45,7 +45,7 @@ from rclpy.task import Future
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from test_parameters import GOOD  # noqa: E402
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint  # noqa: E402
-from xarm_msgs.srv import Call, LinearMotorSetPos, SetInt16  # noqa: E402
+from xarm_msgs.srv import Call, GetInt16, LinearMotorSetPos, SetInt16  # noqa: E402
 
 #: How long a hook waits for the concurrent action it started. With the lock
 #: held, as it must be, that action cannot finish, and the hook gives up after
@@ -414,6 +414,71 @@ class _GateWithHook(StubGate):
 
 def _moves(log: list) -> list:
     return [value for service, value in log if service == "set_linear_motor_pos"]
+
+
+@pytest.mark.parametrize("failure", [82, -1, RuntimeError("vendor transport failed")])
+def test_a_failed_position_call_aborts_segments_and_queued_successors(failure):
+    """An accepted command is not retried by fresh reads after its vendor rejection."""
+    node, log = _track(StubGate())
+    try:
+        node._on_command(_command(0.3, 2))
+        future = node._set_client.futures[-1]
+        node._on_command(_command(0.4, 3))
+        assert node._target is not None and node._pending is not None
+        if isinstance(failure, Exception):
+            future.set_exception(failure)
+        else:
+            _answer(future, failure, LinearMotorSetPos)
+        assert node._target is None and node._pending is None
+        assert node._holding and not node._set_in_flight
+        assert node._move_possible, "a failed reply does not prove that motion stopped"
+        assert _stops(log) == 1
+        for _ in range(3):
+            node._poll()
+            position = GetInt16.Response(ret=0, data=100)
+            node._get_client.futures[-1].set_result(position)
+        assert len(_moves(log)) == 1
+        _answer(node._stop_client.futures[-1], 0, Call)
+        assert not node._move_possible
+        # A new explicit command remains possible; old queued commands do not.
+        node._on_command(_command(0.0, 1))
+        assert len(_moves(log)) == 2 and not node._holding
+    finally:
+        node.destroy_node()
+
+
+def test_a_segment_planned_before_rejection_cannot_reenter_the_pipeline():
+    node, log = _track(StubGate())
+    try:
+        node._on_command(_command(0.3, 2))
+        future = node._set_client.futures[-1]
+        submit = node._submit
+
+        def reject_before_submit(request, hold):
+            _answer(future, 82, LinearMotorSetPos)
+            submit(request, hold)
+
+        node._submit = reject_before_submit
+        node._advance(0.1)
+        assert len(_moves(log)) == 1
+        assert node._target is None and node._pending is None
+        assert node._holding and not node._set_in_flight
+    finally:
+        node.destroy_node()
+
+
+def test_a_command_being_checked_when_rejection_arrives_is_discarded():
+    gate = _GateWithHook()
+    node, log = _track(gate)
+    try:
+        node._on_command(_command(0.3, 2))
+        gate.hook = lambda: _answer(node._set_client.futures[-1], 82, LinearMotorSetPos)
+        node._on_command(_command(0.4, 3))
+        assert len(_moves(log)) == 1
+        assert node._target is None and node._pending is None
+        assert node._holding
+    finally:
+        node.destroy_node()
 
 
 def test_a_hold_landing_while_a_move_is_checked_outranks_it():
