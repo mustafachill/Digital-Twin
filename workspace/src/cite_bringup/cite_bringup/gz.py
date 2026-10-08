@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 import os
+import signal
 import subprocess
 import time
 
@@ -151,6 +152,12 @@ def process_environment(
 #: ends the moment the command exits - and not a ceiling, which is ``timeout``.
 _INTERRUPT_POLL_S = 0.1
 
+#: How long `run` waits for a command it killed to release its output, in wall
+#: seconds. A kill reaches the command's whole process group, so its pipes
+#: close at once; this bounds the case where a descendant left the group and
+#: still holds them, which would otherwise hold the stop for ever.
+KILL_WAIT_S = 2.0
+
 
 class CommandInterrupted(RuntimeError):
     """A command `run` killed because its caller's ``interrupted`` said to stop."""
@@ -188,6 +195,12 @@ def run(
     operator console's stop (ADR-0071) - and True there kills the command and
     raises `CommandInterrupted`, rather than holding the stop for up to
     ``timeout``. The command is killed as a timeout kills it.
+
+    With ``interrupted`` the command runs in a session of its own, and a stop
+    or the ceiling kills its WHOLE process group: `ros2 run` is a wrapper that
+    forks the real executable, and a kill of the wrapper alone left that child
+    holding the output pipes, so reading them never ended (R2-01). What is
+    left of the output is then read for at most `KILL_WAIT_S`.
     """
     environment = process_environment(plan_for(zone), side=side)
     if interrupted is None:
@@ -206,6 +219,7 @@ def run(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
         **kwargs,
     ) as process:
         while True:
@@ -218,15 +232,29 @@ def run(
                     list(argv), process.returncode, stdout, stderr
                 )
             if interrupted():
-                process.kill()
-                process.communicate()
+                _kill_group(process)
                 raise CommandInterrupted(f"{argv[0]} was stopped before it finished")
             if time.monotonic() > deadline:
-                process.kill()
-                stdout, stderr = process.communicate()
+                stdout, stderr = _kill_group(process)
                 raise subprocess.TimeoutExpired(
                     list(argv), timeout, output=stdout, stderr=stderr
                 )
+
+
+def _kill_group(process: subprocess.Popen) -> tuple[str, str]:
+    """Kill ``process``'s whole process group; return what it printed, read within a bound."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        return process.communicate(timeout=KILL_WAIT_S)
+    except subprocess.TimeoutExpired:
+        # A descendant outside the group still holds the pipes: what it may
+        # print is not waited for. The command itself is dead and reaped.
+        process.kill()
+        process.wait(timeout=KILL_WAIT_S)
+        return "", ""
 
 
 class ModelPoses:

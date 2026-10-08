@@ -288,3 +288,59 @@ def test_a_command_run_with_a_stop_answers_as_without_one() -> None:
 def test_a_command_run_with_a_stop_still_has_its_ceiling() -> None:
     with pytest.raises(subprocess.TimeoutExpired):
         gz.run(["sleep", "30"], zone=ZONE, timeout=0.3, interrupted=lambda: False)
+
+
+#: A command that forks a child holding its output pipes, as `ros2 run` forks
+#: the executable it wraps; the child's pid is printed first.
+_FORKING = ["bash", "-c", "sleep 30 & echo $!; wait"]
+
+
+def _gone(pid: int) -> bool:
+    """Whether ``pid`` no longer runs: absent, or a zombie waiting for its reaper."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (FileNotFoundError, ProcessLookupError):
+        return True
+    return state == "Z"
+
+
+def test_a_stop_kills_a_forked_child_holding_the_pipes(monkeypatch) -> None:
+    """R2-01: a stop reaches the wrapper's child too, and never waits on its pipes."""
+    import subprocess as real
+
+    children: list[int] = []
+    popen = real.Popen
+
+    class Recording(popen):  # type: ignore[misc, valid-type]
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            children.append(self.pid)
+
+    monkeypatch.setattr(gz.subprocess, "Popen", Recording)
+    asked: list[int] = []
+
+    def interrupted() -> bool:
+        asked.append(1)
+        return len(asked) > 5
+
+    started = time.monotonic()
+    with pytest.raises(gz.CommandInterrupted):
+        gz.run(_FORKING, zone=ZONE, timeout=60, interrupted=interrupted)
+    assert time.monotonic() - started < 10.0
+    # The wrapper ran in a group of its own, and that group is gone whole.
+    (wrapper,) = children
+    with pytest.raises(ProcessLookupError):
+        os.killpg(wrapper, 0)
+
+
+def test_the_ceiling_kills_a_forked_child_holding_the_pipes() -> None:
+    """R2-01: the deadline path kills the group too, and returns what was printed."""
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        gz.run(_FORKING, zone=ZONE, timeout=0.5, interrupted=lambda: False)
+    assert time.monotonic() - started < 10.0
+    child = int(raised.value.output.split()[0])
+    deadline = time.monotonic() + 5.0
+    while not _gone(child) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert _gone(child), "the forked child outlived the ceiling"
