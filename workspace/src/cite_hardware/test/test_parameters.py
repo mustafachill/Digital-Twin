@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from cite_hardware.deadman import Deadman, SPECS as DEADMAN_SPECS
 from cite_hardware.gripper_relay import GripperRelay, SPECS as RELAY_SPECS
+from cite_hardware.initializer import Initializer, SPECS as INITIALIZER_SPECS
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.track_adapter import SPECS as TRACK_SPECS, TrackAdapter
 import pytest
@@ -68,6 +69,19 @@ GOOD = {
         "vendor_state_closed_position": 0.0,
         "poll_period_s": 0.1,
     },
+    "initializer": {
+        "service_name": "/t/initialize",
+        "linear_motor_enable_service": "/v/set_linear_motor_enable",
+        "gripper_enable_service": "/v/set_gripper_enable",
+        "linear_motor_on_zero_service": "/v/get_linear_motor_on_zero",
+        "linear_motor_back_origin_service": "/v/set_linear_motor_back_origin",
+        "linear_motor_stop_service": "/v/set_linear_motor_stop",
+        "poll_period_s": 0.1,
+        "call_deadline_s": 0.25,
+        "deadline_s": 20.0,
+        "deadman_state_topic": "/t/deadman",
+        "deadman_state_max_age_s": 0.5,
+    },
     "deadman": {
         "zone": "cell_b",
         "asset_id": "picker",
@@ -87,6 +101,7 @@ NODES = {
     "track_adapter": (TrackAdapter, TRACK_SPECS),
     "gripper_relay": (GripperRelay, RELAY_SPECS),
     "deadman": (Deadman, DEADMAN_SPECS),
+    "initializer": (Initializer, INITIALIZER_SPECS),
 }
 
 

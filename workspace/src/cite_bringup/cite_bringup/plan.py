@@ -505,6 +505,10 @@ class PhysicalSide:
     deadman: str
     track_adapter: str | None
     gripper_relay: str | None
+    #: The node serving this arm's `InitializeAsset`, and the service, or
+    #: `None` both where the side has none (ADR-0070).
+    initializer: str | None
+    initialize_service: str | None
     deadman_state_topic: str
     #: Published by the arm trajectory controller only while it is active.
     arm_controller_state_topic: str
@@ -2054,13 +2058,18 @@ def _physical(entry: object | None, where: str) -> PhysicalSide | None:
         "deadman_state_topic": _require(entry, "deadman_state_topic", here),
         "arm_controller_state_topic": _require(entry, "arm_controller_state_topic", here),
     }
-    for optional in ("track_adapter", "gripper_relay"):
+    for optional in ("track_adapter", "gripper_relay", "initializer", "initialize_service"):
         value = _optional(entry, optional)
         if value is not None:
             names[optional] = value
     for label, name in names.items():
         if not isinstance(name, str) or not name.startswith("/"):
             raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
+    if ("initializer" in names) != ("initialize_service" in names):
+        raise PlanError(
+            f"{here}: states one of 'initializer' and 'initialize_service' without the "
+            "other. They are emitted together."
+        )
     joints = _sequence(entry, "joints", here)
     if not joints or not all(isinstance(j, str) and j for j in joints):
         raise PlanError(f"{here}: 'joints' must be a non-empty list of joint names")
@@ -2069,6 +2078,8 @@ def _physical(entry: object | None, where: str) -> PhysicalSide | None:
         deadman=names["deadman"],
         track_adapter=names.get("track_adapter"),
         gripper_relay=names.get("gripper_relay"),
+        initializer=names.get("initializer"),
+        initialize_service=names.get("initialize_service"),
         deadman_state_topic=names["deadman_state_topic"],
         arm_controller_state_topic=names["arm_controller_state_topic"],
         joints=tuple(joints),

@@ -127,9 +127,17 @@ asset_type:
         # so that overrun is no longer than the deadman's own bound
         # (`track-segment-*`).
         segment_s: 0.5
-        # Enabling the track motor is an operator's act, never a command's side
-        # effect.
+        # Enabling the track motor is never a move's side effect. The arm's
+        # initializer enables it when asked, as the operator does in UFACTORY
+        # Studio before running the program (ADR-0070).
         auto_enable: false
+        # The ceiling on one initialization (the enables, the zero read and a
+        # homing where the track has not found its zero). The vendor SDK's own
+        # wait for a homing alone gives up at 10 s
+        # (`_wait_linear_motor_back_origin(fp32 timeout = 10)`,
+        # xarm_sdk/cxx/include/xarm/wrapper/xarm_api.h); twice that, because a
+        # homing's duration has not been measured here. A ceiling on a failure.
+        initialize_deadline_s: 20.0
 
   controllers:
     - suffix: trajectory_controller

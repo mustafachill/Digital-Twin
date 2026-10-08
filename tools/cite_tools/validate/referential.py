@@ -844,7 +844,7 @@ def _a_physical_side_states_how_it_is_served(model: FacilityModel) -> list[Findi
                         "is a physical axis no `ros2_control` component serves, and states "
                         "no `vendor_axis`, so its track adapter has no units or read rate",
                         "Add `vendor_axis: {position_scale, poll_period_s, "
-                        "position_max_age_s, auto_enable}`.",
+                        "position_max_age_s, segment_s, auto_enable, initialize_deadline_s}`.",
                     )
                 )
             if backend.vendor_axis is not None and not served_by_vendor:

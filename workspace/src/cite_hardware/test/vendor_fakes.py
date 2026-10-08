@@ -54,7 +54,14 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from xarm_msgs.srv import Call, GetFloat32, GetInt16, LinearMotorSetPos, SetInt16
+from xarm_msgs.srv import (
+    Call,
+    GetFloat32,
+    GetInt16,
+    LinearMotorBackOrigin,
+    LinearMotorSetPos,
+    SetInt16,
+)
 
 #: How long a test waits for something that should already be on its way.
 SETTLE_S = 20.0
@@ -314,6 +321,68 @@ class FakeArmState:
             else:
                 self.mode = request.data
                 response.ret = 0
+        return response
+
+
+class FakeTrackInit:
+    """What the operator does in Studio before running the program, served as the driver does.
+
+    `set_linear_motor_enable`, `set_gripper_enable`, `get_linear_motor_on_zero`
+    and `set_linear_motor_back_origin` (`xarm_driver_service.cpp`). ``on_zero``
+    is what the zero read reports; a homing makes it 1 after
+    ``reads_to_home`` further reads, or never while ``homes`` is false.
+    ``failures`` maps a service to the vendor code its next answer carries.
+    Every call is recorded in arrival order in ``calls``, as (service, request).
+    """
+
+    ENABLE = "set_linear_motor_enable"
+    GRIPPER = "set_gripper_enable"
+    ON_ZERO = "get_linear_motor_on_zero"
+    HOME = "set_linear_motor_back_origin"
+
+    def __init__(
+        self,
+        harness: Harness,
+        namespace: str,
+        on_call: Callable[[str, object], None] | None = None,
+    ) -> None:
+        self.calls: list[tuple[str, object]] = []
+        self.failures: dict[str, int] = {}
+        self.on_zero = 0
+        self.homes = True
+        self.reads_to_home = 2
+        self._homing_reads: int | None = None
+        self._on_call = on_call
+        self._lock = threading.Lock()
+        self._services = [
+            harness.node.create_service(
+                kind, f"{namespace}/{name}",
+                lambda request, response, name=name: self._answer(name, request, response),
+                callback_group=harness.group,
+            )
+            for name, kind in (
+                (self.ENABLE, SetInt16),
+                (self.GRIPPER, SetInt16),
+                (self.ON_ZERO, GetInt16),
+                (self.HOME, LinearMotorBackOrigin),
+            )
+        ]
+
+    def _answer(self, name: str, request, response):
+        if self._on_call is not None:
+            self._on_call(name, request)
+        with self._lock:
+            self.calls.append((name, request))
+            response.ret = self.failures.pop(name, 0)
+            if name == self.HOME and response.ret == 0 and self.homes:
+                self._homing_reads = self.reads_to_home
+            elif name == self.ON_ZERO:
+                if self._homing_reads is not None:
+                    self._homing_reads -= 1
+                    if self._homing_reads <= 0:
+                        self.on_zero, self._homing_reads = 1, None
+                response.data = self.on_zero
+        response.message = "fake"
         return response
 
 

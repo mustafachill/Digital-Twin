@@ -592,10 +592,13 @@ class DescriptionSpec(Strict):
 #: motor services (its stop is the deadman's too; its speed write is explicit
 #: because the vendor's `set_linear_motor_pos` caches the last speed it set and
 #: ignores whether a write succeeded, SA-S-03), and the gripper relay's
-#: position read. THE ALLOW-LIST, and least privilege by construction: the
-#: driver creates a service only where `services.<name>` is true, and a name a
-#: model lists here beyond these switches on a vendor call nothing in this
-#: repository makes. `vendor-service-not-allowed` refuses any other name, and
+#: position read; and the initializer's, which does what the operator does in
+#: UFACTORY Studio before running the program: enable the track motor and the
+#: gripper, read whether the track has found its zero, and home it when it has
+#: not. THE ALLOW-LIST, and least privilege by construction: the driver
+#: creates a service only where `services.<name>` is true, and a name a model
+#: lists here beyond these switches on a vendor call nothing in this repository
+#: makes. `vendor-service-not-allowed` refuses any other name, and
 #: `vendor-service-missing` refuses a list without one of these.
 #:
 #: Each name is the vendor's own, read from the pinned
@@ -603,7 +606,11 @@ class DescriptionSpec(Strict):
 #: by the generator that wires them (`generate.adapters`).
 VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS = (
     "get_gripper_position",
+    "get_linear_motor_on_zero",
     "get_linear_motor_pos",
+    "set_gripper_enable",
+    "set_linear_motor_back_origin",
+    "set_linear_motor_enable",
     "set_linear_motor_pos",
     "set_linear_motor_speed",
     "set_linear_motor_stop",
@@ -709,8 +716,14 @@ class VendorAxis(Strict):
     #: period and the deadman timeout by `track-segment-*`.
     segment_s: Annotated[float, Field(gt=0.0)]
     #: Whether a position command may enable a disabled track motor. `false`:
-    #: enabling the motor is an operator's act, not a side effect of a command.
+    #: enabling the motor is not a side effect of a command; the arm's
+    #: initializer enables it when asked (`InitializeAsset`).
     auto_enable: bool
+    #: The ceiling on one whole initialization of the arm and this track by the
+    #: initializer: the enables, the zero read and, where the track has not
+    #: found its zero, its homing, read every `poll_period_s` until it says 1.
+    #: A ceiling on a failure, never a schedule.
+    initialize_deadline_s: Annotated[float, Field(gt=0.0)]
 
 
 class HardwareBackend(Strict):

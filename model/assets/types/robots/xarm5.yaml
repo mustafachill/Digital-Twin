@@ -311,7 +311,12 @@ asset_type:
         # by `vendor-service-not-allowed` and `vendor-service-missing`: the
         # deadman's `set_state` and `set_mode`, the track adapter's position
         # read, speed write, move and stop (the stop is the deadman's too), and
-        # the gripper relay's position read. The speed write is explicit
+        # the gripper relay's position read; and the initializer's - enable the
+        # track motor and the gripper, read whether the track has found its
+        # zero, home it when it has not - which is what the operator does in
+        # UFACTORY Studio before running the program, and without which every
+        # track move is refused with vendor code 82 (LINEAR_MOTOR_NOT_INIT).
+        # The speed write is explicit
         # because the SDK's `set_linear_motor_pos` caches the last speed it set
         # and ignores the result of the write (xarm_sdk/cxx/src/xarm/wrapper/
         # xarm_linear_motor.cc:208-210). The gripper's action needs none: it is created
@@ -319,7 +324,11 @@ asset_type:
         # 570 and 582).
         services:
           - get_gripper_position
+          - get_linear_motor_on_zero
           - get_linear_motor_pos
+          - set_gripper_enable
+          - set_linear_motor_back_origin
+          - set_linear_motor_enable
           - set_linear_motor_pos
           - set_linear_motor_speed
           - set_linear_motor_stop

@@ -50,6 +50,16 @@ _TRACK_SERVICES = {
     "stop_service": "set_linear_motor_stop",
 }
 _GRIPPER_SERVICES = {"get_position_service": "get_gripper_position"}
+#: The initializer's: what the operator does in UFACTORY Studio before running
+#: the program - enable the track motor and the gripper, read whether the track
+#: has found its zero, home it when it has not, stop it if homing fails.
+_INITIALIZER_SERVICES = {
+    "linear_motor_enable_service": "set_linear_motor_enable",
+    "gripper_enable_service": "set_gripper_enable",
+    "linear_motor_on_zero_service": "get_linear_motor_on_zero",
+    "linear_motor_back_origin_service": "set_linear_motor_back_origin",
+    "linear_motor_stop_service": "set_linear_motor_stop",
+}
 
 
 @dataclass(frozen=True)
@@ -69,6 +79,11 @@ class PhysicalSideView:
     deadman: NodeView
     track_adapter: NodeView | None
     gripper_relay: NodeView | None
+    #: Serves the arm's `InitializeAsset`, or `None` where the arm does not
+    #: both ride a vendor-served track and carry a vendor-served gripper.
+    initializer: NodeView | None
+    #: The service it serves, or `None` exactly where it is.
+    initialize_service: str | None
     deadman_state_topic: str
     #: The arm trajectory controller's state topic, published only while that
     #: controller is active: what the twin boundary reads as "the arm's
@@ -172,6 +187,8 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
     )
 
     track = None
+    #: The track's vendor facts, where a track adapter serves it.
+    served_axis = None
     axis = asset.axis
     if axis is not None and axis.plugin_on(side) is None:
         served = axis.vendor_axis_on(side)
@@ -180,6 +197,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
                 f"track {axis.asset!r} is physical and plugin-less on the {side} side and "
                 "states no `vendor_axis` (`vendor-axis-unstated`)"
             )
+        served_axis = served
         track = NodeView(
             node=ids.interface(cell.zone, asset.id, ids.TRACK_ADAPTER_NODE),
             parameters=(
@@ -277,12 +295,35 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
             ("cancel_actions", "[" + ", ".join(cancel_actions) + "]"),
         ),
     )
+    # What the operator does in Studio before running the program, on an arm
+    # that rides a vendor-served track and carries a vendor-served gripper.
+    initializer = None
+    initialize_service = ids.interface(cell.zone, asset.id, ids.INITIALIZE)
+    if served_axis is not None and relay is not None:
+        initializer = NodeView(
+            node=ids.interface(cell.zone, asset.id, ids.INITIALIZER_NODE),
+            parameters=(
+                ("use_sim_time", "false"),
+                ("service_name", initialize_service),
+                *(
+                    (parameter, _service(vendor, name, asset))
+                    for parameter, name in _INITIALIZER_SERVICES.items()
+                ),
+                ("poll_period_s", _f(served_axis.poll_period_s)),
+                ("call_deadline_s", _f(timing.call_deadline_s)),
+                ("deadline_s", _f(served_axis.initialize_deadline_s)),
+                ("deadman_state_topic", deadman_state_topic),
+                ("deadman_state_max_age_s", _f(timing.state_max_age_s)),
+            ),
+        )
     trajectory_controller = trajectory_action.rsplit("/", 1)[0]
     return PhysicalSideView(
         parameters=adapters_path(cell.zone, asset.id, side),
         deadman=deadman,
         track_adapter=track,
         gripper_relay=relay,
+        initializer=initializer,
+        initialize_service=None if initializer is None else initialize_service,
         deadman_state_topic=deadman_state_topic,
         arm_controller_state_topic=f"{trajectory_controller}/controller_state",
         joints=tuple(sorted(joints)),
@@ -300,7 +341,11 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             view = physical_side(cell, asset, side)
             if view is None:
                 continue
-            nodes = [n for n in (view.deadman, view.track_adapter, view.gripper_relay) if n]
+            nodes = [
+                n
+                for n in (view.deadman, view.track_adapter, view.gripper_relay, view.initializer)
+                if n
+            ]
             artifacts.append(
                 Artifact(view.parameters, template.render(arm=asset, side=side, nodes=nodes))
             )

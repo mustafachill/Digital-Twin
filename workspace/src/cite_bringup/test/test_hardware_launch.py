@@ -382,7 +382,9 @@ def test_every_hardware_node_is_named_by_the_plan_with_the_generated_file(
         for n in _nodes(_structure(module), context)
         if n.node_package == "cite_hardware"
     }
-    assert set(hardware) == {physical.deadman, physical.track_adapter, physical.gripper_relay}
+    assert set(hardware) == {
+        physical.deadman, physical.track_adapter, physical.gripper_relay, physical.initializer
+    }
     for node in hardware.values():
         assert isinstance(node, LifecycleNode)
         assert _parameters(node, context) == [str(physical.parameters)]
@@ -404,6 +406,7 @@ def test_nothing_on_a_physical_side_respawns(module, context) -> None:
         "ros2_control_node",
         "track_adapter.py",
         "gripper_relay.py",
+        "initializer.py",
         "robot_state_publisher",
         "move_group",
         "skill_server",

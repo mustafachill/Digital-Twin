@@ -362,7 +362,11 @@ class TestVendorNames:
                 name: f"{service_namespace}/{name}"
                 for name in (
                     "get_gripper_position",
+                    "get_linear_motor_on_zero",
                     "get_linear_motor_pos",
+                    "set_gripper_enable",
+                    "set_linear_motor_back_origin",
+                    "set_linear_motor_enable",
                     "set_linear_motor_pos",
                     "set_linear_motor_speed",
                     "set_linear_motor_stop",

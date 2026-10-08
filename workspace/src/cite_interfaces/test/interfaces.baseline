@@ -103,6 +103,10 @@ msg/TwinMode.msg
 srv/GetModelVersion.srv
   ---
   ModelVersion version
+srv/InitializeAsset.srv
+  ---
+  bool success
+  string detail
 srv/SetMode.srv
   string SERVICE="/cite/twin/set_mode"
   uint8 mode

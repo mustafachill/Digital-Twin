@@ -43,7 +43,13 @@ from cite_interfaces.msg import DeadmanState
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "cite_hardware" / "test"))
-from vendor_fakes import FakeArmState, FakeDeadman, FakeTrack, Harness  # noqa: E402
+from vendor_fakes import (  # noqa: E402
+    FakeArmState,
+    FakeDeadman,
+    FakeTrack,
+    FakeTrackInit,
+    Harness,
+)
 from xarm_msgs.srv import GetFloat32  # noqa: E402
 
 ZONE = "cell_b"
@@ -244,6 +250,8 @@ def test_2_a_vendor_service_not_advertised_is_named(rig) -> None:
     deadman.say(DeadmanState.STATE_AWAITING, "awaiting")
     rig_track = FakeTrack(harness, vendor.service_namespace)
     rig_arm = FakeArmState(harness, vendor.service_namespace)
+    # The initializer's services: the gate waits for every one the side calls.
+    harness.initializer = FakeTrackInit(harness, vendor.service_namespace)
     harness.fakes = [rig_track, rig_arm]
     result = _gate()
     assert result.returncode == 1, result.stderr

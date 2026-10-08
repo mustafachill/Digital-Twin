@@ -386,6 +386,12 @@ plan:
 {% if manager.counterpart_physical.gripper_relay %}
         gripper_relay: {{ manager.counterpart_physical.gripper_relay.node }}
 {% endif %}
+{% if manager.counterpart_physical.initializer %}
+        # Serves InitializeAsset on initialize_service: what the operator does
+        # in UFACTORY Studio before running the program (ADR-0070).
+        initializer: {{ manager.counterpart_physical.initializer.node }}
+        initialize_service: {{ manager.counterpart_physical.initialize_service }}
+{% endif %}
         deadman_state_topic: {{ manager.counterpart_physical.deadman_state_topic }}
         arm_controller_state_topic: {{ manager.counterpart_physical.arm_controller_state_topic }}
         joints: [{{ manager.counterpart_physical.joints | join(', ') }}]

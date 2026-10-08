@@ -35,8 +35,9 @@ requested and confirmed by `lifecycle_driver.py` (ADR-0058):
    vendor's hardware component exists, so the arm is held at the vendor's STOP
    state from the moment the plugin connects.
 3. **The controller manager** with the vendor plugin, the description
-   publisher, the facility nodes and the two adapters; then the adapters and
-   facility nodes configured and activated, confirmed.
+   publisher, the facility nodes, the two adapters and the initializer (which
+   serves `InitializeAsset` and does nothing until asked); then these
+   configured and activated, confirmed.
 4. **The hold gate** (`hold_gate.py`): the deadman says AWAITING, every vendor
    service the side's nodes call is advertised, and a STOP sent to the vendor
    is acknowledged. The deadman itself offers no observable for its own first
@@ -114,6 +115,7 @@ _EXECUTABLES = {
     "deadman": "deadman.py",
     "track_adapter": "track_adapter.py",
     "gripper_relay": "gripper_relay.py",
+    "initializer": "initializer.py",
 }
 
 _HOLD_HINT = (
@@ -295,7 +297,7 @@ def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
             )
         )
         hardware.append(controller_manager(manager, side))
-        for key in ("track_adapter", "gripper_relay"):
+        for key in ("track_adapter", "gripper_relay", "initializer"):
             name = getattr(physical, key)
             if name is None:
                 continue

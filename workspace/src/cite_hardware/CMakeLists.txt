@@ -19,6 +19,7 @@ install(PROGRAMS
   ${PROJECT_NAME}/track_adapter.py
   ${PROJECT_NAME}/gripper_relay.py
   ${PROJECT_NAME}/deadman.py
+  ${PROJECT_NAME}/initializer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -60,6 +61,7 @@ if(BUILD_TESTING)
   add_launch_test(test/test_track_adapter_launch.py TIMEOUT 180)
   add_launch_test(test/test_gripper_relay_launch.py TIMEOUT 180)
   add_launch_test(test/test_deadman_launch.py TIMEOUT 180)
+  add_launch_test(test/test_initializer_launch.py TIMEOUT 180)
   # The vendor driver going away and coming back is a process ending: the
   # fake vendor there is a process of its own (test/fake_vendor_process.py).
   add_launch_test(test/test_deadman_vendor_launch.py TIMEOUT 180)

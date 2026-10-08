@@ -1429,6 +1429,11 @@
           "title": "Auto Enable",
           "type": "boolean"
         },
+        "initialize_deadline_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Initialize Deadline S",
+          "type": "number"
+        },
         "poll_period_s": {
           "exclusiveMinimum": 0.0,
           "title": "Poll Period S",
@@ -1455,7 +1460,8 @@
         "poll_period_s",
         "position_max_age_s",
         "segment_s",
-        "auto_enable"
+        "auto_enable",
+        "initialize_deadline_s"
       ],
       "title": "VendorAxis",
       "type": "object"

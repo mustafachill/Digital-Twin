@@ -162,10 +162,15 @@ DEADMAN_NODE = "deadman"
 CONTROLLER_MANAGER_NODE = "controller_manager"
 TRACK_ADAPTER_NODE = "track_adapter"
 GRIPPER_RELAY_NODE = "gripper_relay"
+#: Serves the physical arm's `InitializeAsset` (ADR-0070): what its operator
+#: does by hand in UFACTORY Studio before running the program.
+INITIALIZER_NODE = "initializer"
 
 #: Where a physical side's deadman publishes its `DeadmanState`, under the asset
 #: it guards (CLAUDE.md §8). A leaf, formed into a name by :func:`interface`.
 DEADMAN_STATE = "deadman/state"
+#: Where a physical arm's initializer serves `InitializeAsset`, under the asset.
+INITIALIZE = "initialize"
 
 
 def scope(reserved: str, name: str) -> str:

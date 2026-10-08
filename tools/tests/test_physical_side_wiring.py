@@ -102,6 +102,7 @@ class TestVendorServicesAreLeastPrivilege:
                 adapter_generator._DEADMAN_SERVICES,
                 adapter_generator._TRACK_SERVICES,
                 adapter_generator._GRIPPER_SERVICES,
+                adapter_generator._INITIALIZER_SERVICES,
             )
             for name in services.values()
         }
@@ -112,7 +113,7 @@ class TestVendorServicesAreLeastPrivilege:
         assert sorted(driver.services) == sorted(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
         assert rules(REAL_MODEL) == set()
 
-    @pytest.mark.parametrize("name", ["set_linear_motor_enable", "clean_error", "set_tcp_load"])
+    @pytest.mark.parametrize("name", ["clean_error", "set_collision_sensitivity", "set_tcp_load"])
     def test_a_service_nothing_calls_is_refused(
         self, real_model: Path, edit_yaml: Callable, name: str
     ) -> None:
@@ -230,6 +231,7 @@ class TestEveryNodeParameterIsGenerated:
             (ids.DEADMAN_NODE, "deadman"),
             (ids.TRACK_ADAPTER_NODE, "track_adapter"),
             (ids.GRIPPER_RELAY_NODE, "gripper_relay"),
+            (ids.INITIALIZER_NODE, "initializer"),
         ],
     )
     def test_the_file_carries_every_parameter_the_node_declares_and_no_other(
@@ -250,6 +252,7 @@ class TestEveryNodeParameterIsGenerated:
             physical["deadman"],
             physical["track_adapter"],
             physical["gripper_relay"],
+            physical["initializer"],
         }
         assert physical["deadman_state_topic"] == f"/cite/{ZONE}/{ARM}/{ids.DEADMAN_STATE}"
 
@@ -410,3 +413,56 @@ class TestTheVendorGripperRangeIsDeclaredOnce:
         assert edited["vendor_closed_position"] == pytest.approx(0.8)
         assert edited["vendor_state_open_position"] == pytest.approx(800.0)
         assert edited["vendor_state_closed_position"] == 0.0
+
+
+class TestTheInitializerIsWiredFromL0:
+    """What the operator does in Studio before the program, wired from L0 alone (ADR-0070)."""
+
+    def _section(self, path: Path) -> dict:
+        return adapters(path)[f"/cite/{ZONE}/{ARM}/{ids.INITIALIZER_NODE}"]["ros__parameters"]
+
+    def test_the_shipped_section_names_the_vendor_services_and_the_axis_timing(self) -> None:
+        section = self._section(REAL_MODEL)
+        prefix = f"/cite/{ZONE}/{ARM}/{ARM}_{ARM}/"
+        assert section["linear_motor_enable_service"] == prefix + "set_linear_motor_enable"
+        assert section["linear_motor_on_zero_service"] == prefix + "get_linear_motor_on_zero"
+        assert (
+            section["linear_motor_back_origin_service"] == prefix + "set_linear_motor_back_origin"
+        )
+        assert section["linear_motor_stop_service"] == prefix + "set_linear_motor_stop"
+        assert section["gripper_enable_service"] == prefix + "set_gripper_enable"
+        assert section["service_name"] == f"/cite/{ZONE}/{ARM}/initialize"
+        assert section["poll_period_s"] == pytest.approx(0.1)
+        assert section["deadline_s"] == pytest.approx(20.0)
+
+    def test_the_plan_names_the_section(self) -> None:
+        (manager,) = plan(REAL_MODEL)["controller_managers"]
+        physical = manager["counterpart_physical"]
+        assert physical["initializer"] == f"/cite/{ZONE}/{ARM}/initializer"
+        assert physical["initialize_service"] == f"/cite/{ZONE}/{ARM}/initialize"
+
+    def test_the_initialize_deadline_follows_its_one_declaration(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / TRACK_TYPE,
+            lambda d: d["asset_type"]["hardware_backends"]["real"]["vendor_axis"].__setitem__(
+                "initialize_deadline_s", 25.0
+            ),
+        )
+        assert self._section(real_model)["deadline_s"] == pytest.approx(25.0)
+
+    @pytest.mark.parametrize("value", [0.0, -1.0, None])
+    def test_an_unusable_or_unstated_initialize_deadline_is_refused(
+        self, real_model: Path, edit_yaml: Callable, value: object
+    ) -> None:
+        def edit(d: dict) -> None:
+            axis = d["asset_type"]["hardware_backends"]["real"]["vendor_axis"]
+            if value is None:
+                axis.pop("initialize_deadline_s")
+            else:
+                axis["initialize_deadline_s"] = value
+
+        edit_yaml(real_model / TRACK_TYPE, edit)
+        with pytest.raises(ModelError, match="initialize_deadline_s"):
+            load(real_model)

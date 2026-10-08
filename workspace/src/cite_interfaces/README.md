@@ -11,7 +11,7 @@ exists, and it is why this package sits at the bottom of the dependency graph.
 
 ## What is here
 
-16 definitions — 8 `.msg`, 3 `.srv`, 5 `.action` — listed in `CMakeLists.txt` and frozen
+17 definitions — 8 `.msg`, 4 `.srv`, 5 `.action` — listed in `CMakeLists.txt` and frozen
 against `test/interfaces.baseline`. Read the shapes with `ros2 interface show`; they are not
 restated here (P1). The conventions they follow are in
 [`docs/interfaces/README.md`](../../../docs/interfaces/README.md).
@@ -31,6 +31,7 @@ than by reading the definitions.
 | `SafetyState` | **nothing** |
 | `TwinHeartbeat` | `cite_twin/twin_boundary.py`, onto each side's own domain from that side's own executor (ADR-0070 item 5) |
 | `DeadmanState` | `cite_hardware/deadman.py`, started first by `cite_bringup`'s `hardware.launch.py` on a physical side (ADR-0070 item 6); read by the relays and by the twin boundary's readiness gate |
+| `InitializeAsset` | `cite_hardware/initializer.py`, on a physical side only, under the plan's `initialize_service` (ADR-0070); called by `cite_bringup.program.home` |
 | `TwinMode`, `DivergenceMetrics`, `SetMode`, `TrackArrived` | `cite_twin/twin_boundary.py`, which the pair supervisor starts under `./scripts/sim --pair` and `./scripts/program` (ADR-0057) and no launch file starts; it refuses a zone declaring one side, and the one shipped zone, `cell_b`, declares two. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
 
 `TwinMode` and `DivergenceMetrics` each carry their own topic name as a `string TOPIC`

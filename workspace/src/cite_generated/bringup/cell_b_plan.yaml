@@ -303,7 +303,11 @@ plan:
         service_namespace: /cite/cell_b/picker/picker_picker
         services:
           get_gripper_position: /cite/cell_b/picker/picker_picker/get_gripper_position
+          get_linear_motor_on_zero: /cite/cell_b/picker/picker_picker/get_linear_motor_on_zero
           get_linear_motor_pos: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
+          set_gripper_enable: /cite/cell_b/picker/picker_picker/set_gripper_enable
+          set_linear_motor_back_origin: /cite/cell_b/picker/picker_picker/set_linear_motor_back_origin
+          set_linear_motor_enable: /cite/cell_b/picker/picker_picker/set_linear_motor_enable
           set_linear_motor_pos: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
           set_linear_motor_speed: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
           set_linear_motor_stop: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
@@ -330,6 +334,10 @@ plan:
         deadman: /cite/cell_b/picker/deadman
         track_adapter: /cite/cell_b/picker/track_adapter
         gripper_relay: /cite/cell_b/picker/gripper_relay
+        # Serves InitializeAsset on initialize_service: what the operator does
+        # in UFACTORY Studio before running the program (ADR-0070).
+        initializer: /cite/cell_b/picker/initializer
+        initialize_service: /cite/cell_b/picker/initialize
         deadman_state_topic: /cite/cell_b/picker/deadman/state
         arm_controller_state_topic: /cite/cell_b/picker/picker_joint_trajectory_controller/controller_state
         joints: [picker_drive_joint, picker_joint1, picker_joint2, picker_joint3, picker_joint4, picker_joint5, picker_track_joint]
