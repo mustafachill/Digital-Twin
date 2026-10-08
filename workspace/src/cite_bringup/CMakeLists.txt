@@ -127,6 +127,9 @@ if(BUILD_TESTING)
   # nothing - which the launch announces and the supervisor reports as a pair.
   ament_add_pytest_test(readiness_witness test/test_readiness_witness.py)
   ament_add_pytest_test(program test/test_program.py)
+  # S-01 (ADR-0070): an initialization interrupted or unanswered once sent is
+  # followed by the vendor's track stop; against fakes, on a domain of its own.
+  ament_add_pytest_test(initialize_interrupted test/test_initialize_interrupted.py)
   # ADR-0058 clause 2. The driver's failure paths, driven against fake managed
   # nodes that advertise the two lifecycle services and answer them as the test
   # says - including one that transitions and never answers, which is the case

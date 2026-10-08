@@ -24,9 +24,10 @@
 
 The steps are the real robot's program as the bring-up plan states it
 (`from_plan`, ADR-0067). Before the first cycle (`--first-cycle 1`, the
-default) the program's start is measured on every side, and only where a side
-is not there is every physical side's arm initialized and both arms brought to
-it, and the start measured again (`program.home.bring_to_start`, ADR-0070).
+default) every physical side's arm is initialized, the program's start is
+measured on every side, and only where a side is not there are both arms
+brought to it and the start measured again (`program.home.bring_to_start`,
+ADR-0070).
 It does NOT put parts on the table, and it does NOT run the belt: the caller
 supplies one part per cycle and starts each side's belt on that side, which is
 what `./scripts/program` does.

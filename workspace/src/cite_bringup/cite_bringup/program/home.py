@@ -16,21 +16,25 @@
 
     --zone cell_b --speed-scale 0.1
 
-The program's own start, measured first and moved to only if a side is not
-there, through the twin, on both sides with one signal (ADR-0070,
-`bring_to_start`):
+The program's own start, measured and moved to only if a side is not there,
+through the twin, on both sides with one signal (ADR-0070, `bring_to_start`):
 
-1. **Measure**: is every side at the start? Every arm joint within the arm's
+1. **Initialize** each physical side's arm, every time: its `InitializeAsset`
+   service (`cite_hardware`'s initializer, under the plan's
+   `initialize_service`) is called on that side's own domain, as
+   `program.belt` calls a side's belt (the ADR-0044 clause 3 carve-out). It
+   enables the track motor and the gripper, homes the track only where it has
+   not found its zero, and brings the carriage to the program's first track
+   target only where it is not there; on an initialized arm at the start
+   nothing moves. A simulated side has nothing to initialize. Interrupted or
+   unanswered once sent, the call is followed by that side's
+   `set_linear_motor_stop` (`_call_on_domain`).
+2. **Measure**: is every side at the start? Every arm joint within the arm's
    goal tolerance of the program's first pose (its `reset` block, `zero`),
    asked of the twin with `JointsAt`, and every carriage within the track's
    goal tolerance of the program's first track target (0 m), asked with
    `TrackArrived`. A physical side counts only with fresh positions. If every
    side is there, nothing moves.
-2. Otherwise **initialize** each physical side's arm: its `InitializeAsset`
-   service (`cite_hardware`'s initializer, under the plan's
-   `initialize_service`) is called on that side's own domain. It enables the
-   track motor and the gripper and, only where the track has not found its
-   zero, homes the track. A simulated side has nothing to initialize.
 3. **Home**: the program's first arm move and first track move, at the
    program's speeds scaled by `--speed-scale`, sent once through the twin
    boundary in VALIDATED asked with `SetMode.homing` - the one allowance that
@@ -67,6 +71,7 @@ from cite_bringup.plan import (
 )
 from cite_bringup.program.from_plan import program, Target, target
 from cite_bringup.program.steps import (
+    _interrupts_ignored,
     execute,
     EXIT_INTERRUPTED,
     Step,
@@ -79,7 +84,10 @@ import yaml
 MATCH_CEILING_S = 60.0
 
 #: What the operator is asked before a home on a physical side.
-HOME_PROMPT = "Clear the cell: the track may home and both arms will move. Then press Enter. "
+HOME_PROMPT = (
+    "Clear the cell: the track may home and move to its start, and both arms will move. "
+    "Then press Enter. "
+)
 
 
 def home_steps(cell: Target) -> list[Step]:
@@ -173,14 +181,17 @@ def bring_to_start(
     say: Callable[[str], None],
     via_twin: bool = True,
 ) -> bool:
-    """Measure the start; home only if a side is not there; measure again (ADR-0070).
+    """Initialize; measure the start; home only if a side is not there; measure again.
 
-    Returns whether a homing move was made. Ends, through the twin, in
+    ``initialize_physical`` runs first, every time (ADR-0070): it is
+    idempotent, and only an initialized physical arm is measured. Returns
+    whether a homing move was made. Ends, through the twin, in
     VALIDATED asked WITHOUT `SetMode.homing`, so whatever runs next runs under
     the ordinary carriage-agreement refusal. Raises `StepFailed` - and retries
     nothing - when initializing, entering VALIDATED, a home step, or the second
     measurement fails; ``ros`` is a `RosCell`.
     """
+    initialize_physical()
     away = ros.away_from_start(start)
     if away is None:
         say(f"every side is at the program's start ({start.pose}): no homing move")
@@ -188,7 +199,6 @@ def bring_to_start(
             ros.enter_validated()
         return False
     say(f"not at the program's start: {away}")
-    initialize_physical()
     if via_twin:
         ros.enter_validated(homing=True)
     run_home(steps, ros, say)
@@ -215,15 +225,39 @@ def run_home(steps: list[Step], cell, say: Callable[[str], None]) -> None:
         raise
 
 
+def initializer_parameter(physical, name: str):
+    """Return one of the initializer's parameters, from the side's generated parameters."""
+    try:
+        document = yaml.safe_load(physical.parameters.read_text()) or {}
+        return document[physical.initializer]["ros__parameters"][name]
+    except (OSError, yaml.YAMLError, KeyError, TypeError) as exc:
+        raise PlanError(
+            f"{physical.parameters} states no {name} for {physical.initializer}: {exc!r}"
+        ) from exc
+
+
 def initializer_deadline_s(physical) -> float:
     """Return the initializer's own `deadline_s`, from the side's generated parameters."""
     try:
-        document = yaml.safe_load(physical.parameters.read_text()) or {}
-        return float(document[physical.initializer]["ros__parameters"]["deadline_s"])
-    except (OSError, yaml.YAMLError, KeyError, TypeError, ValueError) as exc:
-        raise PlanError(
-            f"{physical.parameters} states no deadline_s for {physical.initializer}: {exc!r}"
-        ) from exc
+        return float(initializer_parameter(physical, "deadline_s"))
+    except (TypeError, ValueError) as exc:
+        raise PlanError(f"{physical.parameters}: deadline_s is no number: {exc!r}") from exc
+
+
+def initializer_stop(physical) -> tuple[str, float]:
+    """Return the vendor's track stop the initializer names, and how long to wait for it.
+
+    Twice the initializer's own `call_deadline_s`, as the initializer bounds
+    its own stop.
+    """
+    service = initializer_parameter(physical, "linear_motor_stop_service")
+    try:
+        ceiling_s = 2.0 * float(initializer_parameter(physical, "call_deadline_s"))
+    except (TypeError, ValueError) as exc:
+        raise PlanError(f"{physical.parameters}: call_deadline_s is no number: {exc!r}") from exc
+    if not isinstance(service, str) or not service:
+        raise PlanError(f"{physical.parameters}: linear_motor_stop_service is no name")
+    return service, ceiling_s
 
 
 def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ=os.environ):
@@ -242,22 +276,31 @@ def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ
                 continue
             try:
                 ceiling_s = 2.0 * initializer_deadline_s(physical)
+                stop = initializer_stop(physical)
             except PlanError as error:
                 raise StepFailed(str(error)) from None
             say(f"==> {side}: initializing {manager.asset} ({physical.initialize_service})")
             response = _call_on_domain(
-                physical.initialize_service, resolve_domain_id(plan, side, base), ceiling_s
+                physical.initialize_service, resolve_domain_id(plan, side, base), ceiling_s, stop
             )
             if not response.success:
                 raise StepFailed(f"{side}: {manager.asset} not initialized: {response.detail}")
             say(f"  ok  {side}: {response.detail}")
 
 
-def _call_on_domain(service: str, domain: int, ceiling_s: float):
-    """Call `InitializeAsset` once on ``domain``, in a context of its own, once matched."""
+def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str, float]):
+    """Call `InitializeAsset` once on ``domain``, in a context of its own, once matched.
+
+    The initialization may move the carriage, so once the request is sent, an
+    interrupt (Ctrl-C, SIGTERM) or no answer within ``ceiling_s`` is followed
+    by the vendor's track stop on that domain - ``stop`` is its name and how
+    long to wait for its answer (`initializer_stop`) - before the failure is
+    re-raised (S-01).
+    """
     from cite_interfaces.srv import InitializeAsset
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
+    from xarm_msgs.srv import Call
 
     # One context per side: a side is a ROS domain, as in `program.belt`.
     context = rclpy.Context()
@@ -267,6 +310,8 @@ def _call_on_domain(service: str, domain: int, ceiling_s: float):
         executor = SingleThreadedExecutor(context=context)
         executor.add_node(node)
         client = node.create_client(InitializeAsset, service)
+        # Created before the request, so it has matched by the time it is needed.
+        stopper = node.create_client(Call, stop[0])
         deadline = time.monotonic() + MATCH_CEILING_S
         while not client.service_is_ready():
             if time.monotonic() > deadline:
@@ -276,14 +321,47 @@ def _call_on_domain(service: str, domain: int, ceiling_s: float):
                 )
             executor.spin_once(timeout_sec=0.1)
         future = client.call_async(InitializeAsset.Request())
-        deadline = time.monotonic() + ceiling_s
-        while not future.done():
-            if time.monotonic() > deadline:
-                raise StepFailed(f"{service} did not answer within {ceiling_s:g} s")
-            executor.spin_once(timeout_sec=0.1)
+        try:
+            deadline = time.monotonic() + ceiling_s
+            while not future.done():
+                if time.monotonic() > deadline:
+                    raise StepFailed(f"{service} did not answer within {ceiling_s:g} s")
+                executor.spin_once(timeout_sec=0.1)
+        except BaseException:
+            # A second Ctrl-C (the terminal's and the script's) must not
+            # abandon the stop half-way, as in `steps.run`.
+            with _interrupts_ignored():
+                _stop_track(executor, stopper, stop[1])
+            raise
         return future.result()
     finally:
         context.try_shutdown()
+
+
+def _stop_track(executor, stopper, ceiling_s: float) -> None:
+    """Send the vendor's track stop once matched and wait for its answer, within ``ceiling_s``.
+
+    Reported, never raised: the failure that called for it is what is raised.
+    """
+    from xarm_msgs.srv import Call
+
+    deadline = time.monotonic() + ceiling_s
+    while not stopper.service_is_ready():
+        if time.monotonic() > deadline:
+            say_now(f"could not stop the track: nothing serves {stopper.srv_name}")
+            return
+        executor.spin_once(timeout_sec=0.05)
+    answer = stopper.call_async(Call.Request())
+    while not answer.done():
+        if time.monotonic() > deadline:
+            say_now(f"{stopper.srv_name} did not answer within {ceiling_s:g} s")
+            return
+        executor.spin_once(timeout_sec=0.05)
+    result = answer.result()
+    if result is None or result.ret != 0:
+        say_now(f"the vendor refused {stopper.srv_name}: {result}")
+    else:
+        say_now(f"interrupted during an initialization: {stopper.srv_name} sent")
 
 
 def say_now(text: str) -> None:

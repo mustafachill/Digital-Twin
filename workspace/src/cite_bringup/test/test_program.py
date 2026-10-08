@@ -955,14 +955,14 @@ def test_a_failed_home_step_cancels_and_fails(cell) -> None:
 
 
 def test_a_first_cycle_away_from_the_start_homes_measures_again_then_runs(monkeypatch) -> None:
-    """Not at the start: initialize, home under the allowance, measure, re-enter plainly."""
+    """Initialize, then not at the start: home under the allowance, measure, re-enter plainly."""
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
     assert _PairCell.calls == [
         "refuse_if_holding",
-        "measure zero",
         "initialize counterpart",
+        "measure zero",
         "enter_validated homing",
         "home move track",
         "measure zero",
@@ -973,14 +973,16 @@ def test_a_first_cycle_away_from_the_start_homes_measures_again_then_runs(monkey
     ]
 
 
-def test_a_first_cycle_already_at_the_start_moves_nothing_before_the_program(
+def test_a_first_cycle_already_at_the_start_initializes_and_homes_nothing(
     monkeypatch,
 ) -> None:
+    """R-01: the physical arm is initialized every time, even at the start; no homing move."""
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, away=(None,)) == 0
     assert _PairCell.calls == [
         "refuse_if_holding",
+        "initialize counterpart",
         "measure zero",
         "enter_validated",
         "run",
@@ -996,8 +998,8 @@ def test_a_failed_home_stops_without_a_retry_and_returns_to_sim(monkeypatch) -> 
     ) == 1
     assert _PairCell.calls == [
         "refuse_if_holding",
-        "measure zero",
         "initialize counterpart",
+        "measure zero",
         "enter_validated homing",
         "home move track",
         "leave_validated",
@@ -1015,8 +1017,8 @@ def test_a_home_that_does_not_reach_the_start_stops_without_a_retry(monkeypatch,
     ) == 1
     assert _PairCell.calls == [
         "refuse_if_holding",
-        "measure zero",
         "initialize counterpart",
+        "measure zero",
         "enter_validated homing",
         "home move track",
         "measure zero",
@@ -1055,7 +1057,6 @@ def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, initialized=False) == 1
     assert _PairCell.calls == [
         "refuse_if_holding",
-        "measure zero",
         "initialize counterpart",
         "leave_validated",
     ]
@@ -1073,14 +1074,21 @@ def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> No
         success, detail = True, "track and gripper enabled"
 
     monkeypatch.setattr(
-        home, "_call_on_domain", lambda service, domain, ceiling: calls.append(
-            (service, domain, ceiling)
+        home, "_call_on_domain", lambda service, domain, ceiling, stop: calls.append(
+            (service, domain, ceiling, stop)
         ) or Answer()
     )
     said: list[str] = []
     environ = {"CITE_DOMAIN_BASE": "40"}
     home.initialize(plan, ["counterpart"], said.append, environ=environ)
-    ((service, domain, ceiling),) = calls
+    ((service, domain, ceiling, stop),) = calls
+    # S-01: the stop sent if the call is interrupted is the one the generated
+    # parameters name for that side's initializer, never a hand-written name.
+    assert stop == (
+        home.initializer_parameter(physical, "linear_motor_stop_service"),
+        2.0 * home.initializer_parameter(physical, "call_deadline_s"),
+    )
+    assert stop[0].endswith("/set_linear_motor_stop")
     assert service == physical.initialize_service == "/cite/cell_b/picker/initialize"
     from cite_bringup.plan import domain_base, resolve_domain_id
 
@@ -1152,17 +1160,18 @@ class _StartCell:
         return getattr(self.fake, name)
 
 
-def test_bring_to_start_moves_nothing_when_every_side_is_there(cell) -> None:
+def test_bring_to_start_initializes_first_and_moves_nothing_when_every_side_is_there(
+    cell,
+) -> None:
+    """R-01: initialized every time, before the start is measured."""
     from cite_bringup.program.home import bring_to_start, home_steps, start_pose
 
     steps = home_steps(cell)
     ros = _StartCell([None])
-    initialized = []
     assert not bring_to_start(
-        steps, start_pose(cell, steps), ros, lambda: initialized.append(1), _quiet
+        steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
     )
-    assert ros.calls == [("measure",), ("enter_validated", False)]
-    assert initialized == []
+    assert ros.calls == [("initialize",), ("measure",), ("enter_validated", False)]
 
 
 def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> None:
@@ -1170,15 +1179,13 @@ def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> N
 
     steps = home_steps(cell)
     ros = _StartCell(["arm away", None])
-    initialized = []
     assert bring_to_start(
-        steps, start_pose(cell, steps), ros, lambda: initialized.append(1), _quiet
+        steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
     )
-    assert initialized == [1]
     assert [call[0] for call in ros.calls] == [
-        "measure", "enter_validated", "move", "track", "measure", "enter_validated"
+        "initialize", "measure", "enter_validated", "move", "track", "measure", "enter_validated"
     ]
-    assert ros.calls[1] == ("enter_validated", True)
+    assert ros.calls[2] == ("enter_validated", True)
     assert ros.calls[-1] == ("enter_validated", False)
 
 
@@ -1201,8 +1208,8 @@ def test_bring_to_start_via_the_plant_alone_asks_no_mode(cell) -> None:
          ["measure", "enter_validated", "move", "track", "measure"]),
         # A home step fails: cancelled, never retried, never measured again.
         (["arm away"], "zero", False, ["measure", "enter_validated", "move", "cancel"]),
-        # The physical arm cannot be initialized: nothing moves.
-        (["arm away"], None, True, ["measure"]),
+        # The physical arm cannot be initialized: nothing is measured, nothing moves.
+        (["arm away"], None, True, []),
     ],
 )
 def test_bring_to_start_stops_on_any_failure_and_retries_nothing(
@@ -1277,13 +1284,16 @@ def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
 
     _PairCell.away = [None]
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
-    assert _PairCell.calls == ["measure zero", "enter_validated", "leave_validated"]
+    # R-01: initialized every time, even when already at the start.
+    assert _PairCell.calls == [
+        "initialize counterpart", "measure zero", "enter_validated", "leave_validated"
+    ]
 
     _PairCell.away = ["arm away", None]
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
     assert _PairCell.calls == [
-        "measure zero",
         "initialize counterpart",
+        "measure zero",
         "enter_validated homing",
         "home",
         "measure zero",
