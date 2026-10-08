@@ -176,8 +176,9 @@ refuses `use_sim_time`.
   limits would clamp it, and said in the log.
 - **A vendor service that is not advertised refuses the command** (no wait, no retry), and a
   vendor error return is logged with its code; the next command is handled normally.
-- **A failed track position call ends the accepted track command.** Its target and queued
-  segments are discarded, and conservative stop handling remains in force. Fresh position
+- **A failed track position call, or speed write before it, ends the accepted track
+  command.** Its target and queued segments are discarded, and conservative stop handling
+  remains in force. Fresh position
   reports cannot retry that rejected command; a new command still requires the normal gate.
   This topic-based interface does not return a typed rejection to its sender, which may wait
   until its existing arrival deadline.

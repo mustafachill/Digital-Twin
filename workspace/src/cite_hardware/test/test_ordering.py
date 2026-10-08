@@ -459,10 +459,45 @@ def test_a_segment_planned_before_rejection_cannot_reenter_the_pipeline():
             submit(request, hold)
 
         node._submit = reject_before_submit
+        # Forgotten, so a segment that reached `_send` would write its speed
+        # first: the absence of that write shows `_submit` dropped it.
+        node._acked_speed = None
+        speeds = _sent(log).count("set_linear_motor_speed")
         node._advance(0.1)
         assert len(_moves(log)) == 1
+        assert _sent(log).count("set_linear_motor_speed") == speeds
         assert node._target is None and node._pending is None
         assert node._holding and not node._set_in_flight
+    finally:
+        node.destroy_node()
+
+
+@pytest.mark.parametrize("failure", [1, RuntimeError("vendor transport failed")])
+def test_a_failed_speed_write_ends_the_move_and_stops_the_carriage(failure):
+    """A refused speed write ends the move as a refused position call does."""
+    node, log = _track(StubGate())
+    try:
+        node._on_command(_command(0.3, 2))
+        _answer(node._set_client.futures[-1], 0, LinearMotorSetPos)
+        assert node._move_possible, "the first segment may still be running"
+        node._speed_client.answer = None
+        node._on_command(_command(0.5, 2))
+        assert _sent(log)[-1] == "set_linear_motor_speed", "a new speed is written first"
+        node._on_command(_command(0.6, 2))
+        assert node._pending is not None, "held behind the speed write"
+        future = node._speed_client.futures[-1]
+        if isinstance(failure, Exception):
+            future.set_exception(failure)
+        else:
+            _answer(future, failure, SetInt16)
+        assert node._target is None and node._pending is None
+        assert node._holding and not node._set_in_flight
+        assert _stops(log) == 1
+        node._speed_client.answer = 0
+        for _ in range(3):
+            node._poll()
+            node._get_client.futures[-1].set_result(GetInt16.Response(ret=0, data=100))
+        assert len(_moves(log)) == 1, "no segment of the ended move is sent"
     finally:
         node.destroy_node()
 

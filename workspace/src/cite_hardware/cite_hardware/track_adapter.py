@@ -43,7 +43,9 @@ presents the simulated names on the physical side and translates:
   next segment is sent on every fresh position read while the gate is open,
   until the target itself is within one segment and is sent. If every process
   here dies with the carriage moving, it runs at most one segment past the
-  last read (SA2c-S-02 d).
+  last read (SA2c-S-02 d). A failed or vendor-rejected answer to a segment, or
+  to the speed write before it, ends the move: a stop is sent and no later
+  segment of it is sent.
 - **Hold.** A command whose first and last points are one position is a hold:
   the simulated controller holds where it stands, and this adapter sends
   `set_linear_motor_stop` and drops any move in progress, level-triggered like
@@ -91,7 +93,8 @@ would queue behind it.
 position while moving, which is also what makes a segment's successor
 seamless. A command that arrives while the previous vendor call has not yet
 answered is held, and replaced by any later one, so the vendor receives the
-latest target and never a backlog.
+latest target and never a backlog. A held command is discarded, not sent,
+when the call it waited behind fails or is rejected by the vendor.
 """
 
 from __future__ import annotations
@@ -284,8 +287,8 @@ class TrackAdapter(LifecycleNode):
         #: The move in progress, until its last segment is sent: re-planned
         #: from every fresh position while the gate is open.
         self._target: TrackTarget | None = None
-        #: A hold was commanded: the carriage is stopped, level-triggered,
-        #: until a move is accepted again.
+        #: A hold or vendor rejection ended the move: the carriage is stopped,
+        #: level-triggered, until a move is accepted again.
         self._holding = False
         #: Completed once the carriage is no longer driven from here, while the
         #: process is ending (`stop_before_exit`).
@@ -556,18 +559,24 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             # A rejection can land after a segment was planned but before it
             # reached this lock. It must not revive the discarded move.
-            if hold != self._hold_sequence:
-                return
-            if self._set_in_flight:
-                if self._pending is not None:
-                    self.get_logger().info(
-                        f"track target {self._pending.pos} superseded by {request.pos} "
-                        "before the vendor answered the previous call"
-                    )
-                self._pending = request
-                self._pending_hold = hold
-                return
-            self._set_in_flight = True
+            superseded = hold != self._hold_sequence
+            if not superseded:
+                if self._set_in_flight:
+                    if self._pending is not None:
+                        self.get_logger().info(
+                            f"track target {self._pending.pos} superseded by {request.pos} "
+                            "before the vendor answered the previous call"
+                        )
+                    self._pending = request
+                    self._pending_hold = hold
+                    return
+                self._set_in_flight = True
+        if superseded:
+            self.get_logger().warning(
+                f"track segment to {request.pos} dropped: a hold or vendor rejection "
+                "arrived after it was planned"
+            )
+            return
         self._send(request, hold)
 
     def _send(self, request: LinearMotorSetPos.Request, hold: int) -> None:
@@ -605,14 +614,20 @@ class TrackAdapter(LifecycleNode):
         response = None if error is not None else future.result()
         if response is None or response.ret != 0:
             with self._lock:
+                # Ends the move as a failed position call does: nothing
+                # accepted before this answer is sent after it.
                 self._acked_speed = None
+                self._hold_sequence += 1
                 self._target = None
+                self._holding = True
             why = error if error is not None else (
                 f"vendor code {response.ret}: {response.message}"
             )
             self._drop_in_flight(
                 f"set_linear_motor_speed({request.speed}) failed ({why})", request
             )
+            # A segment sent before this write may still be running.
+            self._stop_if_moving("a track speed write failed")
             return
         with self._lock:
             # Recorded only if the gate was not found closed since the write
@@ -698,7 +713,7 @@ class TrackAdapter(LifecycleNode):
             self._pending = None
             self._set_in_flight = follow is not None
         self.get_logger().warning(
-            f"track target {request.pos} dropped: a hold was commanded after it"
+            f"track target {request.pos} dropped: a hold or vendor rejection arrived after it"
         )
         if follow is not None:
             self._send(follow, follow_hold)
