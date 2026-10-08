@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypelang="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cite_console_gui</name>
+  <version>0.1.0</version>
+  <description>
+    The operator console's panel in the Gazebo window (ADR-0071 decision 5): a
+    gz-gui plugin, CellConsole, and the first L7 package.
+
+    It holds no logic. It shows the latched ConsoleState that cell_console
+    publishes and sends that console's requests; every refusal is the
+    console's. Its only dependencies are the contracts in cite_interfaces, the
+    ROS client libraries, gz-gui and Qt - never cite_bringup, cite_twin or
+    cite_tools - and nothing below L7 names it: it puts its own library on
+    GZ_GUI_PLUGIN_PATH, and the generated GUI configuration names the plugin.
+  </description>
+  <maintainer email="cite@shsu.edu">CITE Digital Twin</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>cite_interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <!-- The Harmonic GUI library through its ROS vendor package: the copy `gz sim`
+       itself loads in this environment, so the plugin and the window share one
+       gz-gui. A second copy would give the plugin a second Application. -->
+  <depend>gz_gui_vendor</depend>
+  <depend>gz_plugin_vendor</depend>
+  <!-- Plugin.hh includes it, and the plugin reads its own XML element with it. -->
+  <depend>tinyxml2</depend>
+  <depend>qtbase5-dev</depend>
+  <depend>qtdeclarative5-dev</depend>
+  <!-- What the panel's QML imports at run time. -->
+  <exec_depend>qml-module-qtquick2</exec_depend>
+  <exec_depend>qml-module-qtquick-controls2</exec_depend>
+  <exec_depend>qml-module-qtquick-layouts</exec_depend>
+
+  <!-- ament_lint_auto discovers linters through the test dependencies declared
+       here. With only ament_lint_auto declared it discovers NONE, ctest reports
+       "No tests were found!!!" and exits 0, and the lint gate reports a clean
+       run having checked nothing. -->
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
