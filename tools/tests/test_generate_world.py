@@ -13,6 +13,7 @@ world, and the names it reaches it under are the same names the plan declares.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from pathlib import Path
 from xml.etree import ElementTree
@@ -20,7 +21,8 @@ from xml.etree import ElementTree
 import pytest
 import yaml
 
-from cite_tools.generate import bringup, gui, world
+from cite_tools.generate import bringup, gui, gui_config_path, world
+from cite_tools.model import ids
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import resolve
 
@@ -398,7 +400,7 @@ class TestTheWindowOpensOnTheCell:
             assert abs(x - pose.x) < forward * math.tan(half_fov), asset.id
 
     def test_the_config_keeps_harmonics_default_plugins(self, zone_cell) -> None:
-        (artifact,) = gui.generate(zone_cell)
+        artifact = gui.generate(zone_cell)[0]
         assert artifact.path == f"worlds/{zone_cell.zone}_gui.config"
         root = ElementTree.fromstring(f"<root>{artifact.content.split('?>', 1)[1]}</root>")
         names = {p.get("filename") for p in root.findall("plugin")}
@@ -421,9 +423,65 @@ class TestTheWindowOpensOnTheCell:
         emitted = [float(v) for v in root.find("plugin/camera_pose").text.split()]
         assert emitted == pytest.approx([pose.x, pose.y, pose.z, 0.0, pose.pitch, pose.yaw])
 
-    def test_the_plan_names_it(self, zone_cell) -> None:
+    def test_the_plan_names_each_sides_own(self, zone_cell) -> None:
         (plan,) = bringup.generate(zone_cell)
         document = yaml.safe_load(plan.content)["plan"]
-        assert document["gui_config"] == (
-            f"package://cite_generated/worlds/{zone_cell.zone}_gui.config"
-        )
+        assert "gui_config" not in document
+        named = {side["name"]: side["gui_config"] for side in document["sides"]}
+        assert named == {
+            side.name: f"package://cite_generated/{gui_config_path(zone_cell.zone, side.name)}"
+            for side in zone_cell.sides
+        }
+        # And each names a file the GUI generator emits.
+        emitted = {a.path for a in gui.generate(zone_cell)}
+        assert {gui_config_path(zone_cell.zone, s.name) for s in zone_cell.sides} == emitted
+
+
+def _plugins(artifact) -> list[ElementTree.Element]:
+    root = ElementTree.fromstring(f"<root>{artifact.content.split('?>', 1)[1]}</root>")
+    return root.findall("plugin")
+
+
+class TestOnlyThePlantsWindowCarriesTheConsole:
+    """ADR-0071 decision 5: the operator panel, on the plant of a paired zone only."""
+
+    @pytest.fixture
+    def zone_cell(self, real_model: Path):
+        return resolve(load(real_model), ZONE)
+
+    def _by_side(self, cell) -> dict[str, object]:
+        paths = {gui_config_path(cell.zone, side.name): side.name for side in cell.sides}
+        return {paths[a.path]: a for a in gui.generate(cell)}
+
+    def test_the_plants_config_carries_the_panel(self, zone_cell) -> None:
+        assert zone_cell.is_paired, "the shipped zone is paired; this test needs it to be"
+        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
+        panels = [p for p in _plugins(plant) if p.get("filename") == "CellConsole"]
+        assert len(panels) == 1
+
+    def test_the_counterparts_config_does_not(self, zone_cell) -> None:
+        counterpart = self._by_side(zone_cell)[ids.COUNTERPART_SIDE]
+        names = {p.get("filename") for p in _plugins(counterpart)}
+        assert "CellConsole" not in names
+        # Everything else is the same window.
+        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
+        assert names == {p.get("filename") for p in _plugins(plant)} - {"CellConsole"}
+
+    def test_the_panel_is_handed_exactly_the_plans_console_names(self, zone_cell) -> None:
+        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
+        (panel,) = (p for p in _plugins(plant) if p.get("filename") == "CellConsole")
+        handed = {child.tag: child.text for child in panel if child.tag != "gz-gui"}
+        (plan,) = bringup.generate(zone_cell)
+        assert handed == yaml.safe_load(plan.content)["plan"]["console"]
+
+    def test_the_twin_mode_topic_is_not_restated(self, zone_cell) -> None:
+        # The panel reads `TwinMode.TOPIC` from the contract; a parameter here
+        # would be the second statement of that name.
+        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
+        assert "/cite/twin" not in plant.content
+
+    def test_an_unpaired_zone_opens_no_panel(self, zone_cell) -> None:
+        single = dataclasses.replace(zone_cell, sides=zone_cell.sides[:1])
+        assert not single.is_paired
+        (only,) = gui.generate(single)
+        assert "CellConsole" not in {p.get("filename") for p in _plugins(only)}

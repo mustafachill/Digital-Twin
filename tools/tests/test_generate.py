@@ -1489,6 +1489,9 @@ class TestTwinSidesAndTheGazeboPartition:
                 "name": ids.PLANT_SIDE,
                 "gz_partition": ids.partition("cell_b", ids.PLANT_SIDE),
                 "domain_offset": 0,
+                "gui_config": (
+                    "package://cite_generated/" + gen.gui_config_path("cell_b", ids.PLANT_SIDE)
+                ),
             }
         ]
 
@@ -1576,17 +1579,28 @@ class TestTwinSidesAndTheGazeboPartition:
         self._pair(real_model, edit_yaml)
         after = artifacts(real_model)
 
-        # No file appears and none disappears: pairing generates no second tree.
-        assert sorted(after) == sorted(before)
-        # And of the files that exist, exactly two have different bytes. The plan
-        # is the substance - a second `sides:` entry and each asset's
-        # `counterpart_backend`. `MODEL_HASH` is the hash of the model that
-        # produced the tree, so it moves whenever the model does; that it moves
-        # is asserted deliberately by `test_pairing_a_zone_changes_the_model_hash`
-        # below, which is the tripwire on `twin.sides` describing the system
-        # rather than running it.
+        # One file appears and none disappears: pairing generates no second
+        # tree. The one is the counterpart's GUI configuration, and it is not a
+        # copy: the fact that makes the sides' windows differ is the operator
+        # console's panel, which only the plant's window carries, because the
+        # console serves on the plant's domain alone (ADR-0071 decision 5).
+        assert sorted(set(after) - set(before)) == [
+            gen.gui_config_path("cell_b", ids.COUNTERPART_SIDE)
+        ]
+        assert set(before) - set(after) == set()
+        # And of the files that exist, exactly three have different bytes. The
+        # plan is the substance - a second `sides:` entry and each asset's
+        # `counterpart_backend`. The plant's GUI configuration gains that panel.
+        # `MODEL_HASH` is the hash of the model that produced the tree, so it
+        # moves whenever the model does; that it moves is asserted deliberately
+        # by `test_pairing_a_zone_changes_the_model_hash` below, which is the
+        # tripwire on `twin.sides` describing the system rather than running it.
         differing = sorted(path for path in before if before[path] != after[path])
-        assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
+        assert differing == [
+            "MODEL_HASH",
+            "bringup/cell_b_plan.yaml",
+            gen.gui_config_path("cell_b", ids.PLANT_SIDE),
+        ]
 
     def test_a_differing_counterpart_adds_its_three_artifacts_and_moves_no_other(
         self, real_model: Path, edit_yaml: Callable
@@ -1792,7 +1806,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # substring search would be answered by the prose instead of by the data.
         plan = yaml.safe_load(produced["bringup/cell_b_plan.yaml"])["plan"]
         for side in plan["sides"]:
-            assert set(side) == {"name", "gz_partition", "domain_offset"}
+            assert set(side) == {"name", "gz_partition", "domain_offset", "gui_config"}
             # An offset is a small index into the sides, not a domain: anything
             # large enough to be usable as one has stopped being an offset.
             assert side["domain_offset"] in range(len(ids.SIDES))

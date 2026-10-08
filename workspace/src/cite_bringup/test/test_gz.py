@@ -85,6 +85,7 @@ def test_a_reordered_plan_still_yields_the_plants_partition(tmp_path: Path) -> N
         "name": "counterpart",
         "gz_partition": f"cite/{ZONE}/counterpart",
         "domain_offset": 1,
+        "gui_config": f"package://cite_generated/worlds/counterpart/{ZONE}_gui.config",
     }
     # The counterpart first, which is the ordering the generator does not emit
     # today and that no rule forbids a future one from emitting.

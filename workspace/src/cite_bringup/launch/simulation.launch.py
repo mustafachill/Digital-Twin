@@ -241,7 +241,7 @@ def _bring_up(context: LaunchContext) -> list:
             os.path.join("/opt/ros", os.environ.get("ROS_DISTRO", "jazzy"), "lib"),
         ),
     ]
-    actions += _simulator(plan, headless=headless, seed=seed, gz_env=gz_env)
+    actions += _simulator(plan, side, headless=headless, seed=seed, gz_env=gz_env)
     actions += _scene(plan, gz_env)
     actions += _arms(plan, side, gz_env)
 
@@ -356,12 +356,12 @@ def _seed(environ: dict) -> str | None:
 
 
 def _simulator(
-    plan: Plan, *, headless: bool, seed: str | None, gz_env: dict[str, str]
+    plan: Plan, side: str, *, headless: bool, seed: str | None, gz_env: dict[str, str]
 ) -> list:
     gz_args = (
         ["-s", "-r", "-v", "2"]
         if headless
-        else ["-r", "-v", "2", "--gui-config", str(plan.gui_config)]
+        else ["-r", "-v", "2", "--gui-config", str(plan.side_named(side).gui_config)]
     )
     if seed is not None:
         gz_args += ["--seed", seed]

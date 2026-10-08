@@ -672,6 +672,7 @@ def _paired_plan(tmp_path: Path) -> Plan:
                 "name": "counterpart",
                 "gz_partition": "cite/cell_b/counterpart",
                 "domain_offset": 1,
+                "gui_config": "package://cite_generated/worlds/counterpart/cell_b_gui.config",
             }
         )
     for manager in document["plan"]["controller_managers"]:

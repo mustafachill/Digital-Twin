@@ -11,8 +11,6 @@
 plan:
   zone: {{ cell.zone }}
   world: package://cite_generated/worlds/{{ cell.zone }}.sdf
-  # Where a windowed run's camera starts. Read only when Gazebo opens a window.
-  gui_config: package://cite_generated/worlds/{{ cell.zone }}_gui.config
   scene: package://cite_generated/description/{{ cell.zone }}_scene.urdf.xacro
   static_frames: package://cite_generated/frames/{{ cell.zone }}_static_tf.yaml
   topology: package://cite_generated/topology/{{ cell.zone }}_flow.yaml
@@ -105,11 +103,17 @@ plan:
   #
   # Emitted rather than left implicit in this list's order, for the reason the
   # partition is: positional meaning is not reviewable.
+  #
+  # `gui_config` is what that side's window opens with, read only when Gazebo
+  # opens one: the camera framing, and on the plant of a paired zone the
+  # operator console's panel (ADR-0071 decision 5). Per side, because only one
+  # window of a pair may carry the panel.
   sides:
 {% for side in sides %}
     - name: {{ side.name }}
       gz_partition: {{ side.gz_partition }}
       domain_offset: {{ side.domain_offset }}
+      gui_config: {{ package_uri(gui_configs[side.name]) }}
 {% endfor %}
 {% if twin %}
 

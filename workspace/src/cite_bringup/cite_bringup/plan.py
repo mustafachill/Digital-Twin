@@ -339,6 +339,11 @@ class Side:
     name: str
     gz_partition: str
     domain_offset: int
+    #: The Gazebo GUI configuration this side's window opens with: the camera
+    #: framing, and on the plant of a paired zone the operator console's panel
+    #: (ADR-0071 decision 5). Per side, so that only one window of a pair carries
+    #: the panel. Read only when Gazebo opens a window.
+    gui_config: Path
 
 
 @dataclass(frozen=True)
@@ -922,8 +927,6 @@ class Program:
 class Plan:
     zone: str
     world: Path
-    #: The Gazebo GUI configuration a windowed run opens with (camera framing).
-    gui_config: Path
     scene: Path
     static_frames: Path
     topology: Path
@@ -1106,7 +1109,6 @@ def load(path: Path) -> Plan:
     return Plan(
         zone=_require(plan, "zone", "plan"),
         world=resolve_uri(_require(plan, "world", "plan")),
-        gui_config=resolve_uri(_require(plan, "gui_config", "plan")),
         scene=resolve_uri(_require(plan, "scene", "plan")),
         static_frames=resolve_uri(_require(plan, "static_frames", "plan")),
         topology=resolve_uri(_require(plan, "topology", "plan")),
@@ -1254,6 +1256,7 @@ def _sides(plan: object, path: Path) -> tuple[Side, ...]:
             name=str(_require(entry, "name", f"side {index}")),
             gz_partition=str(_require(entry, "gz_partition", f"side {index}")),
             domain_offset=_offset(_require(entry, "domain_offset", f"side {index}"), index),
+            gui_config=resolve_uri(_require(entry, "gui_config", f"side {index}")),
         )
         for index, entry in enumerate(entries)
     )

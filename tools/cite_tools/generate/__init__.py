@@ -51,9 +51,11 @@ def per_side_path(directory: str, filename: str, side: str) -> str:
     it. The filename is the same on both sides because it is built from names,
     and no name differs by a byte between the sides (ADR-0044 clause 1).
 
-    Only the description, the controller configuration and a physical side's
-    adapter configuration are ever per-side; every other artifact contains no
-    backend term and stays one file.
+    Only the description, the controller configuration, a physical side's
+    adapter configuration and the GUI configuration are ever per-side; every
+    other artifact contains no backend term and no side-only content, and stays
+    one file. The GUI configuration is per-side for a reason of its own: only the
+    plant's window carries the operator console's panel (ADR-0071 decision 5).
     """
     if side not in ids.SIDES:
         raise ValueError(f"{side!r} is not a side of a twin pair. Expected one of {ids.SIDES}.")
@@ -79,6 +81,11 @@ def adapters_path(zone: str, asset_id: str, side: str) -> str:
     paired zone is refused (ADR-0048), and a simulated side runs no adapter.
     """
     return per_side_path("control", f"{zone}_{asset_id}_adapters.yaml", side)
+
+
+def gui_config_path(zone: str, side: str) -> str:
+    """The Gazebo GUI configuration ``side``'s window opens with; see `per_side_path`."""
+    return per_side_path("worlds", f"{zone}_gui.config", side)
 
 
 def model_hash(model: FacilityModel) -> str:
