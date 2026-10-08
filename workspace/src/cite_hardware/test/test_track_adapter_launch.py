@@ -194,7 +194,9 @@ class TestTrackAdapter(unittest.TestCase):
     def tearDownClass(cls):
         cls.harness.close()
 
-    def setUp(self):
+    def setUp(self, adapter):
+        #: The adapter a test commands unless it names another (`_deadman`).
+        self.adapter = adapter
         self.deadman.publishing.set()
         self.track.answer_get.set()
         self.track.answer_set.set()
@@ -203,8 +205,12 @@ class TestTrackAdapter(unittest.TestCase):
         self.track.stop_failures = 0
         self.track.position_mm = 100
 
-    def _deadman(self, proc_output, state: int) -> None:
+    def _deadman(self, proc_output, state: int, process=None) -> None:
         """Publish a deadman state and wait until the adapter has received it.
+
+        ``process`` is the adapter the test commands, the first one by default:
+        all three log the state, so a wait on any of them could end before the
+        commanded one has received it.
 
         Waited on, because the state and the command that follows travel on
         two topics and nothing orders them at the adapter: a refusal asserted
@@ -214,7 +220,11 @@ class TestTrackAdapter(unittest.TestCase):
         type(self)._sequence = getattr(type(self), "_sequence", 0) + 1
         detail = f"test state {type(self)._sequence}."
         self.deadman.say(state, detail)
-        proc_output.assertWaitFor(expected_output=detail, timeout=SETTLE_S)
+        proc_output.assertWaitFor(
+            expected_output=detail,
+            process=self.adapter if process is None else process,
+            timeout=SETTLE_S,
+        )
 
     def _send_until_count(self, message, count: int, what: str) -> None:
         """Publish once and wait for the fake to have seen ``count`` set calls."""
@@ -389,7 +399,7 @@ class TestTrackAdapter(unittest.TestCase):
         finally:
             self.harness.node.destroy_publisher(rival)
 
-    def test_a_move_is_sent_in_segments_until_the_target(self, proc_output):
+    def test_a_move_is_sent_in_segments_until_the_target(self, proc_output, segmented):
         """SA2c-S-02 d: each vendor move reaches one segment ahead, re-sent from every read.
 
         0.1 m/s for 0.5 s is 50 mm: from 100 mm the first segment ends at 150,
@@ -397,7 +407,7 @@ class TestTrackAdapter(unittest.TestCase):
         nothing more is sent for this move.
         """
         track = self.segmented_track
-        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY, segmented)
         track.position_mm = 100
         self.harness.wait_for(
             lambda: self.segmented_commands.get_subscription_count() > 0,
@@ -522,9 +532,9 @@ class TestTrackAdapter(unittest.TestCase):
         self._send_until_count(_command([0.3], 1.0), before + 2, "the next call")
         self.assertEqual(self.track.set_requests[-1].pos, 300)
 
-    def test_an_unavailable_vendor_service_refuses_and_recovers(self, proc_output):
+    def test_an_unavailable_vendor_service_refuses_and_recovers(self, proc_output, unserved):
         """Run against the second adapter, whose set service nothing serves yet."""
-        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY, unserved)
         self.harness.wait_for(
             lambda: self.unserved_commands.get_subscription_count() > 0,
             "the second adapter subscribed",
