@@ -1,3 +1,15 @@
+msg/DeadmanState.msg
+  uint8 STATE_INACTIVE=0
+  uint8 STATE_AWAITING=1
+  uint8 STATE_HEALTHY=2
+  uint8 STATE_TRIPPED=3
+  std_msgs/Header header
+  string asset_id
+  uint8 state
+  float64 timeout_s
+  uint64 last_sequence
+  string detail
+  bool arm_enabled
 msg/DivergenceMetrics.msg
   string TOPIC="/cite/twin/divergence"
   std_msgs/Header header
@@ -68,6 +80,12 @@ msg/SafetyState.msg
   uint8 estop_source
   builtin_interfaces/Time estop_asserted_at
   string detail
+msg/TwinHeartbeat.msg
+  string TOPIC="/cite/twin/heartbeat"
+  std_msgs/Header header
+  string zone
+  string boundary_id
+  uint64 sequence
 msg/TwinMode.msg
   string TOPIC="/cite/twin/mode"
   uint8 MODE_SIM=0
@@ -85,15 +103,47 @@ msg/TwinMode.msg
 srv/GetModelVersion.srv
   ---
   ModelVersion version
+srv/InitializeAsset.srv
+  ---
+  bool success
+  string detail
+srv/JointsAt.srv
+  string SERVICE="/cite/twin/joints_at"
+  string[] joints
+  float64[] positions
+  float64 tolerance
+  ---
+  uint8 AT=0
+  uint8 AWAY=1
+  uint8 UNHEARD=2
+  uint8 MALFORMED=3
+  bool at
+  uint8 reason
+  string detail
 srv/SetMode.srv
   string SERVICE="/cite/twin/set_mode"
   uint8 mode
   string reason
   bool force
+  bool homing
   ---
   bool accepted
   ResultCode result
   uint8 current_mode
+srv/TrackArrived.srv
+  string SERVICE="/cite/twin/track_arrived"
+  string joint
+  float64 position_m
+  float64 tolerance_m
+  ---
+  uint8 ARRIVED=0
+  uint8 AWAY=1
+  uint8 UNHEARD=2
+  uint8 NOT_A_TRACK=3
+  bool arrived
+  uint8 reason
+  bool routed
+  string detail
 action/Grasp.action
   float64 width_m
   float64 max_effort_n

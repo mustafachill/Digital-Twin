@@ -1042,13 +1042,35 @@ stop_this_checkouts_containers() {
     docker rm -f $ids >/dev/null
 }
 
+#
+# The repository-root `.env` is handed over with `--env-file`, because compose
+# reads only the `.env` in its PROJECT directory, which is the compose file's
+# (infra/docker/), and so never saw the one `.env.example` tells people to fill
+# in: CITE_XARM_IP set there never reached a container (ADR-0070 item 6). Shell
+# values outrank the file in compose's interpolation, so everything this file
+# derives and exports - ROS_DOMAIN_ID, CITE_DOMAIN_BASE - still wins over a
+# value written in `.env`.
+#
+# CITE_ALLOW_HARDWARE is pinned to `hardware_opt_in` for the same reason: the
+# variable's value in this process is the only one a container is given, so
+# compose never reads the opt-in out of `.env` itself. Whether `.env` counts is
+# decided once, by `resolve_hardware_opt_in` below, and only for the commands
+# that may start the physical side.
 compose() {
+    local env_file=()
+    if [ -f "${REPO_ROOT}/.env" ]; then
+        env_file=(--env-file "${REPO_ROOT}/.env")
+    fi
     if have docker && docker compose version >/dev/null 2>&1; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+            CITE_ALLOW_HARDWARE="$(hardware_opt_in)" \
+            docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            ${env_file[@]+"${env_file[@]}"} "$@"
     elif have docker-compose; then
         CITE_UID="$(id -u)" CITE_GID="$(id -g)" \
-            docker-compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+            CITE_ALLOW_HARDWARE="$(hardware_opt_in)" \
+            docker-compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" \
+            ${env_file[@]+"${env_file[@]}"} "$@"
     else
         die "Docker Compose not found. Install Docker Desktop (macOS) or docker-compose-plugin (Linux)."
     fi
@@ -1118,9 +1140,14 @@ exec_in_container() {
     # branch that depends on it becomes unreachable — which is easy to mistake for
     # the feature simply not working.
     local env_args=() v
-    for v in $(compgen -e 2>/dev/null | grep '^CITE_' || true); do
+    for v in $(compgen -e 2>/dev/null | grep '^CITE_' | grep -vx 'CITE_ALLOW_HARDWARE' || true); do
         env_args+=(-e "${v}=${!v}")
     done
+    # The hardware opt-in is ALWAYS passed, as this command resolved it (S-06):
+    # `compose exec` attaches to a running container whose environment was fixed
+    # when it started, so an opt-in given to that container once would otherwise
+    # still stand for every later command run in it (ADR-0054).
+    env_args+=(-e "CITE_ALLOW_HARDWARE=$(hardware_opt_in)")
 
     # The DDS domain is decided once, by the outermost invocation, and carried in.
     # `compose run` would pick it up through the compose file's ${ROS_DOMAIN_ID}
@@ -1215,10 +1242,107 @@ source_overlay() {
     set -u
 }
 
+# -----------------------------------------------------------------------------
+# The hardware opt-in, CITE_ALLOW_HARDWARE (ADR-0054; ADR-0070 item 2 as amended
+# by the owner on 2026-10-06). Everything that hands it on, checks it or reads it
+# asks `hardware_opt_in`; nothing else spells the default.
+#
+# hardware_opt_in — the opt-in this command carries: the process's value, unset
+# meaning 0. It is what every compose invocation and every container exec/run is
+# given, explicitly, so a running container never keeps a stale value.
+#
+# resolve_hardware_opt_in — the ONE place the opt-in is resolved, with the
+# precedence shell > repository-root `.env` (read fail closed, `env_file_opt_in`)
+# > 0. Called only by the entry points
+# that may start or command the physical side: `./scripts/program`,
+# `./scripts/home`, `./scripts/sim --pair` and `./scripts/enter hardware`. Every other command — test, scenario, lint,
+# build, CI — never calls it, so for them a `1` in `.env` is not read and the
+# opt-in stays the shell's, unset meaning 0; `scripts/_selftest.sh` holds both
+# halves of that. A value set in the shell wins even when it is empty, so
+# `CITE_ALLOW_HARDWARE= ./scripts/program` refuses whatever `.env` says.
+# -----------------------------------------------------------------------------
+hardware_opt_in() {
+    printf '%s' "${CITE_ALLOW_HARDWARE:-0}"
+}
+
+resolve_hardware_opt_in() {
+    if [ -n "${CITE_ALLOW_HARDWARE+set}" ]; then
+        export CITE_ALLOW_HARDWARE
+        return 0
+    fi
+    env_file_opt_in "${REPO_ROOT}/.env"
+    CITE_ALLOW_HARDWARE="$ENV_FILE_OPT_IN"
+    CITE_ALLOW_HARDWARE="$(hardware_opt_in)"
+    export CITE_ALLOW_HARDWARE
+    if [ "$CITE_ALLOW_HARDWARE" = "1" ]; then
+        warn "CITE_ALLOW_HARDWARE=1 is taken from ${REPO_ROOT}/.env: this command may start a physical side."
+    fi
+}
+
+# env_file_opt_in <file> — what an env file says about the hardware opt-in,
+# read FAIL CLOSED (S-01): ENV_FILE_OPT_IN is set to 1 only when exactly one
+# non-comment line names CITE_ALLOW_HARDWARE, that line is the plain form
+# `CITE_ALLOW_HARDWARE=<value>`, and <value> is `1`, `"1"` or `'1'`, optionally
+# followed by whitespace and a `#` comment (surrounding whitespace and a CRLF
+# ending tolerated). A recognised off value (`0`, `"0"`, `'0'`, empty, `""`,
+# `''`) or no such line gives empty, which `hardware_opt_in` reads as 0.
+# Anything else — `export CITE_ALLOW_HARDWARE=1`, spaces around `=`, `:` for
+# `=`, the key named twice, an unterminated quote, `"1" x`, `yes` — gives empty
+# as well, and a warning naming the offending line by NUMBER; no line's text is
+# echoed, so no other key's value reaches a terminal or a log. The problem is
+# also kept in ENV_FILE_OPT_IN_PROBLEM for the refusal to name. Stricter than
+# compose on purpose: what is not unambiguously an opt-in is not one.
+env_file_opt_in() {
+    local file="$1" key=CITE_ALLOW_HARDWARE line n=0 count=0 first=0 value="" problem=""
+    local on_re="^(1|\"1\"|'1')([[:space:]]+#.*)?[[:space:]]*\$"
+    local off_re="^(0|\"0\"|'0'|\"\"|'')?([[:space:]]+#.*)?[[:space:]]*\$"
+    ENV_FILE_OPT_IN=""
+    ENV_FILE_OPT_IN_PROBLEM=""
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        n=$((n + 1))
+        line="${line%$'\r'}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        case "$line" in
+            '#'*|'') continue ;;
+            *"$key"*) ;;
+            *) continue ;;
+        esac
+        count=$((count + 1))
+        if [ "$count" -eq 1 ]; then
+            first=$n
+        else
+            problem="${problem:+$problem; }line ${n} names ${key} again (first on line ${first})"
+            continue
+        fi
+        case "$line" in
+            "${key}="*) value="${line#"${key}="}" ;;
+            *)
+                problem="${problem:+$problem; }line ${n} names ${key} in a form other than ${key}=<value>"
+                continue
+                ;;
+        esac
+        if [[ "$value" =~ $on_re ]]; then
+            ENV_FILE_OPT_IN=1
+        elif ! [[ "$value" =~ $off_re ]]; then
+            problem="${problem:+$problem; }line ${n} gives ${key} a value that is neither 1 nor 0"
+        fi
+    done < "$file"
+    if [ -n "$problem" ]; then
+        ENV_FILE_OPT_IN=""
+        ENV_FILE_OPT_IN_PROBLEM="${file}: ${problem}"
+        warn "${ENV_FILE_OPT_IN_PROBLEM}; the hardware opt-in is not taken from it (read as 0)."
+    fi
+    return 0
+}
+
 # Guard for anything that must not run against physical hardware by accident.
 require_explicit_hardware_opt_in() {
-    if [ "${CITE_ALLOW_HARDWARE:-0}" != "1" ]; then
+    if [ "$(hardware_opt_in)" != "1" ]; then
         die "This command can command physical hardware.
-  Set CITE_ALLOW_HARDWARE=1 to proceed, and confirm the cell is clear first."
+  Set CITE_ALLOW_HARDWARE=1 in the shell or in the repository-root .env (read on the
+  host by ./scripts/program, ./scripts/sim --pair, ./scripts/enter hardware) to proceed,
+  and confirm the cell is clear first.${ENV_FILE_OPT_IN_PROBLEM:+
+  Not read from .env: ${ENV_FILE_OPT_IN_PROBLEM}.}"
     fi
 }

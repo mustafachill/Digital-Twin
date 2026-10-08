@@ -13,7 +13,7 @@ WHAT THE VALUE LOOKS LIKE ON THE FAR SIDE, so that nobody "fixes" the assertions
 below. `xarm5.ros2_control.xacro` emits `<param name="robot_ip">R${robot_ip}</param>`
 — a literal `R` prefix — and `uf_robot_system_hardware.cpp` takes `substr(1)` to
 remove it again. The generator emits the plain address; pre-stripping a character
-here would turn 192.168.1.203 into 92.168.1.203 and nothing would find out until
+here would turn 203.0.113.7 into 03.0.113.7 and nothing would find out until
 an arm existed.
 
 The addresses are from TEST-NET-3 (RFC 5737), which exists so that a routable
@@ -149,7 +149,9 @@ class TestItDoesNotReachASimulatedArm:
     """Promotion clause 2. Absence of the argument, not an empty value."""
 
     def test_the_argument_name_is_absent_from_a_sim_arm(self, real_model: Path) -> None:
-        # The shipped model is all-`sim`, so this is the shipped path.
+        # The shipped PLANT is `sim`, so this is the shipped plant's path. The
+        # shipped counterpart is `real` and has a description of its own
+        # (ADR-0070), which this helper does not read.
         assert "robot_ip" not in macro_arguments(description_of(real_model, ARM))
 
     def test_an_unselected_backends_block_reaches_nothing(

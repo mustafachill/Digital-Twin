@@ -1,6 +1,9 @@
 # ADR-0067: The real robot's program drives the twin, and the arm rides a track
 
-- **Status:** Proposed
+- **Status:** Proposed. **[2026-10-05]** Decision 5's hardware path for the track is built by
+  [ADR-0070](0070-the-physical-arm-is-cell-b-s-counterpart.md): a `real` track backend and
+  `cite_hardware`'s track adapter, which serves this record's track topic on the physical side
+  through the vendor's `set_linear_motor_pos`. The body below is kept as written.
 - **Date:** 2026-09-29
 - **Deciders:** Project owner
 - **Related:** [ADR-0066](0066-run-the-cell-from-a-fixed-program.md) (continued here),

@@ -374,6 +374,16 @@ asset_type:
     # declaring a second, much wider part fail rather than degrade quietly.
     stall_band_narrow_m: 0.002385
     stall_band_wide_m: 0.002385
+    # The vendor driver's own units, for the physical side, where a relay
+    # forwards GripperCommand to the vendor's action instead of a controller
+    # (ADR-0070 item 4). The driver's `xarm_gripper.max_pos`, declared once:
+    # its action takes 0.0 open to max_pos / 1000 (0.85) closed, and its
+    # `get_gripper_position` service reports pulses, max_pos open and 0 closed
+    # (xarm_api/src/xarm_driver.cpp:507-515, `xarm_params.yaml`). Both ranges
+    # are derived from it (`VendorGripperUnits`).
+    vendor:
+      max_pos_pulses: 850.0
+      poll_period_s: 0.1
 
   controllers:
     - suffix: gripper_controller

@@ -106,6 +106,36 @@ def wait(seconds: float) -> Step:
     return Step("wait", seconds=seconds)
 
 
+def speed_scale(value: float) -> float:
+    """Return a usable speed scale, in (0, 1], or refuse one (`--speed-scale`)."""
+    if not (math.isfinite(value) and 0.0 < value <= 1.0):
+        raise ValueError(f"a speed scale is in (0, 1], not {value}")
+    return value
+
+
+def scaled_motion(
+    velocity_scaling: float,
+    default_velocity: float,
+    default_acceleration: float,
+    scale: float,
+) -> tuple[float, float]:
+    """Return a move's (velocity, acceleration) scaling at ``scale`` of its own speed.
+
+    At 1.0 the move is exactly what the program states: its velocity, and the
+    server's default acceleration (0). Below it, both are that fraction of what
+    the move would otherwise run at - the program's velocity, or the server's
+    default where the program states none, and the server's default
+    acceleration - so a slowed program is the same program, slower, on both
+    sides alike. It never asks for more than the move would otherwise get, and
+    no tolerance changes.
+    """
+    scale = speed_scale(scale)
+    if scale == 1.0:
+        return velocity_scaling, 0.0
+    velocity = velocity_scaling if velocity_scaling > 0.0 else default_velocity
+    return velocity * scale, default_acceleration * scale
+
+
 class StepFailed(RuntimeError):
     """A step the cell did not complete. The message says which and why."""
 

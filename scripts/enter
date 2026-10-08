@@ -51,6 +51,8 @@ if [ "$SERVICE" = "hardware" ]; then
     # that a caller can skip by appending arguments is not an opt-in.
     warn "The 'hardware' service has host networking, /dev passthrough and privileged execution."
     warn "Anything you run inside it can reach and command the physical robots."
+    # Shell > repository-root .env > 0; compose() hands the container this value.
+    resolve_hardware_opt_in
     require_explicit_hardware_opt_in
 fi
 

@@ -33,6 +33,7 @@ install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
   ${PROJECT_NAME}/lifecycle_driver.py
   ${PROJECT_NAME}/grasp_hold_bridge.py
+  ${PROJECT_NAME}/hold_gate.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -63,6 +64,12 @@ if(BUILD_TESTING)
   # The plan reader is pure logic with no ROS runtime, so it is unit-tested here
   # rather than exercised only by bringing the whole cell up.
   ament_add_pytest_test(plan test/test_plan.py)
+  # ADR-0070 item 6: what the physical side's launch refuses and the order it
+  # would start the side in, read off the launch description; nothing starts.
+  ament_add_pytest_test(hardware_launch test/test_hardware_launch.py)
+  # R-05, R-09: the hold gate against cite_hardware's vendor fakes, each case
+  # the real gate as a process; nothing reaches hardware.
+  ament_add_pytest_test(hold_gate test/test_hold_gate.py TIMEOUT 180)
   # ADR-0054 clause 6: the reproduction refused end to end - L0 edit, generate,
   # load the plan, call the gate. The only assertion that runs the whole path
   # the defect ran, and the only one crossing `cite_tools` and `cite_bringup`,
@@ -120,6 +127,9 @@ if(BUILD_TESTING)
   # nothing - which the launch announces and the supervisor reports as a pair.
   ament_add_pytest_test(readiness_witness test/test_readiness_witness.py)
   ament_add_pytest_test(program test/test_program.py)
+  # S-01 (ADR-0070): an initialization interrupted or unanswered once sent is
+  # followed by the vendor's track stop; against fakes, on a domain of its own.
+  ament_add_pytest_test(initialize_interrupted test/test_initialize_interrupted.py)
   # ADR-0058 clause 2. The driver's failure paths, driven against fake managed
   # nodes that advertise the two lifecycle services and answer them as the test
   # says - including one that transitions and never answers, which is the case

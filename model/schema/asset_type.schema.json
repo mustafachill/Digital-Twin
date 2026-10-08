@@ -669,6 +669,17 @@
           "exclusiveMinimum": 0.0,
           "title": "Stall Band Wide M",
           "type": "number"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorGripperUnits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -739,6 +750,11 @@
           "title": "Commands Physical Hardware",
           "type": "boolean"
         },
+        "exports_end_effector_joints": {
+          "default": true,
+          "title": "Exports End Effector Joints",
+          "type": "boolean"
+        },
         "instance_params": {
           "items": {
             "type": "string"
@@ -747,8 +763,37 @@
           "type": "array"
         },
         "ros2_control_plugin": {
-          "title": "Ros2 Control Plugin",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ros2 Control Plugin"
+        },
+        "vendor_axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorAxis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "vendor_driver": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VendorDriver"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1309,6 +1354,32 @@
       "title": "PlanningSpec",
       "type": "object"
     },
+    "StreamingMode": {
+      "additionalProperties": false,
+      "description": "The vendor mode a physical arm's plugin streams commands in (ADR-0070 item 5).\n\nThe xArm plugin streams only in SERVO (1) for position control or VELO_JOINT\n(4) for velocity control, chosen by the description argument\n`velocity_control` (`uf_robot_system_hardware.cpp:252`, `:487`). The deadman\nenables the arm in that same mode, so the mode is read from the argument the\ndescription is generated from and cannot disagree with it.",
+      "properties": {
+        "argument": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Argument",
+          "type": "string"
+        },
+        "when_false": {
+          "title": "When False",
+          "type": "integer"
+        },
+        "when_true": {
+          "title": "When True",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "argument",
+        "when_false",
+        "when_true"
+      ],
+      "title": "StreamingMode",
+      "type": "object"
+    },
     "TrajectoryConstraints": {
       "additionalProperties": false,
       "description": "When a `JointTrajectoryController` should call a trajectory mistracked.\n\nADR-0036. Without these the controller runs any trajectory to the end and\nreports ``SUCCEEDED`` however badly it tracked, because\n`joint_trajectory_controller` defaults every tolerance to ``0.0`` and\n``check_state_tolerance_per_joint`` skips any variable whose tolerance is not\n``> 0.0``. That silence reaches the caller: MoveIt returns success,\n``execute_plan`` maps it to ``ResultCode::SUCCESS``, and ``Pick`` reports a\nclean pick it never made.\n\nThese are a DETECTOR and not a protective measure. What stops an arm driving\ninto a fixture is the vendor controller's torque limiting and physical\nguarding — a risk assessment and ISO 10218 matter outside this repository\n(charter §3.2). This turns a silent success into an ``EXECUTION_FAILED``\nafter the fact, which is what lets L4 fault a station instead of building on\na lie.\n\nThey live in the model rather than in the generator for the same reason\n``update_rate_hz`` and ``max_acceleration_rad_s2`` do: how tightly a\nparticular arm tracks is a fact about that arm (P5). One block serves both\nbackends — a tolerance that differed between simulation and hardware would\nbe a P2 break, not a tuning choice.",
@@ -1348,6 +1419,136 @@
         "stopped_velocity_tolerance_rad_s"
       ],
       "title": "TrajectoryConstraints",
+      "type": "object"
+    },
+    "VendorAxis": {
+      "additionalProperties": false,
+      "description": "How a physical axis served by vendor services is read and commanded (ADR-0070 item 3).\n\nDeclared on a plugin-less `real` backend of a `linear_axis` type: no\n`ros2_control` component serves its joint there, and the physical side's\ntrack adapter translates between the trajectory controller's names and the\nvendor's services with these facts. The travel and the speed limit are not\nhere: they are the axis's own (`LinearAxisSpec`), the same numbers the\nsimulated controller is limited by.",
+      "properties": {
+        "auto_enable": {
+          "title": "Auto Enable",
+          "type": "boolean"
+        },
+        "initialize_deadline_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Initialize Deadline S",
+          "type": "number"
+        },
+        "initialize_speed_mps": {
+          "exclusiveMinimum": 0.0,
+          "title": "Initialize Speed Mps",
+          "type": "number"
+        },
+        "poll_period_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Poll Period S",
+          "type": "number"
+        },
+        "position_max_age_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Position Max Age S",
+          "type": "number"
+        },
+        "position_scale": {
+          "exclusiveMinimum": 0.0,
+          "title": "Position Scale",
+          "type": "number"
+        },
+        "segment_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Segment S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "position_scale",
+        "poll_period_s",
+        "position_max_age_s",
+        "segment_s",
+        "auto_enable",
+        "initialize_deadline_s",
+        "initialize_speed_mps"
+      ],
+      "title": "VendorAxis",
+      "type": "object"
+    },
+    "VendorDriver": {
+      "additionalProperties": false,
+      "description": "The vendor driver a physical backend's plugin embeds, and what it serves outside it.\n\nSome vendors serve part of a machine only through a driver of their own that\nruns inside the `ros2_control` component: for the xArm, the plugin\n`uf_robot_hardware/UFRobotSystemHardware` constructs `xarm_api`'s driver on a\nnode of its own, and that driver serves the linear track only as services and\nthe gripper only as an action (ADR-0070 items 3-5). This block is what the\ngenerator needs to name those, and to switch the services on: it states\nfacts about the vendor's code, each read from the pinned source, and no name\na consumer writes by hand.\n\nThe NAMES are formed by `cite_tools.model.ids.vendor_interface`, once.",
+      "properties": {
+        "controller_manager_services": {
+          "items": {
+            "pattern": "^(/[A-Za-z_][A-Za-z0-9_]*)+$",
+            "type": "string"
+          },
+          "title": "Controller Manager Services",
+          "type": "array"
+        },
+        "gripper_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Action"
+        },
+        "namespace_arg": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Namespace Arg",
+          "type": "string"
+        },
+        "node": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Node",
+          "type": "string"
+        },
+        "services": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Services",
+          "type": "array"
+        },
+        "streaming_mode": {
+          "$ref": "#/$defs/StreamingMode"
+        }
+      },
+      "required": [
+        "node",
+        "namespace_arg",
+        "services",
+        "streaming_mode",
+        "controller_manager_services"
+      ],
+      "title": "VendorDriver",
+      "type": "object"
+    },
+    "VendorGripperUnits": {
+      "additionalProperties": false,
+      "description": "The vendor driver's units for a gripper it serves outside `ros2_control` (ADR-0070 item 4).\n\nThe xArm driver's `GripperCommand` action and its `get_gripper_position`\nservice use DIFFERENT units: the action takes 0.0 open to `max_pos / 1000`\nclosed and converts it as `pulses = |max_pos - position * 1000|`; the\nservice reports the pulses themselves, `max_pos` open and 0 closed\n(`xarm_api/src/xarm_driver.cpp:507-515`). Both ranges follow from the one\nvendor value `max_pos_pulses`, declared once (M-02). The drive joint's own\nrange is `GraspSpec.open_position`/`closed_position`.",
+      "properties": {
+        "max_pos_pulses": {
+          "exclusiveMinimum": 0.0,
+          "title": "Max Pos Pulses",
+          "type": "number"
+        },
+        "poll_period_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Poll Period S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_pos_pulses",
+        "poll_period_s"
+      ],
+      "title": "VendorGripperUnits",
       "type": "object"
     },
     "VendorSelfCollisionMatrix": {

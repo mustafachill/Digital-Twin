@@ -50,6 +50,9 @@
   <!-- The reverse state flow: an arm's joint state, consumed by the divergence
        monitor and republished nowhere. -->
   <depend>sensor_msgs</depend>
+  <!-- The arm trajectory controller's state, read on a physical side to tell
+       that the controller is running (ADR-0070 item 6). -->
+  <depend>control_msgs</depend>
   <depend>std_msgs</depend>
   <!-- A linear track's command crosses the boundary as the trajectory its
        controller takes (ADR-0067). -->

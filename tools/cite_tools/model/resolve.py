@@ -26,6 +26,8 @@ from cite_tools.model.schema import (
     HardwareBackend,
     Material,
     TrajectoryConstraints,
+    TwinSpec,
+    VendorAxis,
 )
 from cite_tools.model.workpieces import WorkpieceWidths, workpiece_types, workpiece_widths
 
@@ -56,6 +58,19 @@ class ResolvedController:
     #: through unchanged: the per-joint expansion needs ``joints`` above, which
     #: only exists once the instance has been resolved.
     constraints: TrajectoryConstraints | None = None
+    #: Which asset's hardware this controller claims a joint of: the asset's
+    #: own (`OWN`), the end effector fitted to it (`END_EFFECTOR`) or the track
+    #: it rides (`AXIS`). A controller is loaded on a side only where some
+    #: hardware component on that side exports its joint, and which component
+    #: that is depends on where the controller came from
+    #: (`ResolvedAsset.controllers_on`, ADR-0070 items 3 and 4).
+    origin: str = "own"
+
+
+#: The three values of `ResolvedController.origin`.
+OWN = "own"
+END_EFFECTOR = "end_effector"
+AXIS = "axis"
 
 
 @dataclass(frozen=True)
@@ -82,9 +97,26 @@ class ResolvedAxis:
     carriage_mass_kg: float
     carriage_size_m: tuple[float, float, float]
     goal_tolerance_m: float
-    ros2_control_plugin: str
+    #: The track's `ros2_control` plugin on each side, keyed by side name and
+    #: read through `plugin_on`. `None` on a side whose track backend declares
+    #: no plugin: no `<ros2_control>` block claims the joint there (ADR-0070
+    #: item 3). Both sides are always present, the counterpart carrying the
+    #: fallback, so a caller never has to know whether the zone is paired.
+    plugins: tuple[tuple[str, str | None], ...]
     controller: str
     command_topic: str
+    #: How the physical side's track adapter serves the track on each side,
+    #: keyed by side name like `plugins`; `None` where a `ros2_control`
+    #: component serves it (ADR-0070 item 3).
+    vendor_axes: tuple[tuple[str, VendorAxis | None], ...] = ()
+
+    def plugin_on(self, side: str) -> str | None:
+        """The track's plugin on ``side``; see `plugins`."""
+        return dict(self.plugins)[side]
+
+    def vendor_axis_on(self, side: str) -> VendorAxis | None:
+        """How the track adapter serves the track on ``side``; see `vendor_axes`."""
+        return dict(self.vendor_axes).get(side)
 
 
 @dataclass(frozen=True)
@@ -116,9 +148,68 @@ class ResolvedAsset:
             )
         return backend
 
-    @property
-    def ros2_control_plugin(self) -> str:
-        return self._backend(self.instance.hardware.backend).ros2_control_plugin
+    def backend_on(self, side: str) -> str:
+        """The backend id this asset loads on ``side``.
+
+        THE ONE PLACE A GENERATOR TURNS (asset, side) INTO A BACKEND (ADR-0048
+        clause 2, ADR-0070 item 1). Every generator site that branches on a
+        backend asks this with the side it is generating for; reading
+        `instance.hardware.backend` directly is reading the PLANT's, which is
+        open-work #38's defect.
+        """
+        if side == ids.PLANT_SIDE:
+            return self.instance.hardware.backend
+        if side == ids.COUNTERPART_SIDE:
+            return self.instance.hardware.effective_counterpart_backend
+        raise ResolveError(f"{side!r} is not a side of a twin pair. Expected one of {ids.SIDES}.")
+
+    def differs_on(self, side: str) -> bool:
+        """Whether ``side`` loads a backend other than the plant's.
+
+        A side that names the plant's backend gets no artifact of its own
+        (ADR-0048 clause 2), so this is what decides whether one is emitted.
+        """
+        return self.backend_on(side) != self.backend_on(ids.PLANT_SIDE)
+
+    def ros2_control_plugin_on(self, side: str) -> str | None:
+        return self._backend(self.backend_on(side)).ros2_control_plugin
+
+    def controllers_on(self, side: str) -> tuple[ResolvedController, ...]:
+        """The controllers this asset's manager loads on ``side``.
+
+        A controller is loaded where some hardware on that side exports its
+        joint, and nowhere else: one claiming a joint no component exports fails
+        to configure, and a side where it failed would not come up. Two
+        declarations decide it, both read from L0 and neither from a plugin
+        string:
+
+        * a TRACK controller is dropped where the track's backend on that side
+          declares no `ros2_control_plugin` (ADR-0070 item 3);
+        * an END-EFFECTOR controller is dropped where the end effector is
+          vendor-integrated and this asset's backend on that side declares
+          `exports_end_effector_joints: false` (item 4). The flag is about the
+          vendor's own integration - its macro emits the gripper's block only
+          then - so an end effector that is not vendor-integrated is not
+          dropped by it; `cite_description`'s plugin test asserts the drive
+          joint is claimed exactly when both hold.
+
+        The names stay what they are on every side: what is dropped is what the
+        controller manager loads, never what a consumer addresses.
+        """
+        backend = self._backend(self.backend_on(side))
+        track_unserved = self.axis is not None and self.axis.plugin_on(side) is None
+        effector = self.instance.end_effector
+        effector_unserved = (
+            effector is not None
+            and effector.vendor_integrated
+            and not backend.exports_end_effector_joints
+        )
+        return tuple(
+            c
+            for c in self.controllers
+            if not (c.origin == AXIS and track_unserved)
+            and not (c.origin == END_EFFECTOR and effector_unserved)
+        )
 
     def commands_physical_hardware_of(self, backend_id: str) -> bool:
         """Whether ``backend_id``, as this asset's type declares it, reaches a machine.
@@ -205,6 +296,10 @@ class ResolvedCell:
     #: artifact emits the library itself — so the join happens at each emitter and
     #: the colour is stated once here.
     materials: tuple[Material, ...] = ()
+    #: The zone's twin declaration: how many sides, and the heartbeat and
+    #: physical-side timing a pair carries (ADR-0070 item 5). `None` only for a
+    #: cell built by hand in a test.
+    twin: TwinSpec | None = None
 
     @property
     def is_paired(self) -> bool:
@@ -341,12 +436,20 @@ def _axis(
     if track is None or track_type is None or track_type.axis is None:
         return None
     spec = track_type.axis
-    backend = track_type.hardware_backends.get(track.hardware.backend)
-    if backend is None:
-        raise ResolveError(
-            f"track {track.id!r} selects backend {track.hardware.backend!r}, which type "
-            f"{track_type.id!r} does not declare"
-        )
+    plugins: list[tuple[str, str | None]] = []
+    vendor_axes: list[tuple[str, VendorAxis | None]] = []
+    for side, backend_id in (
+        (ids.PLANT_SIDE, track.hardware.backend),
+        (ids.COUNTERPART_SIDE, track.hardware.effective_counterpart_backend),
+    ):
+        backend = track_type.hardware_backends.get(backend_id)
+        if backend is None:
+            raise ResolveError(
+                f"track {track.id!r} selects backend {backend_id!r}, which type "
+                f"{track_type.id!r} does not declare"
+            )
+        plugins.append((side, backend.ros2_control_plugin))
+        vendor_axes.append((side, backend.vendor_axis))
     track_world = _resolve_world_pose(model, track.id)
     rotation = np.asarray(world.to_matrix())[:3, :3].T @ np.asarray(track_world.to_matrix())[:3, :3]
     direction = rotation @ np.asarray(spec.direction, dtype=float)
@@ -366,7 +469,8 @@ def _axis(
             carriage_mass_kg=spec.carriage_mass_kg,
             carriage_size_m=spec.carriage_size_m,
             goal_tolerance_m=spec.goal_tolerance_m,
-            ros2_control_plugin=backend.ros2_control_plugin,
+            plugins=tuple(plugins),
+            vendor_axes=tuple(vendor_axes),
             controller=ids.controller(track.id, controller.suffix),
             command_topic=ids.interface(
                 instance.zone,
@@ -543,14 +647,18 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
 
         # A track's controllers are loaded by the arm it carries, below, and
         # never by a controller manager of the track's own.
-        specs = [] if asset_type.category == "linear_axis" else list(asset_type.controllers)
+        specs = (
+            []
+            if asset_type.category == "linear_axis"
+            else [(spec, OWN) for spec in asset_type.controllers]
+        )
         # An end-effector's controllers belong to the arm that carries it: they
         # are loaded into the arm's controller manager and named with the arm's
         # prefix, because that is the asset an operator addresses.
         if instance.end_effector is not None:
             effector_type = model.asset_type(instance.end_effector.type)
             if effector_type is not None:
-                specs.extend(effector_type.controllers)
+                specs.extend((spec, END_EFFECTOR) for spec in effector_type.controllers)
 
         controllers = [
             ResolvedController(
@@ -562,8 +670,9 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
                 state_interfaces=tuple(spec.state_interfaces),
                 parameters=dict(spec.parameters),
                 constraints=spec.constraints,
+                origin=origin,
             )
-            for spec in sorted(specs, key=lambda s: (s.stage, s.suffix))
+            for spec, origin in sorted(specs, key=lambda s: (s[0].stage, s[0].suffix))
         ]
 
         # A track's controller is loaded by the controller manager of the arm on
@@ -594,6 +703,7 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
                             trajectory_tolerance_rad=track_type.axis.trajectory_tolerance_m,
                             stopped_velocity_tolerance_rad_s=0.0,
                         ),
+                        origin=AXIS,
                     )
                     for spec in track_type.controllers
                     if spec.joints == "axis"
@@ -684,4 +794,5 @@ def resolve(model: FacilityModel, zone_id: str) -> ResolvedCell:
         unplaced_types=tuple(sorted(model.types, key=lambda t: t.id)),
         workpiece_models=tuple(sorted(model.facility.workpiece_models)),
         materials=model.materials,
+        twin=zone.twin,
     )

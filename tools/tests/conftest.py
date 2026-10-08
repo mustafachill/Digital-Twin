@@ -22,6 +22,19 @@ FIXTURES = Path(__file__).parent / "fixtures"
 REAL_MODEL = Path(__file__).resolve().parents[2] / "model"
 
 
+def paired_twin() -> dict:
+    """The shipped model's `twin:` block of a paired zone, read rather than restated.
+
+    A test that pairs a zone writes this whole block, because a pair states its
+    heartbeat period and, where its counterpart is physical, that side's
+    timing (ADR-0070 item 5); copying the numbers here would be a second
+    statement of them.
+    """
+    zones = yaml.safe_load((REAL_MODEL / "facility/zones.yaml").read_text())["zones"]
+    (twin,) = [zone["twin"] for zone in zones if zone["twin"]["sides"] == "pair"][:1]
+    return dict(twin)
+
+
 @pytest.fixture
 def minimal_model(tmp_path: Path) -> Path:
     destination = tmp_path / "model"

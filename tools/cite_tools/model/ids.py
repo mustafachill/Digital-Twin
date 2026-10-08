@@ -150,6 +150,29 @@ GRASP_ATTACH = "grasp/attach"
 GRASP_DETACH = "grasp/detach"
 
 
+#: The nodes a PHYSICAL side runs beside its controller manager, in the asset's
+#: namespace (ADR-0070 items 3-5). Their parameters are keyed by these names in
+#: the side's generated adapter configuration, and the side's launch starts each
+#: under the fully qualified name the plan states, so a name is made here and
+#: nowhere else.
+DEADMAN_NODE = "deadman"
+#: The controller manager's node name, in each asset's namespace. Named here
+#: because two artifacts form it: the plan's `node`, and the remap targets of a
+#: vendor plugin that calls the manager by an absolute name (ADR-0070).
+CONTROLLER_MANAGER_NODE = "controller_manager"
+TRACK_ADAPTER_NODE = "track_adapter"
+GRIPPER_RELAY_NODE = "gripper_relay"
+#: Serves the physical arm's `InitializeAsset` (ADR-0070): what its operator
+#: does by hand in UFACTORY Studio before running the program.
+INITIALIZER_NODE = "initializer"
+
+#: Where a physical side's deadman publishes its `DeadmanState`, under the asset
+#: it guards (CLAUDE.md §8). A leaf, formed into a name by :func:`interface`.
+DEADMAN_STATE = "deadman/state"
+#: Where a physical arm's initializer serves `InitializeAsset`, under the asset.
+INITIALIZE = "initialize"
+
+
 def scope(reserved: str, name: str) -> str:
     """`/cite/<reserved>/<name>` — facility-, twin-, or line-scope state."""
     if reserved not in RESERVED_SCOPES:
@@ -274,6 +297,24 @@ def link(asset_id: str, suffix: str) -> str:
     """`<asset_id>_<suffix>` — e.g. ``arm_1_link_base``."""
     validate_identifier(suffix, kind="link suffix")
     return f"{prefix(asset_id)}{suffix}"
+
+
+def vendor_interface(zone: str, asset_id: str, relative: str) -> str:
+    """A name the vendor driver embedded in an asset's hardware plugin creates.
+
+    THE ONE RULE FOR EVERY VENDOR NAME (ADR-0070). The xArm driver prefixes each
+    name it creates with the instance prefix and creates it relative to its own
+    node, which runs in the asset's namespace: its service namespace is
+    ``${prefix}${hw_ns}`` (`xarm_description/urdf/xarm5/xarm5.ros2_control.xacro`
+    line 17, used as a sub-node in `xarm_api/src/xarm_driver.cpp` line 159) and
+    its gripper action ``prefix + "xarm_gripper/gripper_action"``
+    (`xarm_driver.cpp` line 486). So ``relative`` is everything after the prefix.
+
+    The driver NODE is not one of these: the plugin constructs it unprefixed
+    (`xarm_controller/src/hardware/uf_robot_system_hardware.cpp` line 53), so its
+    name is :func:`interface` of the node name, in the same namespace.
+    """
+    return interface(zone, asset_id, f"{prefix(asset_id)}{relative}")
 
 
 def controller_action(zone: str, asset_id: str, controller_suffix: str, action: str) -> str:

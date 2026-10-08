@@ -174,6 +174,9 @@ def _reproduction_model(destination: Path) -> Path:
     arms = scratch / "assets/instances/arms.yaml"
     instances = yaml.safe_load(arms.read_text())
     for asset in instances["assets"]:
+        # The zone is unpaired above, so no counterpart is declared:
+        # `counterpart-backend-on-unpaired-zone` refuses one (ADR-0070).
+        asset.get("hardware", {}).pop("counterpart_backend", None)
         if asset.get("hardware", {}).get("backend") == "sim":
             # INDEXED BY THE BACKEND ID, which is `sim` here because the
             # reproduction changes no id — that is the whole of it. ADR-0053
@@ -183,8 +186,18 @@ def _reproduction_model(destination: Path) -> Path:
             # whose `instance_params` declares the key. Without it,
             # `missing-hardware-param` refuses the model and clause 6 would be
             # measuring that refusal rather than the hardware gate.
-            asset["hardware"]["params"] = {"sim": {"robot_ip": "203.0.113.7"}}
+            # A reference and not a literal: this backend declares itself
+            # physical, and `literal-param-on-physical-backend` refuses a
+            # committed value for it (ADR-0070 item 2).
+            asset["hardware"]["params"] = {
+                "sim": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
+            }
     arms.write_text(yaml.safe_dump(instances, sort_keys=False))
+    tracks = scratch / "assets/instances/tracks.yaml"
+    carried = yaml.safe_load(tracks.read_text())
+    for asset in carried["assets"]:
+        asset.get("hardware", {}).pop("counterpart_backend", None)
+    tracks.write_text(yaml.safe_dump(carried, sort_keys=False))
     return scratch
 
 
@@ -325,9 +338,12 @@ def test_the_two_halves_build_the_same_model() -> None:
         "commands_physical_hardware",
         "sim",
         "robot_ip",
-        "203.0.113.7",
+        "env",
+        "CITE_XARM_IP",
+        "counterpart_backend",
         "assets/types/robots/xarm5.yaml",
         "assets/instances/arms.yaml",
+        "assets/instances/tracks.yaml",
         # The zone shape each half pins rather than inherits from the checkout.
         "facility/zones.yaml",
         "twin",

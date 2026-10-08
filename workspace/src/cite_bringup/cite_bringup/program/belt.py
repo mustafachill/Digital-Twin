@@ -14,7 +14,7 @@
 
 """Run one side's belt on that side alone: `python3 -m cite_bringup.program.belt`.
 
-    --zone cell_b                         every side's belt at its installed speed
+    --zone cell_b                         every simulated side's belt at its installed speed
     --zone cell_b --side counterpart --stop
 
 THE BELT IS NOT TWINNED (ADR-0067). The real robot's program has no belt block,
@@ -32,6 +32,7 @@ import sys
 import time
 
 from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
+from cite_bringup.program.sides import is_physical
 
 #: How long to wait for the belt's subscriber, in wall seconds. A hang detector.
 MATCH_CEILING_S = 60.0
@@ -49,9 +50,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     plan = load(default_plan_path(args.zone))
-    sides = [plan.side_named(name).name for name in (args.side or [])] or [
-        side.name for side in plan.sides
-    ]
+    # Never a physical side: there is no physical belt driver, and the belt is
+    # not twinned (ADR-0067, ADR-0070 item 7). Named or not, it is skipped and
+    # said so.
+    named = [plan.side_named(name).name for name in (args.side or [])]
+    sides = []
+    for side in named or [side.name for side in plan.sides]:
+        if is_physical(plan, side):
+            print(f"  --  {side}: physical, and no belt is driven there", flush=True)
+        else:
+            sides.append(side)
     if len(plan.conveyors) != 1:
         parser.error(f"zone {args.zone} has {len(plan.conveyors)} belts, not one")
     (conveyor,) = plan.conveyors

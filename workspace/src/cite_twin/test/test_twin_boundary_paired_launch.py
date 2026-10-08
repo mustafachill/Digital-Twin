@@ -51,14 +51,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
-from cite_bringup.plan import default_plan_path
+from cite_bringup.plan import COUNTERPART_ARTIFACT_KEYS, default_plan_path
 from cite_bringup.readiness import boundary_announcement
+from cite_bringup.track_command import move as track_move
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode
+from cite_interfaces.srv import SetMode, TrackArrived
 import launch
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
@@ -70,6 +72,7 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node as RclpyNode
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory
 import yaml
 
 ZONE = "cell_b"
@@ -127,25 +130,41 @@ def _stdout(proc_output) -> str:
 
 
 def _paired_plan() -> Path:
-    """Return the zone's generated plan, AS GENERATED — nothing appended or edited.
+    """Return the zone's generated plan with every far side SIMULATED, written to a file.
 
-    Every far side simulated, which is what the shipped model declares; the mixed
-    case is the other rig's. This read the generated plan of an UNPAIRED zone and
-    appended a counterpart to it unconditionally, which was legal only because
-    that zone was single and would have written two sides named `counterpart` on
-    a paired one (`docs/open-work.md` #62). The zone the model declares now is
-    paired (ADR-0059), so the generated plan is used as it is, and the two
-    premises this rig rests on are asserted of it instead of manufactured.
+    The mixed case is the other rig's. This read the generated plan of an
+    UNPAIRED zone and appended a counterpart to it unconditionally, which was
+    legal only because that zone was single and would have written two sides
+    named `counterpart` on a paired one (`docs/open-work.md` #62). The zone is
+    paired (ADR-0059), so the pairing is asserted of the generated plan rather
+    than manufactured.
+
+    **The far side is normalised, and that is the one edit.** Since ADR-0070 the
+    shipped counterpart is the physical xArm 5, and this rig is about the
+    boundary with a simulated far side — on a physical one every mode but `SIM`
+    is refused, which `test_twin_boundary_launch.py` covers. So each manager's
+    counterpart is set to the plant's backend and declaration, and the keys
+    naming a differing counterpart's own files are dropped, exactly as the
+    generator emits a pair whose sides load one backend (ADR-0048 clause 2).
     """
-    path = default_plan_path(ZONE)
-    plan = yaml.safe_load(path.read_text())["plan"]
+    document = yaml.safe_load(default_plan_path(ZONE).read_text())
+    plan = document["plan"]
     assert [side["name"] for side in plan["sides"]] == ["plant", "counterpart"], (
         f"{ZONE}'s generated plan is not paired, so there is no far side to cross to"
     )
+    for manager in plan["controller_managers"]:
+        manager["counterpart_backend"] = manager["backend"]
+        manager["counterpart_commands_physical_hardware"] = manager[
+            "commands_physical_hardware"
+        ]
+        for key in COUNTERPART_ARTIFACT_KEYS:
+            manager.pop(key, None)
     assert not any(
-        manager.get("counterpart_commands_physical_hardware")
+        manager["counterpart_commands_physical_hardware"]
         for manager in plan["controller_managers"]
-    ), f"{ZONE}'s generated plan declares a physical far side; this rig is the simulated one"
+    ), f"{ZONE}'s plant declares physical hardware; this rig is the simulated one"
+    path = Path(tempfile.mkdtemp(prefix="cite_twin_paired_")) / f"{ZONE}_plan.yaml"
+    path.write_text(yaml.safe_dump(document))
     return path
 
 
@@ -155,6 +174,12 @@ PLAN_PATH = _paired_plan()
 #: of it, which is where a fixed program sends a setpoint (ADR-0066).
 BELT = yaml.safe_load(PLAN_PATH.read_text())["plan"]["conveyors"][0]["command_topic"]
 TWIN_BELT = BELT.replace("/cite/", "/cite/twin/", 1)
+
+#: The arm's track, as a side owns its command topic, and the operator's twin
+#: of it (ADR-0067). Each fake side stands its carriage at its own offset.
+_TRACK = yaml.safe_load(PLAN_PATH.read_text())["plan"]["controller_managers"][0]["track"]
+TRACK, TRACK_JOINT = _TRACK["command_topic"], _TRACK["joint"]
+TWIN_TRACK = TRACK.replace("/cite/", "/cite/twin/", 1)
 
 
 def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
@@ -172,6 +197,10 @@ def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
             str(offset),
             "--belts",
             BELT,
+            "--track-topic",
+            TRACK,
+            "--track-joint",
+            TRACK_JOINT,
         ],
         # The whole of the isolation, and the reason this rig can hold two
         # sides at once: each child process discovers only its own domain.
@@ -222,6 +251,10 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         cls.move_to = ActionClient(cls.node, MoveTo, MOVE_TO)
         cls.pick = ActionClient(cls.node, Pick, PICK)
         cls.belt = cls.node.create_publisher(Float64, TWIN_BELT, COMMAND)
+        cls.track = cls.node.create_publisher(JointTrajectory, TWIN_TRACK, COMMAND)
+        cls.track_arrived = cls.node.create_client(
+            TrackArrived, TrackArrived.Request.SERVICE
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -300,6 +333,19 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             self.set_mode.wait_for_service(timeout_sec=SETTLE_S),
             "the boundary announced and SetMode was never advertised",
         )
+
+    def test_each_side_hears_the_heartbeat_on_its_own_domain(self, proc_output):
+        """ADR-0070 item 5: the liveness a physical side's deadman stops on.
+
+        Read from each fake's stdout, because each side is on a domain of its
+        own and the counterpart's is one this process holds no context on. The
+        zone is the plan's and the sequence advances — a heartbeat that repeats
+        one sequence is not evidence the boundary is alive now, and the deadman
+        does not count it.
+        """
+        for side in ("plant", "counterpart"):
+            _wait_for_side(proc_output, f"{side}: heartbeat zone={ZONE}")
+            _wait_for_side(proc_output, f"{side}: heartbeat advancing")
 
     def test_an_accepted_transition_is_published(self):
         """Asserted here rather than on the mixed plan, where none is possible.
@@ -442,6 +488,85 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
                 f"a stop sent in SIM reached the {side}",
             )
 
+    def test_a_track_move_reaches_both_sides_unchanged(self, proc_output):
+        """One signal, both carriages: the identical message, start point included."""
+        self._enter_validated()
+        self._spin_until(
+            lambda: self.track.get_subscription_count() > 0, "the boundary's track endpoint"
+        )
+        self.track.publish(track_move(TRACK_JOINT, 0.125, 0.375, 2.5))
+        _wait_for_side(proc_output, "plant: track [0.125, 0.375]")
+        _wait_for_side(proc_output, "counterpart: track [0.125, 0.375]")
+
+    def test_a_track_stop_holds_each_side_where_it_stands_in_every_mode(self, proc_output):
+        """SA2c-S-02 a: never the plant's position sent to the counterpart's carriage.
+
+        The plant stands at 0.25 and the counterpart at 0.75. A stop - a
+        trajectory with no points - is answered with a hold at each side's OWN
+        position, and it crosses in SIM, where nothing else does.
+        """
+        self._spin_until(
+            lambda: self.track.get_subscription_count() > 0, "the boundary's track endpoint"
+        )
+        response = self._request(TwinMode.MODE_SIM, "a stop crosses in every mode")
+        self.assertTrue(response.accepted, response.result.detail)
+        # Re-sent until both holds are seen: the boundary holds only once it
+        # has heard each side's carriage, which this process cannot observe.
+        for _attempt in range(int(SETTLE_S / 0.5)):
+            self.track.publish(JointTrajectory(joint_names=[TRACK_JOINT]))
+            try:
+                proc_output.assertWaitFor(
+                    expected_output="counterpart: track [0.75, 0.75]", stream="stdout",
+                    timeout=0.5,
+                )
+                break
+            except AssertionError:
+                continue
+        else:
+            self.fail("the counterpart was never held at its own position")
+        _wait_for_side(proc_output, "plant: track [0.25, 0.25]")
+        self.assertNotIn("counterpart: track [0.25, 0.25]", _stdout(proc_output))
+
+    def _arrived(self, position_m: float, tolerance_m: float):
+        self.assertTrue(
+            self.track_arrived.wait_for_service(timeout_sec=SETTLE_S),
+            f"{TrackArrived.Request.SERVICE} was never advertised",
+        )
+        future = self.track_arrived.call_async(
+            TrackArrived.Request(
+                joint=TRACK_JOINT, position_m=position_m, tolerance_m=tolerance_m
+            )
+        )
+        self._spin_until(future.done, "TrackArrived returned")
+        return future.result()
+
+    def test_arrival_is_every_commanded_sides(self, proc_output):
+        """SA2c-S-02 c: the plant at its target is not the pair at its target."""
+        self._enter_validated()
+        # Heard first: until then no side has a position at all.
+        self._spin_until(
+            lambda: "no track position" not in self._arrived(0.25, 0.001).detail,
+            "the boundary heard both carriages",
+        )
+        at_plant = self._arrived(0.25, 0.001)
+        self.assertFalse(at_plant.arrived)
+        self.assertIn("counterpart: stands at 750.0 mm", at_plant.detail)
+        self.assertNotIn("plant:", at_plant.detail)
+        self.assertEqual(at_plant.reason, TrackArrived.Response.AWAY)
+        self.assertTrue(at_plant.routed)
+        self.assertTrue(self._arrived(0.5, 0.3).arrived)
+        response = self._request(TwinMode.MODE_SIM, "no side commanded")
+        self.assertTrue(response.accepted, response.result.detail)
+        # In SIM the plant is the commanded side and no track command is routed
+        # through L5 (R-02, R-03): the plant's carriage is asked about, and a
+        # SIMULATED counterpart is not (only a physical side is judged there).
+        in_sim = self._arrived(0.25, 0.001)
+        self.assertTrue(in_sim.arrived, in_sim.detail)
+        self.assertFalse(in_sim.routed)
+        away = self._arrived(0.75, 0.001)
+        self.assertFalse(away.arrived)
+        self.assertIn("plant: stands at 250.0 mm", away.detail)
+
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""
         self._enter_validated()
@@ -486,6 +611,25 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertFalse(sample.valid, "the clock-deficit term has no instrument")
         self.assertTrue(sample.counterpart_observed)
         self.assertFalse(sample.far_side_physical)
+
+    def test_a_quiet_joint_publisher_ages_the_operand(self, proc_output):
+        """R-05: partial joint states merge by name, and the oldest joint sets the age.
+
+        Each fake publishes joint1, joint2 and joint3 from three publishers on
+        one topic; joint3's goes quiet. Recorded per message, the operand would
+        stay as fresh as the last publisher to speak; merged per joint, it ages
+        with joint3, which is what a physical side whose track adapter died
+        must look like to the monitor.
+        """
+        _wait_for_side(proc_output, "plant: joint3 publisher quiet")
+        threshold_s = 2.0
+        self._spin_until(
+            lambda: any(
+                sample.asset_id == ASSET and sample.plant_sample_age_s > threshold_s
+                for sample in self.samples
+            ),
+            f"the plant operand aged past {threshold_s:g} s with joint3 quiet",
+        )
 
     def test_a_transition_is_refused_while_a_goal_is_in_flight(self, proc_output):
         """**S-06.** The mode must not be published ahead of the state it describes.

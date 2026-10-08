@@ -1,0 +1,38 @@
+# Whether every side the mode commands, and every physical side, has its linear
+# track at a target (ADR-0067, ADR-0070; safety findings SA2c-S-02 c, S-08).
+#
+# A program driving the pair through the twin boundary reads its OWN domain's
+# joint states, which are the plant's; the counterpart's are on a domain the
+# program never opens (ADR-0044 clause 3). So before it starts the next step it
+# asks the boundary, which already reads every side's joint states, whether each
+# side the current mode commands (`cite_twin.routing.commanded_sides`), and every
+# physical side whatever the mode, stands within `tolerance_m` of `position_m`.
+# The boundary answers a verdict and not the positions: the reverse state flow
+# is consumed by L5 and republished nowhere (ADR-0050 decision 1b).
+#
+# A physical side's position counts only while it is fresh (the plan's
+# `state_max_age_s`, on the boundary's steady clock); a side the boundary has
+# no position for, or one too old, has not arrived and is UNHEARD. Before a
+# person is asked into the cell the fixed program asks this in SIM with the
+# plant's own track position: it waits while the answer is UNHEARD, and a
+# physical carriage AWAY refuses the run there, before the prompt (S-08).
+#
+# SERVICE is the one place this name is written, as SetMode's is.
+
+string SERVICE="/cite/twin/track_arrived"
+
+string joint        # the track joint, as the plan names it
+float64 position_m  # the target the program sent
+float64 tolerance_m # the track's goal tolerance, as the plan states it
+---
+# Why `arrived` is what it is. AWAY outranks UNHEARD: a carriage heard standing
+# elsewhere does not clear by itself, a position not heard yet does.
+uint8 ARRIVED=0      # every side asked about stands within tolerance of the target
+uint8 AWAY=1         # a side heard (fresh, if physical) stands outside the tolerance
+uint8 UNHEARD=2      # none is AWAY, but a side's position is not heard, or too old
+uint8 NOT_A_TRACK=3  # `joint` is no track joint this zone's plan names
+
+bool arrived        # reason == ARRIVED
+uint8 reason        # one of the constants above
+bool routed         # the current mode routes a track command through the twin
+string detail       # which side is not there, and where it stands; or why none counts

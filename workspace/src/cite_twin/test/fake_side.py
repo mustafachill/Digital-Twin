@@ -51,7 +51,7 @@ import sys
 import threading
 
 from cite_interfaces.action import MoveTo, Pick
-from cite_interfaces.msg import ModelVersion, ResultCode
+from cite_interfaces.msg import ModelVersion, ResultCode, TwinHeartbeat
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -60,10 +60,18 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
+from trajectory_msgs.msg import JointTrajectory
 
-#: The joints this fake reports, and the only thing a divergence comparison
-#: here has to work over.
+#: The joints this fake reports, each from a publisher of its own, as a
+#: physical side's arm broadcaster, track adapter and gripper relay share one
+#: joint-state topic with partial messages (R-05).
 JOINTS = ("joint1", "joint2")
+
+#: A third joint, from a third publisher that goes QUIET after
+#: `QUIET_AFTER` messages delivered to a matched subscriber: the publisher
+#: whose silence the boundary's merged operand must not hide.
+QUIET_JOINT = "joint3"
+QUIET_AFTER = 20
 
 #: How often the fake publishes its joint state, in seconds. A publication rate
 #: and not a timing guess: nothing is sequenced on it.
@@ -79,7 +87,13 @@ def _behaviour(text: str, side: str) -> str:
 
 class FakeSide(Node):
     def __init__(
-        self, side: str, zone: str, assets: list[str], offset: float, belts: list[str]
+        self,
+        side: str,
+        zone: str,
+        assets: list[str],
+        offset: float,
+        belts: list[str],
+        track: tuple[str, str] | None = None,
     ) -> None:
         super().__init__("fake_side")
         self._side = side
@@ -95,9 +109,13 @@ class FakeSide(Node):
                 self._serve(Pick, f"{namespace}/pick", "workpiece_id")
             )
         self._states = [
-            self.create_publisher(JointState, f"/cite/{zone}/{asset}/joint_states", STATE)
+            [
+                self.create_publisher(JointState, f"/cite/{zone}/{asset}/joint_states", STATE)
+                for _joint in JOINTS + (QUIET_JOINT,)
+            ]
             for asset in assets
         ]
+        self._quiet_sent = 0
         # Each belt command this side receives is printed, which is how the
         # test sees a setpoint L5 forwarded onto this side's own domain.
         self._belts = [
@@ -111,8 +129,36 @@ class FakeSide(Node):
             )
             for topic in belts
         ]
+        # A track joint at this side's offset, on the first asset's joint
+        # states, and every track command this side receives printed with its
+        # points' positions: how the test sees what L5 sent to which carriage.
+        self._track_joint = None
+        self._track_state = None
+        if track is not None:
+            topic, self._track_joint = track
+            self._track_state = self.create_publisher(
+                JointState, f"/cite/{zone}/{assets[0]}/joint_states", STATE
+            )
+            self._track_commands = self.create_subscription(
+                JointTrajectory,
+                topic,
+                lambda message: print(
+                    f"{side}: track {[round(p.positions[0], 3) for p in message.points]}",
+                    flush=True,
+                ),
+                COMMAND,
+            )
         self._model = self.create_publisher(
             ModelVersion, "/cite/facility/model_version", LATCHED
+        )
+        # The boundary's heartbeat on THIS side's domain (ADR-0070 item 5),
+        # printed twice and no more: the first one, and the first that shows
+        # the sequence advancing. Every heartbeat would flood the output the
+        # test reads.
+        self._heartbeat_first: int | None = None
+        self._heartbeat_advanced = False
+        self._heartbeats = self.create_subscription(
+            TwinHeartbeat, TwinHeartbeat.TOPIC, self._on_heartbeat, STATE
         )
         self.create_timer(STATE_PERIOD_S, self._publish_state, callback_group=self._group)
         self.create_timer(0.5, self._publish_model, callback_group=self._group)
@@ -176,13 +222,42 @@ class FakeSide(Node):
             result.reached.header.frame_id = self._side
         return result
 
+    def _on_heartbeat(self, message: TwinHeartbeat) -> None:
+        if self._heartbeat_first is None:
+            self._heartbeat_first = message.sequence
+            print(f"{self._side}: heartbeat zone={message.zone}", flush=True)
+        elif not self._heartbeat_advanced and message.sequence > self._heartbeat_first:
+            self._heartbeat_advanced = True
+            print(f"{self._side}: heartbeat advancing", flush=True)
+
     def _publish_state(self) -> None:
-        message = JointState()
-        message.header.stamp = self.get_clock().now().to_msg()
-        message.name = list(JOINTS)
-        message.position = [self._offset for _ in JOINTS]
-        for publisher in self._states:
-            publisher.publish(message)
+        stamp = self.get_clock().now().to_msg()
+        quiet_now = False
+        for publishers in self._states:
+            for joint, publisher in zip(JOINTS + (QUIET_JOINT,), publishers):
+                if joint == QUIET_JOINT:
+                    # Counted only once a subscriber matched, so the boundary
+                    # has heard it before it goes quiet.
+                    if publisher.get_subscription_count() == 0:
+                        continue
+                    if self._quiet_sent >= QUIET_AFTER:
+                        continue
+                    quiet_now = True
+                message = JointState()
+                message.header.stamp = stamp
+                message.name = [joint]
+                message.position = [self._offset]
+                publisher.publish(message)
+        if self._track_state is not None:
+            message = JointState()
+            message.header.stamp = stamp
+            message.name = [self._track_joint]
+            message.position = [self._offset]
+            self._track_state.publish(message)
+        if quiet_now:
+            self._quiet_sent += 1
+            if self._quiet_sent == QUIET_AFTER:
+                print(f"{self._side}: {QUIET_JOINT} publisher quiet", flush=True)
 
     def _publish_model(self) -> None:
         message = ModelVersion()
@@ -201,6 +276,8 @@ def main() -> int:
     parser.add_argument("--assets", default="picker")
     parser.add_argument("--offset", type=float, default=0.0)
     parser.add_argument("--belts", default="", help="Belt command topics to listen on.")
+    parser.add_argument("--track-topic", default="", help="A track command topic to listen on.")
+    parser.add_argument("--track-joint", default="", help="The track joint to publish.")
     arguments, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -210,6 +287,7 @@ def main() -> int:
         arguments.assets.split(","),
         arguments.offset,
         [topic for topic in arguments.belts.split(",") if topic],
+        (arguments.track_topic, arguments.track_joint) if arguments.track_topic else None,
     )
     executor = MultiThreadedExecutor()
     executor.add_node(node)

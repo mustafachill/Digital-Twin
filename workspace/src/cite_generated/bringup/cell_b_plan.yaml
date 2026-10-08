@@ -111,6 +111,16 @@ plan:
       gz_partition: cite/cell_b/counterpart
       domain_offset: 1
 
+  # The twin boundary's timing, from the zone's `twin:` block (ADR-0070 item 5).
+  # `heartbeat_period_s` is how often the boundary tells each side it is alive;
+  # a physical side's deadman times out on several of them. `state_max_age_s`,
+  # where a side is physical, is the oldest joint, controller or deadman state
+  # the boundary counts as current before a mode may command that side - the
+  # same number that side's relays apply to the deadman's state.
+  twin:
+    heartbeat_period_s: 0.1
+    state_max_age_s: 0.25
+
   controller_managers:
     - asset: picker
       node: /cite/cell_b/picker/controller_manager
@@ -126,11 +136,25 @@ plan:
       # the model left out (ADR-0041, Decision 3). The hardware opt-in reads
       # every side's backend, so a physical counterpart refuses to start without
       # it exactly as a physical plant would.
-      counterpart_backend: sim
+      counterpart_backend: real
       # The same fact for that side, emitted exactly where its backend is, so the
       # two accessors can never disagree about which sides this manager declares.
       # The reader refuses a document stating one without the other (ADR-0054).
-      counterpart_commands_physical_hardware: false
+      counterpart_commands_physical_hardware: true
+      # The counterpart loads a backend other than the plant's, so it loads its
+      # own description and controller configuration (ADR-0048 clause 2,
+      # ADR-0070). Every name in them is the plant's: what differs is the
+      # hardware behind the names. Absent where the two sides load one backend,
+      # and then the counterpart loads `description` and `parameters` below.
+      counterpart_description: package://cite_generated/description/counterpart/cell_b_picker.urdf.xacro
+      counterpart_parameters: package://cite_generated/control/counterpart/cell_b_picker_controllers.yaml
+      # What the counterpart's description reads from the ENVIRONMENT at launch:
+      # xacro argument -> variable, and what kind of value it is. The plan names
+      # the variable and never holds its value (ADR-0070 item 2). The physical
+      # side's launch resolves it through `cite_bringup.plan.resolve_description_args`,
+      # which refuses an unset variable and checks the value by its kind.
+      counterpart_description_args:
+        robot_ip: {env: CITE_XARM_IP, kind: ip_address}
       description_topic: /cite/cell_b/picker/robot_description
       joint_state_topic: /cite/cell_b/picker/joint_states
       description: package://cite_generated/description/cell_b_picker.urdf.xacro
@@ -260,6 +284,63 @@ plan:
         - {name: picker_gripper_controller, stage: 1}
         - {name: picker_joint_trajectory_controller, stage: 1}
         - {name: picker_track_trajectory_controller, stage: 1}
+      # What the counterpart's OWN configuration defines, stated exactly where
+      # `counterpart_parameters` is. A side spawns the controllers its own file
+      # defines and no other: one whose joint no hardware on that side exports
+      # is absent there, and its names are served by something else (ADR-0070
+      # items 1, 3 and 4). Every name is the plant's.
+      counterpart_controllers:
+        - {name: picker_joint_state_broadcaster, stage: 0}
+        - {name: picker_joint_trajectory_controller, stage: 1}
+      # What the vendor driver embedded in the counterpart's hardware plugin
+      # serves OUTSIDE `ros2_control`, under the names the vendor creates: the
+      # services the real side's track adapter and watchdog call, and the action
+      # its gripper relay forwards to (ADR-0070 items 3-5). Formed once, by
+      # `ids.vendor_interface`; the services are switched on under
+      # `driver_node` in the counterpart's controller configuration.
+      counterpart_vendor:
+        driver_node: /cite/cell_b/picker/ufactory_driver
+        service_namespace: /cite/cell_b/picker/picker_picker
+        services:
+          get_gripper_position: /cite/cell_b/picker/picker_picker/get_gripper_position
+          get_linear_motor_on_zero: /cite/cell_b/picker/picker_picker/get_linear_motor_on_zero
+          get_linear_motor_pos: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
+          set_gripper_enable: /cite/cell_b/picker/picker_picker/set_gripper_enable
+          set_linear_motor_back_origin: /cite/cell_b/picker/picker_picker/set_linear_motor_back_origin
+          set_linear_motor_enable: /cite/cell_b/picker/picker_picker/set_linear_motor_enable
+          set_linear_motor_pos: /cite/cell_b/picker/picker_picker/set_linear_motor_pos
+          set_linear_motor_speed: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
+          set_linear_motor_stop: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
+          set_mode: /cite/cell_b/picker/picker_picker/set_mode
+          set_state: /cite/cell_b/picker/picker_picker/set_state
+        gripper_action: /cite/cell_b/picker/picker_xarm_gripper/gripper_action
+        # The controller manager services the vendor plugin calls by an
+        # absolute name, each mapped onto this asset's own manager's service.
+        # The side's launch remaps them on `ros2_control_node`; without it the
+        # plugin's `write()` waits on a service nothing serves.
+        controller_manager_remaps:
+          /controller_manager/list_controllers: /cite/cell_b/picker/controller_manager/list_controllers
+          /controller_manager/switch_controller: /cite/cell_b/picker/controller_manager/switch_controller
+      # What the counterpart runs beside its controller manager because its
+      # hardware is physical (ADR-0070 items 3-6): the deadman, and the adapters
+      # that serve the simulated side's names through the vendor driver. Each
+      # node is started under the name stated here with the one generated
+      # `parameters` file, which carries every value it takes. The last three
+      # keys are what the twin boundary reads before a mode may command this
+      # side: the deadman's state, the arm controller's state (published only
+      # while that controller is active), and every joint the side publishes.
+      counterpart_physical:
+        parameters: package://cite_generated/control/counterpart/cell_b_picker_adapters.yaml
+        deadman: /cite/cell_b/picker/deadman
+        track_adapter: /cite/cell_b/picker/track_adapter
+        gripper_relay: /cite/cell_b/picker/gripper_relay
+        # Serves InitializeAsset on initialize_service: what the operator does
+        # in UFACTORY Studio before running the program (ADR-0070).
+        initializer: /cite/cell_b/picker/initializer
+        initialize_service: /cite/cell_b/picker/initialize
+        deadman_state_topic: /cite/cell_b/picker/deadman/state
+        arm_controller_state_topic: /cite/cell_b/picker/picker_joint_trajectory_controller/controller_state
+        joints: [picker_drive_joint, picker_joint1, picker_joint2, picker_joint3, picker_joint4, picker_joint5, picker_track_joint]
       moveit:
         group: picker_xarm5
         base_link: picker_link_base

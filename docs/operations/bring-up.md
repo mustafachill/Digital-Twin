@@ -4,8 +4,9 @@
   drives. A solo bring-up stops at the skills; **twin sync** (`cite_twin`) is started by the
   pair supervisor under `./scripts/sim --pair` and `./scripts/program`
   ([ADR-0057](../adr/0057-start-the-twin-boundary-from-the-pair-supervisor.md)), on the paired
-  zone `cell_b`, and appears in no launch file and no scenario. The physical path is Phase 2.B
-  and has never been run.
+  zone `cell_b`, and appears in no launch file and no scenario. The physical counterpart's path
+  is built ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) and has never
+  been run against the arm.
 - **Related:** [`../architecture/cross-cutting-lifecycle.md`](../architecture/cross-cutting-lifecycle.md)
 
 ## Simulated cell
@@ -111,6 +112,12 @@ is the single most time-consuming false trail in ROS 2 controller bring-up.
 > ([ADR-0059](../adr/0059-pair-cell-b-and-leave-cell-a-single.md)), so the command below comes
 > up from a clean checkout.
 >
+> **The counterpart is the physical arm** ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)).
+> Without `CITE_ALLOW_HARDWARE=1` the commands below are refused and nothing physical starts:
+> `./scripts/program` before it brings anything up, naming the physical side and the opt-in;
+> `./scripts/sim --pair` at the counterpart side. With it they drive the real arm. Read *Physical cell — Phase 2.B*
+> below first.
+>
 > **A declaration is not a gate.** Nothing automated brings a pair up: no scenario and no CI
 > step does, and what CI drives on `cell_b` is the plant alone (`bringup` twice and
 > `program_cycle`).
@@ -182,6 +189,11 @@ Or by hand, on a pair that is already up (`./scripts/sim --pair`):
 ./scripts/enter dev python3 -m cite_bringup.program --zone cell_b --via plant         # the plant alone
 ```
 
+On a pair with a physical side, `./scripts/program` is the supported entry point; do not use
+the module as a shortcut. It enforces the same rules (an explicit `--speed-scale`, and the
+operator's go-ahead read from its terminal), but `./scripts/program` is what places, checks and
+tears down around it.
+
 `python3 -m cite_bringup.program` puts no part on the table and runs no belt; supplying one
 part per cycle is the caller's job, which is why `./scripts/program` runs it one cycle at a
 time. It refuses to start on an arm whose `RobotState` says it holds a part, because the program
@@ -190,10 +202,11 @@ opens the gripper before it closes it. `--via twin` (the default) first asks for
 does Ctrl-C: the goal in flight is cancelled, the track is held where it stands, and the exit
 status is non-zero. `./scripts/scenario program_cycle` checks one cycle on the plant.
 
-**Open, and recorded in ADR-0067:** the track has no hardware path; a mode change while the
-carriages are moving drops later track commands and sends no stop, so each side finishes the
-point it already has; and through the twin the counterpart's track position and custody are
-not read back.
+**Open, and recorded in ADR-0067:** a mode change while the carriages are moving drops later
+track commands and sends no stop, so each side finishes the point it already has; and through
+the twin the counterpart's custody is not read back. Since ADR-0070, a Ctrl-C holds each
+carriage where it stands (a stop on the physical one), and the program waits for the
+counterpart's carriage to arrive too (`TrackArrived`).
 
 Past milestones are not run from here: each runs from its own folder under `projects/`, for
 example `projects/01-three-arm-event-driven-line/run` — see
@@ -264,35 +277,177 @@ model and the same solver, so any agreement between them is agreement of a thing
 
 ## Physical cell — Phase 2.B
 
-> **Not valid yet.** No hardware interface exists. This is the designed procedure, recorded
-> so that Phase 2 implements against it rather than inventing it under time pressure.
+> **Built, never run against the arm.** The physical counterpart's side
+> ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) is tested only
+> against fake vendor services. The first run is supervised, at reduced speed, with a person at
+> the hardware E-stop. Read [safety-procedures.md](safety-procedures.md) first.
 
 ### Preconditions — all of them, every time
 
 1. Risk assessment current. **Not a software artifact.**
 2. Physical E-stop tested this session, latency verified.
 3. Cell clear, confirmed by a person looking at it.
-4. Registration current — the real cell's frame tied to the model's
-   ([calibration-and-registration.md](calibration-and-registration.md); charter §8, Phase 2;
-   not built).
+4. The arm's address in your local, gitignored `.env` as `CITE_XARM_IP` (an IPv4 or IPv6
+   address; never committed, never in L0). `.env.example` names the key.
 5. A human at the stop, watching.
+6. **The physical track is homed and enabled by the operator.** The vendor refuses a move on a
+   track that has not found its zero (`on_zero`), and the track adapter never enables the motor
+   itself (`auto_enable` is false in L0).
+7. **The physical carriage stands where the plant's does**, within the track's goal tolerance.
+   The program checks this before it asks you into the cell. It first waits, up to the
+   readiness ceiling, until the twin hears the physical carriage's position fresh; a carriage
+   never heard in that time refuses the run before the prompt (check the physical side, do not
+   enter). A physical carriage heard standing elsewhere refuses the run, naming the position to
+   home it to, from outside the cell. If it is heard elsewhere only after you pressed Enter, the twin refuses `VALIDATED`
+   for good and the program stops at once; it waits only for what clears by itself (the
+   deadman, the arm's enable, fresh state).
+
+Registration ([calibration-and-registration.md](calibration-and-registration.md)) ties the real
+cell's frame to the model's. **It is not built.** By owner decision (2026-10-06) it is not
+required before the program's joint-space motion, supervised, with the hardware E-stop tested
+and in hand; it is required before any Cartesian motion, any claim on the physical side that
+depends on the planning scene, and any divergence number
+([safety-procedures.md](safety-procedures.md), item 4).
 
 ### Sequence
 
+From an **interactive terminal**, because the program asks for input:
+
 ```bash
-export CITE_ALLOW_HARDWARE=1        # deliberate, never in a shell profile
-./scripts/enter hardware
-./scripts/sim --mode real           # `--mode` is not implemented yet — Phase 2
+CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1
 ```
 
-**Expect:** the hardware interface connects; controllers activate with the arm stationary;
-mode reports `REAL`.
-**If the arm moves during bring-up:** E-stop immediately. Motion during bring-up is a
-defect, never expected, and is a Critical safety finding.
+The opt-in is read from the shell first, then from the repository-root `.env`, and is `0` when
+neither sets it; `1` in `.env` arms every physical bring-up from this checkout. On a physical side,
+`--speed-scale` is required, and it is checked before anything starts. It also has a floor:
+below it, the program's slowest track slide would be slower than the track adapter can carry
+out. The floor is derived, not declared: `cite_bringup.program.sides.minimum_speed_scale` asks
+the adapter's own rule (`cite_hardware.mapping.slowest_speed_mps`) with its generated
+parameters.
 
-### First motion, always
+**What happens:**
+1. The plant (Gazebo) and the physical side come up.
+2. The physical side starts its deadman first, then the vendor driver, and holds the arm
+   stopped. **Its readiness token means held, not enabled.**
+3. The twin boundary starts, and its heartbeat makes the deadman healthy. The deadman then
+   enables the arm. The program waits until the boundary reports the side ready, with the arm
+   enabled and fresh state.
+4. Before each run the program reads the twin's mode. Only once it reads SIM does it ask you
+   to place the part on the physical table by hand and press Enter; anything else refuses
+   without asking. **The arm is enabled and still while you do.** At the end of each run the
+   program puts the twin back in SIM; if that fails, the run fails and the cycle loop ends. No
+   box is spawned and no belt runs on the physical side.
+5. A track step first asks every side whether its carriage is already at the target. If the
+   plant's is and the physical one is not, the step fails and tells you to home that carriage;
+   the physical carriage is never left unchecked. A track step also fails if the twin is in a
+   mode that forwards no track command (for example SIM mid-run), rather than counting as
+   arrived.
+6. Before the first cycle, and in `./scripts/home`, the physical arm is initialized first,
+   every time. Initializing is what you would do in UFACTORY Studio (`InitializeAsset`, served
+   by `cite_hardware`'s initializer from values generated out of L0): the track motor and the
+   gripper are enabled, the track is homed only if it has not found its zero, and the carriage
+   is brought to the program's first track target at L0's `initialize_speed_mps` only if it is
+   not there (a track on its zero has found its zero; it need not stand at it). The homing and
+   that move move the carriage, behind the deadman's gate. Ctrl-C or SIGTERM during the
+   initialization sends the vendor's track stop before the program exits. Then the start is
+   measured: every arm joint within the arm's goal tolerance of the program's `reset` pose and
+   every carriage within the track's goal tolerance of 0 m, on every side; a physical side
+   counts only with fresh positions. If every side is there, nothing more moves. Otherwise both
+   sides are homed through the twin in VALIDATED with `SetMode.homing`, and the start is
+   measured again. Any failure stops with where each side stands; nothing is retried. On a pair
+   that is already up, `./scripts/home --speed-scale 0.1` does the same without restarting
+   anything.
+7. One cycle of the real program then runs on both arms, at the scale you gave.
+8. On the physical side a close expecting a part is executed, not judged (owner decision
+   2026-10-06, ADR-0070): it succeeds once the gripper command completes, the reached width is
+   logged, and only a relay refusal, vendor abort or timeout fails the step.
+9. Likewise an arm motion on the physical side that ends at the trajectory's last point succeeds
+   even if the controller did not report the goal met (owner decision 2026-10-06, ADR-0070);
+   the classification is logged, and every other abort, timeout or cancel still fails the step.
 
-Reduced speed. A human on the stop. A single short motion before anything else.
+**If the arm moves when nothing is commanded:** E-stop immediately. That is a defect and a
+Critical safety finding.
+**Ctrl-C** cancels the goal in flight on both sides and holds each carriage where it stands.
+The supervisor then stops the boundary first, so the deadman trips and stops the arm, and then
+brings each side down.
+**After a deadman trip** the trip latches, and the arm stays stopped until an operator
+deliberately resets it. The recovery sequence is in `workspace/src/cite_hardware/README.md`.
+Restarting the whole run is also a reset.
+
+### First motion, always: two stages
+
+Reduced speed and a human on the stop, in both stages.
+
+1. **Observation, no program.** Bring the pair up and command nothing:
+
+   ```bash
+   CITE_ALLOW_HARDWARE=1 ./scripts/sim --pair --headless
+   ```
+
+   Watch the deadman reach HEALTHY with `arm_enabled`, the vendor deactivate and then
+   reactivate the arm's controllers (the joint-state broadcaster included), and the physical
+   track's position being published. The arm should not move. Then Ctrl-C.
+2. **One cycle.** Only after stage 1 showed nothing unexpected:
+
+   ```bash
+   CITE_ALLOW_HARDWARE=1 ./scripts/program --headless --speed-scale 0.1 --cycles 1
+   ```
+
+Raise the scale only after a run that showed nothing unexpected.
+
+### First physical runs (2026-10-06)
+
+Supervised, owner at the hardware E-stop, `--speed-scale 0.1`, over the lab Wi-Fi. Observations,
+not a campaign:
+
+- **Observation bring-up (`./scripts/sim --pair`)**: the deadman held the arm at STOP, the hold
+  gate passed, the boundary's heartbeat made the deadman HEALTHY and the arm was enabled; the
+  physical joint states matched the receive-only read of 2026-10-05. Teardown tripped the
+  deadman and stopped the arm.
+- **The hold gate's single STOP was lost once** (sent before its client matched); fixed by
+  waiting for the match and re-sending (commit `6e7a733`).
+- **One signal drove both arms**: the real program's first ten steps ran on the physical arm
+  and in Gazebo together (track to 0 mm confirmed on both sides, two joint moves, gripper open,
+  descend). The physical gripper closed on the real box at a reported 62.8 mm, outside the
+  Gazebo-tuned accept band; by owner decision (ADR-0070) the physical side's grip and arm
+  arrival are executed, not judged.
+- **Later runs stopped on the xArm's own collision detection** (`C31: Collision Caused Abnormal
+  Joint Current`) about two seconds into the first move, with no reported contact. The open
+  question is the cause: real contact, or the 150 Hz servo stream over Wi-Fi (the control loop
+  reads late about once a second). Recorded in [`../open-work.md`](../open-work.md) #98.
+- **Subsequent paired attempt at `--speed-scale 0.1 --cycles 1` (2026-10-06)**, before the
+  physical arm was initialized and homed by the program (commits `5fd724c`, `2cec2a1`): after the operator
+  confirmed session checks and no motion during observation bring-up, steps 1–12 completed
+  through the twin boundary. Step 13, the track transfer to 650 mm, repeatedly returned vendor
+  code 82 on the physical side: the track adapter of that run re-sent the refused segment on
+  every position poll, and a refusal now ends the move and stops the carriage instead
+  (`cite_hardware/track_adapter.py`). The pinned SDK calls this `LINEAR_MOTOR_NOT_INIT`: its track
+  status read succeeded but `on_zero` was not set. Position zero alone did not establish
+  homing readiness. The run was cancelled with Ctrl-C; the program confirmed SIM, stopped the
+  simulated belt and brought the pair down. No full cycle completed and no homing or reset was
+  commanded. The physical grip command reported 62.5 mm; the operator confirmed that the
+  arm picked up and lifted the part and still held it after shutdown. The original log is
+  `workspace/log/program/pair.9XfsGM.log` in the
+  container log volume. Both sides showed the known MoveIt teardown crash (#96).
+
+### Step 1 of the 2.B plan: reading the arm without moving it (2026-10-05)
+
+Before any software spoke to the arm, its joint angles were read **receive-only** from the
+controller's report port (TCP 30001). No vendor driver ran and no byte was sent; the read
+succeeded. The vendor driver was not used for this, because it is not read-only:
+- its initialisation calls `clean_error` when it sees a servo error;
+- its destructor writes `set_mode(POSE)`.
+
+What the vendor driver offers, read from its source at the pinned `xarm_ros2`:
+- **The track** is not a `ros2_control` joint. It is driven only through `xarm_api` services
+  (`set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop`, …), each off unless
+  enabled.
+- **The gripper** is not a `ros2_control` joint on the physical plugin either. It is the
+  vendor's `GripperCommand` action, in drive-joint units, plus `get_gripper_position` in
+  pulses.
+
+These are the same calls the program's `set_line_track` and `gripper_set` blocks make on the
+controller. ADR-0070 is built on them.
 
 ## Shutdown
 

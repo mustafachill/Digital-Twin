@@ -27,10 +27,17 @@ schema: cite/asset_type/v1
 # this installation, derived from the real program's pick pose (see
 # model/assets/instances/tracks.yaml).
 #
-# THE HARDWARE PATH IS NOT IMPLEMENTED. The real track is commanded through the
-# vendor's `set_linear_motor_pos` service in `xarm_api`, not through
-# `ros2_control`, so there is no `real` backend here and an instance selecting one
-# is refused by the validator. Phase 2.B builds it (ADR-0067, DoD item 5).
+# THE HARDWARE PATH. The vendor serves the real track only as `xarm_api`
+# services of the arm's own driver (`set_linear_motor_pos`,
+# `set_linear_motor_speed`, `get_linear_motor_pos`, `set_linear_motor_stop`)
+# and never as a `ros2_control` joint, so the `real` backend below declares no
+# plugin (ADR-0070 item 3): on a
+# side selecting it the generator emits the track's joint into the arm's
+# description with no `<ros2_control>` block claiming it, and loads no track
+# controller there. `cite_hardware`'s track adapter serves the controller's
+# `joint_trajectory` topic and publishes the joint's position on that side,
+# configured from `vendor_axis` below and from the axis's own travel and speed.
+# No physical track has been driven through it.
 asset_type:
   id: ufactory_linear_motor
   category: linear_axis
@@ -91,6 +98,52 @@ asset_type:
       ros2_control_plugin: gz_ros2_control/GazeboSimSystem
       commands_physical_hardware: false
       instance_params: []
+    real:
+      # No `ros2_control` component serves this joint on the physical track; see
+      # the header. Written out because the field is required: a backend becomes
+      # plugin-less only by someone saying so.
+      ros2_control_plugin: null
+      # The vendor stage moves a physical carriage carrying a physical arm, so
+      # this side is gated by CITE_ALLOW_HARDWARE exactly as the arm is
+      # (ADR-0054).
+      commands_physical_hardware: true
+      # None: the track is reached through the ARM's controller connection, so
+      # the address is the arm's `robot_ip` and is not stated twice.
+      instance_params: []
+      # How the physical side's track adapter serves this axis (ADR-0070 item
+      # 3). The travel and the speed limit are the axis's own, above.
+      vendor_axis:
+        # The vendor takes and reports millimetres (`LinearMotorSetPos`,
+        # `get_linear_motor_pos`).
+        position_scale: 1000.0
+        poll_period_s: 0.1
+        position_max_age_s: 0.5
+        # How far ahead of the carriage one vendor move reaches, in seconds at
+        # the commanded speed. The adapter sends a move in segments this long
+        # and re-sends the next one on every fresh position read while its gate
+        # is open, so a carriage whose stop is lost with every process gone
+        # overruns by at most one segment. Above `poll_period_s`, so a segment
+        # is re-sent before it ends, and not above the zone's deadman timeout,
+        # so that overrun is no longer than the deadman's own bound
+        # (`track-segment-*`).
+        segment_s: 0.5
+        # Enabling the track motor is never a move's side effect. The arm's
+        # initializer enables it when asked, as the operator does in UFACTORY
+        # Studio before running the program (ADR-0070).
+        auto_enable: false
+        # The ceiling on one initialization (the enables, the zero read and a
+        # homing where the track has not found its zero). The vendor SDK's own
+        # wait for a homing alone gives up at 10 s
+        # (`_wait_linear_motor_back_origin(fp32 timeout = 10)`,
+        # xarm_sdk/cxx/include/xarm/wrapper/xarm_api.h); twice that, because a
+        # homing's duration has not been measured here. A ceiling on a failure.
+        initialize_deadline_s: 20.0
+        # The speed at which the initializer then brings the carriage to the
+        # program's first track target: the vendor's `on_zero` says the track
+        # has FOUND its zero, not that the carriage stands there. Engineered,
+        # not measured: slow, and at it the whole 0.7 m stroke takes 7 s, so a
+        # homing and that move fit `initialize_deadline_s` together.
+        initialize_speed_mps: 0.1
 
   controllers:
     - suffix: trajectory_controller

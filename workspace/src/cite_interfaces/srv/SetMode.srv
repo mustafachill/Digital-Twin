@@ -85,6 +85,18 @@ bool force                  # skip non-safety preconditions. Never skips a safet
                             # idle" while an arm is moving, and forcing it would
                             # be forcing that statement onto every reader of
                             # /cite/twin/mode.
+bool homing                 # true ONLY for the pre-start homing move (ADR-0070):
+                            # skips the one refusal of a physical carriage that
+                            # stands away from the plant's, and nothing else.
+                            # That refusal stops a program running with the
+                            # carriages apart; homing is what brings them
+                            # together. Accepted with mode VALIDATED only, and
+                            # refused with any other. The hardware gate, the
+                            # physical side's readiness (deadman healthy, arm
+                            # enabled, state fresh) and the in-flight refusal
+                            # all still apply. The program re-asks VALIDATED
+                            # without it before its first cycle, so a cycle
+                            # never runs under it.
 ---
 bool accepted
 ResultCode result

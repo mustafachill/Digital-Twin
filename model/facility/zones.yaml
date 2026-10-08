@@ -48,10 +48,12 @@ zones:
       min_m: [-1.000, 2.000, 0.000]
       max_m: [3.000, 4.000, 2.500]
     # PAIRED, and this is the system under construction (ADR-0059): two sides,
-    # BOTH SIMULATED, one of everything on each. It read `single` until
-    # 2026-09-18, when the project owner decided that the target is two digital
-    # twin sides rather than the three-arm cell; ADR-0056 had declared this zone
-    # unpaired and deferred the flip to a record of its own, and ADR-0059 is it.
+    # one of everything on each. It read `single` until 2026-09-18, when the
+    # project owner decided that the target is two twin sides rather than the
+    # three-arm cell; ADR-0056 had declared this zone unpaired and deferred the
+    # flip to a record of its own, and ADR-0059 is it. Since ADR-0070 the PLANT
+    # is simulated and the COUNTERPART is the physical xArm 5 on its track
+    # (`counterpart_backend: real` on `picker` and `picker_track`).
     #
     # WHAT THIS LINE DOES NOT BUY, because a declaration is not a test. Nothing
     # automated brings the pair up: ADR-0057's promotion clause 4 asks for a
@@ -60,9 +62,31 @@ zones:
     # outside `cite_twin`'s own tests. What CI drives on this zone is still the
     # PLANT ALONE.
     #
-    # Both sides stay simulated by REFUSAL and not by convention: ADR-0048
-    # clause 1 makes a divergent `counterpart_backend` an ERROR at validate
-    # time, and a physical plant on a paired zone is a second ERROR, so the L5
-    # command path cannot reach a physical machine by editing this file.
+    # WHAT KEEPS THE PHYSICAL SIDE FROM MOVING BY ACCIDENT. A physical PLANT on
+    # a paired zone is still an ERROR at validate time
+    # (`physical-plant-on-paired-zone`), so the side every scenario addresses
+    # stays simulated. The physical counterpart is gated at bring-up: a plan
+    # declaring it refuses to start without CITE_ALLOW_HARDWARE=1 (ADR-0054),
+    # and its address is an environment reference to CITE_XARM_IP, never
+    # committed, which the physical side's launch resolves.
+    # `cite_bringup`'s hardware launch brings that side up with the track
+    # adapter, the gripper relay and the deadman (ADR-0070 items 3-6), and no
+    # physical arm has been driven through it.
     twin:
       sides: pair
+      # How often the twin boundary tells each side it is alive (ADR-0070 item
+      # 5). The physical side's deadman trips after several missed periods.
+      heartbeat_period_s: 0.1
+      # The physical counterpart's timing, steady-clock seconds. The deadman
+      # timeout is five heartbeat periods, and at least three by rule
+      # (`deadman-timeout-below-three-heartbeats`). 0.5 s IS NOT BACKED BY A
+      # MEASUREMENT: the heartbeat runs from the boundary to the deadman on
+      # this host and never crosses the Wi-Fi link to the arm, so the Wi-Fi
+      # probe of 2026-10-05 says nothing about it. The state age bounds
+      # how stale a deadman state a relay acts on, and how stale a joint the
+      # boundary counts as fresh; above the tick and every poll period.
+      physical_side:
+        deadman_timeout_s: 0.5
+        deadman_tick_period_s: 0.05
+        call_deadline_s: 0.25
+        state_max_age_s: 0.25

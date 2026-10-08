@@ -78,6 +78,14 @@ if(BUILD_TESTING)
   # which is why it is a package test in the container and not a `tools/` one.
   ament_add_pytest_test(test_expanded_collision_references_are_covered
     test/test_expanded_collision_references_are_covered.py)
+
+  # open-work #65's strong form: every <ros2_control> block of every description
+  # a side loads carries the plugin L0 declares for that side's backend, the
+  # physical track's joint is claimed by no block, and the gripper's is claimed
+  # exactly where the arm's backend exports it (ADR-0048 clause 2, ADR-0070).
+  # Expansion again, for the same reason as the test above.
+  ament_add_pytest_test(test_each_side_loads_its_declared_plugin
+    test/test_each_side_loads_its_declared_plugin.py)
 endif()
 
 ament_package()

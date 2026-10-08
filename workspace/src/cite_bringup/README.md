@@ -42,7 +42,11 @@ answers some interfaces and not others.
 | `cite_bringup/readiness_witness.py` | the process that blocks until this side is serving, then exits |
 | `cite_bringup/pair.py` | the pair supervisor: starts both sides, joins them, owns the pair's lifetime |
 | `cite_bringup/grasp_hold_bridge.py` | **simulation-only**: turns one arm's published custody into an attach or a detach on that arm's grasp-hold plugin (ADR-0065) |
-| `launch/simulation.launch.py` | the launch description built from that plan |
+| `launch/simulation.launch.py` | the launch description built from that plan, for a simulated side |
+| `launch/hardware.launch.py` | the launch description for a PHYSICAL side (ADR-0070 item 6): the vendor plugin, `cite_hardware`'s deadman and adapters, and above them what a simulated side runs; no Gazebo, the wall clock |
+| `cite_bringup/side_launch.py` | the pieces both launches run, written once: facility nodes, lifecycle driver, controller chain, MoveIt, planning scene, skill servers, witness, and every gate and refusal |
+| `cite_bringup/hold_gate.py` | the physical side's gate: the deadman says AWAITING, every vendor service is advertised and a STOP sent to the vendor is acknowledged; nothing that can move the arm starts before it exits 0 |
+| `cite_bringup/program/sides.py` | which sides of a zone are physical, read from the plan; `./scripts/program` skips every Gazebo-only step there |
 
 The split is so the plan reader can be unit-tested. A launch file is awkward to test; a
 function that turns YAML into dataclasses is not, and most of what can go wrong — a missing
@@ -111,7 +115,7 @@ a Gazebo system plugin, has no structural reason it cannot reach the hardware pa
 
 | Environment variable | Effect |
 |---|---|
-| `CITE_ALLOW_HARDWARE=1` | permits a plan on which some (asset, side) **declares** `commands_physical_hardware: true` to start. It decides on that declared fact and **not** on the backend's id — see "The hardware gate" below, which is the one statement of this and is not restated here |
+| `CITE_ALLOW_HARDWARE=1` | permits `hardware.launch.py` to start a side that **declares** `commands_physical_hardware: true` (from the shell, or for `./scripts/program`, `./scripts/sim --pair` and `./scripts/enter hardware` from the repository-root `.env` when the shell does not set it — `resolve_hardware_opt_in` in `scripts/_lib.sh`; `simulation.launch.py` refuses such a side regardless). It decides on that declared fact and **not** on the backend's id — see "The hardware gate" below, which is the one statement of this and is not restated here |
 | `CITE_PHYSICS_SEED` | passed to `gz sim --seed`; a malformed value is refused, not ignored |
 
 `GZ_PARTITION` is **not** in that table on purpose: it is not a knob. The launch sets it on
@@ -237,9 +241,38 @@ has.
 
 **What this is not.** Refusing to start is the only enforceable form of the rule until Phase 2
 builds the safety layer. It does not change *what* is commanded on either path (P2); it stops
-a physical machine being commanded by accident. There is no hardware launch file in this
-package at this commit, and every controller manager in `cell_b_plan.yaml` states
-`commands_physical_hardware: false`.
+a physical machine being commanded by accident. `hardware.launch.py` is the second door, and
+it asks this gate of the side it starts before it describes anything; `simulation.launch.py`
+refuses a physical side whatever the opt-in says. The shipped plan's counterpart states
+`counterpart_commands_physical_hardware: true` (ADR-0070).
+
+## The physical side (ADR-0070 item 6)
+
+`pair.side_launch` gives a side `hardware.launch.py` exactly when some asset on it declares
+physical hardware, and `simulation.launch.py` otherwise. The physical side comes up in this
+order, each step gated on the one before it exiting 0 and no step on a timer:
+
+1. Refusals: the side must be physical, `CITE_ALLOW_HARDWARE=1`, the process on that side's
+   domain, every environment argument set and of its declared kind. The description is
+   expanded in the launch process, so the robot's address is on no command line.
+2. The deadman alone, configured and activated by the lifecycle driver.
+3. The controller manager (vendor plugin, the plant's namespace, no `name=` remap, the side's
+   own configuration file, the description from the latched topic), the description
+   publisher, the facility nodes and the two adapters; then those driven to `active`. The
+   vendor plugin calls `/controller_manager/list_controllers` and `.../switch_controller` by
+   absolute name from inside `write()`; the plan's `controller_manager_remaps` (from L0's
+   `vendor_driver.controller_manager_services`) remaps both onto this manager's own services.
+4. `hold_gate.py`.
+5. Controllers and `move_group`; the planning scene; the skill servers and the witness, which on
+   this side also waits for the two actions the deadman cancels; the token.
+
+The token means **held, not enabled**: the vendor plugin deactivates every controller while the
+deadman holds the arm at STOP, and reactivates them once the deadman enables the arm on the
+boundary's first heartbeat. The twin boundary refuses a mode that would command the side, and
+a re-assertion of the mode already in force, until the deadman is HEALTHY with `arm_enabled`, the arm trajectory controller's state is fresh and every joint the side
+publishes is fresh (`cite_twin.physical_readiness`); the fixed program asks again under a
+ceiling. Any process of the side exiting, for any reason, stops the whole side, and nothing
+respawns. Nothing here has run against the physical arm.
 
 ## The ROS domain, and the other half of one rule
 
@@ -456,7 +489,9 @@ boundary fails no gate in CI.
 `--pair` takes `--headless` like a single side does, and without it opens one window per side
 (it used to imply `--headless` and no longer does). It requires the zone to declare `twin: {sides: pair}` in the L0
 model; on an untwinned zone it refuses rather than inventing a second side. **`cell_b`
-declares `pair`** (ADR-0059), so `--pair` comes up on it from a clean checkout. It brings up
+declares `pair`** (ADR-0059), and its counterpart is the **physical** arm (ADR-0070): `--pair`
+starts that side with `hardware.launch.py` and is refused at it unless `CITE_ALLOW_HARDWARE=1`
+is set in the shell or in the repository-root `.env`. It brings up
 both sides and
 then the twin boundary, which serves `SetMode` — nothing here chooses a mode. **A declaration
 is not a gate**: there is still no asserted paired scenario and no CI step brings a pair up,

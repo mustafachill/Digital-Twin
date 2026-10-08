@@ -26,8 +26,9 @@ interface, and the system continuously measures how far the model is from realit
 **The main tree's current scope is one signal, two arms, the same code.** It is built so that
 one command will drive one real xArm 5 and one virtual xArm 5 in Gazebo, both running the real
 robot's own program with the arm on a linear track, as the two sides of the paired zone
-`cell_b`. Today both sides are digital and one command drives both; replacing one with the
-physical cell is Phase 2.B (charter §8).
+`cell_b`. The counterpart is declared to be the physical arm and its side is built
+([ADR-0070](docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)); it has not yet driven
+the arm (Phase 2.B, charter §8).
 
 It is also a **rebuild**. A first iteration (v1) was archived under `legacy/` and deleted at
 the end of Phase 1; it survives only in version control, and **its patterns are not
@@ -59,7 +60,9 @@ names text that is `git show 960e6b4:CLAUDE.md`.
   runs it on the pair, and `./scripts/scenario program_cycle` checks it on the plant.
 - **`./scripts/sim --pair`** brings each side up on its own `ROS_DOMAIN_ID` and Gazebo
   partition, joins them on a readiness witness and starts the L5 twin boundary, `cite_twin`
-  (ADR-0047, ADR-0050, ADR-0057). Lifecycle transitions are requested and confirmed (ADR-0058);
+  (ADR-0047, ADR-0050, ADR-0057). The physical counterpart's side starts from
+  `hardware.launch.py`, and only with `CITE_ALLOW_HARDWARE=1` (ADR-0054, ADR-0070); without it
+  the pair is refused. Lifecycle transitions are requested and confirmed (ADR-0058);
   Pilz plans, with OMPL only on a planning failure (ADR-0027); arms collide against derived
   convex hulls (ADR-0028).
 - **CI gates** `lint`, `build`, `test`, and the scenarios `bringup` (twice) and `program_cycle`
@@ -77,8 +80,11 @@ names text that is `git show 960e6b4:CLAUDE.md`.
 
 **What does not work yet, stated plainly:**
 
-- **No physical arm has been driven.** A physical plant on a paired zone is refused at validate
-  time (ADR-0048); the hardware path is Phase 2.B's work.
+- **No full cycle has run on the physical arm.** One signal has driven the physical xArm 5 and
+  its twin together through the first steps of the real program at reduced speed; the run
+  then stopped on the controller's own collision detection (C31). What was run and what stopped
+  it: [`docs/operations/bring-up.md`](docs/operations/bring-up.md), "First physical runs". A
+  physical plant on a paired zone is refused at validate time (ADR-0041 Decision 3).
 - **Nothing automated brings a pair up**, so the twin boundary is held only by `cite_twin`'s own
   tests against fake sides (ADR-0057). `DivergenceMetrics.valid` is false by construction.
 - **Runs are not deterministic**: the seed does not reach the physics solver, and
@@ -100,9 +106,11 @@ file before):
 
 - **An execution abort is classified before any recovery motion**
   ([ADR-0037](docs/adr/0037-classify-an-abort-before-any-recovery-motion.md)), and **a
-  counterpart whose backend differs from the plant's is refused at validate time**
-  ([ADR-0048](docs/adr/0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1).
-  Both are binding: violating either is an `ESCALATE`, not a review finding.
+  physical machine is never the plant of a paired zone** — it may only be the counterpart,
+  refused otherwise at validate time (`physical-plant-on-paired-zone`;
+  [ADR-0041](docs/adr/0041-virtual-counterpart-is-a-second-full-simulation.md) Decision 3,
+  [ADR-0070](docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md), which retired
+  ADR-0048 clause 1). Both are binding: violating either is an `ESCALATE`, not a review finding.
 - **Never widen a scenario ceiling, an execution tolerance or a teardown exemption to absorb a
   failure.** A scenario failure is a finding to investigate, not a flake to re-run past.
 
@@ -132,7 +140,9 @@ Charter §4 carries the full reasoning.
   it. A value must never exist in two places.
 - **P2 — Sim and real are interchangeable.** Code that commands the simulated cell
   commands the physical cell unmodified. Topic, action, controller, joint, and frame names
-  are identical; only the loaded `ros2_control` hardware plugin differs. Breaking this is
+  are identical; only what serves those names differs — the loaded `ros2_control` hardware
+  plugin, and an L2 adapter where a vendor serves an axis outside `ros2_control`
+  ([ADR-0070](docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). Breaking this is
   the highest-severity defect in the project.
 - **P3 — Typed contracts, always.** Every interface is a versioned `.msg`/`.srv`/`.action`
   in an interface package. If a consumer cannot discover the shape with
@@ -238,7 +248,8 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares (ADR-0028). Needs the imported vendor source, so unlike `validate-model` it does not run anywhere. |
 | `./scripts/audit-deps` | Scan dependencies for known vulnerabilities. Read its header — it does not cover every layer. |
 | `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` follows the same rule as `./scripts/sim`'s — the model's only zone by default, required when there are several (ADR-0069 decision 5) — through `tests/scenarios/_cell.py`, which asks `cite_bringup/zones.py`. The scenarios are `bringup` and `program_cycle` |
-| `./scripts/program [--zone <name>] [--headless] [--cycles N]` | Bring the twin pair up, start each side's belt on that side, put a box on each side's table and run the real xArm 5's program once through the twin boundary (ADR-0067): both arms and both tracks from one client. `--zone` as for `./scripts/sim`. **A demonstration, not an instrument**: it gates nothing and is in no CI step; `./scripts/scenario program_cycle` is what checks it, on the plant |
+| `./scripts/program [--zone <name>] [--headless] [--cycles N] [--speed-scale S]` | Bring the twin pair up, start each side's belt on that side, put a box on each side's table and run the real xArm 5's program once through the twin boundary (ADR-0067): both arms and both tracks from one client. On a physical side (ADR-0070) it needs `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` in (0, 1], commands no belt, and asks the operator to place the part by hand before each cycle. `--zone` as for `./scripts/sim`. **A demonstration, not an instrument**: it gates nothing and is in no CI step; `./scripts/scenario program_cycle` is what checks it, on the plant |
+| `./scripts/home [--zone <name>] [--speed-scale S]` | Against a pair that is ALREADY RUNNING (it attaches to that container and refuses when there is none; it restarts nothing): initializes each physical arm every time (`InitializeAsset`: track motor and gripper enabled, track homed if it has not found its zero, carriage brought to the program's start), then measures and brings both arms to the program's start through the twin only if a side is away (ADR-0070). `./scripts/program` does the same before its first cycle. On a physical side it needs `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |
 | `./scripts/fetch-assets` | Download large assets declared in `assets/manifest.yaml` |
 | `./scripts/clean [--all]` | Remove build artifacts |

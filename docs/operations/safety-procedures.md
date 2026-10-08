@@ -1,6 +1,9 @@
 # Safety procedures
 
 - **Status:** `DESIGNED` — **no procedure here is valid until Phase 2 hardware integration is complete and independently reviewed.**
+  The physical counterpart's software chain is built
+  ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) and has never moved the
+  arm. [`bring-up.md`](bring-up.md)'s *Physical cell* section is how it is run.
 - **Related:** [`../architecture/cross-cutting-safety.md`](../architecture/cross-cutting-safety.md), [`../reference/standards.md`](../reference/standards.md)
 
 ## Read this first
@@ -16,23 +19,32 @@ operate**, and nothing in this document should be read as suggesting otherwise.
 ## The rule that governs everything
 
 **Nothing in this repository commands physical hardware unless `CITE_ALLOW_HARDWARE=1` is
-set deliberately in the current shell.**
+set deliberately, in the current shell or in the repository-root `.env`.**
 
 Never set it in a shell profile, a Dockerfile, a launch default, or CI. It exists so that
-reaching hardware requires a conscious act, and putting it in a profile destroys the only
-protection it provides.
+reaching hardware requires a conscious act; set there, it would arm commands and machines
+nobody chose to arm. **`.env` is allowed, by owner decision (2026-10-06):** `./scripts/program`,
+`./scripts/sim --pair` and `./scripts/enter hardware` read it there when the shell does not set
+it (the shell wins, even when it sets it empty), and say so when `.env` arms them. `.env` is
+read fail closed: only one plain `CITE_ALLOW_HARDWARE=1` line arms; any other line naming the
+key (`export …`, spaces around `=`, the key twice, an unrecognised value) is read as `0`, with
+a warning naming its line number. A `1` in `.env` keeps every physical bring-up from this
+checkout armed — remove it when you are not working at the cell. Test, scenario, lint, build
+and CI never read it from `.env` — except when run inside `./scripts/enter hardware`, which
+carries the resolved value. Every container command carries the value the
+command resolved, so a container left running from an earlier session cannot carry it over.
 
-**The honest qualification about today's state is about *when* the rule binds, not
-whether anything enforces it.** Two guards do, and both are covered by tests; their names,
-locations and coverage are in
-[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)'s Status bullet and are
-not repeated here. What that bullet does not say, and what an operator needs: **both refuse
-before the stack starts — one at the shell, one at bring-up — and neither refuses a mode
-transition.** The one `SetMode` server is the twin boundary, `cite_twin/twin_boundary.py`,
-which `./scripts/sim --pair` starts; its own refusal (`cite_twin/mode.py`) applies at the
-transition only while it runs, and it is not the safety layer
-[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md) describes. That gap must be closed before the first Phase 2 motion, and it is
-not a reason to treat the rule as optional in the meantime.
+**When it binds.** It binds:
+- at the shell, for `./scripts/enter hardware`;
+- at bring-up, for the physical side's own launch;
+- at every mode transition that commands a physical side, in the twin boundary.
+
+Bring-up alone does not move the arm. The physical side comes up *held*, its deadman keeping
+the vendor stopped. It enables the arm only once the twin boundary's heartbeat is healthy, and
+the program then waits for the boundary to report the side ready. What each guard does, and
+what none of them covers, is in
+[`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)'s Status block. None of
+it is the safety layer that document designs, and none of it replaces the hardware E-stop.
 
 ## Before any physical motion
 
@@ -47,9 +59,19 @@ Every session. Not once per week.
 4. **Registration current** — the real cell's frame tied to the model's, by
    [calibration-and-registration.md](calibration-and-registration.md) (Phase 2, charter §8;
    not built yet). A drifted registration means the robot's model of where things are is wrong.
+   **Owner decision (2026-10-06):** registration is not required before the program's
+   joint-space motion, supervised, with the hardware E-stop tested and in hand
+   ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). It is required
+   before any Cartesian motion, any claim on the physical side that depends on the planning
+   scene, and any divergence number.
 5. **A human at the stop**, watching, for the whole session.
 6. **Reduced speed** for the first execution of any motion that has not run on this
    hardware before.
+7. **On the physical counterpart** ([bring-up.md](bring-up.md), "Physical cell"): the track
+   is homed and its motor enabled by the operator; the physical carriage stands where the
+   plant's does; the run is started through `./scripts/program` with an explicit
+   `--speed-scale`; and the operator's go-ahead is given only when the program has read the
+   twin in SIM.
 
 ## First execution of any new motion
 
@@ -113,6 +135,12 @@ not make it.**
 4. Reset deliberately.
 5. Reduced speed on the first motion after a fault.
 
+**On the physical counterpart.** A deadman trip latches: the arm is held stopped and stays
+stopped. Re-sent stops keep undoing anyone else's re-enable until an operator resets the
+deadman on purpose; the sequence is in `workspace/src/cite_hardware/README.md`. A vendor error
+is never cleared by this software: the controller's own `clean_error` is the operator's
+decision, after diagnosis.
+
 ## Held payloads on fault
 
 The design must state what happens to a grasped work-piece on E-stop, power loss, or
@@ -123,6 +151,11 @@ controller failure. **Both possible behaviours are hazards:**
 
 Neither is wrong in the abstract. Not having chosen is wrong. Whoever operates the cell
 must know which behaviour it has before they need to know.
+
+**On the physical xArm gripper, this has not been chosen.** As built, on a deadman trip the
+jaws finish their last command, because the vendor's gripper action ignores cancel. What the
+gripper does on E-stop or power loss is not established. Do not run with a part a fall would
+make dangerous until it is.
 
 ## For software contributors who will never touch the robot
 

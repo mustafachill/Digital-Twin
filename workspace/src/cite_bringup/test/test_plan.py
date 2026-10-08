@@ -30,24 +30,32 @@ from cite_bringup.plan import (
     BACKEND_FIELD_BY_SIDE,
     ControllerManager,
     ControllerRef,
+    COUNTERPART_ARTIFACT_KEYS,
     COUNTERPART_SIDE,
     DOMAIN_BAND,
     domain_base,
     DOMAIN_BASE_ENV,
     DOMAIN_ENV,
     DomainUnresolvedError,
+    EnvironmentArgument,
+    EnvironmentValueInvalidError,
+    EnvironmentValueMissingError,
     GazeboPartitionMissingError,
     GRIPPER_KEYS,
     GZ_PARTITION_ENV,
     HARDWARE_OPT_IN_ENV,
     HardwareNotPermittedError,
+    IP_ADDRESS_KIND,
     load,
     PHYSICAL_FIELD_BY_SIDE,
+    PhysicalSideNotSimulatedError,
     PlanError,
     PLANT_SIDE,
+    refuse_a_physical_side,
     require_domain,
     require_gz_partition,
     require_hardware_opt_in,
+    resolve_description_args,
     resolve_domain_id,
     resolve_uri,
     RosDomainMismatchError,
@@ -69,7 +77,7 @@ def _generated() -> Path:
 #: call it. Named rather than spelled inside the guard below, so that the guard
 #: cannot drift from the thing it guards.
 _LIVE_READER = "_live_document"
-_SHAPE_HELPERS = ("_paired_document", "_solo_document")
+_SHAPE_HELPERS = ("_paired_document", "_solo_document", "_physical_counterpart_document")
 
 #: The path accessor underneath that reader, and the URI constant underneath
 #: that. Guarding only `_live_document` guards a WRAPPER: its whole body is
@@ -119,6 +127,7 @@ _DYNAMIC_EVALUATORS = ("eval", "exec", "__import__")
 _COUNTERPART_MANAGER_KEYS = (
     BACKEND_FIELD_BY_SIDE[COUNTERPART_SIDE],
     PHYSICAL_FIELD_BY_SIDE[COUNTERPART_SIDE],
+    *COUNTERPART_ARTIFACT_KEYS,
 )
 
 
@@ -437,10 +446,32 @@ def _with_backend(document: dict, backend: str) -> dict:
     """Rename one manager's backend and change nothing else.
 
     A NAME-ONLY change, which after ADR-0054 must move no gate at all.
+
+    On a paired document whose counterpart loads the plant's backend, the
+    counterpart is renamed with it: that is what the generator emits for a model
+    that renames the backend, and a plant renamed alone would be a pair whose
+    sides differ, which the reader requires to name files of their own.
     """
     document = copy.deepcopy(document)
-    document["plan"]["controller_managers"][1]["backend"] = backend
+    manager = document["plan"]["controller_managers"][1]
+    if manager.get("counterpart_backend") == manager["backend"]:
+        manager["counterpart_backend"] = backend
+    manager["backend"] = backend
     return document
+
+
+def _with_own_files(manager: dict) -> dict:
+    """Give a manager's counterpart files of its own, as a differing side has.
+
+    The plant's files stand in for them: what the tests using this ask about is
+    the backend or the declaration, and a package URI must resolve to a file
+    that exists. The reader refuses a differing pair that names none
+    (ADR-0048 clause 2).
+    """
+    manager["counterpart_description"] = manager["description"]
+    manager["counterpart_parameters"] = manager["parameters"]
+    manager["counterpart_controllers"] = copy.deepcopy(manager["controllers"])
+    return manager
 
 
 def _declaring_physical(document: dict, backend: str = "real") -> dict:
@@ -450,9 +481,21 @@ def _declaring_physical(document: dict, backend: str = "real") -> dict:
     return document
 
 
-def test_the_generated_plan_needs_no_opt_in() -> None:
-    """Every arm is simulated today, so nothing is gated. The gate must not fire."""
-    require_hardware_opt_in(load(_generated()), {})
+def test_the_generated_plan_is_refused_without_the_opt_in() -> None:
+    """The shipped counterpart is the physical xArm 5 (ADR-0070), so the plan is gated.
+
+    This asserted the opposite - "every arm is simulated today" - until
+    `counterpart_backend: real` was declared in L0. The gate reads every side,
+    so the plan this checkout generates refuses to start without
+    `CITE_ALLOW_HARDWARE=1`, and names the counterpart's field as the reason.
+    """
+    plan = load(_generated())
+    with pytest.raises(HardwareNotPermittedError) as raised:
+        require_hardware_opt_in(plan, {})
+    message = str(raised.value)
+    assert "picker (counterpart_commands_physical_hardware, backend 'real')" in message
+    assert HARDWARE_OPT_IN_ENV in message
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"})
 
 
 def test_a_physical_declaration_is_refused_without_the_opt_in(
@@ -664,6 +707,7 @@ def test_each_side_is_answered_with_its_own_declaration(tmp_path: Path) -> None:
     document["plan"]["controller_managers"][1][
         "counterpart_commands_physical_hardware"
     ] = True
+    _with_own_files(document["plan"]["controller_managers"][1])
     plan = load(_written(tmp_path, document))
     divergent = [
         manager
@@ -1135,7 +1179,10 @@ def _with_counterpart_backend(document: dict, backend: str) -> dict:
         # A NAME-ONLY change: every side still declares that it commands nothing
         # physical, which after ADR-0054 is what the gate reads.
         manager["counterpart_commands_physical_hardware"] = False
-    document["plan"]["controller_managers"][1]["counterpart_backend"] = backend
+    differing = document["plan"]["controller_managers"][1]
+    differing["counterpart_backend"] = backend
+    if backend != differing["backend"]:
+        _with_own_files(differing)
     return document
 
 
@@ -1231,9 +1278,9 @@ def test_each_side_is_answered_with_its_own_backend(tmp_path: Path) -> None:
     same shape as `test_the_refusal_is_keyed_on_difference_rather_than_on_a_
     physical_backend` uses one layer up.
 
-    A divergent pair is refused at L0 today (ADR-0048 clause 1) and is exactly
-    what clause 2 will emit, so the accessor is asked the question before the
-    model can pose it - which is the order that keeps the answer honest.
+    A divergent pair was refused at L0 when this was written (ADR-0048 clause 1),
+    so the accessor was asked the question before the model could pose it.
+    ADR-0070 built clause 2 and the shipped model now poses it.
     """
     plan = load(_written(tmp_path, _with_counterpart_backend(_paired_document(), "real")))
     divergent = [
@@ -1563,6 +1610,15 @@ def _paired_document() -> dict:
     - two sides, with every asset silent about what the second one loads - so
     every test taking the paired half of the `document` fixture would be asking
     about that instead of about a pair.
+
+    **A PAIR WHOSE TWO SIDES LOAD ONE BACKEND — the 2.A shape — whatever the
+    model declares.** Since ADR-0070 the shipped counterpart is physical, and a
+    paired fixture inheriting that would make every test taking it a test of the
+    hardware gate; the gate's own tests below build a physical counterpart on
+    purpose. So each manager's counterpart is set to the plant's backend and
+    fact, and the keys naming a counterpart's OWN artifacts are dropped, since a
+    side loading the plant's backend has none (ADR-0048 clause 2). The shipped
+    2.B shape is read by the tests that ask about it, through `load(_generated())`.
     """
     document = _with_more_arms(_live_document())
     sides = document["plan"]["sides"]
@@ -1572,13 +1628,14 @@ def _paired_document() -> dict:
         # The fallback ADR-0041 Decision 3 applies in the generator: an instance
         # that writes no `counterpart_backend` in L0 loads the same plugin on both
         # sides, so the plan states the backend of every side that exists.
-        manager.setdefault("counterpart_backend", manager["backend"])
+        manager["counterpart_backend"] = manager["backend"]
         # Emitted exactly where the backend is, and by the same fallback: the
         # counterpart loads the plant's plugin, so it declares the plant's fact.
-        manager.setdefault(
-            "counterpart_commands_physical_hardware",
-            manager["commands_physical_hardware"],
-        )
+        manager["counterpart_commands_physical_hardware"] = manager[
+            "commands_physical_hardware"
+        ]
+        for key in COUNTERPART_ARTIFACT_KEYS:
+            manager.pop(key, None)
     return document
 
 
@@ -1612,6 +1669,8 @@ def _solo_document() -> dict:
     for manager in document["plan"]["controller_managers"]:
         for field in _COUNTERPART_MANAGER_KEYS:
             manager.pop(field, None)
+    # An untwinned zone runs no boundary, so its plan states no boundary timing.
+    document["plan"].pop("twin", None)
     return document
 
 
@@ -2115,3 +2174,462 @@ def test_asking_an_untwinned_zone_for_a_counterpart_names_the_missing_side(
     plan = load(_written(tmp_path, _solo_document()))
     with pytest.raises(SideNotDeclaredError):
         require_domain(plan, "counterpart", {DOMAIN_BASE_ENV: "42", DOMAIN_ENV: "43"})
+
+
+# --- Each side's own files, and what its description reads at launch ---------
+#
+# ADR-0070 items 1 and 2. A counterpart whose backend differs from the plant's
+# loads a description and a controller configuration of its own, and the
+# physical arm's address reaches its description from the environment, through
+# one function, at launch. Nothing below holds an address but the RFC 5737
+# documentation one.
+
+#: TEST-NET-3 (RFC 5737): reserved for documentation, routes nowhere.
+_TEST_ADDRESS = "203.0.113.7"
+
+
+def _the_generated_counterpart() -> ControllerManager:
+    plan = load(_generated())
+    (picker,) = [m for m in plan.controller_managers if m.asset == "picker"]
+    return picker
+
+
+def test_the_generated_counterpart_loads_its_own_files() -> None:
+    """The shipped counterpart is physical, so it names files the plant does not load."""
+    picker = _the_generated_counterpart()
+    assert picker.description_on(PLANT_SIDE) == picker.description
+    assert picker.parameters_on(PLANT_SIDE) == picker.parameters
+    counterpart = picker.description_on(COUNTERPART_SIDE)
+    assert counterpart != picker.description
+    assert counterpart.exists()
+    assert counterpart.parent.name == COUNTERPART_SIDE
+    assert counterpart.name == picker.description.name, "the side is a directory, not a name"
+    assert picker.parameters_on(COUNTERPART_SIDE) == (
+        "package://cite_generated/control/counterpart/cell_b_picker_controllers.yaml"
+    )
+
+
+def _controllers_defined_in(manager: ControllerManager, side: str) -> set[str]:
+    """Return the controllers ``side``'s configuration file defines: what its manager loads.
+
+    A controller is a key under the manager's `ros__parameters` whose value
+    states a `type`; the manager can load that one and no other. The file is
+    found beside the plant's description in the installed generated package,
+    which `load` has already resolved, rather than by resolving a second URI.
+    """
+    package = manager.description.parent.parent
+    relative = manager.parameters_on(side).split("/", 3)[3]
+    document = yaml.safe_load((package / relative).read_text())
+    (manager,) = (
+        block["ros__parameters"]
+        for node, block in document.items()
+        if node.endswith("/controller_manager")
+    )
+    return {name for name, value in manager.items() if isinstance(value, dict) and "type" in value}
+
+
+@pytest.mark.parametrize("side", (PLANT_SIDE, COUNTERPART_SIDE))
+def test_each_side_spawns_exactly_the_controllers_its_own_file_defines(side: str) -> None:
+    """ADR-0070 item 1: a side's stages name what that side's configuration defines.
+
+    Spawning the plant's list on the physical counterpart asks its controller
+    manager for the gripper and track controllers, which its configuration does
+    not define because no hardware there exports their joints; the spawner fails
+    and the side never comes up.
+    """
+    picker = _the_generated_counterpart()
+    spawned = {name for _, names in picker.stages_on(side) for name in names}
+    assert spawned == {c.name for c in picker.controllers_on(side)}
+    assert spawned == _controllers_defined_in(picker, side), side
+
+
+def test_the_counterpart_spawns_fewer_controllers_than_the_plant() -> None:
+    """The two lists differ on the shipped plan, so the test above is not vacuous."""
+    picker = _the_generated_counterpart()
+    plant = {c.name for c in picker.controllers_on(PLANT_SIDE)}
+    counterpart = {c.name for c in picker.controllers_on(COUNTERPART_SIDE)}
+    assert counterpart < plant
+    assert picker.stages() == picker.stages_on(PLANT_SIDE)
+
+
+def test_a_side_loading_the_plants_files_spawns_the_plants_controllers(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    for manager in plan.controller_managers:
+        assert manager.controllers_on(COUNTERPART_SIDE) == manager.controllers
+        assert manager.stages_on(COUNTERPART_SIDE) == manager.stages_on(PLANT_SIDE)
+
+
+def test_an_empty_counterpart_controller_list_is_refused(tmp_path: Path) -> None:
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    manager["counterpart_controllers"] = []
+    with pytest.raises(PlanError, match="lists no controllers"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("environ", ({}, {HARDWARE_OPT_IN_ENV: "1"}))
+def test_a_simulation_never_starts_the_physical_side(environ: dict) -> None:
+    """ADR-0070: the refusal takes no environment, so no opt-in can answer it."""
+    plan = load(_generated())
+    refuse_a_physical_side(plan, PLANT_SIDE)
+    with pytest.raises(PhysicalSideNotSimulatedError) as raised:
+        refuse_a_physical_side(plan, COUNTERPART_SIDE)
+    message = str(raised.value)
+    assert "picker" in message and "ADR-0070" in message
+    assert HARDWARE_OPT_IN_ENV not in message
+    assert isinstance(raised.value, PlanError), "the launch reports a PlanError as a refusal"
+
+
+def test_a_simulated_counterpart_is_not_refused(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _paired_document()))
+    refuse_a_physical_side(plan, PLANT_SIDE)
+    refuse_a_physical_side(plan, COUNTERPART_SIDE)
+
+
+@pytest.mark.parametrize(
+    "sides",
+    (
+        COUNTERPART_SIDE,  # a str iterates as its letters, none of which is a side
+        (),
+        [],
+        ("countrepart",),
+        (PLANT_SIDE, "Counterpart"),
+    ),
+)
+def test_a_narrowing_that_names_no_real_side_is_refused_not_skipped(sides: object) -> None:
+    """S-01: the gate failed open on each of these, returning with a physical side unasked.
+
+    Before the fix `require_hardware_opt_in(plan, {}, sides=...)` returned None
+    for the first four cases on the shipped plan, whose counterpart is physical.
+    """
+    plan = load(_generated())
+    with pytest.raises(SideNotDeclaredError):
+        require_hardware_opt_in(plan, {}, sides=sides)
+    with pytest.raises(SideNotDeclaredError):
+        require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"}, sides=sides)
+
+
+def test_the_generated_counterpart_names_its_vendor_driver() -> None:
+    """ADR-0070: the real side's adapters read every vendor name from the plan."""
+    picker = _the_generated_counterpart()
+    assert picker.vendor_on(PLANT_SIDE) is None
+    vendor = picker.vendor_on(COUNTERPART_SIDE)
+    assert vendor is not None
+    namespace = picker.node.rsplit("/", 1)[0]
+    assert vendor.driver_node.startswith(namespace + "/")
+    assert vendor.services, "the track adapter and watchdog call these"
+    for service, name in vendor.services.items():
+        assert name == f"{vendor.service_namespace}/{service}"
+    assert {"set_linear_motor_pos", "set_linear_motor_stop", "set_state"} <= set(vendor.services)
+    assert vendor.gripper_action is not None and vendor.gripper_action.startswith(namespace)
+
+
+def test_vendor_names_without_files_of_its_own_are_refused(tmp_path: Path) -> None:
+    document = _paired_document()
+    manager = document["plan"]["controller_managers"][1]
+    manager["counterpart_vendor"] = {
+        "driver_node": "/a/ufactory_driver",
+        "service_namespace": "/a/b",
+        "services": {"set_state": "/a/b/set_state"},
+    }
+    with pytest.raises(PlanError, match="counterpart_vendor"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("field", ("driver_node", "service_namespace", "service"))
+def test_a_relative_vendor_name_is_refused(tmp_path: Path, field: str) -> None:
+    """Every name is formed by the generator; a relative one would be composed by a reader."""
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    vendor = {
+        "driver_node": "/a/ufactory_driver",
+        "service_namespace": "/a/b",
+        "services": {"set_state": "/a/b/set_state"},
+    }
+    if field == "service":
+        vendor["services"]["set_state"] = "set_state"
+    else:
+        vendor[field] = vendor[field].lstrip("/")
+    manager["counterpart_vendor"] = vendor
+    with pytest.raises(PlanError, match="absolute"):
+        load(_written(tmp_path, document))
+
+
+def test_the_generated_plan_carries_a_reference_and_never_a_value() -> None:
+    picker = _the_generated_counterpart()
+    assert dict(picker.description_args_on(COUNTERPART_SIDE)) == {
+        "robot_ip": EnvironmentArgument(variable="CITE_XARM_IP", kind=IP_ADDRESS_KIND)
+    }
+    assert dict(picker.description_args_on(PLANT_SIDE)) == {}
+
+
+def test_a_side_loading_the_plants_backend_loads_the_plants_files(
+    tmp_path: Path,
+) -> None:
+    """One artifact where the sides agree (ADR-0048 clause 2): the accessor follows."""
+    plan = load(_written(tmp_path, _paired_document()))
+    for manager in plan.controller_managers:
+        assert manager.description_on(COUNTERPART_SIDE) == manager.description
+        assert manager.parameters_on(COUNTERPART_SIDE) == manager.parameters
+        assert dict(manager.description_args_on(COUNTERPART_SIDE)) == {}
+
+
+def test_an_untwinned_asset_has_no_counterpart_files_to_ask_for(tmp_path: Path) -> None:
+    plan = load(_written(tmp_path, _solo_document()))
+    with pytest.raises(SideNotDeclaredError):
+        plan.controller_managers[0].description_on(COUNTERPART_SIDE)
+
+
+def test_a_differing_counterpart_naming_no_files_of_its_own_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The stale-plan case: a physical side handed the simulated side's description."""
+    document = _paired_document()
+    document["plan"]["controller_managers"][1]["counterpart_backend"] = "real"
+    with pytest.raises(PlanError, match="counterpart_description"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize(
+    "key", ("counterpart_description", "counterpart_parameters", "counterpart_controllers")
+)
+def test_half_of_a_counterparts_files_is_refused(tmp_path: Path, key: str) -> None:
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    manager.pop(key)
+    with pytest.raises(PlanError, match="without the other"):
+        load(_written(tmp_path, document))
+
+
+def test_counterpart_files_on_an_untwinned_zone_are_refused(tmp_path: Path) -> None:
+    document = _solo_document()
+    _with_own_files(document["plan"]["controller_managers"][0])
+    with pytest.raises(PlanError, match="counterpart_backend"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        _TEST_ADDRESS,
+        {"env": "", "kind": IP_ADDRESS_KIND},
+        {"env": "CITE_XARM_IP", "kind": IP_ADDRESS_KIND, "default": _TEST_ADDRESS},
+        {"env": "CITE_XARM_IP"},
+        ["x"],
+    ],
+)
+def test_a_description_argument_that_is_not_a_reference_is_refused(
+    tmp_path: Path, reference: object
+) -> None:
+    """A literal in the plan would be an address in a committed file (ADR-0070 item 2)."""
+    document = _paired_document()
+    manager = _with_own_files(document["plan"]["controller_managers"][1])
+    manager["counterpart_backend"] = "real"
+    manager["counterpart_description_args"] = {"robot_ip": reference}
+    with pytest.raises(PlanError, match="env"):
+        load(_written(tmp_path, document))
+
+
+def test_the_address_is_resolved_from_the_environment() -> None:
+    picker = _the_generated_counterpart()
+    assert resolve_description_args(
+        picker, COUNTERPART_SIDE, {"CITE_XARM_IP": _TEST_ADDRESS}
+    ) == {"robot_ip": _TEST_ADDRESS}
+    # Surrounding whitespace is a typo in `.env`, not part of an address.
+    assert resolve_description_args(
+        picker, COUNTERPART_SIDE, {"CITE_XARM_IP": f"  {_TEST_ADDRESS}\n"}
+    ) == {"robot_ip": _TEST_ADDRESS}
+
+
+@pytest.mark.parametrize("environ", [{}, {"CITE_XARM_IP": ""}, {"CITE_XARM_IP": "  \t"}])
+def test_an_unset_address_is_a_refusal_naming_the_variable_and_env(environ: dict) -> None:
+    """Unset and empty are one refusal: the vendor component answers both with exit(1)."""
+    picker = _the_generated_counterpart()
+    with pytest.raises(EnvironmentValueMissingError) as raised:
+        resolve_description_args(picker, COUNTERPART_SIDE, environ)
+    message = str(raised.value)
+    assert "CITE_XARM_IP" in message
+    assert ".env" in message
+    assert "picker" in message and COUNTERPART_SIDE in message
+    assert isinstance(raised.value, PlanError), "the launch reports a PlanError as a refusal"
+
+
+def test_the_refusal_never_prints_a_value() -> None:
+    """Even a whitespace-only value is not echoed; nothing an operator typed is logged."""
+    picker = _the_generated_counterpart()
+    with pytest.raises(EnvironmentValueMissingError) as raised:
+        resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": "   "})
+    assert " " not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("203.0.113", "203.0.113.700", "robot.local", "203.0.113.7:502", "http://x", "2001:db8::g"),
+)
+def test_a_malformed_address_is_refused_without_printing_it(value: str) -> None:
+    """S-04: an address is checked as one, and the refusal names the variable only."""
+    picker = _the_generated_counterpart()
+    with pytest.raises(EnvironmentValueInvalidError) as raised:
+        resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": value})
+    message = str(raised.value)
+    assert "CITE_XARM_IP" in message
+    assert value not in message
+    assert raised.value.__cause__ is None, "the parser's message would repeat the value"
+    assert isinstance(raised.value, PlanError)
+
+
+@pytest.mark.parametrize("value", (_TEST_ADDRESS, "2001:db8::7"))
+def test_an_ipv4_or_ipv6_address_is_accepted(value: str) -> None:
+    picker = _the_generated_counterpart()
+    assert resolve_description_args(picker, COUNTERPART_SIDE, {"CITE_XARM_IP": value}) == {
+        "robot_ip": value
+    }
+
+
+def test_a_side_reading_nothing_resolves_to_nothing() -> None:
+    """The simulated plant reads no variable, so an empty environment is enough."""
+    assert resolve_description_args(_the_generated_counterpart(), PLANT_SIDE, {}) == {}
+
+
+def test_the_hardware_gate_refuses_before_the_address_matters() -> None:
+    """Both refusals hold independently: an address is no opt-in, and the opt-in no address."""
+    plan = load(_generated())
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {"CITE_XARM_IP": _TEST_ADDRESS})
+    with pytest.raises(EnvironmentValueMissingError):
+        resolve_description_args(
+            _the_generated_counterpart(), COUNTERPART_SIDE, {HARDWARE_OPT_IN_ENV: "1"}
+        )
+
+
+def test_a_launch_starting_the_simulated_plant_is_not_gated_on_the_physical_counterpart() -> None:
+    """`sides` asks the question of the sides a caller starts, and only those.
+
+    The shipped plan's plant is simulated and its counterpart physical
+    (ADR-0070). A launch starting the plant alone starts no machine; one
+    starting the counterpart does, and is refused; asked of every side - the
+    default, and what `cite_twin` asks - it is refused too.
+    """
+    plan = load(_generated())
+    require_hardware_opt_in(plan, {}, sides=(PLANT_SIDE,))
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {}, sides=(COUNTERPART_SIDE,))
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {})
+    require_hardware_opt_in(plan, {HARDWARE_OPT_IN_ENV: "1"}, sides=(COUNTERPART_SIDE,))
+
+
+def test_asking_about_a_side_the_plan_does_not_declare_gates_nothing(tmp_path: Path) -> None:
+    """An untwinned zone has no counterpart to refuse, exactly as the default treats it."""
+    plan = load(_written(tmp_path, _declaring_physical(_solo_document())))
+    require_hardware_opt_in(plan, {}, sides=(COUNTERPART_SIDE,))
+    with pytest.raises(HardwareNotPermittedError):
+        require_hardware_opt_in(plan, {}, sides=(PLANT_SIDE,))
+
+
+# --- The physical side's wiring, as the plan carries it (ADR-0070 item 6) ----
+
+
+def _physical_counterpart_document() -> dict:
+    """Return a paired plan whose first manager's counterpart is physical and wired.
+
+    Built from the generated plan's own counterpart keys, so every name in it
+    is one the generator emitted.
+    """
+    live = _live_document()
+    (shipped,) = live["plan"]["controller_managers"]
+    document = _paired_document()
+    manager = document["plan"]["controller_managers"][0]
+    for key in COUNTERPART_ARTIFACT_KEYS + (
+        "counterpart_backend",
+        "counterpart_commands_physical_hardware",
+    ):
+        if key in shipped:
+            manager[key] = copy.deepcopy(shipped[key])
+    document["plan"]["twin"] = copy.deepcopy(live["plan"]["twin"])
+    return document
+
+
+def test_the_generated_plan_wires_its_physical_counterpart() -> None:
+    picker = _the_generated_counterpart()
+    physical = picker.physical_on(COUNTERPART_SIDE)
+    assert physical is not None
+    assert physical.parameters.is_file()
+    assert physical.deadman_state_topic.startswith("/cite/cell_b/picker/")
+    assert physical.track_adapter is not None and physical.gripper_relay is not None
+    assert picker.track.joint in physical.joints
+    assert picker.physical_on(PLANT_SIDE) is None
+
+
+def test_the_generated_plan_states_the_boundary_timing() -> None:
+    twin = load(_generated()).twin
+    assert twin is not None
+    assert twin.heartbeat_period_s > 0.0
+    assert twin.state_max_age_s is not None and twin.state_max_age_s > 0.0
+
+
+def test_an_untwinned_plan_states_no_boundary_timing(tmp_path: Path) -> None:
+    assert load(_written(tmp_path, _solo_document())).twin is None
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, float("nan")])
+def test_a_heartbeat_that_is_not_a_period_is_refused(tmp_path: Path, value: float) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["twin"]["heartbeat_period_s"] = value
+    with pytest.raises(PlanError, match="heartbeat_period_s"):
+        load(_written(tmp_path, document))
+
+
+def test_a_physical_wiring_without_a_vendor_driver_is_refused(tmp_path: Path) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["controller_managers"][0].pop("counterpart_vendor")
+    with pytest.raises(PlanError, match="counterpart_vendor"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("field", ["deadman", "deadman_state_topic", "track_adapter"])
+def test_a_relative_physical_side_name_is_refused(tmp_path: Path, field: str) -> None:
+    document = _physical_counterpart_document()
+    physical = document["plan"]["controller_managers"][0]["counterpart_physical"]
+    physical[field] = physical[field].lstrip("/")
+    with pytest.raises(PlanError, match="absolute"):
+        load(_written(tmp_path, document))
+
+
+def test_a_physical_side_naming_no_joint_is_refused(tmp_path: Path) -> None:
+    document = _physical_counterpart_document()
+    document["plan"]["controller_managers"][0]["counterpart_physical"]["joints"] = []
+    with pytest.raises(PlanError, match="joints"):
+        load(_written(tmp_path, document))
+
+
+@pytest.mark.parametrize("kind", ["hostname", None])
+def test_an_environment_value_of_no_known_kind_is_refused(tmp_path: Path, kind) -> None:
+    """R-NEW-2: an unclassified value never reaches the vendor unchecked."""
+    document = _physical_counterpart_document()
+    manager = document["plan"]["controller_managers"][0]
+    reference = {"env": "CITE_XARM_IP"}
+    if kind is not None:
+        reference["kind"] = kind
+    manager["counterpart_description_args"] = {"robot_ip": reference}
+    with pytest.raises(PlanError, match="kind"):
+        load(_written(tmp_path, document))
+
+
+def test_an_address_is_checked_by_its_kind_and_not_by_its_name(tmp_path: Path) -> None:
+    """R-NEW-2: the argument's name is not what makes it an address."""
+    document = _physical_counterpart_document()
+    manager = document["plan"]["controller_managers"][0]
+    manager["counterpart_description_args"] = {
+        "controller_host": {"env": "CITE_XARM_IP", "kind": IP_ADDRESS_KIND}
+    }
+    plan = load(_written(tmp_path, document))
+    arm = plan.controller_managers[0]
+    with pytest.raises(EnvironmentValueInvalidError):
+        resolve_description_args(arm, COUNTERPART_SIDE, {"CITE_XARM_IP": "robot.local"})
+    assert resolve_description_args(
+        arm, COUNTERPART_SIDE, {"CITE_XARM_IP": _TEST_ADDRESS}
+    ) == {"controller_host": _TEST_ADDRESS}

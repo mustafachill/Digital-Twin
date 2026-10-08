@@ -40,10 +40,20 @@ assets:
     end_effector:
       type: xarm_parallel_gripper
       vendor_integrated: true
-    # `sim` on both sides. ADR-0048 clause 1 refuses an asset whose two sides
-    # declare different backends, and ADR-0056 leaves hardware to Phase 2.B.
+    # The plant is simulated and the counterpart is the physical xArm 5
+    # (ADR-0070): the generator emits that side a description and controller
+    # configuration of its own, carrying the same names.
+    #
+    # The address is an ENVIRONMENT REFERENCE and never a value: the project
+    # owner decided on 2026-10-05 that the robot's address is not committed. It
+    # lives in the gitignored `.env` as CITE_XARM_IP, the generated plan names
+    # the variable, and bring-up refuses to start that side when it is unset.
     hardware:
       backend: sim
+      counterpart_backend: real
+      params:
+        real:
+          robot_ip: {env: CITE_XARM_IP, kind: ip_address}
     configuration:
       kind: robot
       # A retracted, collision-free pose the arm returns to between cycles.

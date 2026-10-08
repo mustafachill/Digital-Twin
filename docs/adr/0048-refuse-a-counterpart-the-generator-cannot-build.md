@@ -70,6 +70,12 @@
     this status block.
   - **Clause 3 is promoted with clause 1 only if it lands with it**; if it does not, this
     block says so.
+  **[2026-10-05]** Clause 1 is **retired** and clause 2 is **built**, by
+  [ADR-0070](0070-the-physical-arm-is-cell-b-s-counterpart.md): the generator now emits the
+  counterpart's own description and controller configuration when its backend differs from the
+  plant's, the side in the file path and never in a name, with the side-parity invariant
+  asserted by tests. `divergent-counterpart-backend` is deleted; `physical-plant-on-paired-zone`
+  stays. The body below is kept as written.
 - **Date:** 2026-08-30
 - **Deciders:** Docs-writer agent, on the gap
   `tools/tests/test_generate.py::TestTwinSidesAndTheGazeboPartition::test_pairing_a_zone_changes_nothing_but_the_bring_up_plan`

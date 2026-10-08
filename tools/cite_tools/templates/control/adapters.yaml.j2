@@ -1,0 +1,18 @@
+---
+{{ hash_banner() }}
+#
+# The nodes the {{ side }} side of {{ arm.id }} runs beside its controller manager,
+# because that side's hardware is physical (ADR-0070 items 3-5): the deadman on
+# the twin boundary's heartbeat, and the adapters that serve the simulated
+# side's names through the vendor driver, and the initializer that does what
+# the operator does in UFACTORY Studio before running the program. Keyed by
+# each node's fully qualified name, which the bring-up plan states and the
+# side's launch starts the node under. Every value comes from the L0 model or is
+# a name `ids` forms; none of these nodes has a default for any of them.
+{% for node in nodes %}
+{{ node.node }}:
+  ros__parameters:
+{% for key, value in node.parameters %}
+    {{ key }}: {{ value }}
+{% endfor %}
+{% endfor %}

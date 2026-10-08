@@ -1,9 +1,67 @@
 {
   "$defs": {
+    "PhysicalSideTiming": {
+      "additionalProperties": false,
+      "description": "How a physical side's deadman and relays keep time (ADR-0070 item 5).\n\nSteady-clock seconds, every one. The relations between them and the\nheartbeat are checked by `cite_tools.validate.referential`\n(`deadman-timeout-*`, `deadman-tick-*`, `state-max-age-*`), because each\nis a relation between two declarations rather than a range of one.",
+      "properties": {
+        "call_deadline_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Call Deadline S",
+          "type": "number"
+        },
+        "deadman_tick_period_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Deadman Tick Period S",
+          "type": "number"
+        },
+        "deadman_timeout_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "Deadman Timeout S",
+          "type": "number"
+        },
+        "state_max_age_s": {
+          "exclusiveMinimum": 0.0,
+          "title": "State Max Age S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "deadman_timeout_s",
+        "deadman_tick_period_s",
+        "call_deadline_s",
+        "state_max_age_s"
+      ],
+      "title": "PhysicalSideTiming",
+      "type": "object"
+    },
     "TwinSpec": {
       "additionalProperties": false,
       "description": "Whether this zone is modelled as one cell or as a twinned pair.\n\nADR-0041's Decision 3, and it is a ZONE fact written once rather than an\nasset fact written per instance. In Phase 2.A the counterpart is a complete\nsecond simulation of the cell, so its world contains every asset whether or\nnot anyone wanted that asset twinned; \"the arm is paired but the belt is not\"\nhas no meaning there, and writing the same deployment fact on fifteen\ninstances is P1 at a different granularity.\n\nThere is deliberately no ``counterpart`` field and no ``none`` sentinel.\nTwinned is DERIVED — an asset is twinned exactly when its zone declares a\nsecond side — because a sentinel is a way of making an untwinned asset\ndeclare that it is untwinned, and it crosses with `HardwareSelection` to give\none physical situation two encodings.\n\nThe two sides are named ``plant`` and ``counterpart``, structurally: `plant`\nis the side the untwinned model already describes and that every Phase 1\nartifact, scenario and script already addresses, and `counterpart` is the\nside that exists only where the zone is a `pair`. Nothing in that naming\nmoves when `TwinMode` moves, which is what makes it safe to derive a Gazebo\ntransport partition from (ADR-0042). The names themselves are mechanism and\nlive in `cite_tools.model.ids`, never here.",
       "properties": {
+        "heartbeat_period_s": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heartbeat Period S"
+        },
+        "physical_side": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PhysicalSideTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "sides": {
           "enum": [
             "single",

@@ -61,11 +61,15 @@ from cite_tools.validate import Severity, referential
 MUTATED_ARM = "picker_2"
 BACKEND_WITH_PARAMS = "real"
 
-#: Values chosen to be unmistakable in a text search. The address is from
-#: TEST-NET-3 (RFC 5737), which exists so that a routable address never ends up
-#: in an example, and it appears nowhere else in this repository outside the
-#: tests that use it deliberately.
-PARAMS = {"robot_ip": "203.0.113.7"}
+#: The parameter as a physical backend's block must write it: a reference to the
+#: environment, never a literal (`literal-param-on-physical-backend`, ADR-0070
+#: item 2). What reaches a description is the xacro argument it becomes.
+PARAMS = {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
+#: Unmistakable in a text search: the argument a selected block becomes, and
+#: the parameter's and the variable's names, none of which an unselected block
+#: may put in any description.
+REACHED = "$(arg robot_ip)"
+UNREACHED = ("robot_ip", "CITE_XARM_IP")
 
 #: The two plugin class strings, each of which is the positive control for the
 #: class that selects its backend.
@@ -90,6 +94,16 @@ def _hardware(model: Path, edit_yaml: Callable, add_arm: Callable, block: dict) 
     edit_yaml(
         model / "facility/zones.yaml",
         lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+    )
+    # And with no counterpart declared on it, which an unpaired zone refuses
+    # (`counterpart-backend-on-unpaired-zone`, ADR-0070).
+    edit_yaml(
+        model / "assets/instances/arms.yaml",
+        lambda d: [a["hardware"].pop("counterpart_backend", None) for a in d["assets"]],
+    )
+    edit_yaml(
+        model / "assets/instances/tracks.yaml",
+        lambda d: [a["hardware"].pop("counterpart_backend", None) for a in d["assets"]],
     )
     return model
 
@@ -143,7 +157,7 @@ class TestTheSelectedBackendsBlockIsBound:
         value that is present, which is what makes the silence in the next class
         a measured one.
         """
-        assert _carrying(selecting_the_backend, PARAMS["robot_ip"])
+        assert _carrying(selecting_the_backend, REACHED)
 
     def test_the_search_finds_the_plugin_of_the_selected_backend(
         self, selecting_the_backend: Path
@@ -180,7 +194,7 @@ class TestAnUnselectedBackendsBlockIsInertAndUndetectable:
         could be.
         """
         leaked = {
-            path: [token for token in (*PARAMS, *PARAMS.values()) if token in content]
+            path: [token for token in UNREACHED if token in content]
             for path, content in _descriptions(not_selecting_the_backend).items()
         }
         assert not any(leaked.values()), (

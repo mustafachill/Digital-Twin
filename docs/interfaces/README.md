@@ -1,7 +1,7 @@
 # Interfaces
 
-- **Status:** `BUILT` — `cite_interfaces` exists and holds **13 definitions** (6 `.msg`,
-  2 `.srv`, 5 `.action`), every one frozen against a stored baseline at
+- **Status:** `BUILT` — `cite_interfaces` exists and holds **18 definitions** (8 `.msg`,
+  5 `.srv`, 5 `.action`), every one frozen against a stored baseline at
   `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
   build rather than surfacing at runtime. The conventions below are what that package does,
   not what it intends to do.
@@ -14,7 +14,14 @@
   closed-loop belt needs a contract of its own
   ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md), "What
   this costs us"). A track is commanded with a `trajectory_msgs/JointTrajectory` on its
-  controller's own topic ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)).
+  controller's own topic ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md));
+  on the physical side the same topic is served by `cite_hardware`'s track adapter, and the
+  program confirms both carriages arrived through the twin boundary's typed `TrackArrived`
+  service ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)). The
+  physical side's liveness contract is typed too: `TwinHeartbeat` (boundary to side) and
+  `DeadmanState` (deadman to the relays and the boundary). `InitializeAsset` is what a
+  physical arm's operator does by hand in UFACTORY Studio before running the program, served
+  by `cite_hardware`'s initializer on the physical side only.
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a

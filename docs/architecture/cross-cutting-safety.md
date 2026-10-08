@@ -3,42 +3,92 @@
 - **Status:** `DESIGNED` — **the safety layer described here does not exist.** No node
   enforces any row of the table below, and the enforcement point in the diagram is not in
   the command path. Binding from the first line of Phase 2 code.
-  Two things it relies on *are* enforced today, and nothing else.
-  **First, a paired zone cannot reach a physical machine by any edit to L0**: the validator
-  refuses a physical plant on a paired zone (`physical-plant-on-paired-zone`) and an asset whose
-  two sides name different backends (`divergent-counterpart-backend`,
-  [ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1), both as
-  ERRORs in `tools/cite_tools/validate/referential.py`, so such a model does not generate. That
-  is a validate-time refusal, not a safety layer, and lifting it is Phase 2.B's work.
-  **Second, nothing reaches a hardware backend without a deliberate opt-in.** `CITE_ALLOW_HARDWARE=1` is required by
-  `require_explicit_hardware_opt_in` in `scripts/_lib.sh` for `./scripts/enter hardware`,
-  and independently by `require_hardware_opt_in` in `cite_bringup/cite_bringup/plan.py` for
-  any bring-up plan on which some (asset, side) **declares** that it reaches a physical
-  machine. That refusal decides on a declared fact and not on the backend's id: L0 states
-  `commands_physical_hardware` per backend, the generated plan carries it per (asset, side),
-  and a physical backend is refused whatever it is called
-  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). Before ADR-0054
-  it compared the id against the literal `sim`, and a type declaring the vendor's physical
-  `ros2_control` plugin under that id passed the gate without it ever consulting the opt-in.
-  Both are covered by tests.
-  **That opt-in is not a guarantee about the cell, and this document is the last place that
-  should read as though it were.** The refusal rests on a **self-declaration that nothing
-  verifies**, and it fails in two directions rather than one: L0 can state `false` beside the
-  vendor's physical plugin, and — the sharper one — L0 can be **entirely honest** and the
-  loaded plugin still physical, because nothing checks that the plugin the model declares is
-  the plugin the description loads. That second route needs no false statement at all, only an
-  **omitted binding**, which is the omission this document forbids everywhere else. ADR-0054,
-  linked above, carries both in its Correction of 2026-09-10; `../open-work.md` #65 carries the
-  fix for the second and does not choose its shape. **State the rule with its residual or do
-  not state it here** — this paragraph was corrected once already for stating a guarantee that
-  no code provided.
-  **The track is a motion path no planner checks.** A track step is one `JointTrajectory`
-  point sent straight to the track's trajectory controller, forwarded to both sides by the
-  twin boundary ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)); no
-  planner checks a track move against the scene, so what bounds it is the controller's limits
-  and, on hardware, the vendor's. The physical track's hardware path is not implemented: the
-  track type declares a simulation backend only, so a physical track is refused by the
-  validator.
+  What *is* enforced today is the physical counterpart's own chain, built for `cell_b` by
+  [ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md). It is tested only
+  against fake vendor services; **no physical arm has been driven through it.** It is not the
+  safety layer this document designs, and it does not replace the hardware E-stop.
+  **What L0 allows.** A physical machine may be a paired zone's counterpart, never its plant:
+  `physical-plant-on-paired-zone` in `tools/cite_tools/validate/referential.py` is an ERROR.
+  `divergent-counterpart-backend` (ADR-0048 clause 1) is deleted, because the generator now
+  emits the counterpart's own description and controller configuration. A robot address is an
+  environment reference of a declared kind, and a literal value on a physical backend is
+  refused.
+  **The opt-in.** `CITE_ALLOW_HARDWARE=1` is required by `require_explicit_hardware_opt_in`
+  (`scripts/_lib.sh`) for `./scripts/enter hardware`, by `require_hardware_opt_in`
+  (`cite_bringup/plan.py`) in `hardware.launch.py` for the side it starts, and by the twin
+  boundary's mode gate for every mode that commands a physical side. It is decided on the
+  declared fact `commands_physical_hardware`, not on a backend's id
+  ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)). It is resolved
+  once, by `resolve_hardware_opt_in` (`scripts/_lib.sh`), shell first, then the repository-root
+  `.env`, default `0` — and only for `./scripts/program`, `./scripts/sim --pair` and
+  `./scripts/enter hardware` (owner decision 2026-10-06, ADR-0070 amendment item 2), reading
+  `.env` fail closed (one plain `CITE_ALLOW_HARDWARE=1` line arms; anything else naming the key
+  is `0`, with a warning naming its line); every other command takes the shell's value alone
+  — except when run inside `./scripts/enter hardware`, which carries the resolved value. Every
+  container exec carries the resolved value, so a stale container cannot carry it over. `simulation.launch.py` refuses a
+  physical side whatever the opt-in says, so a simulation never stands in for the arm. The
+  opt-in rests on a declaration: the side-parity tests assert that each side's description
+  carries the plugin L0 declares (open-work #65 closed), but nothing proves the arm at the
+  address is the intended one.
+  **The physical side's start.** `hardware.launch.py` is event-driven and in this order:
+  1. refuse unless the side is physical and opted in, and resolve and check the address;
+  2. start the deadman;
+  3. start the vendor controller manager;
+  4. start the track adapter and gripper relay;
+  5. pass a hold gate that requires the vendor to acknowledge a STOP;
+  6. start the controllers, MoveIt and the skills.
+
+  Its readiness token means *held*, not enabled. Any of these processes exiting brings the
+  whole side down, and nothing respawns.
+  **The deadman** (`cite_hardware/deadman.py`) watches the twin boundary's `TwinHeartbeat`. The
+  heartbeat carries the boundary's id; a second id or a second publisher trips it.
+  - It holds the arm through the vendor's own state: a STOP on every tick unless HEALTHY.
+  - It enables the arm only on the AWAITING to HEALTHY edge, atomically with respect to a trip.
+  - It trips on a heartbeat timeout, on a lost publisher, or on the vendor driver disappearing
+    or restarting.
+  - Once tripped, it latches until an operator deactivates and reactivates it, and it re-sends
+    every stop (arm STOP, track stop, cancel of the arm and gripper actions) on every tick.
+  - On SIGINT or SIGTERM it sends the arm STOP before exiting.
+
+  The track adapter and gripper relay refuse motion unless the deadman's state is HEALTHY,
+  fresh, and from exactly one publisher.
+  **The track.** No planner checks a track move against the scene
+  ([ADR-0067](../adr/0067-the-real-program-drives-the-twin-on-a-track.md)). On the physical
+  side the adapter bounds it instead:
+  - the vendor speed is never above the commanded speed: it is rounded down to the vendor's
+    1 mm/s resolution, and a move slower than the slowest the adapter can carry out is refused
+    rather than sped up;
+  - the speed is written explicitly (`set_linear_motor_speed`, `ret == 0` required) before a
+    move whose speed differs from the last one the vendor acknowledged, because the vendor SDK
+    caches the speed and skips its own write (`xarm_linear_motor.cc:208-210` at the pinned
+    `xarm_ros2`);
+  - moves go in segments of `segment_s`, so a lost stop limits the overrun to one segment;
+  - a program cancel is a hold at each side's own position, which the adapter turns into a stop,
+    and a move accepted before a hold is never sent after it;
+  - the stop is re-sent until acknowledged after the last move, including at exit;
+  - a track step asks `TrackArrived` first and fails ("home it") when the plant's carriage is at
+    the target and the counterpart's is not; after a move, the program does not proceed until
+    `TrackArrived` confirms every side's carriage arrived.
+
+  **The boundary's readiness gate.** VALIDATED, or any mode commanding the physical side, is
+  refused until the deadman is HEALTHY **with the arm enabled** and the side's controller
+  state, joint states and carriage position are fresh; this is waited on, and re-checked
+  whenever the mode is asserted again. A physical carriage heard outside the track's goal
+  tolerance of the plant's is a separate, final refusal, never waited on: the program asks
+  `TrackArrived` in SIM before the operator prompt, waits while the carriage is unheard, and
+  refuses the run there if it stands elsewhere or is never heard.
+  **Residuals, stated rather than fixed:**
+  - The vendor's gripper action is always served and is reachable on the physical domain
+    without the relay's gate.
+  - Every software stop travels through the vendor driver's single executor and its one socket
+    to the controller, so no software stop is independent of that path.
+  - If every process dies at once (a SIGKILL of the launch), nothing in software stops the arm;
+    the hardware E-stop is the only closure.
+  - What the controller firmware does when its TCP stream ends, and whether the E-stop also
+    cuts the track drive, are unverified.
+  - The deadman timeout is declared in L0 and is not backed by a measurement.
+
+  [`../open-work.md`](../open-work.md) carries each of these.
   **What stops a physical arm is not in this repository.** The vendor controller's torque
   limiting and physical guarding stop an arm driving into something; the execution-side
   trajectory tolerances ([ADR-0036](../adr/0036-execution-side-trajectory-tolerances.md)) are a
@@ -135,6 +185,8 @@ When the commanding node dies, the network stalls, or messages simply stop, moti
 **stops**. It does not continue on the last command. Every command path has a deadman with
 a bounded timeout, and the timeout is documented rather than tuned until the symptom goes
 away.
+
+On the physical counterpart this is the deadman described in this document's Status block. It covers the boundary process and its DDS path, not the vendor driver's link to the controller: a lost link shows only as the vendor driver's own failure. Its timeout is declared in L0 and not yet backed by a measurement.
 
 ## Mode transitions
 
@@ -239,7 +291,7 @@ answers are hazards:
 - **Drops the part** — falling object, damaged work-piece.
 - **Cannot be released** — a trapped part, and possibly a trapped person.
 
-Neither is wrong in the abstract. What is wrong is not having chosen. The design must state
+Neither is wrong in the abstract. What is wrong is not having chosen. **On the physical xArm gripper this is not yet chosen.** As built, on a deadman trip the jaws finish their last command, because the vendor's gripper action ignores cancel (`cite_hardware`'s README). What the gripper does on E-stop or power loss is not established. This is open, not decided. The design must state
 which behaviour it selected and why, and `safety-auditor` reports an unstated choice as a
 finding.
 

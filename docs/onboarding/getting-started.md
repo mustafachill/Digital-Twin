@@ -61,7 +61,7 @@ are real.
 | `./scripts/validate-model` | Validate the L0 facility model. Runs anywhere. |
 | `./scripts/sim [--zone <name>] [--headless] [--pair]` | Launch the simulated cell. L0 declares one zone, `cell_b`, the one-arm cell, so `--zone` may be left out; it becomes required again if a second zone is declared ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) decision 5). `--pair` is the twin pair and needs a paired L0 model — see [`../operations/bring-up.md`](../operations/bring-up.md). |
 | `./scripts/scenario [name]` | Run a headless scenario; no argument lists them. |
-| `./scripts/program [--headless]` | Bring the twin pair up, put a box on each side's table and run the real robot's program once through the twin boundary. A demonstration, not a check — `./scripts/scenario program_cycle` is what asserts it, on one side. |
+| `./scripts/program [--headless]` | Bring the twin pair up — the counterpart is the **physical** arm, refused without `CITE_ALLOW_HARDWARE=1` ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)) — and run the real robot's program once through the twin boundary. A demonstration, not a check — `./scripts/scenario program_cycle` is what asserts it, on one side. |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |
 | `./scripts/clean [--all]` | Remove build artifacts. |
@@ -111,7 +111,8 @@ cannot hold two of them ([ADR-0044](../adr/0044-one-ros-domain-per-side-identica
 the even number above it, so no counterpart can ever land on another checkout's
 plant. What you get by default — from `./scripts/enter`, `./scripts/scenario` and
 `./scripts/sim` without `--pair` alike — is the **plant**, which is the side
-every script here addresses; `./scripts/sim --pair` starts both sides, each on
+every script here addresses; `./scripts/sim --pair` starts both sides (the
+counterpart is the physical arm, behind the hardware opt-in), each on
 its own domain, and leaves your shell on the plant's. `./scripts/doctor` prints it and says which side it is;
 `docs/operations/troubleshooting.md` has the recipe for resolving any side's
 domain from the plan.

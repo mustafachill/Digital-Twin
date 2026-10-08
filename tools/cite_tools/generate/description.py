@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from cite_tools.generate import Artifact
+from cite_tools.generate import Artifact, arm_description_path, controllers_path
 from cite_tools.model import ids
 from cite_tools.model.geometry import Pose
 from cite_tools.model.resolve import ResolvedAsset, ResolvedAxis, ResolvedCell
@@ -25,6 +25,7 @@ from cite_tools.model.schema import (
     PARAMS_BINDING_PREFIX,
     PLUGIN_BINDING,
     Body,
+    EnvReference,
     Material,
     xacro_would_evaluate,
 )
@@ -73,9 +74,16 @@ class _ArmView:
     namespace: str
     mount_link: str
     args: tuple[tuple[str, str], ...]
+    #: The controller configuration this side's description names, relative to
+    #: the generated package. Per side, because the configuration is.
+    controllers_path: str = ""
     #: The linear track this arm rides, emitted between the mount and the arm's
     #: base (ADR-0067); `None` for an arm bolted in place.
     axis: _AxisView | None = None
+    #: Whether this side runs in Gazebo, which is what the `gz_ros2_control`
+    #: plugin block and the Gazebo-model comment are about. Keyed exactly as
+    #: `use_sim_time` is in the controller configuration (ADR-0070).
+    in_gazebo: bool = True
 
 
 @dataclass(frozen=True)
@@ -94,10 +102,12 @@ class _AxisView:
     ixx: str
     iyy: str
     izz: str
-    plugin: str
+    #: `None` on a side whose track backend declares no plugin: the joint is
+    #: emitted and no `<ros2_control>` block claims it (ADR-0070 item 3).
+    plugin: str | None
 
 
-def _axis_view(axis: ResolvedAxis | None) -> _AxisView | None:
+def _axis_view(axis: ResolvedAxis | None, side: str) -> _AxisView | None:
     """The carriage as a solid box, so the joint has a link with mass behind it."""
     if axis is None:
         return None
@@ -116,7 +126,7 @@ def _axis_view(axis: ResolvedAxis | None) -> _AxisView | None:
         ixx=fmt(round(m * (y * y + z * z) / 12.0, 9)),
         iyy=fmt(round(m * (x * x + z * z) / 12.0, 9)),
         izz=fmt(round(m * (x * x + y * y) / 12.0, 9)),
-        plugin=axis.ros2_control_plugin,
+        plugin=axis.plugin_on(side),
     )
 
 
@@ -192,14 +202,37 @@ def _body_view(asset: ResolvedAsset, cell: ResolvedCell) -> _BodyView:
     )
 
 
-def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> str:
-    """Resolve one `bound_args` binding name to its value.
+def env_argument(key: str) -> str:
+    """The xacro argument a parameter read from the environment arrives under.
+
+    The parameter's own name, so the plan's `description_args` and the
+    `$(arg ...)` in the description are one statement read twice.
+    """
+    return key
+
+
+def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell, side: str) -> str:
+    """Resolve one `bound_args` binding name to its value on ``side``.
 
     Every binding is enumerated. An unknown one raises rather than defaulting,
     so a typo in the component library fails loudly here instead of silently
     handing the vendor macro its own default — which would produce a description
     that loads and is wrong.
+
+    Every backend term is the SIDE's: the plugin, and the parameter block it is
+    valued from (ADR-0048 clause 2, open-work #38).
     """
+    plugin = asset.ros2_control_plugin_on(side)
+    if binding == PLUGIN_BINDING and plugin is None:
+        # The backstop for `plugin-less-backend-on-a-bound-description`. Binding
+        # nothing here hands the vendor macro its OWN default, which for
+        # `xarm_description` is the physical component.
+        raise BindingError(
+            f"type {asset.asset_type.id!r} binds a macro argument to {binding!r}, and "
+            f"asset {asset.id!r} loads backend {asset.backend_on(side)!r} on the {side} "
+            "side, which declares no `ros2_control_plugin`. The vendor macro would load "
+            "its own default plugin. Declare one, or do not bind it."
+        )
     # An arm is its own Gazebo model, so it attaches to its own root link rather
     # than to a link in the scene. Where that root sits in the world is stated
     # once, by the generated static transform table and the spawn pose — not
@@ -219,18 +252,26 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
         # fact twice.
         "instance.parent_xyz_m": fmt_triple((0.0, 0.0, 0.0)),
         "instance.parent_rpy_rad": fmt_triple((0.0, 0.0, 0.0)),
-        PLUGIN_BINDING: asset.ros2_control_plugin,
+        PLUGIN_BINDING: str(plugin),
         "instance.end_effector.vendor_integrated": str(
             bool(asset.instance.end_effector and asset.instance.end_effector.vendor_integrated)
         ).lower(),
     }
 
-    # The one open family, for the SELECTED backend — the same quantity
-    # `_collision_args` resolves the collision URI scheme against, and the
-    # plant's, because there is one artifact set per asset until ADR-0048 clause 2
-    # is built. Until it is, ADR-0048 clause 1 refuses any asset whose two sides
-    # differ, so both sides load the same backend and the question of which side
-    # this is cannot arise.
+    # The one open family, for the backend SELECTED ON THIS SIDE — the same
+    # quantity `_collision_args` resolves the collision URI scheme against. A side
+    # whose backend differs from the plant's gets a description of its own
+    # (ADR-0048 clause 2, built by ADR-0070), so each side's parameters come from
+    # the block of the backend that side loads.
+    #
+    # A value read FROM THE ENVIRONMENT (`EnvReference`) is emitted as the xacro
+    # argument `$(arg <key>)` and never resolved here: the value is not the
+    # model's, and the generated tree is committed. The plan names the variable,
+    # `cite_bringup.plan.resolve_description_args` reads it - called by the
+    # physical side's launch, `hardware.launch.py`, which hands the value to
+    # xacro in-process - and a description expanded without it fails in
+    # xacro rather than reaching the vendor component with an empty address
+    # (ADR-0070 item 2).
     #
     # KEYED ON WHAT THE BACKEND DECLARES, AND ONLY VALUED FROM THE BLOCK. The
     # names come from `instance_params`, the field `_dropped_on_this_backend`
@@ -245,13 +286,16 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
     #
     # Bools are lowercased for the same reason `fixed_args` lowercases them: xacro
     # reads `true`, not Python's `True`.
-    selected = asset.instance.hardware.backend
+    selected = asset.backend_on(side)
     selected_backend = asset.asset_type.hardware_backends.get(selected)
     declared = selected_backend.instance_params if selected_backend is not None else ()
     supplied = asset.instance.hardware.supplied_params(selected)
     for key in sorted(declared):
         if key in supplied:
             value = supplied[key]
+            if isinstance(value, EnvReference):
+                values[f"{PARAMS_BINDING_PREFIX}{key}"] = f"$(arg {env_argument(key)})"
+                continue
             # Refused rather than escaped: xacro evaluates `${...}` and `$(...)`
             # after XML has unescaped the attribute, and the template cannot
             # escape `$` for every argument because a collision root relies on
@@ -298,14 +342,13 @@ def _binding_value(asset: ResolvedAsset, binding: str, cell: ResolvedCell) -> st
     # loads and takes an arm's `ros2_control_node` down at `on_init`.
     if binding not in values and binding.startswith(PARAMS_BINDING_PREFIX):
         key = binding[len(PARAMS_BINDING_PREFIX) :]
-        backend = asset.asset_type.hardware_backends.get(asset.instance.hardware.backend)
+        backend = asset.asset_type.hardware_backends.get(selected)
         if backend is not None and key in backend.instance_params:
             raise BindingError(
                 f"type {asset.asset_type.id!r} binds a macro argument to {binding!r}, "
-                f"and asset {asset.id!r} loads backend "
-                f"{asset.instance.hardware.backend!r}, which declares parameter "
-                f"{key!r} — but the asset supplies no value for it. Add it under "
-                f"`hardware.params.{asset.instance.hardware.backend}`."
+                f"and asset {asset.id!r} loads backend {selected!r} on the {side} side, "
+                f"which declares parameter {key!r} — but the asset supplies no value "
+                f"for it. Add it under `hardware.params.{selected}`."
             )
 
     if binding not in values:
@@ -333,7 +376,7 @@ def _end_effector_drive_rate(asset: ResolvedAsset, cell: ResolvedCell) -> float 
     return float(effector.grasp.max_drive_rate_rad_s)
 
 
-def _dropped_on_this_backend(asset: ResolvedAsset, binding: str) -> bool:
+def _dropped_on_this_backend(asset: ResolvedAsset, binding: str, side: str) -> bool:
     """Whether an `instance.hardware.params.*` binding is left unemitted here.
 
     THE PREDICATE IS A UNION AND BOTH TERMS ARE LOAD-BEARING (ADR-0053, decision
@@ -370,22 +413,123 @@ def _dropped_on_this_backend(asset: ResolvedAsset, binding: str) -> bool:
     parameter" from "nobody declares it, so this is a typo".
 
     The precedent for emitting no argument at all is `_collision_args`, which
-    returns `[]` in the same file for the same reason: the shipped model is
-    all-`sim`, so this filter must leave every committed description byte-identical
-    or `./scripts/validate-model` stops being able to tell "the default is
-    unchanged" from "the default moved".
+    returns `[]` in the same file for the same reason: a simulated side's
+    description must stay byte-identical whatever parameters other backends
+    declare, or `./scripts/validate-model` stops being able to tell "the default
+    is unchanged" from "the default moved".
+
+    Asked per SIDE: a binding dropped on the simulated plant is emitted on a
+    physical counterpart, whose description is its own (ADR-0070).
     """
     if not binding.startswith(PARAMS_BINDING_PREFIX):
         return False
     key = binding[len(PARAMS_BINDING_PREFIX) :]
     backends = asset.asset_type.hardware_backends
     declared_somewhere = any(key in backend.instance_params for backend in backends.values())
-    selected = backends.get(asset.instance.hardware.backend)
+    selected = backends.get(asset.backend_on(side))
     declared_here = selected is not None and key in selected.instance_params
     return declared_somewhere and not declared_here
 
 
-def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
+def description_argument(asset: ResolvedAsset, cell: ResolvedCell, side: str, name: str) -> str:
+    """The value ``side``'s description hands the vendor macro for argument ``name``.
+
+    From the same `fixed_args` / `bound_args` entry, and the same formatting,
+    the description itself is generated from, so a name derived from an
+    argument (the vendor's service namespace, ADR-0070) and the argument the
+    description carries are one statement read twice. An argument the type does
+    not hand the macro is refused rather than defaulted: the vendor's default is
+    a value this generator does not know.
+    """
+    spec = asset.asset_type.description
+    if name in spec.fixed_args:
+        value = spec.fixed_args[name]
+        return str(value).lower() if isinstance(value, bool) else str(value)
+    if name in spec.bound_args:
+        return _binding_value(asset, spec.bound_args[name], cell, side)
+    raise BindingError(
+        f"type {asset.asset_type.id!r} hands the vendor macro no argument {name!r}, so "
+        "the value the vendor derives a name from is the vendor's default, which this "
+        "generator does not know. Bind it."
+    )
+
+
+@dataclass(frozen=True)
+class VendorNames:
+    """Every name the vendor driver on one side serves outside `ros2_control` (ADR-0070).
+
+    Formed here, once, from the backend's `vendor_driver` block and the
+    description's own arguments, and read by the bring-up plan (which names
+    them) and the controller configuration (which switches the services on
+    under ``driver_node``).
+    """
+
+    #: The driver node's fully qualified name; its parameters are keyed by it.
+    driver_node: str
+    service_namespace: str
+    #: ``(service, fully qualified name)``, sorted by service.
+    services: tuple[tuple[str, str], ...]
+    gripper_action: str | None
+    #: ``(the absolute name the plugin calls, this asset's controller manager
+    #: service)``: the remaps the side's launch puts on `ros2_control_node`.
+    controller_manager_remaps: tuple[tuple[str, str], ...] = ()
+
+
+def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorNames | None:
+    """The vendor names ``side`` serves for ``asset``, or ``None`` where it embeds no driver."""
+    backend = asset.asset_type.hardware_backends.get(asset.backend_on(side))
+    driver = backend.vendor_driver if backend is not None else None
+    if driver is None:
+        return None
+    namespace = ids.vendor_interface(
+        cell.zone, asset.id, description_argument(asset, cell, side, driver.namespace_arg)
+    )
+    effector = asset.instance.end_effector
+    return VendorNames(
+        driver_node=ids.interface(cell.zone, asset.id, driver.node),
+        service_namespace=namespace,
+        services=tuple((name, f"{namespace}/{name}") for name in sorted(driver.services)),
+        gripper_action=(
+            ids.vendor_interface(cell.zone, asset.id, driver.gripper_action)
+            if driver.gripper_action is not None
+            and effector is not None
+            and effector.vendor_integrated
+            else None
+        ),
+        controller_manager_remaps=tuple(
+            (
+                name,
+                f"{asset.namespace}/{ids.CONTROLLER_MANAGER_NODE}/{name.rsplit('/', 1)[1]}",
+            )
+            for name in driver.controller_manager_services
+        ),
+    )
+
+
+def environment_arguments(asset: ResolvedAsset, side: str) -> tuple[tuple[str, str, str], ...]:
+    """The xacro arguments ``side``'s description takes from the environment.
+
+    `(argument, variable, kind)` triples, sorted: one for every parameter the
+    backend selected on that side declares and the asset supplies as an
+    `EnvReference`. The kind is what the reference declares the value to be
+    (ADR-0070 item 2), so bring-up checks an address as an address because L0
+    said so, never because of what the argument is called. The bring-up plan
+    carries exactly these, so a launch knows which variables to resolve and
+    which arguments to hand xacro. Empty for a side that reads nothing from the
+    environment, which is every simulated side.
+    """
+    selected = asset.asset_type.hardware_backends.get(asset.backend_on(side))
+    if selected is None:
+        return ()
+    supplied = asset.instance.hardware.supplied_params(asset.backend_on(side))
+    return tuple(
+        (env_argument(key), value.env, value.kind)
+        for key in sorted(selected.instance_params)
+        if isinstance(value := supplied.get(key), EnvReference)
+    )
+
+
+def _arm_view(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> _ArmView:
     spec = asset.asset_type.description
     if not (spec.package and spec.file and spec.macro):
         raise BindingError(
@@ -405,7 +549,7 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
             f"{', '.join(unrouted)} to an instance parameter, but no `bound_args` entry "
             f"carries {PLUGIN_BINDING!r}, so the description of asset {asset.id!r} would "
             f"load the vendor macro's default plugin rather than the one backend "
-            f"{asset.instance.hardware.backend!r} declares. Bind it."
+            f"{asset.backend_on(side)!r} declares. Bind it."
         )
 
     args: list[tuple[str, str]] = [
@@ -413,11 +557,11 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         for name, value in sorted(spec.fixed_args.items())
     ]
     args += [
-        (name, _binding_value(asset, binding, cell))
+        (name, _binding_value(asset, binding, cell, side))
         for name, binding in sorted(spec.bound_args.items())
-        if not _dropped_on_this_backend(asset, binding)
+        if not _dropped_on_this_backend(asset, binding, side)
     ]
-    args += _collision_args(spec, asset)
+    args += _collision_args(spec, asset, side)
 
     return _ArmView(
         id=asset.id,
@@ -428,7 +572,9 @@ def _arm_view(asset: ResolvedAsset, cell: ResolvedCell) -> _ArmView:
         namespace=asset.namespace,
         mount_link=_mount_link(asset),
         args=tuple(sorted(args)),
-        axis=_axis_view(asset.axis),
+        controllers_path=controllers_path(cell.zone, asset.id, side),
+        axis=_axis_view(asset.axis, side),
+        in_gazebo=asset.backend_on(side) == ids.SIMULATION_BACKEND,
     )
 
 
@@ -441,7 +587,7 @@ _ROOT_URI = {
 }
 
 
-def _collision_args(spec: Any, asset: ResolvedAsset) -> list[tuple[str, str]]:
+def _collision_args(spec: Any, asset: ResolvedAsset, side: str) -> list[tuple[str, str]]:
     """The collision-mesh root, if the type binds one (ADR-0028).
 
     Empty whenever the selected set is the vendor's own meshes, and that emptiness
@@ -479,7 +625,7 @@ def _collision_args(spec: Any, asset: ResolvedAsset) -> list[tuple[str, str]]:
     selected = spec.collision.selected if spec.collision else None
     if selected is None or selected.kind == "vendor_meshes":
         return []
-    backend = asset.instance.hardware.backend
+    backend = asset.backend_on(side)
     try:
         scheme = spec.collision.scheme_for(backend)
     except KeyError as exc:
@@ -532,9 +678,29 @@ def scene_materials(bodies: tuple[_BodyView, ...]) -> tuple[Material, ...]:
     return tuple(seen[name] for name in sorted(seen))
 
 
+def described_sides(cell: ResolvedCell, asset: ResolvedAsset) -> tuple[str, ...]:
+    """The sides that get an artifact of their own for ``asset``.
+
+    The plant always; the counterpart only on a paired zone and only where it
+    loads a backend other than the plant's (ADR-0048 clause 2). Read by the
+    description, control and bring-up generators alike, so the file a plan names
+    and the file that exists are decided once.
+    """
+    return tuple(
+        side
+        for side in (s.name for s in cell.sides)
+        if side == ids.PLANT_SIDE or asset.differs_on(side)
+    )
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     bodies = body_views(cell)
-    arms = tuple(_arm_view(a, cell) for a in cell.assets if a.asset_type.emits_vendor_description)
+    arms = tuple(
+        (side, _arm_view(a, cell, side))
+        for a in cell.assets
+        if a.asset_type.emits_vendor_description
+        for side in described_sides(cell, a)
+    )
 
     env = environment()
     artifacts = [
@@ -550,9 +716,9 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
     ]
     artifacts += [
         Artifact(
-            f"description/{cell.zone}_{arm.id}.urdf.xacro",
+            arm_description_path(cell.zone, arm.id, side),
             env.get_template("description/arm.urdf.xacro.j2").render(zone=cell.zone, arm=arm),
         )
-        for arm in arms
+        for side, arm in arms
     ]
     return artifacts

@@ -1,8 +1,14 @@
 ---
 {{ hash_banner() }}
 #
+{% if in_gazebo %}
 # Controller configuration for {{ arm.id }}, loaded by the gz_ros2_control plugin
 # in {{ zone }}.urdf.xacro. Every name below is derived from the L0 model, which
+{% else %}
+# Controller configuration for {{ arm.id }}, loaded by the controller manager of
+# a side that runs no simulator (ADR-0070). Every name below is derived from the
+# L0 model, which
+{% endif %}
 # is what makes ADR-0005's guarantee structural: these are the same controller
 # and joint names the physical arm will use, because there is nowhere else for
 # them to come from.
@@ -130,3 +136,18 @@
 {% endif %}
 {% endif %}
 {% endfor %}
+{% if vendor %}
+
+# The vendor driver the hardware plugin embeds (ADR-0070 items 3-5). It runs on a
+# node of its own in this process, reads its parameters from this file under its
+# own name, and creates each service below only where `services.<name>` is true:
+# the vendor's own default is false for every one of them, and the vendor's
+# parameter file is not loaded here. Exactly the services the real side's track
+# adapter and watchdog call are switched on, and no other.
+{{ vendor.driver_node }}:
+  ros__parameters:
+    services:
+{% for service, _ in vendor.services %}
+      {{ service }}: true
+{% endfor %}
+{% endif %}

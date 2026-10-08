@@ -32,6 +32,10 @@ Three things, and they are the three ADR-0050 decides:
    measures. **So the monitor publishes self-describing invalid samples rather
    than nothing**, each carrying the terms that decide its own validity.
 
+Beside those, one thing ADR-0070 item 5 adds: a `TwinHeartbeat` on each side's
+own domain, from that side's own executor, which a physical side's deadman
+stops on when it ceases (`_Heartbeat`).
+
 **NOTHING HERE IS A FIDELITY MEASUREMENT.** Both sides of a Phase 2.A pair run
 the same L0 model, the same generated description, the same controllers and the
 same solver, so a comparison is a thing with itself. `far_side_physical` is the
@@ -72,6 +76,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import uuid
 
 from action_msgs.msg import GoalStatus
 from cite_bringup.plan import (
@@ -87,10 +92,18 @@ from cite_bringup.plan import (
 # (ADR-0057), and two literals would be the P1 defect this whole join is built
 # out of avoiding.
 from cite_bringup.readiness import boundary_announcement
+from cite_bringup.track_command import hold as track_hold
 from cite_facility import model_info
-from cite_interfaces.msg import DivergenceMetrics, ModelVersion, ResultCode, TwinMode
+from cite_interfaces.msg import (
+    DeadmanState,
+    DivergenceMetrics,
+    ModelVersion,
+    ResultCode,
+    TwinHeartbeat,
+    TwinMode,
+)
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode
+from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
     address,
@@ -103,7 +116,8 @@ from cite_twin.boundary import (
     SideContext,
     SKILL_ACTION_TYPES,
 )
-from cite_twin.divergence import assess, compare, Operand, UNMEASURED
+from cite_twin.divergence import assess, compare, JointMerge, Operand, UNMEASURED
+from cite_twin.joints_at import joints_at
 from cite_twin.mode import (
     deployment_from_plan,
     far_side_is_physical,
@@ -111,12 +125,20 @@ from cite_twin.mode import (
     ModeAuthority,
     Verdict,
 )
+from cite_twin.physical_readiness import PhysicalSideWatch, unready as physical_unready
 from cite_twin.routing import (
+    commanded_sides,
     COUNTERPART_SIDE,
     PLANT_SIDE,
     reverse_state_flow,
     route,
 )
+from cite_twin.track_arrival import (
+    apart as tracks_apart,
+    arrival as track_arrival,
+    unheard as track_unheard,
+)
+from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.task import Future
@@ -220,6 +242,74 @@ DIVERGENCE_PERIOD_S = 1.0
 _ANNOUNCE_PERIOD_S = 0.05
 
 
+#: How often the boundary says it is alive on each side is NOT stated here: it
+#: is the zone's `twin.heartbeat_period_s` in L0, read from the plan
+#: (`Plan.twin`), so the period and the physical side's deadman timeout that
+#: has to be several of them are two declarations one validator rule relates
+#: (`deadman-timeout-below-three-heartbeats`, ADR-0070 item 5). A publication
+#: rate and not a timing guess: nothing waits for it and no transition is
+#: sequenced on it (P4).
+
+
+class _Heartbeat:
+    """`TwinHeartbeat` on one side's own domain, from that side's own executor.
+
+    One per side and never one shared, because what a heartbeat on a domain has
+    to mean is that the boundary is serving THAT side: a timer on the plant's
+    executor publishing onto the counterpart's domain would keep a physical
+    side's deadman satisfied while the executor serving that side was dead.
+
+    **Published before a subscriber may have matched, and that is harmless
+    here** (CLAUDE.md §10). A heartbeat is a stream, not a command: one that
+    reaches nobody is simply not counted, and a deadman starts timing only from
+    the first one it receives.
+    """
+
+    def __init__(
+        self,
+        side: SideContext,
+        zone: str,
+        boundary_id: str,
+        period_s: float,
+        group: ReentrantCallbackGroup,
+        lock: threading.Lock,
+    ) -> None:
+        self._zone = zone
+        self._boundary_id = boundary_id
+        self._sequence = 0
+        self._node = side.node
+        #: The boundary's own lock, the one its command path takes. A command
+        #: path wedged holding it stops the heartbeat too, which is what a
+        #: physical side's deadman has to hear.
+        self._lock = lock
+        # STATE: periodic, reliable, volatile — and the profile the deadman
+        # subscribes with.
+        self._publisher = side.node.create_publisher(
+            TwinHeartbeat, TwinHeartbeat.TOPIC, STATE
+        )
+        self._timer = side.node.create_timer(period_s, self._beat, callback_group=group)
+
+    def _beat(self) -> None:
+        with self._lock:
+            self._sequence += 1
+            message = TwinHeartbeat()
+            message.header.stamp = self._node.get_clock().now().to_msg()
+            message.zone = self._zone
+            message.boundary_id = self._boundary_id
+            message.sequence = self._sequence
+        self._publisher.publish(message)
+
+
+def heartbeat_period(value: float) -> float:
+    """Return a usable heartbeat period, or refuse one that is not a period."""
+    if not (math.isfinite(value) and value > 0.0):
+        raise BoundaryError(
+            f"heartbeat_period_s is {value}; a heartbeat needs a positive, finite period, "
+            "or a physical side's deadman never hears one"
+        )
+    return value
+
+
 @dataclass(frozen=True)
 class _SideOutcome:
     """What one side answered: the code, and the typed result behind it.
@@ -292,6 +382,39 @@ class TwinBoundary:
             .get_parameter_value()
             .double_value
         )
+        # Read and refused here, before anything is built on the sides, so a
+        # refusal releases both contexts (S-12).
+        try:
+            if plan.twin is None:
+                raise BoundaryError(
+                    f"the plan for zone {plan.zone!r} states no `twin:` timing, so there is "
+                    "no heartbeat_period_s to publish at. It is generated from the zone's "
+                    "`twin:` block - run ./scripts/validate-model --write, then ./scripts/build."
+                )
+            beat_period = heartbeat_period(plan.twin.heartbeat_period_s)
+            # What a physical counterpart has said, per arm, before a mode may
+            # command it (ADR-0070 item 6): its deadman, its arm controller and
+            # its joints. Read on the counterpart's own domain; nothing crosses.
+            self._physical_watches = _physical_watches(plan)
+        except BoundaryError:
+            self.stop()
+            raise
+        #: Each track a physical counterpart rides, with its goal tolerance: a
+        #: mode commanding that side waits until its carriage stands where the
+        #: plant's does (SA-S-01 b), because a program reads only the plant's.
+        self._physical_tracks = [
+            (manager.track.joint, manager.track.goal_tolerance_m)
+            for manager in plan.controller_managers
+            if manager.track is not None and manager.asset in self._physical_watches
+        ]
+        #: Per (side, track joint): the last position and its steady-clock
+        #: arrival, heard in every mode, because a stop, an arrival check and
+        #: the precondition above are owed whatever the mode is.
+        self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
+        #: Per (side, joint): the same for every joint a side publishes, heard
+        #: in every mode, for `JointsAt` - the program's start measured before
+        #: anything is commanded (ADR-0070). Answered as a verdict only.
+        self._joint_positions: dict[tuple[str, str], tuple[float, float]] = {}
 
         # Both sides, read per asset, because the hardware gate asks which sides
         # the requested mode commands and what each of them DECLARES - never
@@ -321,6 +444,8 @@ class TwinBoundary:
         self._authority = ModeAuthority(
             deployment,
             partial(require_hardware_opt_in, plan, environ),
+            physical_side_unready=self._physical_side_unready,
+            physical_carriage_apart=self._physical_carriage_apart,
         )
 
         self._mode_publisher = self._plant.node.create_publisher(
@@ -362,6 +487,10 @@ class TwinBoundary:
         # its own side's context, so two identical topic names cannot be
         # confused for one.
         self._operands: dict[tuple[str, str], Operand] = {}
+        #: Per (side, asset), the latest position of each joint and when it
+        #: arrived. Several publishers share one joint-state topic, each with
+        #: the joints it owns, so an operand is merged from them by name.
+        self._joints: dict[tuple[str, str], JointMerge] = {}
         self._model_versions: dict[str, str] = {}
         self._subscriptions = []
         for side_name, side in self._sides.items():
@@ -393,6 +522,31 @@ class TwinBoundary:
                 )
             )
 
+        for asset, watch in self._physical_watches.items():
+            manager = next(m for m in plan.controller_managers if m.asset == asset)
+            physical = manager.physical_on(COUNTERPART_SIDE)
+            self._subscriptions.append(
+                self._counterpart.node.create_subscription(
+                    DeadmanState,
+                    physical.deadman_state_topic,
+                    partial(self._on_deadman_state, watch),
+                    # The deadman's own profile: latched, so the current state
+                    # arrives at once, and republished on every tick.
+                    LATCHED,
+                    callback_group=self._group,
+                )
+            )
+            self._subscriptions.append(
+                self._counterpart.node.create_subscription(
+                    JointTrajectoryControllerState,
+                    physical.arm_controller_state_topic,
+                    partial(self._on_controller_state, watch),
+                    # Reliable and volatile, as the controller publishes it.
+                    STATE,
+                    callback_group=self._group,
+                )
+            )
+
         # 4. The belt command (ADR-0066). One operator endpoint per conveyor,
         # on the plant's domain beside the skills, forwarded in memory to each
         # side's own command topic under the same routing table: refused in
@@ -420,11 +574,22 @@ class TwinBoundary:
         # 5. The linear track command (ADR-0067). One operator endpoint per track,
         # beside the belt's, forwarded in memory to each side's own trajectory
         # controller topic under the same routing table: refused in SIM, sent to
-        # both in VALIDATED and VIRTUAL_LEAD. Unlike a belt, a track holds the
-        # last position it was sent, so there is no stop to carry in every mode;
-        # a refused command is dropped and said in the log. What comes back is
-        # each side's own joint state, which this node already reads.
+        # both in VALIDATED and VIRTUAL_LEAD; a refused command is dropped and
+        # said in the log. A trajectory with NO points at the operator endpoint
+        # is a stop, and like a belt's zero it crosses in every mode: each side
+        # is sent a hold at ITS OWN carriage position, which a simulated
+        # controller holds and a physical adapter answers with a stop - never
+        # the plant's position sent to the physical carriage (SA2c-S-02 a).
+        # What comes back is each side's own joint state, which this node
+        # already reads, and `TrackArrived` answers from it (SA2c-S-02 c).
         tracks = [m.track for m in plan.controller_managers if m.track is not None]
+        #: Each track's joint, by its command topic, and the asset whose side
+        #: may be physical, by the joint.
+        self._track_joint_by_topic = {track.command_topic: track.joint for track in tracks}
+        self._track_asset_by_joint = {
+            m.track.joint: m.asset for m in plan.controller_managers if m.track is not None
+        }
+        self._state_max_age_s = plan.twin.state_max_age_s
         self._track_publishers = {
             (side_name, track.command_topic): side.node.create_publisher(
                 JointTrajectory, track.command_topic, COMMAND
@@ -443,9 +608,33 @@ class TwinBoundary:
                 )
             )
 
+        self._track_arrived = self._plant.node.create_service(
+            TrackArrived,
+            TrackArrived.Request.SERVICE,
+            self._on_track_arrived,
+            callback_group=self._group,
+        )
+
+        self._joints_at = self._plant.node.create_service(
+            JointsAt,
+            JointsAt.Request.SERVICE,
+            self._on_joints_at,
+            callback_group=self._group,
+        )
+
         self._timer = self._plant.node.create_timer(
             period, self._publish_divergence, callback_group=self._group
         )
+
+        # 6. The heartbeat (ADR-0070 item 5): one per side, on that side's own
+        # domain, from a timer that side's own executor runs, under this
+        # boundary's lock. One id per boundary start, the same on both sides:
+        # a deadman latches it and trips on any other (S-07).
+        boundary_id = str(uuid.uuid4())
+        self._heartbeats = [
+            _Heartbeat(side, plan.zone, boundary_id, beat_period, self._group, self._lock)
+            for side in self._sides.values()
+        ]
 
     # ------------------------------------------------------------------ #
     # Lifetime
@@ -532,7 +721,7 @@ class TwinBoundary:
                 )
             else:
                 verdict = self._authority.request(
-                    request.mode, "", request.reason, request.force
+                    request.mode, "", request.reason, request.force, request.homing
                 )
             changed = verdict.accepted and verdict.mode != before
             if changed:
@@ -545,6 +734,8 @@ class TwinBoundary:
                     key for key in self._operands if key[0] != PLANT_SIDE
                 ]:
                     del self._operands[key]
+                for key in [key for key in self._joints if key[0] != PLANT_SIDE]:
+                    del self._joints[key]
                 self._publish_mode()
         if changed:
             self._stop_belts_the_mode_does_not_command(verdict.mode)
@@ -757,9 +948,34 @@ class TwinBoundary:
         """Forward one track trajectory to the sides the mode routes a command to.
 
         The message is passed through unchanged, as a goal is: the same joint
-        name and the same point reach both sides' controllers, which is what
+        name and the same points reach both sides' controllers, which is what
         makes one signal drive both tracks (ADR-0067).
+
+        **A trajectory with no points is a stop, and a stop is never gated**
+        (SA2c-S-02 a). It is not forwarded - both sides refuse an empty
+        trajectory - but answered per side: each side is sent a hold at the
+        position THAT side last reported, so no carriage is commanded anywhere
+        but where it stands. A side whose position was never heard is sent
+        nothing, and said.
         """
+        if not message.points:
+            joint = self._track_joint_by_topic[topic]
+            with self._lock:
+                heard = {
+                    side_name: self._track_positions.get((side_name, joint))
+                    for side_name in self._sides
+                }
+            for side_name, position in heard.items():
+                if position is None:
+                    self._log.error(
+                        f"{operator_endpoint(topic)} stop: no {joint} position heard on the "
+                        f"{side_name} side, so no hold was sent there"
+                    )
+                    continue
+                self._track_publishers[(side_name, topic)].publish(
+                    track_hold(joint, position[0])
+                )
+            return
         with self._lock:
             mode = self._authority.mode
         chosen = route(mode)
@@ -772,6 +988,91 @@ class TwinBoundary:
             return
         for side_name in chosen.sides:
             self._track_publishers[(side_name, topic)].publish(message)
+
+    def _on_track_arrived(
+        self, request: TrackArrived.Request, response: TrackArrived.Response
+    ) -> TrackArrived.Response:
+        """Answer whether every commanded side, and every physical one, stands at the target.
+
+        SA2c-S-02 c. The sides are `commanded_sides(mode)`, not the sides a
+        goal is routed to, so REAL and SHADOW judge the physical side; a
+        physical side is judged in every mode, so the program's ask in SIM,
+        before a person is asked into the cell, is answered UNHEARD until its
+        carriage is heard fresh and AWAY once it is heard elsewhere (S-08).
+        ``routed`` says whether this mode carries a track command through the
+        twin at all, so a track step in any other mode fails (R-03).
+        """
+        asset = self._track_asset_by_joint.get(request.joint)
+        if asset is None:
+            response.arrived = False
+            response.reason = TrackArrived.Response.NOT_A_TRACK
+            response.detail = f"{request.joint!r} is no track joint this zone's plan names"
+            return response
+        with self._lock:
+            mode = self._authority.mode
+            heard = {
+                side_name: position
+                for side_name in self._sides
+                if (position := self._track_positions.get((side_name, request.joint)))
+                is not None
+            }
+        physical = [COUNTERPART_SIDE] if asset in self._physical_watches else []
+        commanded = commanded_sides(mode)
+        sides = (*commanded, *(side for side in physical if side not in commanded))
+        reason, detail = track_arrival(
+            sides,
+            heard,
+            physical,
+            request.position_m,
+            request.tolerance_m,
+            time.monotonic(),
+            self._state_max_age_s,
+        )
+        response.reason = reason
+        response.arrived = reason == TrackArrived.Response.ARRIVED
+        response.routed = route(mode).accepted
+        response.detail = detail or (
+            f"in {MODE_NAMES.get(mode, mode)} every side asked about ({', '.join(sides)}) "
+            "is at the target"
+        )
+        return response
+
+    def _on_joints_at(
+        self, request: JointsAt.Request, response: JointsAt.Response
+    ) -> JointsAt.Response:
+        """Answer whether every side the zone declares stands at the requested positions.
+
+        ADR-0070: the program's start, measured before anything is commanded,
+        so every side is judged in every mode. A physical side counts only with
+        fresh positions; which sides are physical is the plan's, read at
+        start-up (`_physical_watches`), conservatively for every joint asked.
+        """
+        with self._lock:
+            sides = tuple(self._sides)
+            heard = {
+                (side_name, joint): position
+                for side_name in sides
+                for joint in request.joints
+                if (position := self._joint_positions.get((side_name, joint))) is not None
+            }
+        physical = [COUNTERPART_SIDE] if self._physical_watches else []
+        reason, detail = joints_at(
+            sides,
+            heard,
+            physical,
+            list(request.joints),
+            list(request.positions),
+            request.tolerance,
+            time.monotonic(),
+            self._state_max_age_s,
+        )
+        response.reason = reason
+        response.at = reason == JointsAt.Response.AT
+        response.detail = detail or (
+            f"every side ({', '.join(sides)}) stands within {request.tolerance:g} of "
+            "every position asked"
+        )
+        return response
 
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
         """Command to zero every belt on a side ``mode`` no longer routes to.
@@ -864,25 +1165,108 @@ class TwinBoundary:
 
         The message is consumed here. It is not forwarded to a publisher on the
         other side's context, in any mode (ADR-0050 decision 1b).
+
+        **Merged by joint name.** On a physical side the arm's joint-state topic
+        carries partial messages from several publishers — the arm's
+        broadcaster, the track adapter, the gripper relay — each naming only the
+        joints it owns. Each message updates its own joints; the operand is
+        every joint heard, and its age is its OLDEST joint's, so one publisher
+        that went quiet makes the operand old rather than hiding behind the
+        others (R-05).
         """
         positions = {
             name: float(position)
             for name, position in zip(message.name, message.position)
         }
         with self._lock:
+            # Heard for readiness in every mode: whether a physical side is
+            # publishing is what decides whether a mode may command it at all.
+            watch = (
+                self._physical_watches.get(asset) if side_name == COUNTERPART_SIDE else None
+            )
+            if watch is not None:
+                watch.heard_joints(positions, time.monotonic())
+            arrived = time.monotonic()
+            for joint, position in positions.items():
+                self._joint_positions[(side_name, joint)] = (position, arrived)
+            for joint in self._track_asset_by_joint:
+                if joint in positions:
+                    self._track_positions[(side_name, joint)] = (
+                        positions[joint],
+                        time.monotonic(),
+                    )
             if side_name != PLANT_SIDE and side_name not in reverse_state_flow(
                 self._authority.mode
             ):
                 return
+            merge = self._joints.setdefault((side_name, asset), JointMerge())
+            merge.update(positions, time.time())
+            if not merge.positions():
+                return
             self._operands[(side_name, asset)] = Operand(
-                positions=positions,
-                received_wall_s=time.time(),
+                positions=merge.positions(),
+                received_wall_s=merge.oldest_arrival(),
                 model_version=self._model_versions.get(side_name, ""),
                 # Nothing in the tree measures a clock deficit, so nothing can
                 # supply one here. `None` is the honest value and it is what
                 # makes term 3 of the conjunction false (ADR-0049 decision 5).
                 clock_deficit_s=None,
             )
+
+    def _on_deadman_state(self, watch: PhysicalSideWatch, message: DeadmanState) -> None:
+        with self._lock:
+            watch.heard_deadman(message, time.monotonic())
+
+    def _on_controller_state(self, watch: PhysicalSideWatch, _message) -> None:
+        with self._lock:
+            watch.heard_controller(time.monotonic())
+
+    def _physical_side_unready(self) -> str | None:
+        """Why a physical counterpart may not be commanded YET; asked under the lock.
+
+        Its deadman, controller and joints (ADR-0070 item 6), and a fresh
+        position for its carriage to be compared by: each clears by itself.
+        """
+        now = time.monotonic()
+        reasons = [physical_unready(self._physical_watches.values(), now)]
+        for joint, _tolerance_m in self._physical_tracks:
+            reasons.append(
+                track_unheard(
+                    joint,
+                    self._track_positions.get((PLANT_SIDE, joint)),
+                    COUNTERPART_SIDE,
+                    self._track_positions.get((COUNTERPART_SIDE, joint)),
+                    now,
+                    self._state_max_age_s,
+                )
+            )
+        found = [reason for reason in reasons if reason is not None]
+        return "; ".join(found) if found else None
+
+    def _physical_carriage_apart(self) -> str | None:
+        """Why a physical carriage, heard fresh, stands away from the plant's; under the lock.
+
+        SA-S-01 b, and final (S-08): within the track's goal tolerance of the
+        plant's or not at all, and nothing but a person homing it clears it.
+        """
+        now = time.monotonic()
+        found = [
+            reason
+            for joint, tolerance_m in self._physical_tracks
+            if (
+                reason := tracks_apart(
+                    joint,
+                    self._track_positions.get((PLANT_SIDE, joint)),
+                    COUNTERPART_SIDE,
+                    self._track_positions.get((COUNTERPART_SIDE, joint)),
+                    tolerance_m,
+                    now,
+                    self._state_max_age_s,
+                )
+            )
+            is not None
+        ]
+        return "; ".join(found) if found else None
 
     def _on_model_version(self, side_name: str, message: ModelVersion) -> None:
         with self._lock:
@@ -1231,6 +1615,34 @@ def _wait(future: Future, goal_handle, handles) -> object | None:
             for handle in list(handles):
                 handle.cancel_goal_async()
     return future.result()
+
+
+def _physical_watches(plan: Plan) -> dict[str, PhysicalSideWatch]:
+    """One watch per arm whose counterpart is physical, keyed by asset.
+
+    Empty on a zone whose counterpart is simulated, and then nothing is
+    subscribed and no mode waits on anything. The freshness bound is the plan's
+    one statement of it (`twin.state_max_age_s`); a physical side with none is
+    refused rather than given a default.
+    """
+    watches: dict[str, PhysicalSideWatch] = {}
+    for manager in plan.controller_managers:
+        if manager.commands_physical_hardware_on_or_none(COUNTERPART_SIDE) is None:
+            continue
+        physical = manager.physical_on(COUNTERPART_SIDE)
+        if physical is None:
+            continue
+        if plan.twin is None or plan.twin.state_max_age_s is None:
+            raise BoundaryError(
+                f"{manager.asset}'s counterpart is physical and the plan states no "
+                "`twin.state_max_age_s` to judge its state fresh by"
+            )
+        watches[manager.asset] = PhysicalSideWatch(
+            asset=manager.asset,
+            joints=physical.joints,
+            max_age_s=plan.twin.state_max_age_s,
+        )
+    return watches
 
 
 def _skill_endpoints(plan: Plan) -> tuple[_SkillEndpoint, ...]:

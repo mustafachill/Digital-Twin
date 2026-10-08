@@ -22,8 +22,10 @@ order, a package:// URI that does not resolve — is in this half.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import ipaddress
+import math
 from pathlib import Path
 from types import MappingProxyType
 
@@ -185,6 +187,29 @@ PHYSICAL_FIELD_BY_SIDE: Mapping[str, str] = MappingProxyType(
 )
 
 
+#: The kinds of value a description argument read from the environment may be,
+#: and the check each kind gets before a launch hands it to the vendor
+#: (ADR-0070 item 2). The KIND is stated in L0 on the reference itself and
+#: carried by the plan, so nothing here keeps a list of argument names; a kind
+#: this reader does not know is refused rather than passed unchecked.
+IP_ADDRESS_KIND = "ip_address"
+ENVIRONMENT_VALUE_KINDS = frozenset({IP_ADDRESS_KIND})
+
+
+#: The plan keys that name the counterpart's OWN artifacts, stated only where its
+#: backend differs from the plant's (ADR-0048 clause 2, ADR-0070). A tuple of
+#: names authored once, here, for the reader below and for any fixture that has
+#: to strip a counterpart from a document.
+COUNTERPART_ARTIFACT_KEYS = (
+    "counterpart_description",
+    "counterpart_parameters",
+    "counterpart_description_args",
+    "counterpart_controllers",
+    "counterpart_vendor",
+    "counterpart_physical",
+)
+
+
 class PlanError(Exception):
     """The bring-up plan is missing, malformed, or references something absent."""
 
@@ -195,6 +220,17 @@ class HardwareNotPermittedError(PlanError):
     A `PlanError`, so the launch file's existing refusal path reports it the same
     way it reports every other reason bring-up cannot proceed: a message and a
     `Shutdown`, never a partially started cell.
+    """
+
+
+class PhysicalSideNotSimulatedError(PlanError):
+    """A launch that starts a simulation was asked to start a physical side.
+
+    Separate from :class:`HardwareNotPermittedError`, and not answerable by the
+    opt-in that one names: `simulation.launch.py` starts Gazebo and the
+    `gz_ros2_control` plugin, so a side whose hardware is physical started there
+    would be a simulation standing in for the machine, under the machine's names
+    (ADR-0070). The physical side has a launch of its own (ADR-0070 item 6).
     """
 
 
@@ -238,6 +274,27 @@ class RosDomainMismatchError(PlanError):
     would succeed and be invisible: a side alone on a domain nobody addresses
     answers nothing, and a side sharing the plant's domain collides with it on
     every name (ADR-0044, clause 4).
+    """
+
+
+class EnvironmentValueMissingError(PlanError):
+    """A description argument the plan reads from the environment is unset.
+
+    A `PlanError`, so a launch reports it as a refusal and starts nothing. Raised
+    by `resolve_description_args`, which is provided for the physical side's
+    launch, `hardware.launch.py` (ADR-0070 item 6). The plan
+    carries the variable's NAME and never its value (ADR-0070 item 2), so
+    that is the only point at which an absent robot address can be caught before
+    a hardware component opens a socket to nothing: the vendor component answers
+    an empty address with `exit(1)` inside a loaded plugin (ADR-0053).
+    """
+
+
+class EnvironmentValueInvalidError(PlanError):
+    """A description argument read from the environment is set but malformed.
+
+    Its message names the variable and never the value, for the reason
+    `EnvironmentValueMissingError` gives: nothing an operator typed is logged.
     """
 
 
@@ -402,6 +459,74 @@ class Track:
 
 
 @dataclass(frozen=True)
+class VendorNames:
+    """What a side's embedded vendor driver serves outside `ros2_control` (ADR-0070).
+
+    Every name is formed by the generator (`ids.vendor_interface`) and read here,
+    never composed: the real side's track adapter, gripper relay and watchdog
+    address these and nothing they build themselves.
+    """
+
+    #: The driver node, fully qualified; its parameters are keyed by it.
+    driver_node: str
+    service_namespace: str
+    #: Vendor service name -> fully qualified service.
+    services: Mapping[str, str]
+    #: The vendor's `GripperCommand` action, or `None` where it serves none.
+    gripper_action: str | None
+    #: Absolute name the vendor plugin calls -> this asset's controller manager
+    #: service it is remapped onto, on the side's `ros2_control_node`.
+    controller_manager_remaps: Mapping[str, str] = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class EnvironmentArgument:
+    """A description argument whose value is read from the environment at launch.
+
+    The plan carries the variable's NAME and what kind of value it holds,
+    never the value (ADR-0070 item 2).
+    """
+
+    variable: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class PhysicalSide:
+    """What a physical side runs beside its controller manager (ADR-0070 items 3-6).
+
+    Every name is generated; the side's launch starts each node under the name
+    stated here with the one generated `parameters` file, and the twin boundary
+    reads the last three before a mode may command this side.
+    """
+
+    #: The generated parameter file every node below is started with.
+    parameters: Path
+    deadman: str
+    track_adapter: str | None
+    gripper_relay: str | None
+    #: The node serving this arm's `InitializeAsset`, and the service, or
+    #: `None` both where the side has none (ADR-0070).
+    initializer: str | None
+    initialize_service: str | None
+    deadman_state_topic: str
+    #: Published by the arm trajectory controller only while it is active.
+    arm_controller_state_topic: str
+    #: Every joint whose state the side publishes, whichever node publishes it.
+    joints: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TwinTiming:
+    """The twin boundary's timing, from the zone's `twin:` block (ADR-0070 item 5)."""
+
+    heartbeat_period_s: float
+    #: The oldest joint, controller or deadman state counted as current on a
+    #: physical side; `None` where the zone has no physical side.
+    state_max_age_s: float | None
+
+
+@dataclass(frozen=True)
 class ControllerManager:
     asset: str
     node: str
@@ -447,6 +572,84 @@ class ControllerManager:
     arm: Mapping[str, float]
     #: The linear track this arm rides, or `None` for an arm bolted in place.
     track: Track | None = None
+    #: What the plant's description reads from the environment: xacro argument
+    #: -> variable NAME. Empty on a simulated side. Read through
+    #: `description_args_on` and resolved only by `resolve_description_args`.
+    description_args: Mapping[str, EnvironmentArgument] = MappingProxyType({})
+    #: The counterpart's own description and controller configuration, or
+    #: `None` where it loads the plant's. The plan states them exactly where the
+    #: counterpart's backend differs from the plant's (ADR-0048 clause 2), and the
+    #: reader refuses a differing pair that does not. Read through
+    #: `description_on` and `parameters_on`, never off these fields.
+    counterpart_description: Path | None = None
+    counterpart_parameters: str | None = None
+    counterpart_description_args: Mapping[str, EnvironmentArgument] = MappingProxyType({})
+    #: The controllers the counterpart's own configuration defines, or `None`
+    #: where it loads the plant's. Stated exactly where `counterpart_parameters`
+    #: is. Read through `controllers_on` and `stages_on`, never off this field.
+    counterpart_controllers: tuple[ControllerRef, ...] | None = None
+    #: The names the counterpart's embedded vendor driver serves, or `None`
+    #: where it embeds none. Stated only beside `counterpart_description`. Read
+    #: through `vendor_on`.
+    counterpart_vendor: VendorNames | None = None
+    #: What the counterpart runs beside its controller manager where it is
+    #: physical, or `None`. Stated only beside `counterpart_vendor`. Read
+    #: through `physical_on`.
+    counterpart_physical: PhysicalSide | None = None
+
+    def physical_on(self, side: str) -> PhysicalSide | None:
+        """Return what ``side`` runs as a physical side, or `None` where it runs none."""
+        self.backend_on(side)
+        return self.counterpart_physical if side == COUNTERPART_SIDE else None
+
+    def vendor_on(self, side: str) -> VendorNames | None:
+        """Return the vendor names ``side`` serves, or `None` where the plan states none.
+
+        The plan states them for a counterpart that loads files of its own and
+        whose backend embeds a vendor driver (ADR-0070); a side loading the
+        plant's files loads the plant's simulated hardware and serves none.
+        """
+        self.backend_on(side)
+        return self.counterpart_vendor if side == COUNTERPART_SIDE else None
+
+    def description_on(self, side: str) -> Path:
+        """Return the description ``side`` loads: its own where it has one, else the plant's."""
+        self.backend_on(side)  # refuses a side this asset does not declare
+        if side == COUNTERPART_SIDE and self.counterpart_description is not None:
+            return self.counterpart_description
+        return self.description
+
+    def parameters_on(self, side: str) -> str:
+        """Return the controller configuration ``side`` loads, by `description_on`'s rule."""
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_parameters is not None:
+            return self.counterpart_parameters
+        return self.parameters
+
+    def controllers_on(self, side: str) -> tuple[ControllerRef, ...]:
+        """Return the controllers ``side`` spawns, by `description_on`'s rule.
+
+        A side loading a configuration of its own spawns what that file defines
+        and nothing else: a controller whose joint no hardware on that side
+        exports is absent from it, and spawning the plant's list there would ask
+        the controller manager for a controller it has no type for (ADR-0070
+        items 1, 3 and 4).
+        """
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_controllers is not None:
+            return self.counterpart_controllers
+        return self.controllers
+
+    def description_args_on(self, side: str) -> Mapping[str, EnvironmentArgument]:
+        """Return what ``side``'s description reads from the environment, by argument.
+
+        Follows the description: a counterpart that loads the plant's
+        description takes the plant's arguments.
+        """
+        self.backend_on(side)
+        if side == COUNTERPART_SIDE and self.counterpart_description is not None:
+            return self.counterpart_description_args
+        return self.description_args
 
     def backend_on(self, side: str) -> str:
         """Return the `ros2_control` backend this asset loads on ``side``, or refuse.
@@ -571,7 +774,11 @@ class ControllerManager:
         return None
 
     def stages(self) -> list[tuple[int, tuple[str, ...]]]:
-        """Group the controllers by stage, in ascending order.
+        """Return the plant's stages: `stages_on(PLANT_SIDE)`."""
+        return self.stages_on(PLANT_SIDE)
+
+    def stages_on(self, side: str) -> list[tuple[int, tuple[str, ...]]]:
+        """Group the controllers ``side`` spawns by stage, in ascending order.
 
         Stage is a dependency ordering, not a schedule: a broadcaster must be
         active before the controllers that read the state it publishes. The
@@ -579,7 +786,7 @@ class ControllerManager:
         previous spawner exiting successfully — never on elapsed time (P4).
         """
         grouped: dict[int, list[str]] = {}
-        for controller in self.controllers:
+        for controller in self.controllers_on(side):
             grouped.setdefault(controller.stage, []).append(controller.name)
         return [(stage, tuple(sorted(names))) for stage, names in sorted(grouped.items())]
 
@@ -725,6 +932,8 @@ class Plan:
     workpieces: Workpieces | None
     #: One per arm that runs a program (ADR-0067). Empty where none does.
     programs: tuple[Program, ...] = ()
+    #: The twin boundary's timing; `None` on a zone that runs no boundary.
+    twin: TwinTiming | None = None
 
     def side_named(self, name: str) -> Side:
         """Return the side called ``name``, or refuse.
@@ -808,10 +1017,10 @@ def load(path: Path) -> Plan:
     )
 
     for manager in managers:
-        if not manager.controllers:
+        if not manager.controllers or manager.counterpart_controllers == ():
             raise PlanError(
-                f"controller manager for {manager.asset!r} lists no controllers; "
-                "bring-up would report success having activated nothing"
+                f"controller manager for {manager.asset!r} lists no controllers on a "
+                "side; bring-up would report success having activated nothing"
             )
 
     _every_declared_side_states_a_backend(sides, managers, path)
@@ -892,7 +1101,29 @@ def load(path: Path) -> Plan:
         programs=tuple(
             _program(entry, index) for index, entry in enumerate(_sequence(plan, "programs"))
         ),
+        twin=_twin(_optional(plan, "twin")),
     )
+
+
+def _twin(entry: object | None) -> TwinTiming | None:
+    """Read the boundary's timing, or `None` where the plan states none."""
+    if entry is None:
+        return None
+    heartbeat = _number(
+        _require(entry, "heartbeat_period_s", "twin"), "heartbeat_period_s", "twin"
+    )
+    age = _optional(entry, "state_max_age_s")
+    timing = TwinTiming(
+        heartbeat_period_s=heartbeat,
+        state_max_age_s=None if age is None else _number(age, "state_max_age_s", "twin"),
+    )
+    for name, value in (
+        ("heartbeat_period_s", timing.heartbeat_period_s),
+        ("state_max_age_s", timing.state_max_age_s),
+    ):
+        if value is not None and not (math.isfinite(value) and value > 0.0):
+            raise PlanError(f"twin: {name!r} must be a positive, finite number, not {value}")
+    return timing
 
 
 def _every_declared_side_states_a_backend(
@@ -1364,8 +1595,25 @@ def _track(entry: object | None, where: str) -> Track | None:
     )
 
 
-def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
+def require_hardware_opt_in(
+    plan: Plan, environ: Mapping[str, str], sides: Iterable[str] | None = None
+) -> None:
     """Refuse a plan that would drive physical hardware without a deliberate opt-in.
+
+    ``sides`` narrows the question to the sides a CALLER is about to start, and
+    ``None`` — the default, and what `cite_twin.mode` passes — asks it of every
+    side. A launch that starts one side passes that side: since ADR-0070 the
+    shipped counterpart is physical and the plant simulated, and a launch that
+    starts only the simulated plant (every scenario, CI, `./scripts/sim`) starts
+    nothing the counterpart's declaration is about. What keeps the physical side
+    gated is that whatever starts IT asks about it: `simulation.launch.py`
+    refuses to start a physical side at all (`refuse_a_physical_side`, with no
+    opt-in that answers it), and the hardware side launch ADR-0070 item 6 owes
+    must ask this gate. A side named here that the plan does not declare is
+    skipped, exactly as an undeclared side is below; but a `str`, an empty
+    collection and a name that is no side at all are refused with
+    `SideNotDeclaredError` before anything is asked, because each would skip
+    every side.
 
     `cross-cutting-safety.md` requires that no command reaches a hardware
     interface without passing the safety layer. Until Phase 2 builds that layer,
@@ -1446,9 +1694,12 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
     # behind it to command. That is the accessor's judgement and not a second
     # one - an asset that stopped stating a side would stop being gated here only
     # because the accessor says the side is gone.
+    asked = None if sides is None else _asked_sides(sides)
     hardware = []
     for manager in plan.controller_managers:
         for side, field in PHYSICAL_FIELD_BY_SIDE.items():
+            if asked is not None and side not in asked:
+                continue
             try:
                 physical = manager.commands_physical_hardware_on(side)
             except SideNotDeclaredError:
@@ -1471,6 +1722,132 @@ def require_hardware_opt_in(plan: Plan, environ: Mapping[str, str]) -> None:
         f"{HARDWARE_OPT_IN_ENV}={HARDWARE_OPT_IN_VALUE} deliberately — see "
         "docs/operations/safety-procedures.md."
     )
+
+
+def _asked_sides(sides: Iterable[str]) -> frozenset[str]:
+    """Validate a `sides` narrowing before it narrows anything; refuse rather than skip.
+
+    The gate skips every side not named, so a narrowing that names nothing it
+    can match turns it off: a bare string iterates as its letters, an empty
+    iterable names no side, and a misspelled side matches none. Each of those is
+    refused here, before the loop, because each would return without refusing
+    a physical side.
+    """
+    if isinstance(sides, str):
+        raise SideNotDeclaredError(
+            f"sides={sides!r} is a string, which would be read as its letters; pass a "
+            f"collection of side names such as ({sides!r},)."
+        )
+    asked = frozenset(sides)
+    if not asked:
+        raise SideNotDeclaredError(
+            "sides names no side, which would ask the hardware gate nothing; pass the "
+            "sides being started, or None for every side."
+        )
+    unknown = sorted(asked - set(PHYSICAL_FIELD_BY_SIDE))
+    if unknown:
+        raise SideNotDeclaredError(
+            f"sides names {', '.join(repr(name) for name in unknown)}, which is not a side; "
+            f"the sides are {', '.join(repr(name) for name in PHYSICAL_FIELD_BY_SIDE)}."
+        )
+    return asked
+
+
+def refuse_a_physical_side(plan: Plan, side: str) -> None:
+    """Refuse to start ``side`` in a simulation when any asset there commands a machine.
+
+    Whatever the environment says: there is no opt-in for this, because the
+    question is not whether a machine may be commanded but whether a simulation
+    may pretend to be one. A side launched by `simulation.launch.py` is a Gazebo
+    model with simulated hardware behind every name; starting the physical side
+    there would make the twin boundary command a simulation while every name and
+    every readiness token said it was the arm.
+
+    Asked through `commands_physical_hardware_on_or_none`, and `None` - a side
+    this asset does not declare - is not a refusal here: whether the side exists
+    is the domain check's question, which refuses it by name.
+    """
+    physical = sorted(
+        manager.asset
+        for manager in plan.controller_managers
+        if manager.commands_physical_hardware_on_or_none(side) is True
+    )
+    if not physical:
+        return
+    raise PhysicalSideNotSimulatedError(
+        f"zone {plan.zone!r}: on the {side} side, {', '.join(physical)} commands physical "
+        "hardware. simulation.launch.py starts a simulation and never stands in for a "
+        "physical side (ADR-0070). The physical side is started by a launch of its own, "
+        "hardware.launch.py (ADR-0070 item 6), which ./scripts/sim --pair selects for it."
+    )
+
+
+def resolve_description_args(
+    manager: ControllerManager, side: str, environ: Mapping[str, str]
+) -> dict[str, str]:
+    """Resolve what ``side``'s description reads from the environment, or refuse.
+
+    THE ONE PLACE A VALUE THE PLAN REFERS TO IS READ (ADR-0070 item 2). L0, the
+    generated description and the generated plan all carry the variable's name;
+    the value — today, the physical xArm's address — exists only in the process
+    environment, filled from the gitignored `.env`. This returns
+    `{xacro argument: value}` for a launch to hand xacro, and nothing else
+    reads those variables.
+
+    **Called by the physical side's launch, `hardware.launch.py`** (ADR-0070
+    item 6), after the hardware opt-in. `simulation.launch.py` starts only
+    simulated sides, which read nothing from the environment, and refuses a
+    physical one (`refuse_a_physical_side`). A reference of a kind this reader
+    does not know is refused (`ENVIRONMENT_VALUE_KINDS`).
+
+    An unset variable, and one that is empty after stripping, are both refused:
+    `HardwareSelection.supplied_params` treats an empty address as no address for
+    the reason given there, and the vendor component answers one with `exit(1)`.
+    The message names the variable and where it is set, and never prints a
+    value.
+
+    A reference of kind `ip_address` must also parse as an IPv4 or IPv6 address
+    (`ipaddress.ip_address`), and is refused otherwise with
+    `EnvironmentValueInvalidError`, which names the variable and not the value:
+    the vendor hands what it is given to its SDK as a host to connect to, and a
+    typo there is a connection to the wrong machine or to none.
+
+    ``environ`` is passed in rather than read from `os` here, for the reason
+    `require_hardware_opt_in` gives.
+    """
+    resolved: dict[str, str] = {}
+    missing: list[str] = []
+    for argument, reference in sorted(manager.description_args_on(side).items()):
+        variable = reference.variable
+        value = environ.get(variable, "")
+        if not value.strip():
+            missing.append(variable)
+            continue
+        if reference.kind not in ENVIRONMENT_VALUE_KINDS:
+            raise EnvironmentValueInvalidError(
+                f"asset {manager.asset!r} on the {side} side reads {variable} as a value of "
+                f"kind {reference.kind!r}, which bring-up does not know how to check; it is "
+                "refused rather than handed to the vendor unchecked."
+            )
+        if reference.kind == IP_ADDRESS_KIND:
+            try:
+                ipaddress.ip_address(value.strip())
+            except ValueError:
+                raise EnvironmentValueInvalidError(
+                    f"asset {manager.asset!r} on the {side} side reads {variable} from the "
+                    "environment as its robot's IP address, and its value is not an IPv4 "
+                    "or IPv6 address. Correct it in your local .env (see .env.example) and "
+                    "start again."
+                ) from None
+        resolved[argument] = value.strip()
+    if missing:
+        raise EnvironmentValueMissingError(
+            f"asset {manager.asset!r} on the {side} side reads "
+            f"{', '.join(sorted(set(missing)))} from the environment, and it is unset or "
+            "empty. Set it in your local .env (see .env.example), which is never "
+            "committed, and start again."
+        )
+    return resolved
 
 
 def _manager(entry: object, index: int) -> ControllerManager:
@@ -1529,19 +1906,7 @@ def _manager(entry: object, index: int) -> ControllerManager:
         spawn_xyz_m=_triple(_require(entry, "spawn_xyz_m", where), "spawn_xyz_m", where),
         spawn_rpy_rad=_triple(_require(entry, "spawn_rpy_rad", where), "spawn_rpy_rad", where),
         parameters=_require(entry, "parameters", where),
-        controllers=tuple(
-            ControllerRef(
-                name=_require(controller, "name", f"{where}, controller {position}"),
-                stage=int(
-                    _number(
-                        _require(controller, "stage", f"{where}, controller {position}"),
-                        "stage",
-                        where,
-                    )
-                ),
-            )
-            for position, controller in enumerate(_sequence(entry, "controllers", where))
-        ),
+        controllers=_controller_refs(_sequence(entry, "controllers", where), where),
         moveit=_moveit(_optional(entry, "moveit"), where),
         trajectory_action=_optional(entry, "trajectory_action"),
         gripper_action=_optional(entry, "gripper_action"),
@@ -1549,6 +1914,213 @@ def _manager(entry: object, index: int) -> ControllerManager:
         gripper=_named_numbers(entry, GRIPPER_KEYS, where),
         arm=_named_numbers(entry, ARM_KEYS, where),
         track=_track(_optional(entry, "track"), where),
+        description_args=_environment_args(entry, "description_args", where),
+        **_counterpart_artifacts(entry, counterpart_backend, where),
+    )
+
+
+def _controller_refs(entries: list, where: str) -> tuple[ControllerRef, ...]:
+    return tuple(
+        ControllerRef(
+            name=_require(controller, "name", f"{where}, controller {position}"),
+            stage=int(
+                _number(
+                    _require(controller, "stage", f"{where}, controller {position}"),
+                    "stage",
+                    where,
+                )
+            ),
+        )
+        for position, controller in enumerate(entries)
+    )
+
+
+def _environment_args(entry: object, key: str, where: str) -> Mapping[str, EnvironmentArgument]:
+    """Read an `argument: {env: VARIABLE, kind: KIND}` mapping, refusing anything else.
+
+    A literal value is refused rather than accepted: the plan is committed, and a
+    value here would be the address ADR-0070 item 2 keeps out of the tree. A
+    reference whose kind is unstated, or of a kind this reader does not check,
+    is refused too: an unclassified value would reach the vendor unchecked.
+    """
+    stated = _optional(entry, key)
+    if stated is None:
+        return MappingProxyType({})
+    if not isinstance(stated, dict):
+        raise PlanError(f"{where}: {key!r} must be a mapping, not {_kind(stated)}")
+    arguments: dict[str, EnvironmentArgument] = {}
+    for argument, reference in stated.items():
+        variable = reference.get("env") if isinstance(reference, dict) else None
+        kind = reference.get("kind") if isinstance(reference, dict) else None
+        if (
+            not isinstance(argument, str)
+            or not isinstance(reference, dict)
+            or set(reference) != {"env", "kind"}
+            or not isinstance(variable, str)
+            or not variable
+        ):
+            raise PlanError(
+                f"{where}: {key!r} entry {argument!r} must be {{env: <VARIABLE>, kind: <KIND>}}, "
+                f"not {_kind(reference)}. The plan names a variable and what kind of value it "
+                "holds, and never holds its value (ADR-0070)."
+            )
+        if kind not in ENVIRONMENT_VALUE_KINDS:
+            raise PlanError(
+                f"{where}: {key!r} entry {argument!r} declares kind {kind!r}; the kinds "
+                f"bring-up checks are {sorted(ENVIRONMENT_VALUE_KINDS)}. An unclassified "
+                "value is refused rather than handed to the vendor unchecked."
+            )
+        arguments[argument] = EnvironmentArgument(variable=variable, kind=kind)
+    return MappingProxyType(arguments)
+
+
+def _counterpart_artifacts(entry: object, counterpart_backend: object, where: str) -> dict:
+    """Read the counterpart's own description and configuration, where it has them.
+
+    Stated together or not at all, only beside a `counterpart_backend`, and
+    REQUIRED where that backend differs from the plant's: a counterpart that
+    loads another backend loading the plant's description would be a side
+    described as the other side's machine, which is open-work #38's defect
+    arriving from a stale plan rather than from the generator.
+    """
+    (
+        description_key,
+        parameters_key,
+        arguments_key,
+        controllers_key,
+        vendor_key,
+        physical_key,
+    ) = COUNTERPART_ARTIFACT_KEYS
+    description = _optional(entry, description_key)
+    parameters = _optional(entry, parameters_key)
+    arguments = _environment_args(entry, arguments_key, where)
+    controllers = _optional(entry, controllers_key)
+    if not (description is None) == (parameters is None) == (controllers is None):
+        raise PlanError(
+            f"{where}: states some of 'counterpart_description', 'counterpart_parameters' "
+            "and 'counterpart_controllers' without the other. They are emitted together."
+        )
+    if description is not None and counterpart_backend is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_description' without 'counterpart_backend', "
+            "so it describes a side nothing says exists."
+        )
+    vendor = _vendor(_optional(entry, vendor_key), where)
+    if vendor is not None and description is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_vendor' without 'counterpart_description'. "
+            "A side loading the plant's files loads simulated hardware, which embeds no "
+            "vendor driver."
+        )
+    physical = _physical(_optional(entry, physical_key), where)
+    if physical is not None and vendor is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_physical' without 'counterpart_vendor'. The "
+            "physical side's nodes translate to the vendor driver, which a side embedding "
+            "none does not have."
+        )
+    if arguments and description is None:
+        raise PlanError(
+            f"{where}: states 'counterpart_description_args' without "
+            "'counterpart_description'. A side loading the plant's description takes "
+            "the plant's arguments."
+        )
+    backend = _optional(entry, "backend")
+    if description is None and counterpart_backend not in (None, backend):
+        raise PlanError(
+            f"{where}: the counterpart loads backend {counterpart_backend!r} and the plant "
+            f"{backend!r}, and the plan names no 'counterpart_description' for it. A side "
+            "whose backend differs loads its own description (ADR-0048 clause 2); this "
+            "plan predates that - run ./scripts/validate-model --write, then "
+            "./scripts/build."
+        )
+    return {
+        "counterpart_description": None if description is None else resolve_uri(description),
+        "counterpart_parameters": parameters,
+        "counterpart_description_args": arguments,
+        "counterpart_controllers": (
+            None
+            if controllers is None
+            else _controller_refs(_sequence(entry, controllers_key, where), where)
+        ),
+        "counterpart_vendor": vendor,
+        "counterpart_physical": physical,
+    }
+
+
+def _physical(entry: object | None, where: str) -> PhysicalSide | None:
+    """Read a `counterpart_physical` block; every name absolute, none composed here."""
+    if entry is None:
+        return None
+    here = f"{where}, counterpart_physical"
+    names = {
+        "deadman": _require(entry, "deadman", here),
+        "deadman_state_topic": _require(entry, "deadman_state_topic", here),
+        "arm_controller_state_topic": _require(entry, "arm_controller_state_topic", here),
+    }
+    for optional in ("track_adapter", "gripper_relay", "initializer", "initialize_service"):
+        value = _optional(entry, optional)
+        if value is not None:
+            names[optional] = value
+    for label, name in names.items():
+        if not isinstance(name, str) or not name.startswith("/"):
+            raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
+    if ("initializer" in names) != ("initialize_service" in names):
+        raise PlanError(
+            f"{here}: states one of 'initializer' and 'initialize_service' without the "
+            "other. They are emitted together."
+        )
+    joints = _sequence(entry, "joints", here)
+    if not joints or not all(isinstance(j, str) and j for j in joints):
+        raise PlanError(f"{here}: 'joints' must be a non-empty list of joint names")
+    return PhysicalSide(
+        parameters=resolve_uri(_require(entry, "parameters", here)),
+        deadman=names["deadman"],
+        track_adapter=names.get("track_adapter"),
+        gripper_relay=names.get("gripper_relay"),
+        initializer=names.get("initializer"),
+        initialize_service=names.get("initialize_service"),
+        deadman_state_topic=names["deadman_state_topic"],
+        arm_controller_state_topic=names["arm_controller_state_topic"],
+        joints=tuple(joints),
+    )
+
+
+def _vendor(entry: object | None, where: str) -> VendorNames | None:
+    """Read a `counterpart_vendor` block; every name absolute, none composed here."""
+    if entry is None:
+        return None
+    here = f"{where}, counterpart_vendor"
+    services = _require(entry, "services", here)
+    if not isinstance(services, dict) or not services:
+        raise PlanError(f"{here}: 'services' must be a non-empty mapping, not {_kind(services)}")
+    names = {
+        "driver_node": _require(entry, "driver_node", here),
+        "service_namespace": _require(entry, "service_namespace", here),
+        **{f"service {key!r}": value for key, value in services.items()},
+    }
+    gripper_action = _optional(entry, "gripper_action")
+    if gripper_action is not None:
+        names["gripper_action"] = gripper_action
+    remaps = _optional(entry, "controller_manager_remaps")
+    if remaps is None:
+        remaps = {}
+    if not isinstance(remaps, dict):
+        raise PlanError(
+            f"{here}: 'controller_manager_remaps' must be a mapping, not {_kind(remaps)}"
+        )
+    for absolute, target in remaps.items():
+        names[f"remap {absolute!r}"] = absolute
+        names[f"remap target of {absolute!r}"] = target
+    for label, name in names.items():
+        if not isinstance(name, str) or not name.startswith("/"):
+            raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
+    return VendorNames(
+        driver_node=names["driver_node"],
+        service_namespace=names["service_namespace"],
+        services=MappingProxyType(dict(services)),
+        gripper_action=gripper_action,
+        controller_manager_remaps=MappingProxyType(dict(remaps)),
     )
 
 

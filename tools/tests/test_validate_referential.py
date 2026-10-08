@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from conftest import paired_twin
 
 from cite_tools.model.loader import ModelError, load
 from cite_tools.validate import Severity, referential
@@ -356,9 +357,40 @@ def test_a_block_for_a_declared_backend_nobody_selects_is_clean(
     unexercised block is indistinguishable from a deliberate pre-declaration."""
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
-        lambda d: _hardware(d, {"backend": "sim", "params": {"real": {"robot_ip": "203.0.113.7"}}}),
+        lambda d: _hardware(
+            d,
+            {
+                "backend": "sim",
+                "params": {"real": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}},
+            },
+        ),
     )
     assert referential.check(load(minimal_model)) == []
+
+
+@pytest.mark.parametrize("backend", ["sim", "real"])
+def test_a_literal_parameter_of_a_physical_backend_is_an_error(
+    minimal_model: Path, edit_yaml: Callable, backend: str
+) -> None:
+    """R-05 (ADR-0070 item 2): a physical backend's parameter is a reference, never a value.
+
+    Selected or not: an unselected block is committed all the same.
+    """
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: _hardware(
+            d, {"backend": backend, "params": {"real": {"robot_ip": "203.0.113.7"}}}
+        ),
+    )
+    findings = [
+        f
+        for f in referential.check(load(minimal_model))
+        if f.rule == "literal-param-on-physical-backend"
+    ]
+    assert [(f.severity, f.where) for f in findings] == [
+        (Severity.ERROR, "assets.arm_1.hardware.params.real.robot_ip")
+    ]
+    assert "203.0.113.7" not in findings[0].message, "the value is not repeated"
 
 
 def test_station_references_a_missing_asset(minimal_model: Path, edit_yaml: Callable) -> None:
@@ -432,7 +464,7 @@ def test_the_real_model_resolves_its_workpieces(real_model: Path) -> None:
 def _pair_the_zone(model: Path, edit_yaml: Callable) -> None:
     edit_yaml(
         model / "facility/zones.yaml",
-        lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+        lambda d: d["zones"][0].__setitem__("twin", paired_twin()),
     )
 
 
@@ -573,41 +605,51 @@ def test_a_physical_plant_on_an_untwinned_zone_is_still_allowed(
     assert "physical-plant-on-paired-zone" not in rules(minimal_model)
 
 
-def test_a_physical_counterpart_on_a_paired_zone_is_refused(
+#: The counterpart's address as the shipped model writes it: a reference to the
+#: environment, never a value (ADR-0070 item 2).
+_ADDRESS_FROM_THE_ENVIRONMENT = {
+    "real": {"robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}}
+}
+
+
+def test_a_physical_counterpart_on_a_paired_zone_is_accepted(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    """Phase 2.B's encoding stays expressible; GENERATING from it does not.
+    """Phase 2.B's encoding, now generated as well as expressible (ADR-0070).
 
-    This test asserted `rules(...) == set()` until ADR-0048 clause 1 landed, on
-    the comment "it is the encoding that must stay expressible". That comment is
-    right about the vocabulary and was wrong about the tree: the encoding is
-    still `counterpart_backend` and this record proposes no other, but all three
-    generator sites that branch on a backend read the plant's, so the model
-    validated cleanly and the counterpart was handed a description of a
-    simulated cell. Rewritten rather than deleted, for that reason.
-
-    The assertion is set EQUALITY rather than membership, which makes it the
-    mutation check as well: the model is otherwise clean, so deleting the new
-    rule turns this back into the empty set it used to assert, and no other rule
-    can be the one refusing.
+    This test asserted `rules(...) == set()` until ADR-0048 clause 1 landed, then
+    `== {"divergent-counterpart-backend"}`: every generator site that branched on
+    a backend read the plant's, so the counterpart would have been handed a
+    description of a simulated cell. ADR-0070 built clause 2 — each side's
+    artifacts are generated from that side's own backend — and deleted the rule.
+    So the shipped encoding is clean again, and set EQUALITY keeps this the
+    mutation check: no rule may refuse it.
     """
     _pair_the_zone(minimal_model, edit_yaml)
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
         lambda d: d["assets"][1].__setitem__(
-            "hardware", {"backend": "sim", "counterpart_backend": "real"}
+            "hardware",
+            {
+                "backend": "sim",
+                "counterpart_backend": "real",
+                "params": _ADDRESS_FROM_THE_ENVIRONMENT,
+            },
         ),
     )
-    assert rules(minimal_model) == {"divergent-counterpart-backend"}
+    assert rules(minimal_model) == set()
 
 
-def test_the_divergence_refusal_says_what_would_have_been_generated(
+def test_a_physical_counterpart_must_supply_what_its_backend_declares(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    # The trade ADR-0048 takes is that someone writes a true fact about the
-    # facility and is told no, so the message has to be good enough to move
-    # them: it names what the generator would have emitted and the record that
-    # lifts the refusal.
+    """`missing-hardware-param` reads the counterpart's backend too.
+
+    It read the plant's alone, which was enough while both sides loaded one
+    backend. The counterpart now gets a description valued from ITS backend's
+    block, so an address it does not supply would stop the generator exactly as
+    the plant's would — reported here instead, against the block it belongs in.
+    """
     _pair_the_zone(minimal_model, edit_yaml)
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
@@ -616,39 +658,54 @@ def test_the_divergence_refusal_says_what_would_have_been_generated(
         ),
     )
     findings = referential.check(load(minimal_model))
-    refusal = next(f for f in findings if f.rule == "divergent-counterpart-backend")
-    assert refusal.where == "assets.arm_1.hardware.counterpart_backend"
-    hint = refusal.hint or ""
-    assert "use_sim_time: true" in hint
-    assert "ADR-0048" in hint
+    assert {f.rule for f in findings if f.severity is Severity.ERROR} == {"missing-hardware-param"}
+    (missing,) = (f for f in findings if f.rule == "missing-hardware-param")
+    assert missing.where == "assets.arm_1.hardware.params.real.robot_ip"
 
 
-def test_the_refusal_is_keyed_on_difference_rather_than_on_a_physical_backend(
+def test_a_physical_plant_under_a_simulated_counterpart_is_still_refused(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    """The mutation check: `real` is not what the rule reads.
+    """The cell of the cross product that stays closed, by the rule that closes it.
 
-    Keying on the literal would leave a third backend to rediscover the gap, so
-    the rule is asserted against a counterpart that is not physical at all. The
-    plant here is `real` and the counterpart `sim` — a case no other rule
-    touches on an untwinned zone, which is also what makes this the mutation
-    check for the rule's key.
+    This was the mutation check for `divergent-counterpart-backend`'s key. With
+    that rule deleted, the reversed pair — physical plant, simulated
+    counterpart — is refused by `physical-plant-on-paired-zone` and by nothing
+    else, which is what ADR-0070 keeps.
     """
+    _pair_the_zone(minimal_model, edit_yaml)
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
         lambda d: d["assets"][1].__setitem__(
-            "hardware", {"backend": "real", "counterpart_backend": "sim"}
+            "hardware",
+            {
+                "backend": "real",
+                "counterpart_backend": "sim",
+                "params": _ADDRESS_FROM_THE_ENVIRONMENT,
+            },
         ),
     )
-    assert "divergent-counterpart-backend" in rules(minimal_model)
+    assert rules(minimal_model) == {"physical-plant-on-paired-zone"}
+
+
+def test_the_divergence_rule_is_gone(minimal_model: Path, edit_yaml: Callable) -> None:
+    """ADR-0070 deletes `divergent-counterpart-backend`; no model may produce it."""
+    _pair_the_zone(minimal_model, edit_yaml)
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "real"}
+        ),
+    )
+    findings = referential.check(load(minimal_model))
+    assert "divergent-counterpart-backend" not in {f.rule for f in findings}
 
 
 def test_a_counterpart_naming_the_backend_it_already_has_is_allowed(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    # The other half of the mutation check, and the property the refusal must not
-    # break: writing the value the fallback would have supplied is the same model
-    # as omitting it, so it stays clean on a paired zone.
+    # Writing the value the fallback would have supplied is the same model as
+    # omitting it, so it stays clean on a paired zone.
     _pair_the_zone(minimal_model, edit_yaml)
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
@@ -659,21 +716,45 @@ def test_a_counterpart_naming_the_backend_it_already_has_is_allowed(
     assert rules(minimal_model) == set()
 
 
-def test_a_divergent_counterpart_on_an_untwinned_zone_is_refused_with_its_own_hint(
+def test_a_differing_counterpart_on_an_untwinned_zone_is_refused(
     minimal_model: Path, edit_yaml: Callable
 ) -> None:
-    # One rule, two hints. On a `single` zone the value states a fact about a
-    # side the zone does not have, which is a different thing to tell the author
-    # than what the generator would have emitted for a side that exists.
+    """R-07: on a `single` zone there is no counterpart for the value to describe.
+
+    ADR-0070 deleted `divergent-counterpart-backend`, which reported this case;
+    for a while after that it was accepted and silently inert, so a model could
+    read as declaring a physical counterpart that nothing would ever start - and
+    pairing the zone later would make it one without anyone writing it again.
+    The generator still emits nothing for it
+    (`test_a_counterpart_on_an_untwinned_zone_generates_nothing`).
+    """
     edit_yaml(
         minimal_model / "assets/instances/cell.yaml",
         lambda d: d["assets"][1].__setitem__(
             "hardware", {"backend": "sim", "counterpart_backend": "real"}
         ),
     )
-    findings = referential.check(load(minimal_model))
-    refusal = next(f for f in findings if f.rule == "divergent-counterpart-backend")
-    assert "twin.sides: single" in (refusal.hint or "")
+    findings = [
+        f
+        for f in referential.check(load(minimal_model))
+        if f.rule == "counterpart-backend-on-unpaired-zone"
+    ]
+    assert [(f.severity, f.where) for f in findings] == [
+        (Severity.ERROR, "assets.arm_1.hardware.counterpart_backend")
+    ]
+
+
+def test_a_counterpart_written_equal_to_the_plant_on_an_untwinned_zone_is_clean(
+    minimal_model: Path, edit_yaml: Callable
+) -> None:
+    """Writing the fallback out is the same loaded model as omitting it (`HardwareSelection`)."""
+    edit_yaml(
+        minimal_model / "assets/instances/cell.yaml",
+        lambda d: d["assets"][1].__setitem__(
+            "hardware", {"backend": "sim", "counterpart_backend": "sim"}
+        ),
+    )
+    assert rules(minimal_model) == set()
 
 
 def test_a_counterpart_backend_the_type_does_not_declare_is_refused(

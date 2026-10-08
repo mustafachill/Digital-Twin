@@ -33,6 +33,7 @@ import re
 from types import ModuleType
 
 from cite_bringup.plan import (
+    COUNTERPART_ARTIFACT_KEYS,
     DOMAIN_BASE_ENV,
     DOMAIN_ENV,
     GZ_PARTITION_ENV,
@@ -160,9 +161,10 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
 ) -> None:
     """The gate, at the boundary that matters.
 
-    Remove `require_hardware_opt_in` from `_bring_up` and this fails: the plan
+    Remove `refuse_a_physical_side` from `_bring_up` and this fails: the plan
     still loads, so the description comes back full of processes instead of a
-    refusal.
+    refusal. The refusal names ADR-0070 and never tells anyone to set the
+    opt-in, because no opt-in makes a simulation the physical side.
     """
     _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
@@ -175,7 +177,8 @@ def test_a_hardware_plan_refuses_to_bring_the_cell_up(
     )
     assert not _processes(actions), "nothing may be started on the way to refusing"
     reason = _refusal(actions, context)
-    assert "picker" in reason and HARDWARE_OPT_IN_ENV in reason
+    assert "picker" in reason and "ADR-0070" in reason
+    assert HARDWARE_OPT_IN_ENV not in reason
 
 
 def _ends_non_zero(module: ModuleType, entities: list, context: LaunchContext) -> bool:
@@ -226,25 +229,62 @@ def test_a_missing_plan_ends_the_launch_non_zero(
     assert _ends_non_zero(module, actions, context)
 
 
-def test_a_hardware_plan_starts_with_the_opt_in(
+def test_a_hardware_plan_is_refused_even_with_the_opt_in(
     module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
 ) -> None:
-    """A refusal, not a ban — and not a divergence in what gets commanded (P2)."""
+    """ADR-0070: this launch starts a simulation and never stands in for a physical side.
+
+    Before the fix the opt-in started Gazebo and `gz_ros2_control` for a side
+    whose plan said it was the physical machine - a simulation answering under
+    the arm's names. The opt-in is the physical launch's door, not this one's.
+    """
     _use(module, monkeypatch, _plan_with_backend(tmp_path, "real"))
     monkeypatch.setenv(HARDWARE_OPT_IN_ENV, "1")
 
     actions = module._bring_up(context)
 
+    assert not _processes(actions), "nothing may be started on the way to refusing"
+    reason = _refusal(actions, context)
+    assert "ADR-0070" in reason and HARDWARE_OPT_IN_ENV not in reason
+    assert _ends_non_zero(module, actions, context)
+
+
+def test_the_simulated_plant_needs_no_opt_in(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """The shipped plant side starts without the opt-in, though its counterpart is physical.
+
+    The gate is asked of the side this launch starts (ADR-0070): every scenario
+    and CI bring up the simulated plant alone, and the physical counterpart's
+    declaration is not about anything this launch starts.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    actions = module._bring_up(context)
     assert "Shutdown" not in _kinds(actions)
     assert _processes(actions)
 
 
-def test_the_simulated_plan_needs_no_opt_in(
-    module: ModuleType, context: LaunchContext, monkeypatch
+@pytest.mark.parametrize("opt_in", (None, "1"))
+def test_the_shipped_physical_counterpart_side_is_refused_whatever_the_opt_in(
+    module: ModuleType, context: LaunchContext, monkeypatch, opt_in: str | None
 ) -> None:
-    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    """The other half: the side that IS physical never starts here (ADR-0070).
+
+    With or without `CITE_ALLOW_HARDWARE`, and the message sends the reader to
+    the physical side's own launch rather than to the opt-in.
+    """
+    if opt_in is None:
+        monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    else:
+        monkeypatch.setenv(HARDWARE_OPT_IN_ENV, opt_in)
+    context.launch_configurations["side"] = "counterpart"
     actions = module._bring_up(context)
-    assert "Shutdown" not in _kinds(actions)
+    assert not _processes(actions), "nothing may be started on the way to refusing"
+    reason = _refusal(actions, context)
+    assert "counterpart" in reason and "picker" in reason
+    assert "ADR-0070" in reason and "launch of its own" in reason
+    assert HARDWARE_OPT_IN_ENV not in reason
+    assert _ends_non_zero(module, actions, context)
 
 
 # --- R-15: a malformed plan is refused, not raised through --------------------
@@ -1162,11 +1202,17 @@ def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
         # writes no `counterpart_backend` in L0 load the same plugin on both
         # sides, so the plan states the backend of every side that exists. The
         # same shape as `_paired_document` in `test_plan.py`.
-        manager.setdefault("counterpart_backend", manager["backend"])
-        manager.setdefault(
-            "counterpart_commands_physical_hardware",
-            manager["commands_physical_hardware"],
-        )
+        #
+        # SET, not defaulted, and the counterpart's own files dropped: since
+        # ADR-0070 the shipped counterpart is physical, and these tests are about
+        # the isolation of a side, not the hardware gate - which refuses a
+        # physical counterpart side, and has its own tests below.
+        manager["counterpart_backend"] = manager["backend"]
+        manager["counterpart_commands_physical_hardware"] = manager[
+            "commands_physical_hardware"
+        ]
+        for key in COUNTERPART_ARTIFACT_KEYS:
+            manager.pop(key, None)
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     _use(module, monkeypatch, path)
@@ -1224,6 +1270,8 @@ def _single(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
     for manager in document["plan"]["controller_managers"]:
         manager.pop("counterpart_backend", None)
         manager.pop("counterpart_commands_physical_hardware", None)
+        for key in COUNTERPART_ARTIFACT_KEYS:
+            manager.pop(key, None)
     path = tmp_path / "plan.yaml"
     path.write_text(yaml.safe_dump(document))
     _use(module, monkeypatch, path)

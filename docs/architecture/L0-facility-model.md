@@ -37,21 +37,51 @@
     may declare `hardware.counterpart_backend`. **Twinned is derived** from `sides == pair`.
     Pairing is a model change, not a runtime mode: it regenerates `cite_generated/` and moves
     `MODEL_HASH`; the runtime knob is `TwinMode`. A paired zone emits one more `sides:` entry
-    and each asset's counterpart backend into the bring-up plan, and nothing else — no second
-    world, controller manager or set of node names, because a counterpart is the same
-    artifacts started in another environment.
+    and each asset's counterpart backend into the bring-up plan. A counterpart on the plant's
+    backend adds nothing else: no second world, controller manager or set of node names,
+    because it is the same artifacts started in another environment. A counterpart on a
+    different backend is the physical one, described next.
   - **Which backend reaches a machine**
     ([ADR-0054](../adr/0054-key-the-hardware-opt-in-on-a-declared-fact.md)):
     `hardware_backends.<id>.commands_physical_hardware` is required with no default, and every
     hardware gate reads it rather than the backend's name. Nothing verifies the claim against
     the plugin string beside it. `use_sim_time` still keys on the backend id, a residual pinned
     by two characterisation tests.
-  - **Two refusals** in `cite_tools.validate.referential`: `physical-plant-on-paired-zone` (a
-    paired zone may not contain an asset whose backend commands physical hardware) and
-    `divergent-counterpart-backend` ([ADR-0048](../adr/0048-refuse-a-counterpart-the-generator-cannot-build.md)
-    clause 1: a counterpart backend may not differ from the plant's, because every generator
-    site reads the plant's). The second is temporary by construction; its message names the
-    record.
+  - **The physical counterpart**
+    ([ADR-0070](../adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)): `cell_b`'s `picker`
+    and `picker_track` declare `counterpart_backend: real`. The generator emits per-side
+    artifacts only where a side's backend differs from the plant's, with the side in the file
+    path (`description/counterpart/`, `control/counterpart/`) and never in a name. The plan names
+    the counterpart's own description, parameters, controllers, vendor names and adapter
+    parameters. What L0 declares for that side:
+    - a robot address as an environment reference of a declared kind
+      (`{env: CITE_XARM_IP, kind: ip_address}`), never a value;
+    - on the arm's `real` backend, `vendor_driver`: an allow-list of exactly the vendor services
+      the side's nodes call, and the vendor's absolute `controller_manager_services`, which are
+      remapped to the side's own;
+    - on the track's `real` backend, a `vendor_axis` block (scale, poll period, position age,
+      `segment_s`, `auto_enable`); travel and speed stay the axis's own;
+    - on the gripper, `grasp.vendor` with `max_pos_pulses`, from which both vendor ranges are
+      derived;
+    - on the zone's `twin` block, `heartbeat_period_s` and a `physical_side` block with the
+      deadman's timeout, tick, call deadline and state age.
+  - **Refusals** in `cite_tools.validate.referential`, all ERRORs:
+    - `physical-plant-on-paired-zone`: a paired zone may not have a physical plant.
+    - `counterpart-backend-on-unpaired-zone`.
+    - `literal-param-on-physical-backend`.
+    - `plugin-less-backend-on-a-bound-description`.
+    - `vendor-service-not-allowed` (which refuses the vendor's `debug` switch) and
+      `vendor-service-missing`.
+    - `vendor-axis-unstated` and `vendor-gripper-units-unstated`.
+    - The timing relations: `physical-side-timing-unstated`,
+      `deadman-timeout-below-three-heartbeats`, `deadman-tick-not-below-timeout`,
+      `state-max-age-not-above-tick`, `state-max-age-not-above-a-poll-period`,
+      `track-position-age-not-above-poll`, `track-segment-not-above-poll`,
+      `track-segment-above-deadman-timeout`, `track-initialize-speed-above-max` and
+      `call-deadline-not-below-timeout`.
+
+    `divergent-counterpart-backend` (ADR-0048 clause 1) was deleted on 2026-10-05, when per-side
+    generation made it unnecessary.
   - **Two isolations per side**, emitted for every side: a `gz_partition` and a
     `domain_offset`, formed together in `cite_tools.model.ids`
     ([ADR-0042](../adr/0042-partition-gazebo-transport-per-side.md),

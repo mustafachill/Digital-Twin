@@ -1,4 +1,4 @@
-# Open work — snapshot of 2026-10-02
+# Open work — snapshot of 2026-10-02, amended 2026-10-05 for ADR-0070
 
 **Status: SNAPSHOT.** This is not a tracker and must not become one. It lists the open work of
 the **main project** — the paired `cell_b`, where one signal drives one real and one Gazebo
@@ -1178,18 +1178,7 @@ grow is a guard nobody can test.
 Reported by `safety-auditor` on 2026-09-08 (S-05) and deliberately not fixed there.
 
 ### #38 — The generator cannot render 2.B
-Exactly three generator call sites branch on a backend: `ResolvedAsset.ros2_control_plugin` (into
-the description), `control.py:236` (`use_sim_time`) and `bringup.py:378` (`hosted_by`). **All
-three read the plant's backend.**
-
-In 2.A that is harmless — a paired zone's plant must be `sim`, the counterpart writes no
-`counterpart_backend`, so all three answer identically for both sides. In 2.B it is wrong:
-`counterpart_backend: real` today yields a plan saying `counterpart_backend: real` beside
-`hosted_by: simulator`, and one controller config carrying `use_sim_time: true` for a side that
-has no simulator.
-
-**Needs an ADR before 2.B** — either the three sites become per-side, or the schema refuses the
-combination until they are.
+Closed: closed 2026-10-05 by [ADR-0070](adr/0070-the-physical-arm-is-cell-b-s-counterpart.md), which built ADR-0048 clause 2 — every generator site reads the side's own backend and the counterpart gets its own description and controller configuration; full text in git history (`git show f651155:docs/open-work.md`).
 
 ### #45 — ADR-0048 clause 3
 Closed: closed at `7d7ac19`; ADR-0048 records clause 3 as `Accepted`; full text in git history (`git show 911ba08:docs/open-work.md`).
@@ -1233,64 +1222,7 @@ change that makes the generator sites per-side and will move this shape again.
 Reported by review on 2026-09-08 (R-06) and filed rather than fixed.
 
 ### #65 — Nothing verifies that the plugin L0 declares is the plugin the description loads
-**Evidence taken on `cell_a`/removed scenarios; re-verify on `cell_b`.**
-
-The hardware opt-in decides on `commands_physical_hardware`, which L0 declares one line from the
-`ros2_control_plugin` string it is about (ADR-0054). That plugin string reaches the generated
-description through exactly one binding — `ros2_control_plugin: instance.hardware.ros2_control_plugin`
-in the arm type's `bound_args` — and **nothing checks that the binding is there.**
-
-**Driven end to end on the shipped model on 2026-09-10, not reasoned about.** Delete that one
-line, a plausible edit while re-working bindings, and `cite-model validate --write` exits 0 with
-`ok model valid — 1 zone(s), 7 type(s), 15 asset(s), 5 station(s), across 15 file(s)`, `--strict`
-prints no finding, the generated `cell_a_arm_1.urdf.xacro` calls `<xacro:xarm_device …/>` with
-**17** arguments where the committed one carries 18, `ros2_control_plugin` being the one it loses, and the vendor macro applies its own
-default — `uf_robot_hardware/UFRobotSystemHardware`, at
-`xarm_description/urdf/xarm_device_macro.xacro:14` and `urdf/xarm5/xarm5.ros2_control.xacro:5`,
-emitted at that file's line 15. Meanwhile L0 still reads `gz_ros2_control/GazeboSimSystem` beside
-`commands_physical_hardware: false`, the plan still carries `false` on all three arms, and
-`require_hardware_opt_in` returns **without ever consulting `CITE_ALLOW_HARDWARE`**. The gate is
-not wrong; it is answering honestly about a fact that stopped being connected to the description.
-`grep -rn bound_args tools/cite_tools/validate/ | wc -l` reads **0**.
-
-**This is the omission direction, and it is the one `cross-cutting-safety.md` forbids.** ADR-0054
-closed the assertion direction — a physical plugin declared under the id `sim` — and made the
-field and the plan key both unreachable by omission (its clauses 1 and 5). The binding is the
-third layer, and no clause of that record looked at it: clause 3 asserts that **no description
-moves**, which is exactly the artifact in which this appears.
-
-**Pre-existing, and not introduced by `feat/declared-simulation-backend`.** The binding line is
-present at `404bbac` and `bound_args` had zero validator readers there too; that branch strictly
-narrows the neighbouring hazard. It blocked no merge and was not fixed there.
-
-**Two candidate shapes, and neither is chosen here — that is the project owner's.**
-
-- **An L0 rule.** A type whose `hardware_backends` declare a `ros2_control_plugin` must bind it:
-  an ERROR in `validate.referential` on the unbound binding, in the shape ADR-0028 decision 4
-  used for collision geometry — L0 declares what the vendor does, and a rule holds it. Cheap,
-  runs anywhere, and catches the edit at the moment it is made. It checks a *binding name*, so
-  it says nothing about what the vendor macro then does with the value.
-- **A generated-artifact check.** Each arm description's `<plugin>` must equal the plugin the
-  selected backend declares. Strictly stronger — it is the actual question — and strictly more
-  expensive: it needs the vendor source imported and a xacro expansion, so it cannot run where
-  `./scripts/validate-model` runs, and it lands in `./scripts/hulls` territory or in a
-  `cite_description` test.
-
-**Do it before any hardware launch exists** — ADR-0054's *What we will have to revisit* bullet on
-the hardware launch shape is where it belongs. That is the last moment at which no deployment
-depends on the answer, and the moment the vendor component acquires the connection parameters
-ADR-0053 delivers is the moment an unguarded description stops being fail-closed by accident.
-
-**2026-09-15: ADR-0053's implementation guards the parameter half, and this item stays open.**
-A type that binds an instance parameter without binding `instance.hardware.ros2_control_plugin`
-is refused as `unrouted-hardware-params`, at the validator and at the generator, because that
-branch would otherwise have delivered a working address to the vendor's default physical
-component. So the `grep` above no longer reads 0. Deleting the plugin binding on a type that binds
-no instance parameter, and binding it under an argument name the vendor does not read, are both
-still silent.
-
-Reported by `safety-auditor` on 2026-09-10 (S-01), re-driven by the fixer that filed it, and
-deliberately not fixed there. ADR-0054 carries the matching Correction of the same date.
+Closed: closed 2026-10-05 by [ADR-0070](adr/0070-the-physical-arm-is-cell-b-s-counterpart.md) — `cite_description`'s `test_each_side_loads_its_declared_plugin.py` expands each side's description and asserts the plugin L0 declares; full text in git history (`git show f651155:docs/open-work.md`).
 
 ### #47 — Five L5 review findings, with their content
 Recorded here because they were once sent as bare identifiers and an agent correctly refused to
@@ -1387,6 +1319,8 @@ grep -c "No transition matching" <the first shell's output>
 
 
 ### #74 — No deadman on the L5 command path: if the boundary dies, dispatched goals keep running on both sides
+**[2026-10-05] Closed on the physical side by [ADR-0070](adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)**: `cite_hardware`'s deadman watches the boundary's `TwinHeartbeat` and, on its loss, stops the arm through the vendor's state, stops the track and cancels the arm and gripper goals — tested against fake vendor services only. **Still open on the plant**: a simulated side has no deadman, so if the boundary dies it finishes the goal it holds. The text below is as of 2026-10-02.
+
 `cite_twin/twin_boundary.py`'s `_await_far_side_goals` states its own bound in its docstring —
 **"No deadline, deliberately … The operator's cancel is the bound, and it reaches every side"** —
 and that bound is exactly what stops existing when the boundary is the process that died. The
@@ -1685,6 +1619,46 @@ catches it. **Done means** `cite_bringup/program/` moves to an L4 package of its
 first candidate for one ([`architecture/repository-layout.md`](architecture/repository-layout.md))
 — by a decision recorded in an ADR.
 
+### #92 — The physical side's deadman timeout is declared, not measured
+`model/facility/zones.yaml`'s `twin.physical_side` sets the values that bound how long the
+physical arm may run on after the twin boundary dies
+([ADR-0070](adr/0070-the-physical-arm-is-cell-b-s-counterpart.md) item 5): the deadman
+timeout, tick, call deadline and state age. The validator holds their relations to each other.
+Nothing measures:
+- the heartbeat's real delivery on this host;
+- the trip-to-stop latency through the vendor's single executor under poll load;
+- the vendor's STOP-to-standstill time.
+
+Done means a campaign under `docs/measurements/` with thresholds written before the first
+trial.
+
+### #93 — Hardware behaviour the physical side depends on and nothing in software can establish
+Each item below is a bench question for the physical xArm 5, its track and its gripper. Each
+must be answered before the physical counterpart is trusted beyond a supervised run at reduced
+speed ([ADR-0070](adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)).
+- What the controller does when its TCP stream ends in servo mode, and on a large
+  `set_servo_angle_j` step.
+- Whether the hardware E-stop also cuts the linear track's drive.
+- What the gripper does with a held part on E-stop or power loss. This is a choice to be made
+  and recorded, not only observed.
+- Whether the track's segmented moves blend or stutter.
+- Whether the vendor driver parameter block reaches `ufactory_driver`, so that exactly the
+  allowed services appear.
+- Whether the hold gate's STOP is acknowledged, and how spawner activation interleaves with
+  the vendor's own controller switching while the arm is held.
+- Whether the arm trajectory controller's action server and `controller_state` behave as
+  `hardware.launch.py`'s witness and the boundary's readiness gate assume.
+- Whether the operator prompt reads Enter through the container's stdin.
+- Whether HEALTHY → enable → controllers active completes within the program's readiness
+  ceiling over the lab's Wi-Fi.
+
+### #94 — The vendor's gripper action is reachable without the deadman's gate
+The xArm driver creates `<prefix>xarm_gripper/gripper_action` unconditionally
+(`xarm_api/src/xarm_driver.cpp`), outside the `services` allow-list. Any client on the physical
+side's domain can move the jaws while the deadman is tripped. Closing it needs either a patch
+file under `external/patches/` or access control at the domain level. It is stated as a
+residual in `workspace/src/cite_hardware/README.md`.
+
 ## 4. Instrument honesty
 
 Every item here misled this project at least once, including in the session that wrote this file.
@@ -1915,6 +1889,84 @@ will lose the block that matters.
 proposed and no campaign is proposed; the read is a harness-side instrument in frozen campaign
 directories, and **whether anything in `workspace/` depends on the same read in the same way is
 unexamined**.
+
+### #95 — `bringup` intermittently loses the MoveTo goal response
+`./scripts/scenario bringup` failed its cycle assertion in 2 of 6 runs on
+`feat/real-counterpart` (2026-10-05), with the skill server logging *"Failed to send goal
+response … (timeout): client will not receive response"*. It failed in 0 of 2 runs on
+`2701729` taken alongside.
+
+That is too few runs to attribute. The branch changes neither `tests/scenarios/` nor
+`cite_skills`, and the mechanism is the one already recorded by
+[ADR-0059](adr/0059-pair-cell-b-and-leave-cell-a-single.md) and #26.
+
+Later the same day (2026-10-05), on `acee7bb`, the defect did not appear in 6 runs on the
+branch and 6 on `2701729`, interleaved with nothing else running, nor in the branch's 2 CI-style
+runs. That is an observation, not a campaign: n is small, and it neither attributes nor fixes
+anything.
+
+Done means a campaign that compares enough runs of both commits, under recorded load, to tell
+a rate from noise. No ceiling is to be widened for it.
+
+### #96 — `move_group` exits on SIGSEGV at every scenario teardown
+Seen in every `bringup` and `program_cycle` run on both `2701729` and `feat/real-counterpart`
+(2026-10-05). It exits with -11 in `rclcpp::CallbackGroup::~CallbackGroup()` while `MoveItCpp`
+is destroyed.
+
+`test_nothing_of_ours_exited_badly` still passes, because `move_group` is not counted as one
+of ours. On the physical side, `move_group` exiting brings the whole side down by design, so
+there the crash only ever happens at teardown.
+
+### #98 — The physical arm stops on C31 during streamed motion (2026-10-06)
+On the first physical runs (`docs/operations/bring-up.md`, "First physical runs"), the xArm
+raised `C31: Collision Caused Abnormal Joint Current` about two seconds into the first joint
+move, with no contact reported by the owner at the cell. The vendor plugin then deactivated the
+controllers and MoveIt timed out. Unattributed. Candidates, cheapest first:
+- the servo stream: `UFRobotSystemHardware` streams `set_servo_angle_j` at 150 Hz over the lab
+  Wi-Fi, and the control loop's read overruns 20-25 ms about once a second; a wired link
+  separates this from the rest;
+- the controller's payload / TCP-load and collision-sensitivity settings differing from what
+  the program's own runs used;
+- real contact.
+
+Two facts found on the way:
+- The vendor plugin's `on_activate` calls `clean_error`, so a C31 latched by the previous run
+  is cleared automatically on the next bring-up (seen in the log). Clearing a collision error
+  is an operator's decision; the plugin takes it. Out of this repository's code; a vendor patch
+  or an operating rule.
+- The program's pair log now lives in the `cite-log` volume at
+  `workspace/log/program/pair.*.log` (commit `c417599`); read it with
+  `./scripts/enter dev cat <path>`.
+
+Also open from the last review of the hold-gate fix (Medium, test quality only): no test pins
+"exactly one STOP when the vendor answers at once", and the per-call-bound test accepts any
+positive number.
+
+### #99 — A Ctrl-C at the very start of an initialize can be overtaken (2026-10-08)
+`InitializeAsset` is a service and cannot be cancelled. A Ctrl-C that lands while the
+initializer is still on its enable and zero reads sends the vendor stop to a track that is not
+moving yet; the initializer then homes and/or moves the carriage to the program's start at the
+L0 initialize speed, bounded by `initialize_deadline_s`. Closing it means an abort the client
+can call (or `InitializeAsset` as an action with cancel).
+
+### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
+Each fails safe; none blocks the first supervised motion. From the last reviewer and
+safety-auditor passes on `feat/real-counterpart`:
+- A track step whose plant carriage is already at the target treats an UNHEARD physical
+  carriage like an AWAY one and fails at once with "home it" (`program/cell.py`, `track`).
+  It should wait with `await_heard` within the step's ceiling, then word the refusal by reason.
+- `TrackArrived.Response.ARRIVED` is 0, so a response with `reason` left unset reads as
+  arrived; `carriage_verdict` checks `reason` only. Every server path sets it today.
+- `test_physical_readiness.py` asserts the absence of a string production no longer emits.
+- The `_speed_epoch` bump on re-activation in the track adapter has no test.
+- The program reads the twin's mode once before waiting up to the readiness ceiling for the
+  carriage; a second `SetMode` client in that window is not seen. The operating precondition
+  is that the program is the only `SetMode` client.
+- The `.env` opt-in reader (`env_file_opt_in`, owner decision 2026-10-06) is line-based: an
+  exact `CITE_ALLOW_HARDWARE=1` line inside another key's quoted multi-line value still arms;
+  a BOM is reported as an unrecognised form and a lowercase or look-alike key is read as 0
+  with no warning (both fail closed). The self-test that the warning echoes no other value
+  places that value on a line the reader never reports, so it cannot fail.
 
 ---
 

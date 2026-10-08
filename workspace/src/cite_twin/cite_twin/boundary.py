@@ -65,7 +65,7 @@ import threading
 
 from cite_bringup.plan import ControllerManager, Plan, resolve_domain_id, SkillActions
 from cite_interfaces.action import Grasp, MoveTo, Pick, Place, Transfer
-from cite_interfaces.msg import DivergenceMetrics, TwinMode
+from cite_interfaces.msg import DivergenceMetrics, TwinHeartbeat, TwinMode
 from cite_interfaces.srv import SetMode
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -471,4 +471,9 @@ def twin_endpoints() -> tuple[str, ...]:
     # `SetMode.Request.SERVICE` and not `SetMode.SERVICE`: rosidl puts a
     # service's constants on the section they were declared in, which is how
     # C++ reaches it too (`SetMode::Request::SERVICE`).
-    return (TwinMode.TOPIC, DivergenceMetrics.TOPIC, SetMode.Request.SERVICE)
+    return (
+        TwinMode.TOPIC,
+        DivergenceMetrics.TOPIC,
+        SetMode.Request.SERVICE,
+        TwinHeartbeat.TOPIC,
+    )

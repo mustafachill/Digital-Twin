@@ -285,6 +285,74 @@ asset_type:
       # the name back here would impose a per-instance obligation on every arm for
       # a fact that is not per arm.
       instance_params: [robot_ip]
+      # The vendor's physical component serves the gripper through its own
+      # `GripperCommand` action and exports no gripper joint:
+      # `xarm_gripper_macro.xacro` emits the gripper's `<ros2_control>` block
+      # only when the plugin is NOT this one. So a side selecting this backend
+      # loads no gripper controller, and a relay serves that controller's
+      # action name instead (ADR-0070 item 4).
+      exports_end_effector_joints: false
+      # The vendor driver this plugin embeds, read from the pinned `xarm_ros2`
+      # (ADR-0070 items 3-5). The generator forms every name from this block
+      # through `ids.vendor_interface` and switches the services on in the
+      # physical side's controller configuration.
+      vendor_driver:
+        # `rclcpp::Node::make_shared("ufactory_driver", ...)` —
+        # xarm_controller/src/hardware/uf_robot_system_hardware.cpp:53.
+        node: ufactory_driver
+        # The driver creates its services on a sub-node named by the hardware
+        # parameter `hw_ns` (xarm_api/src/xarm_driver.cpp:157-159), which the
+        # vendor macro sets to `${prefix}${hw_ns}`
+        # (xarm_description/urdf/xarm5/xarm5.ros2_control.xacro:17).
+        namespace_arg: hw_ns
+        # Each is created only where `services.<name>` is true, default false
+        # (xarm_api/src/xarm_driver_service.cpp:19), and exactly the services
+        # the physical side's own nodes call are listed - least privilege, held
+        # by `vendor-service-not-allowed` and `vendor-service-missing`: the
+        # deadman's `set_state` and `set_mode`, the track adapter's position
+        # read, speed write, move and stop (the stop is the deadman's too), and
+        # the gripper relay's position read; and the initializer's - enable the
+        # track motor and the gripper, read whether the track has found its
+        # zero, home it when it has not - which is what the operator does in
+        # UFACTORY Studio before running the program, and without which every
+        # track move is refused with vendor code 82 (LINEAR_MOTOR_NOT_INIT).
+        # The speed write is explicit
+        # because the SDK's `set_linear_motor_pos` caches the last speed it set
+        # and ignores the result of the write (xarm_sdk/cxx/src/xarm/wrapper/
+        # xarm_linear_motor.cc:208-210). The gripper's action needs none: it is created
+        # unconditionally and enables the gripper itself (xarm_driver.cpp:485,
+        # 570 and 582).
+        services:
+          - get_gripper_position
+          - get_linear_motor_on_zero
+          - get_linear_motor_pos
+          - set_gripper_enable
+          - set_linear_motor_back_origin
+          - set_linear_motor_enable
+          - set_linear_motor_pos
+          - set_linear_motor_speed
+          - set_linear_motor_stop
+          - set_mode
+          - set_state
+        # `prefix + "xarm_gripper/gripper_action"` on the driver node
+        # (xarm_api/src/xarm_driver.cpp:486).
+        gripper_action: xarm_gripper/gripper_action
+        # The mode the plugin streams in, by `velocity_control` above: SERVO (1)
+        # for position, VELO_JOINT (4) for velocity
+        # (uf_robot_system_hardware.cpp:252 and :487). The deadman enables the
+        # arm in this mode and no other.
+        streaming_mode:
+          argument: velocity_control
+          when_false: 1
+          when_true: 4
+        # The controller manager services the plugin itself calls, by the
+        # absolute names it hard-codes (uf_robot_system_hardware.cpp:261-262),
+        # from `write()` with a blocking wait of up to about five seconds when
+        # nothing serves them (`_call_request`, :21-46). The physical side's
+        # launch remaps each onto this asset's own controller manager.
+        controller_manager_services:
+          - /controller_manager/list_controllers
+          - /controller_manager/switch_controller
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

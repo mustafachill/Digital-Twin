@@ -16,6 +16,7 @@ from xml.etree import ElementTree
 
 import pytest
 import yaml
+from conftest import paired_twin
 
 from cite_tools import generate as gen
 from cite_tools.model import ids
@@ -259,6 +260,102 @@ def _argument_name(line: str) -> str | None:
     return match.group(1) if match else None
 
 
+#: An address for tests, from RFC 5737's TEST-NET-3 block, which is reserved for
+#: documentation and routes nowhere. No real robot address is ever written into
+#: this tree (ADR-0070 item 2).
+TEST_ADDRESS = "203.0.113.7"
+
+
+def _controller_configuration(text: str) -> dict:
+    """A generated controller configuration, parsed: what a controller manager reads."""
+    document = yaml.safe_load(text)
+    assert isinstance(document, dict), text
+    return document
+
+
+def _without_controllers(document: dict, names: set[str]) -> dict:
+    """``document`` with every trace of the controllers ``names`` removed.
+
+    A controller appears twice in a configuration: as a `type` entry under the
+    controller manager's parameters, and as its own top-level block keyed by its
+    namespaced name. Both go, and nothing else does.
+    """
+    trimmed = yaml.safe_load(yaml.safe_dump(document))
+    for key, block in trimmed.items():
+        if key.endswith("/controller_manager"):
+            for name in names:
+                block["ros__parameters"].pop(name)
+    return {key: block for key, block in trimmed.items() if key.rsplit("/", 1)[-1] not in names}
+
+
+#: How each kind of side's description opens: as a Gazebo model, or as the
+#: description a controller manager with no simulator loads (ADR-0070, M-07).
+_GAZEBO_HEADER = "<!-- One description per arm, spawned as its own Gazebo model."
+_NO_SIMULATOR_HEADER = (
+    "<!-- One description per arm, loaded by the controller manager of a side that"
+)
+
+
+def _run(lines: list[str], opening: str, closing: str) -> tuple[int, int]:
+    """The [start, end] of the one run of ``lines`` from ``opening`` to ``closing``."""
+    (start,) = (i for i, line in enumerate(lines) if opening in line)
+    end = next(i for i in range(start, len(lines)) if closing in lines[i])
+    return start, end
+
+
+def _without_simulator_text(lines: list[str], in_gazebo: bool) -> list[str]:
+    """``lines`` less what differs only because one side runs in Gazebo and one does not.
+
+    Two runs, each found by what it says and required to be there, so this
+    cannot hide one that went missing: the opening comment, which says what
+    loads the description, and - on a Gazebo side only - the
+    `gz_ros2_control` plugin block with the blank line before it. A side that
+    runs no simulator carries no plugin block at all (ADR-0070, M-07).
+    """
+    lines = list(lines)
+    header = _GAZEBO_HEADER if in_gazebo else _NO_SIMULATOR_HEADER
+    start, end = _run(lines, header, "-->")
+    del lines[start : end + 1]
+    plugins = [i for i, line in enumerate(lines) if "gz_ros2_control-system" in line]
+    if not in_gazebo:
+        assert not plugins, "a side that runs no simulator names the gz_ros2_control plugin"
+        return lines
+    (plugin,) = plugins
+    start = plugin - 1
+    assert lines[start].strip() == "<gazebo>" and not lines[start - 1].strip()
+    end = next(i for i in range(plugin, len(lines)) if "</gazebo>" in lines[i])
+    del lines[start - 1 : end + 1]
+    return lines
+
+
+#: The vendor driver's node, as the physical backend's plugin constructs it
+#: (`uf_robot_system_hardware.cpp:53`), in the asset's namespace.
+_DRIVER_NODE = "/cite/cell_b/picker/ufactory_driver"
+
+
+def _without_vendor_driver(document: dict) -> dict:
+    """``document`` less the physical backend's vendor-driver block, which must be there.
+
+    The one thing a physical side's configuration ADDS: the services its
+    embedded vendor driver is to create (ADR-0070). It carries no controller,
+    joint or interface name, so it is not a P2 difference; it is removed by name
+    and only after asserting it is present, so this cannot hide a block that
+    went missing.
+    """
+    trimmed = yaml.safe_load(yaml.safe_dump(document))
+    block = trimmed.pop(_DRIVER_NODE)
+    assert set(block["ros__parameters"]) == {"services"}, block
+    return trimmed
+
+
+def _with_sim_time(document: dict, value: bool) -> dict:
+    flipped = yaml.safe_load(yaml.safe_dump(document))
+    for key, block in flipped.items():
+        if key.endswith("/controller_manager"):
+            block["ros__parameters"]["use_sim_time"] = value
+    return flipped
+
+
 class TestSimRealParity:
     """P2, asserted on the generator rather than hoped for at run time."""
 
@@ -274,19 +371,23 @@ class TestSimRealParity:
             real_model / "assets/instances/arms.yaml",
             lambda d: d["assets"][0].__setitem__(
                 "hardware",
-                {"backend": "real", "params": {"real": {"robot_ip": "192.168.1.100"}}},
+                {"backend": "real", "params": {"real": {"robot_ip": TEST_ADDRESS}}},
             ),
         )
         real = artifacts(real_model)
 
         # Controller and joint names are identical. If this ever fails, P2 is
-        # broken and everything above L2 becomes unfounded.
-        assert (
-            sim["control/cell_b_picker_controllers.yaml"].replace(
-                "use_sim_time: true", "use_sim_time: false"
-            )
-            == real["control/cell_b_picker_controllers.yaml"]
-        )
+        # broken and everything above L2 becomes unfounded. Two differences are
+        # allowed and both are named: `use_sim_time`, and the gripper controller,
+        # which the `real` backend does not load because the vendor's physical
+        # component exports no gripper joint (`exports_end_effector_joints:
+        # false`, ADR-0070 item 4) — its action name is served by a relay.
+        sim_controllers = _controller_configuration(sim["control/cell_b_picker_controllers.yaml"])
+        real_controllers = _controller_configuration(real["control/cell_b_picker_controllers.yaml"])
+        assert _with_sim_time(
+            _without_controllers(sim_controllers, {f"{ARM}_gripper_controller"}), False
+        ) == _without_vendor_driver(real_controllers)
+        assert _DRIVER_NODE not in sim_controllers
 
         # The description differs in exactly two lines, and the second of them
         # arrived on 2026-09-01 when the shipped collision selection moved to the
@@ -322,8 +423,15 @@ class TestSimRealParity:
         # the arguments named here. The length equality is therefore asserted
         # explicitly as well, so that removing the keyword cannot quietly retire
         # it either.
-        sim_lines = sim["description/cell_b_picker.urdf.xacro"].splitlines()
-        real_lines = real["description/cell_b_picker.urdf.xacro"].splitlines()
+        # The Gazebo-only text, removed by name before anything is compared:
+        # a side that runs no simulator says so and loads no Gazebo plugin
+        # (ADR-0070, M-07). Neither run carries a controller, joint or frame.
+        sim_lines = _without_simulator_text(
+            sim["description/cell_b_picker.urdf.xacro"].splitlines(), in_gazebo=True
+        )
+        real_lines = _without_simulator_text(
+            real["description/cell_b_picker.urdf.xacro"].splitlines(), in_gazebo=False
+        )
 
         accounted = ("robot_ip",)
         surplus = [line for line in real_lines if _argument_name(line) in accounted]
@@ -349,6 +457,159 @@ class TestSimRealParity:
 
         key = f"description/{ZONE}_{other}.urdf.xacro"
         assert sim[key] == real[key], f"{other} changed when only {ARM} was switched"
+
+
+class TestSideParity:
+    """ADR-0048 clause 2's invariant, on the side axis, against the shipped model.
+
+    The backend-axis test above switches ONE side of one arm between backends.
+    This one reads what the shipped model actually generates for its two sides —
+    a simulated plant and a physical counterpart (ADR-0070) — and requires that
+    the counterpart's two artifacts differ from the plant's in exactly the ways
+    listed, each with its reason, and in no other. "The sides carry identical
+    names" is a diff this test takes, not a rule someone has to remember.
+    """
+
+    def test_the_counterpart_differs_from_the_plant_only_in_its_hardware(
+        self, real_model: Path
+    ) -> None:
+        """The description: what differs, line by line, and why each is not a P2 break.
+
+        ADR-0070 item 1 states the invariant as "only `ros2_control_plugin`
+        lines". What the generated text actually shows is that plus four more,
+        and every one is a consequence of a decision already taken rather than a
+        name that moved:
+
+        1. **`ros2_control_plugin`** — the hardware, which is the point.
+        2. **`robot_ip="$(arg robot_ip)"`**, one line the plant does not have:
+           the `real` backend declares the parameter and the `sim` one does not
+           (ADR-0053), and its value is an environment reference resolved at
+           launch (ADR-0070 item 2), so the description carries an xacro
+           argument and never an address.
+        3. **`collision_mesh_path`**, scheme only: the root's URI scheme is L0
+           data per backend because the vendor's own mesh root branches on the
+           plugin (`CollisionSpec.root_uri_scheme`, ADR-0028). Same package, same
+           root, same meshes.
+        4. **The Gazebo-only text**: the physical side runs no simulator, so its
+           description opens with a comment saying what loads it and carries no
+           `gz_ros2_control` plugin block (ADR-0070, M-07). Removed by name by
+           `_without_simulator_text`, which requires both runs to be there.
+        5. **The track's `<ros2_control>` block, absent**: the physical track's
+           backend declares no plugin, because the vendor serves it only through
+           `xarm_api` services (ADR-0070 item 3). The track's JOINT stays — the
+           prismatic joint, its limits and its carriage are identical — so every
+           frame and joint name is unchanged.
+
+        **And one thing that does not show here, on purpose.** The vendor macro
+        itself omits the gripper's `<ros2_control>` block for
+        `uf_robot_hardware/UFRobotSystemHardware` (`xarm_gripper_macro.xacro`),
+        and it decides that from the plugin argument in item 1, so the generated
+        text carries no line for it. The expanded description does differ there;
+        `cite_description`'s plugin test expands both sides and checks what each
+        `<ros2_control>` block loads.
+        """
+        generated = artifacts(real_model)
+        plant_path = gen.arm_description_path(ZONE, ARM, ids.PLANT_SIDE)
+        counterpart_path = gen.arm_description_path(ZONE, ARM, ids.COUNTERPART_SIDE)
+        # (4) the Gazebo-only text, by name.
+        plant = _without_simulator_text(generated[plant_path].splitlines(), in_gazebo=True)
+        counterpart = _without_simulator_text(
+            generated[counterpart_path].splitlines(), in_gazebo=False
+        )
+
+        # (2) the argument the plant does not have, read from the environment.
+        accounted = [line for line in counterpart if _argument_name(line) == "robot_ip"]
+        assert [line.strip() for line in accounted] == ['robot_ip="$(arg robot_ip)"']
+        assert not [line for line in plant if _argument_name(line) == "robot_ip"]
+        counterpart = [line for line in counterpart if _argument_name(line) != "robot_ip"]
+
+        # (5) the track's hardware block, removed from the plant as one run. Its
+        # boundaries are found, not counted, and what is inside is checked.
+        track_joint = ids.joint("picker_track", "joint")
+        opening = next(
+            i
+            for i, line in enumerate(plant)
+            if f'<ros2_control name="{track_joint}_system"' in line
+        )
+        # Its comment opens the run: the last comment opening before the block,
+        # with nothing but comment text between the two.
+        start = max(i for i in range(opening) if plant[i].strip().startswith("<!--"))
+        assert all("<" not in line for line in plant[start + 1 : opening]), plant[start:opening]
+        end = next(i for i in range(opening, len(plant)) if "</ros2_control>" in plant[i])
+        block = plant[start : end + 1]
+        assert block[0].strip().startswith("<!-- One hardware component for the track"), block
+        assert f'<joint name="{track_joint}">' in "\n".join(block)
+        assert not [line for line in counterpart if "<ros2_control" in line], (
+            "the counterpart's description claims a joint with a <ros2_control> block "
+            "it should not have"
+        )
+        plant = plant[:start] + plant[end + 1 :]
+
+        assert len(plant) == len(counterpart), (
+            "the counterpart's description has a line the plant's does not, and it is "
+            "not one of the differences accounted for above"
+        )
+        differing = [(a, b) for a, b in zip(plant, counterpart, strict=True) if a != b]
+        by_kind: dict[str, list[tuple[str, str]]] = {}
+        for pair in differing:
+            kind = next(
+                (
+                    k
+                    for k in ("ros2_control_plugin", "collision_mesh_path")
+                    if k in pair[0] and k in pair[1]
+                ),
+                "unaccounted",
+            )
+            by_kind.setdefault(kind, []).append(pair)
+        assert sorted(by_kind) == [
+            "collision_mesh_path",
+            "ros2_control_plugin",
+        ], differing
+        assert all(len(pairs) == 1 for pairs in by_kind.values()), differing
+
+        # (1) only the plugin string moves on its line.
+        ((sim_line, real_line),) = by_kind["ros2_control_plugin"]
+        model = load(real_model)
+        arm_type = model.asset_type("xarm5")
+        assert arm_type is not None
+        backends = arm_type.hardware_backends
+        assert sim_line.replace(str(backends["sim"].ros2_control_plugin), "") == real_line.replace(
+            str(backends["real"].ros2_control_plugin), ""
+        )
+        # (3) the scheme and nothing else.
+        ((sim_line, real_line),) = by_kind["collision_mesh_path"]
+        assert sim_line.replace("file://$(find cite_description)", "") == real_line.replace(
+            "package://cite_description", ""
+        )
+
+    def test_the_counterpart_loads_the_plants_controllers_less_the_unserved_ones(
+        self, real_model: Path
+    ) -> None:
+        """The controller configuration: `use_sim_time`, and two absences, each named.
+
+        ADR-0070 item 1 allows `use_sim_time` and "what item 4 removes", the
+        gripper controller. The track's trajectory controller is absent as well,
+        and that is item 3 rather than an omission from item 1: no hardware on
+        the physical side exports the track joint, so a controller claiming it
+        would fail to configure, and the track adapter serves that controller's
+        `joint_trajectory` topic under the same name instead. Every remaining
+        controller, joint, interface, tolerance and rate is the plant's.
+        """
+        generated = artifacts(real_model)
+        plant = _controller_configuration(
+            generated[gen.controllers_path(ZONE, ARM, ids.PLANT_SIDE)]
+        )
+        counterpart = _controller_configuration(
+            generated[gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE)]
+        )
+        unserved = {f"{ARM}_gripper_controller", "picker_track_trajectory_controller"}
+        assert _with_sim_time(_without_controllers(plant, unserved), False) == (
+            _without_vendor_driver(counterpart)
+        )
+        # And the absences are absences, not renames: neither name is anywhere in
+        # the counterpart's configuration.
+        text = generated[gen.controllers_path(ZONE, ARM, ids.COUNTERPART_SIDE)]
+        assert not [name for name in unserved if name in text]
 
 
 class TestBindings:
@@ -1112,6 +1373,13 @@ class TestTwinSidesAndTheGazeboPartition:
     first, which is the model these assertions were written against; that the
     shipped zone really is paired is asserted separately, by
     `test_the_shipped_zone_is_paired`, so the fixture cannot hide a change.
+
+    **AND EVERY ASSET STARTS WITH ONE BACKEND ON BOTH SIDES**, for the same
+    reason. Since ADR-0070 the shipped counterpart is physical, and these are the
+    2.A properties — what pairing a zone whose two sides load one backend does
+    and does not change. The fixture removes each `counterpart_backend`, which is
+    the model they were written against; what a DIFFERING counterpart adds is
+    asserted by the tests that write one back, at the end of this class.
     """
 
     @pytest.fixture(autouse=True)
@@ -1121,11 +1389,30 @@ class TestTwinSidesAndTheGazeboPartition:
             lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
         )
 
+        def one_backend(document: dict) -> None:
+            for asset in document["assets"]:
+                asset["hardware"].pop("counterpart_backend", None)
+
+        for instances in sorted((real_model / "assets/instances").glob("*.yaml")):
+            edit_yaml(instances, one_backend)
+
+    @staticmethod
+    def _make_the_counterpart_physical(model: Path, edit_yaml: Callable) -> None:
+        """Write back what the shipped model declares: the arm and its track, `real`."""
+
+        def physical(document: dict) -> None:
+            for asset in document["assets"]:
+                if asset["id"] in (ARM, "picker_track"):
+                    asset["hardware"]["counterpart_backend"] = "real"
+
+        for instances in ("arms.yaml", "tracks.yaml"):
+            edit_yaml(model / "assets/instances" / instances, physical)
+
     @staticmethod
     def _pair(model: Path, edit_yaml: Callable) -> None:
         edit_yaml(
             model / "facility/zones.yaml",
-            lambda d: d["zones"][0].__setitem__("twin", {"sides": "pair"}),
+            lambda d: d["zones"][0].__setitem__("twin", paired_twin()),
         )
 
     def test_writing_the_counterpart_backend_it_already_has_changes_nothing(
@@ -1276,31 +1563,14 @@ class TestTwinSidesAndTheGazeboPartition:
         added, do not relax it: state which fact made the sides differ and why
         the copy is not a copy.
 
-        **It is blind to the divergence that actually matters, and the answer to
-        that is now a refusal one layer up rather than anything here.** The
-        premise above — that both sides answer every backend call site
-        identically — holds because a 2.A counterpart is a second simulation. A
-        counterpart naming a different backend would be handed the plant's
-        description, the plant backend's `ros2_control` plugin, the plant's
-        collision scheme and the plant's `use_sim_time`: one cell driven by
-        artifacts that describe the other.
-
-        **This tripwire cannot fire on that**, and the reason is structural
-        rather than an oversight: it compares the artifacts pairing produces
-        against the artifacts it does not, and with no per-side artifact set
-        there is no second artifact to differ. So what it protects against is
-        **reflex duplication** — a generator emitting a byte-identical second
-        world or second controller config — and nothing else.
-
-        **The choice this docstring declined to make is made, and it went to the
-        refusal.** ADR-0048 clause 1 is the referential rule
-        `divergent-counterpart-backend`, which refuses any asset whose two sides
-        name different backends until the generator can honour them; clause 2
-        commits to the per-side artifact set that lifts it, and is not built.
-        So the premise this test rests on is now *enforced* rather than a
-        coincidence of the committed model, and the change that lands clause 2
-        owes this test its rewrite — around what legitimately differs, per
-        ADR-0048's own statement of that invariant.
+        **What it protects against is reflex duplication**, and the case it
+        does not cover has a test of its own. Every generator site that branches
+        on a backend now asks the side it generates for (ADR-0048 clause 2, built
+        by ADR-0070), and a side that loads the plant's backend gets no artifact
+        of its own — which is what this asserts. A counterpart that loads a
+        DIFFERENT backend gets exactly two, and
+        `test_a_differing_counterpart_adds_its_two_artifacts_and_moves_no_other`
+        below is what says which two and that nothing else moves.
         """
         before = artifacts(real_model)
         self._pair(real_model, edit_yaml)
@@ -1317,6 +1587,99 @@ class TestTwinSidesAndTheGazeboPartition:
         # rather than running it.
         differing = sorted(path for path in before if before[path] != after[path])
         assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
+
+    def test_a_differing_counterpart_adds_its_three_artifacts_and_moves_no_other(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """ADR-0048 clause 2 as a diff: that side's own files, and nothing else.
+
+        From a paired zone whose sides load one backend, make the counterpart
+        physical, as the shipped model does. Exactly three files appear — that
+        side's description, its controller configuration and, because it is
+        physical, the configuration of the nodes it runs beside its controller
+        manager (ADR-0070 item 6), all under the side's directory — and of the
+        files that already existed only the plan (which names them) and
+        `MODEL_HASH` change. Every plant artifact is byte-identical: making the
+        far side physical moves nothing the plant loads.
+        """
+        self._pair(real_model, edit_yaml)
+        before = artifacts(real_model)
+        self._make_the_counterpart_physical(real_model, edit_yaml)
+        after = artifacts(real_model)
+
+        assert sorted(set(after) - set(before)) == [
+            gen.adapters_path("cell_b", ARM, ids.COUNTERPART_SIDE),
+            gen.controllers_path("cell_b", ARM, ids.COUNTERPART_SIDE),
+            gen.arm_description_path("cell_b", ARM, ids.COUNTERPART_SIDE),
+        ]
+        assert set(before) - set(after) == set()
+        differing = sorted(path for path in before if before[path] != after[path])
+        assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
+
+    def test_the_side_is_in_the_path_and_in_no_name(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """The P2 answer ADR-0048 clause 2 fixes: a file a launch loads is not a name.
+
+        The counterpart's two artifacts sit under `<kind>/counterpart/` with the
+        plant's filename, and neither contains the word `counterpart`. The one
+        place a file names another - the Gazebo plugin's pointer to its
+        controller configuration - is absent on a side that runs no simulator.
+        """
+        self._pair(real_model, edit_yaml)
+        self._make_the_counterpart_physical(real_model, edit_yaml)
+        after = artifacts(real_model)
+        description = gen.arm_description_path("cell_b", ARM, ids.COUNTERPART_SIDE)
+        controllers = gen.controllers_path("cell_b", ARM, ids.COUNTERPART_SIDE)
+        assert description == f"description/counterpart/cell_b_{ARM}.urdf.xacro"
+        assert controllers == f"control/counterpart/cell_b_{ARM}_controllers.yaml"
+        assert "counterpart" not in after[controllers]
+        # Not even a pointer to its own configuration: a side that runs no
+        # simulator has no Gazebo plugin block to name one (ADR-0070, M-07).
+        assert "counterpart" not in after[description]
+
+    def test_the_plan_names_each_sides_files_only_where_they_differ(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        self._pair(real_model, edit_yaml)
+        same = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        for manager in same["controller_managers"]:
+            assert "counterpart_description" not in manager
+            assert "counterpart_parameters" not in manager
+            assert "counterpart_description_args" not in manager
+            assert "counterpart_controllers" not in manager
+
+        self._make_the_counterpart_physical(real_model, edit_yaml)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        (manager,) = (m for m in plan["controller_managers"] if m["asset"] == ARM)
+        assert manager["counterpart_description"] == (
+            f"package://cite_generated/{gen.arm_description_path('cell_b', ARM, 'counterpart')}"
+        )
+        assert manager["counterpart_parameters"] == (
+            f"package://cite_generated/{gen.controllers_path('cell_b', ARM, 'counterpart')}"
+        )
+        # The reference, never a value (ADR-0070 item 2).
+        assert manager["counterpart_description_args"] == {
+            "robot_ip": {"env": "CITE_XARM_IP", "kind": "ip_address"}
+        }
+        assert "description_args" not in manager
+
+    def test_a_counterpart_on_an_untwinned_zone_generates_nothing(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        """Inert where there is no side for it to describe.
+
+        The validator refuses this model (`counterpart-backend-on-unpaired-zone`,
+        `test_validate_referential.py`); the generator, asked anyway, must let
+        the value reach no artifact at all — not a second description, not a key
+        in the plan.
+        """
+        before = artifacts(real_model)
+        self._make_the_counterpart_physical(real_model, edit_yaml)
+        after = artifacts(real_model)
+        differing = sorted(path for path in after if before.get(path) != after[path])
+        assert sorted(after) == sorted(before)
+        assert differing == ["MODEL_HASH"]
 
     def test_a_paired_zone_still_generates_exactly_one_world(
         self, real_model: Path, edit_yaml: Callable
@@ -1457,21 +1820,14 @@ class TestTwinSidesAndTheGazeboPartition:
     def test_a_physical_counterpart_reaches_the_plan(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
-        """The plan is the one artifact that states the counterpart's backend.
+        """The plan states the counterpart's backend, per asset, on the right manager.
 
-        **This test calls the generator and not the validator, and that is now
-        the whole of what it claims.** Its comment said "Phase 2.B as a data
-        change" until ADR-0048 clause 1 landed, and it kept passing afterwards
-        for exactly that reason — which is how a wrong claim survives a change
-        that contradicts it. The model below is refused by
-        `divergent-counterpart-backend`, so `./scripts/validate-model` would not
-        accept it and `./scripts/sim` would never see this plan; what is asserted
-        here is that the *emission* is per-asset and reaches the right manager,
-        which is the property clause 2 builds on.
-
-        ADR-0041 Decision 3's promise that 2.B is a data change is narrowed
-        rather than withdrawn: the model edit is still one line, and what was
-        never true is that the generator was ready for it.
+        Its comment said "Phase 2.B as a data change" until ADR-0048 clause 1
+        landed, then that the model below was refused. ADR-0070 built clause 2
+        and deleted the refusal, so the model is valid again; what this asserts
+        is still only the emission — that the backend is per asset and reaches
+        the manager it belongs to. What the counterpart's own artifacts contain
+        is `TestSideParity`'s.
         """
         self._pair(real_model, edit_yaml)
         edit_yaml(

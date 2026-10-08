@@ -1,0 +1,15 @@
+# Initialize one physical asset the way its operator does by hand before running
+# its program in the vendor's own tool (ADR-0070): for the xArm on its linear
+# track, enable the track motor and the gripper, home the track only where it
+# has not found its zero, and bring the carriage to the program's first track
+# target only where it is not there. Served by the physical side's `initializer`
+# under `/cite/<zone>/<asset>/initialize`, the name the bring-up plan states
+# (`counterpart_physical.initialize_service`). A simulated side serves none:
+# there is nothing to initialize there.
+#
+# Idempotent: called on an asset already initialized and at the start it
+# enables what is already enabled, finds the track on its zero and the carriage
+# at the start, so nothing moves.
+---
+bool success   # every step answered success
+string detail  # what was done, or which step refused and the vendor's code

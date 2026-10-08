@@ -135,6 +135,13 @@ if [ "$HEADLESS" -eq 0 ] && ! in_container; then
     export CITE_SERVICE=gui
 fi
 
+# A pair may start the physical side, so its hardware opt-in is resolved here,
+# shell > repository-root .env > 0, and handed to the container explicitly. A
+# single side never reads `.env` for it.
+if [ "$PAIR" -eq 1 ]; then
+    resolve_hardware_opt_in
+fi
+
 require_ros_env sim "$@"
 
 if [ ! -d "${REPO_ROOT}/workspace/install" ]; then

@@ -394,6 +394,31 @@ bool gripper_is_holding(
   const GripperReport & report, const GripperTravel & travel,
   const WorkpieceWidths & parts);
 
+/// What a completed `Grasp` close is turned into, before any custody is recorded.
+///
+///   * `kCommandFailed`: the gripper command itself did not complete — refused,
+///     aborted, cancelled or timed out. That outcome stands on every side.
+///   * `kEmpty`: it completed, a part was expected, the predicate above says
+///     none is held, and this side JUDGES its grasps. The step fails.
+///   * `kDone`: anything else.
+///
+/// `judges_grasp` is false on a side whose arm is physical, by owner decision
+/// 2026-10-06 recorded in ADR-0070's amendment: there a close expecting a part
+/// is EXECUTED, not judged, the way the real robot's own program does it —
+/// command the gripper and continue. It arrives from the plan
+/// (`cite_bringup.side_launch.skill_parameters`), never from an asset name.
+/// The predicate is still evaluated and its answer still reported and logged
+/// there, as information; only its power to fail the step is withdrawn.
+enum class GraspVerdict
+{
+  kCommandFailed,
+  kEmpty,
+  kDone,
+};
+
+GraspVerdict grasp_verdict(
+  bool command_succeeded, bool expect_object, bool holding, bool judges_grasp);
+
 }  // namespace cite_skills
 
 #endif  // CITE_SKILLS__GRIPPER_HPP_

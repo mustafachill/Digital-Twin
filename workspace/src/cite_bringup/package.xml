@@ -55,6 +55,13 @@
   <exec_depend>gz_transport_vendor</exec_depend>
   <exec_depend>gz_msgs_vendor</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <!-- The physical side's launch (ADR-0070 item 6): the deadman and adapters it
+       starts, the vendor plugin its controller manager loads, the vendor
+       service its hold gate calls, and the action types its witness waits on. -->
+  <exec_depend>cite_hardware</exec_depend>
+  <exec_depend>xarm_controller</exec_depend>
+  <exec_depend>xarm_msgs</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <!-- Without this, ament_lint_auto_find_test_dependencies() finds no linters,
@@ -68,7 +75,6 @@
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>ament_index_python</test_depend>
   <test_depend>cite_generated</test_depend>
-  <test_depend>control_msgs</test_depend>
   <test_depend>trajectory_msgs</test_depend>
   <test_depend>joint_trajectory_controller</test_depend>
   <!-- mock_components/GenericSystem, the stand-in hardware the test injects a

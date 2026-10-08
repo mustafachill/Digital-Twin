@@ -14,7 +14,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cite_tools.generate import Artifact
+from cite_tools.generate import Artifact, arm_description_path, controllers_path
+from cite_tools.generate.adapters import (
+    PhysicalSideView,
+    controller_action,
+    joint_state_topic,
+    physical_side,
+)
+from cite_tools.generate.description import (
+    VendorNames,
+    described_sides,
+    environment_arguments,
+    vendor_names,
+)
 from cite_tools.generate.moveit import PIPELINES
 from cite_tools.model import blockly, ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell, ResolveError
@@ -121,6 +133,55 @@ class _ManagerView:
     gripper_pad_face_centre_z_m: float | None
     skills: _SkillView | None
     track: _TrackView | None = None
+    #: The xacro arguments the PLANT's description takes from the environment,
+    #: as `(argument, variable)` pairs; empty — and so not emitted — on every
+    #: simulated side (ADR-0070 item 2). The plan carries the variable's NAME and
+    #: never its value.
+    description_args: tuple[tuple[str, str, str], ...] = ()
+    #: The description and controller configuration the COUNTERPART loads, as
+    #: package URIs, or `None` where it loads the plant's: on an untwinned zone,
+    #: and on a paired one whose counterpart names the plant's backend, because
+    #: such a side gets no artifact of its own (ADR-0048 clause 2). Present
+    #: together or not at all.
+    counterpart_description: str | None = None
+    counterpart_parameters: str | None = None
+    #: `description_args` for the counterpart's description.
+    counterpart_description_args: tuple[tuple[str, str, str], ...] = ()
+    #: The controllers the COUNTERPART's own configuration defines, emitted
+    #: exactly where `counterpart_parameters` is: a side loading the plant's
+    #: configuration spawns the plant's list, and a side loading its own spawns
+    #: what that file defines (`ResolvedAsset.controllers_on`, ADR-0070 item 1).
+    counterpart_controllers: tuple[_ControllerRef, ...] = ()
+    #: The names the counterpart's embedded vendor driver serves outside
+    #: `ros2_control` - the track's and the stop services, the gripper action -
+    #: or `None` where that side embeds no driver (ADR-0070 items 3-5).
+    counterpart_vendor: VendorNames | None = None
+    #: What the counterpart runs beside its controller manager where it is
+    #: physical, and how the twin boundary watches it (ADR-0070 items 4-6).
+    counterpart_physical: PhysicalSideView | None = None
+
+
+def _package_uri(path: str) -> str:
+    return f"package://cite_generated/{path}"
+
+
+def _counterpart_controllers(
+    cell: ResolvedCell, asset: ResolvedAsset
+) -> tuple[_ControllerRef, ...]:
+    """The counterpart's controller list where it loads a configuration of its own, else ()."""
+    if ids.COUNTERPART_SIDE not in described_sides(cell, asset):
+        return ()
+    return tuple(
+        _ControllerRef(name=c.name, stage=c.stage)
+        for c in asset.controllers_on(ids.COUNTERPART_SIDE)
+    )
+
+
+def _counterpart_artifact(cell: ResolvedCell, asset: ResolvedAsset, path: str) -> str | None:
+    """``path``'s package URI when the counterpart has an artifact of its own, else None."""
+    if ids.COUNTERPART_SIDE not in described_sides(cell, asset):
+        return None
+    return _package_uri(path)
 
 
 @dataclass(frozen=True)
@@ -358,12 +419,10 @@ def _controller_action(asset: ResolvedAsset, suffix: str) -> str | None:
 
     The skill server receives this as a parameter rather than constructing it,
     which is what keeps the number of places a name is made at exactly one.
+    Formed by `generate.adapters.controller_action`, which the physical side's
+    deadman and relay read too.
     """
-    name = ids.controller(asset.id, suffix)
-    if not any(c.name == name for c in asset.controllers):
-        return None
-    action = "follow_joint_trajectory" if "trajectory" in suffix else "gripper_cmd"
-    return ids.interface(asset.zone, asset.id, f"{name}/{action}")
+    return controller_action(asset, suffix)
 
 
 def _skills(cell: ResolvedCell, asset: ResolvedAsset) -> _SkillView | None:
@@ -495,7 +554,7 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
     managers = tuple(
         _ManagerView(
             asset=asset.id,
-            node=f"{asset.namespace}/controller_manager",
+            node=f"{asset.namespace}/{ids.CONTROLLER_MANAGER_NODE}",
             backend=asset.instance.hardware.backend,
             counterpart_backend=(
                 asset.instance.hardware.effective_counterpart_backend if cell.is_paired else None
@@ -520,12 +579,16 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             # manager per model is what keeps a manager from claiming hardware
             # that belongs to another arm.
             description_topic=f"{asset.namespace}/robot_description",
-            joint_state_topic=f"{asset.namespace}/joint_states",
-            description=(f"package://cite_generated/description/{cell.zone}_{asset.id}.urdf.xacro"),
+            joint_state_topic=joint_state_topic(asset),
+            description=_package_uri(arm_description_path(cell.zone, asset.id, ids.PLANT_SIDE)),
             spawn_xyz_m=" ".join(fmt(v) for v in asset.world_pose.xyz_m),
             spawn_rpy_rad=" ".join(fmt(v) for v in asset.world_pose.rpy_rad),
+            # The PLANT's controllers. The counterpart's are what its own
+            # configuration lists, and differ only where a side's hardware
+            # exports no joint for a controller (`ResolvedAsset.controllers_on`).
             controllers=tuple(
-                _ControllerRef(name=c.name, stage=c.stage) for c in asset.controllers
+                _ControllerRef(name=c.name, stage=c.stage)
+                for c in asset.controllers_on(ids.PLANT_SIDE)
             ),
             planning_group=_planning_group(asset),
             planning_tip_link=_planning_link(asset, "tip"),
@@ -561,6 +624,25 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             gripper_pad_face_centre_z_m=_linkage(cell, asset, "pad_face_centre_z_m"),
             skills=_skills(cell, asset),
             track=_track(asset),
+            description_args=environment_arguments(asset, ids.PLANT_SIDE),
+            counterpart_description=_counterpart_artifact(
+                cell, asset, arm_description_path(cell.zone, asset.id, ids.COUNTERPART_SIDE)
+            ),
+            counterpart_parameters=_counterpart_artifact(
+                cell, asset, controllers_path(cell.zone, asset.id, ids.COUNTERPART_SIDE)
+            ),
+            counterpart_description_args=(
+                environment_arguments(asset, ids.COUNTERPART_SIDE) if cell.is_paired else ()
+            ),
+            counterpart_controllers=_counterpart_controllers(cell, asset),
+            counterpart_vendor=(
+                vendor_names(asset, cell, ids.COUNTERPART_SIDE)
+                if ids.COUNTERPART_SIDE in described_sides(cell, asset)
+                else None
+            ),
+            counterpart_physical=(
+                physical_side(cell, asset, ids.COUNTERPART_SIDE) if cell.is_paired else None
+            ),
         )
         for asset in cell.assets
         if asset.controllers
@@ -617,6 +699,8 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             sensors=sensors,
             programs=_programs(cell),
             workpiece_models=_workpiece_models(cell),
+            twin=cell.twin if cell.is_paired else None,
+            package_uri=_package_uri,
         )
     )
     return [Artifact(f"bringup/{cell.zone}_plan.yaml", text)]

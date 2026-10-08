@@ -15,11 +15,19 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
-from cite_tools.model import blockly, ids
+from cite_tools.model import blockly
 from cite_tools.model.ids import WORLD_FRAME
 from cite_tools.model.loader import FacilityModel
 from cite_tools.model.resolve import program_steps
-from cite_tools.model.schema import PLUGIN_BINDING, FlowEdge, xacro_would_evaluate
+from cite_tools.model.schema import (
+    PLUGIN_BINDING,
+    VENDOR_SERVICE_SWITCH_FOR_ALL,
+    VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS,
+    EnvReference,
+    FlowEdge,
+    VendorAxis,
+    xacro_would_evaluate,
+)
 from cite_tools.validate import Finding, error
 
 #: Which configuration kind each category expects. `None` means the category
@@ -46,9 +54,13 @@ def check(model: FacilityModel) -> list[Finding]:
     findings += _hardware_backends_exist(model)
     findings += _instance_params_reach_a_bound_plugin(model)
     findings += _paired_zone_has_no_physical_plant(model)
-    findings += _counterpart_backend_matches_the_plant(model)
+    findings += _counterpart_backend_needs_a_paired_zone(model)
+    findings += _plugin_less_backends_are_not_bound(model)
     findings += _configuration_matches_category(model)
     findings += _an_arm_rides_its_track_on_one_backend(model)
+    findings += _vendor_services_are_least_privilege(model)
+    findings += _a_physical_side_states_how_it_is_served(model)
+    findings += _a_physical_side_states_its_timing(model)
     findings += _programs_fit_the_arm(model)
     findings += _stations_reference_real_things(model)
     findings += _workpiece_models_exist(model)
@@ -305,10 +317,17 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
       of it: that id is cited as meaning a quote, and the generator treats the two
       differently. The predicate is `schema.xacro_would_evaluate`, which the
       generator's raise reads too.
-    * Nothing at all for a block naming a declared backend nobody selects. That is
-      deliberate and it is what makes flipping an arm to hardware a one-field
-      edit.
+    * `literal-param-on-physical-backend` — a literal value, in any block, for
+      a parameter a backend declaring `commands_physical_hardware: true`
+      declares. Such a parameter says how to reach a machine, and the owner
+      decided on 2026-10-05 that no such value is committed (ADR-0070 item 2):
+      it is written `{env: <VARIABLE>}` and read at launch. Any block, selected
+      or not, for the reason the quote rule gives.
+    * Nothing else for a block naming a declared backend nobody selects. That
+      is deliberate and it is what makes flipping an arm to hardware a
+      one-field edit.
     """
+    paired = {z.id for z in model.zones if z.twin.sides == "pair"}
     findings: list[Finding] = []
     for asset in model.assets:
         asset_type = model.asset_type(asset.type)
@@ -368,6 +387,21 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         # a block asks is about its own backend and is answerable either way.
         for name in sorted(set(params) & set(backends)):
             allowed = set(backends[name].instance_params)
+            if backends[name].commands_physical_hardware:
+                for key in sorted(set(params[name]) & allowed):
+                    if isinstance(params[name][key], EnvReference):
+                        continue
+                    findings.append(
+                        error(
+                            "literal-param-on-physical-backend",
+                            f"assets.{asset.id}.hardware.params.{name}.{key}",
+                            f"backend {name!r} of type {asset_type.id!r} commands physical "
+                            f"hardware, and parameter {key!r} is written as a literal value",
+                            "A parameter of a physical backend says how to reach a machine "
+                            "and is never committed (ADR-0070 item 2). Write it "
+                            "`{env: <VARIABLE>}` and set the variable in your local .env.",
+                        )
+                    )
             for key in sorted(set(params[name]) - allowed):
                 findings.append(
                     error(
@@ -408,6 +442,17 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         if chosen not in backends:
             continue
 
+        # EVERY SIDE THAT EXISTS, each against the backend it loads. The
+        # counterpart of a paired zone gets a description of its own, valued from
+        # ITS backend's block (ADR-0048 clause 2, ADR-0070), so a parameter that
+        # backend declares and the asset does not supply would fail the generator
+        # exactly as the plant's would. On an untwinned zone there is no
+        # counterpart to describe, and its backend is not asked about.
+        selected = [chosen]
+        counterpart = asset.hardware.effective_counterpart_backend
+        if asset.zone in paired and counterpart != chosen and counterpart in backends:
+            selected.append(counterpart)
+
         # The mirror. A connection parameter has no default that could be right:
         # the vendor's own `robot_ip:=''` becomes `<param name="robot_ip">R</param>`
         # and `uf_robot_system_hardware.cpp` answers it with `exit(1)` from inside
@@ -419,17 +464,19 @@ def _hardware_backends_exist(model: FacilityModel) -> list[Finding]:
         # reads as well, so the two cannot disagree about a model. A declared key
         # holding an empty string is unsupplied: decision 2a's reason is about the
         # value, and `robot_ip: ''` lands the same `exit(1)`.
-        supplied = set(asset.hardware.supplied_params(chosen))
-        for key in sorted(set(backends[chosen].instance_params) - supplied):
-            findings.append(
-                error(
-                    "missing-hardware-param",
-                    f"assets.{asset.id}.hardware.params.{chosen}.{key}",
-                    f"backend {chosen!r} of type {asset_type.id!r} declares parameter "
-                    f"{key!r}, which this asset does not supply a value for",
-                    f"Add it under `hardware.params.{chosen}`. An empty value is not one.",
+        for backend_id in selected:
+            supplied = set(asset.hardware.supplied_params(backend_id))
+            for key in sorted(set(backends[backend_id].instance_params) - supplied):
+                findings.append(
+                    error(
+                        "missing-hardware-param",
+                        f"assets.{asset.id}.hardware.params.{backend_id}.{key}",
+                        f"backend {backend_id!r} of type {asset_type.id!r} declares "
+                        f"parameter {key!r}, which this asset does not supply a value for",
+                        f"Add it under `hardware.params.{backend_id}`. An empty value is not "
+                        "one; a value read at launch is written `{env: <VARIABLE>}`.",
+                    )
                 )
-            )
     return findings
 
 
@@ -472,6 +519,37 @@ def _instance_params_reach_a_bound_plugin(model: FacilityModel) -> list[Finding]
                     "that component instead. Bind the plugin, or remove the parameter bindings.",
                 )
             )
+    return findings
+
+
+def _plugin_less_backends_are_not_bound(model: FacilityModel) -> list[Finding]:
+    """A backend declaring no plugin may not sit on a type that binds the plugin.
+
+    `plugin-less-backend-on-a-bound-description`, one ERROR per (type, backend).
+    `ros2_control_plugin: null` says that no `ros2_control` component serves this
+    type's joints on that backend (ADR-0070 item 3), which the generator honours
+    for joints IT emits — a track's — by emitting no `<ros2_control>` block. A
+    vendor description is different: its `<ros2_control>` block is the vendor
+    macro's, and binding no plugin into it hands the macro its OWN default, which
+    for `xarm_description` is the physical component. The generator refuses the
+    same condition as a backstop (`generate.description._binding_value`).
+    """
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        if PLUGIN_BINDING not in asset_type.description.bound_args.values():
+            continue
+        for name, backend in sorted(asset_type.hardware_backends.items()):
+            if backend.ros2_control_plugin is None:
+                findings.append(
+                    error(
+                        "plugin-less-backend-on-a-bound-description",
+                        f"types.{asset_type.id}.hardware_backends.{name}.ros2_control_plugin",
+                        f"backend {name!r} of type {asset_type.id!r} declares no plugin, and "
+                        f"the type's description binds {PLUGIN_BINDING}",
+                        "The vendor macro would load its own default plugin on a side "
+                        "selecting this backend. Declare the plugin, or stop binding it.",
+                    )
+                )
     return findings
 
 
@@ -583,124 +661,46 @@ def _paired_zone_has_no_physical_plant(model: FacilityModel) -> list[Finding]:
                 "two machines, it is what charter §8's Phase 2 scopes, and it is the "
                 "encoding MODE_VIRTUAL_LEAD describes (ADR-0041, Decision 3). What decides "
                 "here is the declaration on the type's backend and not the backend's name, "
-                "so renaming the backend changes nothing (ADR-0054). Note that "
-                "`divergent-counterpart-backend` then refuses that encoding as well, "
-                "until the generator emits a per-side artifact set: the vocabulary is "
-                "right and the generator is not ready for it (ADR-0048).",
+                "so renaming the backend changes nothing (ADR-0054). The generator emits "
+                "that counterpart a description and controller configuration of its own "
+                "(ADR-0048 clause 2, ADR-0070).",
             )
         )
     return findings
 
 
-def _counterpart_backend_matches_the_plant(model: FacilityModel) -> list[Finding]:
-    """An asset's two sides must name one backend, because they are handed one artifact set.
+def _counterpart_backend_needs_a_paired_zone(model: FacilityModel) -> list[Finding]:
+    """A `counterpart_backend` other than `backend`, on a zone with no counterpart, is an ERROR.
 
-    A schema cannot say this either, and for a different reason than
-    `physical-plant-on-paired-zone`: this is a cross-FIELD equality, between two
-    siblings of the same object. pydantic could express it only as a validator,
-    which the exported JSON Schema would not carry, so stating it there would
-    make the schema claim a constraint it does not enforce. This package's own
-    docstring fixes that split, and this rule sits beside the one that closed
-    the other half of the same cross product (ADR-0048, clause 1).
+    Other than `backend`, because the loaded model cannot tell a value equal to
+    `backend` from an omitted one, by design: the fallback is applied at load so
+    the two spellings are one facility (`HardwareSelection`). A differing value
+    is the one that says something.
 
-    WHY IT IS KEYED ON DIFFERENCE RATHER THAN ON `real`. The defect is not that
-    a side is physical. Every generator site that branches on a backend reads
-    `hardware.backend` — the PLANT's — and not one of them has ever been asked
-    which side it is generating for: the `ros2_control` plugin
-    (`cite_tools.model.resolve`, consumed by `generate.description`), the
-    collision scheme (`generate.description`, `spec.collision.scheme_for`) and
-    `use_sim_time` (`generate.control`). So whatever the counterpart names, it is
-    handed artifacts derived from the other side's answer. Keying on the literal
-    `real` would leave a third backend to rediscover exactly this gap.
-
-    THE SET IS ASKED FOR, NOT COUNTED HERE. This docstring said "three" and named
-    among them the bring-up plan key ADR-0048 clause 3 has since removed. That
-    key WAS a branch on the plant's backend, exactly like the three above — the
-    count was right when it was written, and it went stale because a site was
-    deleted, not because it was miscounted. (What made the deletion free is a
-    different property: the key was a total function of a backend the plan
-    already states per side, and nothing read it.) Meanwhile the collision
-    scheme, added 2026-08-31, was never listed at all. So a count in prose is a
-    claim with an expiry date; `grep -rn "instance.hardware.backend"
-    tools/cite_tools` is the instrument.
-
-    WHAT THAT INSTRUMENT REACHES, STATED AS WHAT IT IS. It reaches every read
-    through `ResolvedAsset.instance` — which is every GENERATOR site, in
-    `model/` as well as in `generate/`, where a glob over `generate/*.py` misses
-    the first of the three. It does NOT reach a read off the raw model asset,
-    spelled `asset.hardware.backend`: `model/schema.py`'s counterpart fallback,
-    `cli.py`'s asset table and three lines in this file read it that way, and
-    not one of them generates an artifact. This docstring claimed "every read of
-    the PLANT's backend" and that is the wider set.
-
-    ONE SITE THE INSTRUMENT REACHES IS NOT A DEFECT, AND IT IS NEW. ADR-0054's
-    bring-up generator asks `commands_physical_hardware_of(instance.hardware
-    .backend)` in order to state the PLANT's fact, and states the counterpart's
-    from `effective_counterpart_backend` on the next line — so it reads the
-    plant's backend to answer a question about the plant, which is the shape this
-    rule is waiting for rather than an instance of the shape it refuses. A reader
-    running the instrument has to look at what each hit is answering; the count
-    alone does not say.
-
-    AND IT COUNTS ITSELF. The instrument returned **6 lines in 5 files** in this
-    checkout on 2026-09-08 and **7 in 5** after that generator site landed, and
-    one of them is the sentence above, because
-    this file is inside the search scope — the same "a guard that counts a
-    string counts its own message" hazard the guard in
-    `cite_bringup/test/test_plan.py` is parsed rather than grepped to avoid. Five
-    are reads; one is prose about them. The record's own copies of the count are
-    stale until the change that makes these sites per-side corrects them.
-
-    WHAT IT DOES NOT TOUCH. `counterpart_backend` written where it AGREES with
-    `backend` stays legal and stays byte-identical to omitting it, which is the
-    property `test_writing_the_counterpart_backend_it_already_has_changes_nothing`
-    pins; the fallback in `HardwareSelection` is what makes those the same model,
-    and this rule reads through it rather than around it.
-
-    THE REFUSAL IS TEMPORARY BY CONSTRUCTION and the message says so. ADR-0048
-    clause 2 fixes the shape that lifts it — the description and the controller
-    configuration become per-side, the side goes in a file path and never in a
-    ROS name — and this rule is deleted by the change that builds it.
+    On a `single` zone there is no side for it to select a backend for, so the
+    value reaches no artifact and is silently inert (ADR-0041, Decision 3). That
+    silence is the hazard: a model that writes `counterpart_backend: real` on an
+    unpaired zone reads as if a physical counterpart were declared, and pairing
+    the zone later would make it one without anyone writing it again. ADR-0070
+    deleted `divergent-counterpart-backend`, which used to report this case as
+    a side effect; this keeps the case reported on its own terms.
     """
     paired = {z.id for z in model.zones if z.twin.sides == "pair"}
-    findings: list[Finding] = []
-    for asset in model.assets:
-        plant = asset.hardware.backend
-        counterpart = asset.hardware.effective_counterpart_backend
-        if counterpart == plant:
-            continue
-        if asset.zone in paired:
-            hint = (
-                "All three generator sites that branch on a backend read the plant's, so "
-                f"the counterpart would be handed the plant's description, the {plant!r} "
-                "backend's `ros2_control` plugin, "
-                f"`use_sim_time: {'true' if plant == ids.SIMULATION_BACKEND else 'false'}` "
-                "in its controller configuration and a plan stating where the plant's "
-                "controller manager is hosted — a description of the other side's machine, "
-                "generated and committed without a word of warning. ADR-0048 refuses the "
-                "combination until the generator emits a per-side artifact set (its clause "
-                "2); until then both sides of a paired zone name one backend, and "
-                "`physical-plant-on-paired-zone` fixes what that backend may be: one "
-                "declaring `commands_physical_hardware: false` (ADR-0054)."
-            )
-        else:
-            hint = (
-                f"zone {asset.zone!r} declares `twin.sides: single`, so there is no "
-                "counterpart side for this value to describe: no generated artifact "
-                "carries it and nothing reads it. Remove it. If the facility really has "
-                "two sides, pair the zone — but ADR-0048 refuses a divergent counterpart "
-                "there too, until the generator emits a per-side artifact set."
-            )
-        findings.append(
-            error(
-                "divergent-counterpart-backend",
-                f"assets.{asset.id}.hardware.counterpart_backend",
-                f"counterpart side names backend {counterpart!r} while the plant side "
-                f"names {plant!r}, and the generator emits one artifact set for both sides",
-                hint,
-            )
+    return [
+        error(
+            "counterpart-backend-on-unpaired-zone",
+            f"assets.{asset.id}.hardware.counterpart_backend",
+            f"asset {asset.id!r} declares counterpart_backend "
+            f"{asset.hardware.counterpart_backend!r}, and its zone {asset.zone!r} has no "
+            "counterpart side",
+            "Set `twin: {sides: pair}` on the zone if it is twinned, or remove "
+            "`counterpart_backend`; on an unpaired zone it selects nothing (ADR-0041, "
+            "Decision 3).",
         )
-    return findings
+        for asset in model.assets
+        if asset.zone not in paired
+        and asset.hardware.effective_counterpart_backend != asset.hardware.backend
+    ]
 
 
 def _configuration_matches_category(model: FacilityModel) -> list[Finding]:
@@ -763,6 +763,295 @@ def _an_arm_rides_its_track_on_one_backend(model: FacilityModel) -> list[Finding
                 )
             )
     return findings
+
+
+def _vendor_services_are_least_privilege(model: FacilityModel) -> list[Finding]:
+    """A vendor driver switches on exactly the services the physical side calls (ADR-0070).
+
+    The driver creates a service only where its switch is true, so the list in
+    L0 is a grant. A name beyond the allow-list grants a vendor call nothing in
+    this repository makes - reachable by any client on the side's domain - and
+    `debug` grants every service the driver has. A name missing from it leaves
+    a node of the physical side calling a service that does not exist, which
+    the generator could not wire.
+    """
+    findings: list[Finding] = []
+    allowed = set(VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS)
+    for asset_type in model.types:
+        for backend_id, backend in sorted(asset_type.hardware_backends.items()):
+            driver = backend.vendor_driver
+            if driver is None:
+                continue
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}.vendor_driver.services"
+            for name in driver.services:
+                if name == VENDOR_SERVICE_SWITCH_FOR_ALL:
+                    findings.append(
+                        error(
+                            "vendor-service-not-allowed",
+                            where,
+                            f"lists {name!r}, which is not a service: the vendor driver reads "
+                            "it as the switch that creates EVERY service it has",
+                            "Remove it. List only the services the physical side calls.",
+                        )
+                    )
+                elif name not in allowed:
+                    findings.append(
+                        error(
+                            "vendor-service-not-allowed",
+                            where,
+                            f"lists {name!r}, which no node of the physical side calls, so "
+                            "switching it on grants a vendor call nothing here makes",
+                            f"The allowed services are {sorted(allowed)}.",
+                        )
+                    )
+            missing = sorted(allowed - set(driver.services))
+            if missing:
+                findings.append(
+                    error(
+                        "vendor-service-missing",
+                        where,
+                        f"does not list {missing}, which the physical side's nodes call; "
+                        "the driver would not create them",
+                        "List every service in VENDOR_SERVICES_THE_PHYSICAL_SIDE_CALLS.",
+                    )
+                )
+    return findings
+
+
+def _a_physical_side_states_how_it_is_served(model: FacilityModel) -> list[Finding]:
+    """What the physical side's adapters translate with is declared, not defaulted.
+
+    A plugin-less physical axis is served by the track adapter, which needs the
+    vendor's units and read rate (`VendorAxis`); a gripper the vendor driver
+    serves through its own action is relayed, which needs the vendor's two
+    ranges (`VendorGripperUnits`). Either missing would leave a node of the
+    physical side with no configuration to start on.
+    """
+    findings: list[Finding] = []
+    for asset_type in model.types:
+        for backend_id, backend in sorted(asset_type.hardware_backends.items()):
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}"
+            served_by_vendor = (
+                asset_type.axis is not None
+                and backend.ros2_control_plugin is None
+                and backend.commands_physical_hardware
+            )
+            if served_by_vendor and backend.vendor_axis is None:
+                findings.append(
+                    error(
+                        "vendor-axis-unstated",
+                        where,
+                        "is a physical axis no `ros2_control` component serves, and states "
+                        "no `vendor_axis`, so its track adapter has no units or read rate",
+                        "Add `vendor_axis: {position_scale, poll_period_s, "
+                        "position_max_age_s, segment_s, auto_enable, initialize_deadline_s}`.",
+                    )
+                )
+            if backend.vendor_axis is not None and not served_by_vendor:
+                findings.append(
+                    error(
+                        "vendor-axis-unstated",
+                        where,
+                        "states a `vendor_axis` on a backend a `ros2_control` component "
+                        "serves, or that commands no physical machine; nothing reads it",
+                        "Remove it, or declare the backend plugin-less and physical.",
+                    )
+                )
+    for asset in model.assets:
+        arm_type = model.asset_type(asset.type)
+        effector = asset.end_effector
+        if arm_type is None or effector is None or not effector.vendor_integrated:
+            continue
+        effector_type = model.asset_type(effector.type)
+        if effector_type is None or effector_type.grasp is None:
+            continue
+        for backend_id in sorted(
+            {asset.hardware.backend, asset.hardware.effective_counterpart_backend}
+        ):
+            selected = arm_type.hardware_backends.get(backend_id)
+            driver = None if selected is None else selected.vendor_driver
+            if driver is None or driver.gripper_action is None:
+                continue
+            if effector_type.grasp.vendor is None:
+                findings.append(
+                    error(
+                        "vendor-gripper-units-unstated",
+                        f"types.{effector_type.id}.grasp",
+                        f"asset {asset.id!r} loads backend {backend_id!r}, whose vendor "
+                        "driver serves this gripper through its own action, and the type "
+                        "states no `grasp.vendor` units for the relay that forwards to it",
+                        "Add `grasp.vendor: {max_pos_pulses, poll_period_s}`.",
+                    )
+                )
+    return findings
+
+
+def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
+    """A zone with a physical counterpart states its deadman's timing, coherently (ADR-0070).
+
+    Each relation is a property of two declarations, so it is here rather than
+    on a field: the deadman must not trip on a single late heartbeat (three
+    periods at least), must check its timeout more often than the timeout, and a
+    state a relay or the boundary counts as current must be older than one tick
+    and one poll before it is stale, or a live publisher reads as a dead one.
+    """
+    findings: list[Finding] = []
+    for zone in model.zones:
+        twin = zone.twin
+        physical = [
+            asset
+            for asset in model.assets_in(zone.id)
+            if (asset_type := model.asset_type(asset.type)) is not None
+            and (
+                backend := asset_type.hardware_backends.get(
+                    asset.hardware.effective_counterpart_backend
+                )
+            )
+            is not None
+            and backend.commands_physical_hardware
+            and twin.sides == "pair"
+        ]
+        if not physical:
+            continue
+        where = f"zones.{zone.id}.twin"
+        timing = twin.physical_side
+        if timing is None:
+            findings.append(
+                error(
+                    "physical-side-timing-unstated",
+                    where,
+                    f"the counterpart of {sorted(a.id for a in physical)} commands physical "
+                    "hardware, and the zone states no `physical_side` timing for its deadman",
+                    "Add `physical_side: {deadman_timeout_s, deadman_tick_period_s, "
+                    "call_deadline_s, state_max_age_s}`.",
+                )
+            )
+            continue
+        heartbeat = twin.heartbeat_period_s or 0.0
+        if timing.deadman_timeout_s < 3.0 * heartbeat:
+            findings.append(
+                error(
+                    "deadman-timeout-below-three-heartbeats",
+                    f"{where}.physical_side.deadman_timeout_s",
+                    f"{timing.deadman_timeout_s:g} s is less than three heartbeat periods "
+                    f"({heartbeat:g} s each), so one or two late heartbeats trip the deadman",
+                    "Raise the timeout or shorten the heartbeat period.",
+                )
+            )
+        if timing.deadman_tick_period_s >= timing.deadman_timeout_s:
+            findings.append(
+                error(
+                    "deadman-tick-not-below-timeout",
+                    f"{where}.physical_side.deadman_tick_period_s",
+                    f"{timing.deadman_tick_period_s:g} s is not below the timeout "
+                    f"{timing.deadman_timeout_s:g} s, so the timeout is checked too rarely "
+                    "to hold",
+                )
+            )
+        if timing.state_max_age_s <= timing.deadman_tick_period_s:
+            findings.append(
+                error(
+                    "state-max-age-not-above-tick",
+                    f"{where}.physical_side.state_max_age_s",
+                    f"{timing.state_max_age_s:g} s is not above the deadman's tick "
+                    f"{timing.deadman_tick_period_s:g} s, so a live deadman's state reads as "
+                    "stale between two ticks",
+                )
+            )
+        if timing.call_deadline_s >= timing.deadman_timeout_s:
+            findings.append(
+                error(
+                    "call-deadline-not-below-timeout",
+                    f"{where}.physical_side.call_deadline_s",
+                    f"{timing.call_deadline_s:g} s is not below the deadman timeout "
+                    f"{timing.deadman_timeout_s:g} s, so an unanswered stop is abandoned "
+                    "no sooner than the heartbeat it guards is declared lost",
+                )
+            )
+        for axis_where, served, max_speed_mps in _vendor_axes(model, physical):
+            if served.initialize_speed_mps > max_speed_mps:
+                findings.append(
+                    error(
+                        "track-initialize-speed-above-max",
+                        f"{axis_where}.initialize_speed_mps",
+                        f"{served.initialize_speed_mps:g} m/s is above the axis's own "
+                        f"max_speed_mps {max_speed_mps:g} m/s",
+                    )
+                )
+            if served.position_max_age_s <= served.poll_period_s:
+                findings.append(
+                    error(
+                        "track-position-age-not-above-poll",
+                        f"{axis_where}.position_max_age_s",
+                        f"{served.position_max_age_s:g} s is not above the adapter's poll "
+                        f"period {served.poll_period_s:g} s, so a live carriage position reads "
+                        "as stale between two reads",
+                    )
+                )
+            if served.segment_s <= served.poll_period_s:
+                findings.append(
+                    error(
+                        "track-segment-not-above-poll",
+                        f"{axis_where}.segment_s",
+                        f"{served.segment_s:g} s is not above the adapter's poll period "
+                        f"{served.poll_period_s:g} s, so a segment ends before the next one "
+                        "is sent and the carriage stops between them",
+                    )
+                )
+            if served.segment_s > timing.deadman_timeout_s:
+                findings.append(
+                    error(
+                        "track-segment-above-deadman-timeout",
+                        f"{axis_where}.segment_s",
+                        f"{served.segment_s:g} s is above the deadman timeout "
+                        f"{timing.deadman_timeout_s:g} s, so a carriage whose stop is lost "
+                        "overruns further than the deadman itself would let it",
+                    )
+                )
+        for period, what in _poll_periods(model, physical):
+            if timing.state_max_age_s <= period:
+                findings.append(
+                    error(
+                        "state-max-age-not-above-a-poll-period",
+                        f"{where}.physical_side.state_max_age_s",
+                        f"{timing.state_max_age_s:g} s is not above {what}'s poll period "
+                        f"{period:g} s, so its joint reads as stale between two reads",
+                    )
+                )
+    return findings
+
+
+def _vendor_axes(model: FacilityModel, assets: list) -> list[tuple[str, VendorAxis, float]]:
+    """``(where, vendor_axis, max_speed_mps)`` of every vendor-served axis on the physical side."""
+    found: list[tuple[str, VendorAxis, float]] = []
+    for asset in assets:
+        asset_type = model.asset_type(asset.type)
+        if asset_type is None or asset_type.axis is None:
+            continue
+        backend_id = asset.hardware.effective_counterpart_backend
+        backend = asset_type.hardware_backends.get(backend_id)
+        if backend is not None and backend.vendor_axis is not None:
+            where = f"types.{asset_type.id}.hardware_backends.{backend_id}.vendor_axis"
+            found.append((where, backend.vendor_axis, asset_type.axis.max_speed_mps))
+    return found
+
+
+def _poll_periods(model: FacilityModel, assets: list) -> list[tuple[float, str]]:
+    """The read periods of every adapter the physical side of ``assets`` runs."""
+    periods: list[tuple[float, str]] = []
+    for asset in assets:
+        effector = asset.end_effector
+        effector_type = None if effector is None else model.asset_type(effector.type)
+        if effector_type is not None and effector_type.grasp is not None:
+            vendor = effector_type.grasp.vendor
+            if vendor is not None:
+                periods.append((vendor.poll_period_s, f"{effector_type.id}'s relay"))
+        asset_type = model.asset_type(asset.type)
+        if asset_type is not None and asset_type.axis is not None:
+            backend = asset_type.hardware_backends.get(asset.hardware.effective_counterpart_backend)
+            if backend is not None and backend.vendor_axis is not None:
+                periods.append((backend.vendor_axis.poll_period_s, f"{asset.id}'s adapter"))
+    return periods
 
 
 def _programs_fit_the_arm(model: FacilityModel) -> list[Finding]:

@@ -3,15 +3,18 @@
 This is where ADR-0005's guarantee stops being a promise and becomes structural:
 the controller names, joint names and interfaces emitted here are the ones the
 physical arm will use in Phase 2, because there is nowhere else for them to come
-from. The only thing that changes between the two paths is the plugin string in
-the description, which is itself a per-instance selection in the model.
+from. Between a simulated side and a physical one the names never change; what
+does is `use_sim_time`, and which controllers a side loads at all — one whose
+joint no hardware on that side exports is not loaded there, and its names are
+served by something else (ADR-0070 items 3 and 4).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cite_tools.generate import Artifact
+from cite_tools.generate import Artifact, controllers_path
+from cite_tools.generate.description import described_sides, vendor_names
 from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.model.schema import ControlSpec
@@ -221,21 +224,32 @@ def _control_spec(asset: ResolvedAsset) -> ControlSpec:
 
 
 def generate(cell: ResolvedCell) -> list[Artifact]:
+    """One configuration per controller manager, and a second for a side that differs.
+
+    Per side for the two reasons a side's configuration can differ, both read
+    from that side's own backend (ADR-0048 clause 2, open-work #38):
+    `use_sim_time`, and which controllers are loaded at all —
+    `ResolvedAsset.controllers_on` drops a controller whose joint no hardware on
+    that side exports. Every name is the same on both sides.
+    """
     env = environment()
     template = env.get_template("control/controllers.yaml.j2")
     artifacts: list[Artifact] = []
     for asset in _controlled(cell):
         control = _control_spec(asset)
-        text = template.render(
-            zone=cell.zone,
-            arm=asset,
-            namespace=asset.namespace,
-            update_rate=control.update_rate_hz,
-            enforce_command_limits=_yaml_scalar(control.enforce_command_limits),
-            use_sim_time=(
-                "true" if asset.instance.hardware.backend == ids.SIMULATION_BACKEND else "false"
-            ),
-            controllers=[_view(c, asset) for c in asset.controllers],
-        )
-        artifacts.append(Artifact(f"control/{cell.zone}_{asset.id}_controllers.yaml", text))
+        for side in described_sides(cell, asset):
+            text = template.render(
+                zone=cell.zone,
+                arm=asset,
+                namespace=asset.namespace,
+                update_rate=control.update_rate_hz,
+                enforce_command_limits=_yaml_scalar(control.enforce_command_limits),
+                use_sim_time=(
+                    "true" if asset.backend_on(side) == ids.SIMULATION_BACKEND else "false"
+                ),
+                in_gazebo=asset.backend_on(side) == ids.SIMULATION_BACKEND,
+                controllers=[_view(c, asset) for c in asset.controllers_on(side)],
+                vendor=vendor_names(asset, cell, side),
+            )
+            artifacts.append(Artifact(controllers_path(cell.zone, asset.id, side), text))
     return artifacts

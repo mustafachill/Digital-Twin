@@ -41,6 +41,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import ResultCode, TwinMode
 from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, PLANT_SIDE
 
@@ -367,9 +368,22 @@ class ModeAuthority:
         deployment: Deployment,
         hardware_opt_in: Callable[[], None],
         initial_mode: int = INITIAL_MODE,
+        physical_side_unready: Callable[[], str | None] | None = None,
+        physical_carriage_apart: Callable[[], str | None] | None = None,
     ) -> None:
         self._deployment = deployment
         self._hardware_opt_in = hardware_opt_in
+        #: Why a physical side may not be commanded yet, or `None` when it may
+        #: (ADR-0070 item 6). Asked after the opt-in, of every transition that
+        #: places physical actuation under a new authority, and never behind
+        #: `force`. Injected like the opt-in, so this module reads no topic.
+        self._physical_side_unready = physical_side_unready
+        #: Why a physical carriage, heard fresh, stands where the plant's does
+        #: not, or `None`. Asked with the readiness above and refused for good,
+        #: never as "not ready": it does not clear by itself, and a caller that
+        #: waited on it would wait beside an operator who has confirmed the
+        #: cell clear (S-08).
+        self._physical_carriage_apart = physical_carriage_apart
         self._mode = initial_mode
         self._reason = "the mode a deployment starts in; never reached by a default"
 
@@ -382,15 +396,20 @@ class ModeAuthority:
         """Why the current mode was entered, for the record."""
         return self._reason
 
-    def request(self, mode: int, asset_id: str, reason: str, force: bool) -> Verdict:
+    def request(
+        self, mode: int, asset_id: str, reason: str, force: bool, homing: bool = False
+    ) -> Verdict:
         """Decide one `SetMode` call and, if it is accepted, take the mode.
 
         The order of the checks is the decision. The hardware gate is evaluated
         after the cheap refusals so that a malformed request is answered as a
         malformed request, and before anything `force` can reach.
+
+        ``homing`` is `SetMode.homing`: with VALIDATED only, it skips the
+        carriage-agreement refusal and nothing else (ADR-0070).
         """
         try:
-            return self._decide(mode, asset_id, reason, force)
+            return self._decide(mode, asset_id, reason, force, homing)
         except ModeError as refusal:
             return Verdict(
                 accepted=False,
@@ -400,7 +419,9 @@ class ModeAuthority:
                 commands_hardware=False,
             )
 
-    def _decide(self, mode: int, asset_id: str, reason: str, force: bool) -> Verdict:
+    def _decide(
+        self, mode: int, asset_id: str, reason: str, force: bool, homing: bool
+    ) -> Verdict:
         if mode not in MODE_NAMES:
             raise ModeError(
                 ResultCode.PRECONDITION_FAILED,
@@ -413,6 +434,15 @@ class ModeAuthority:
                 "SetMode.reason is required, so that every transition has a why on the "
                 "record. A transition nobody has to justify is one nobody reviews.",
             )
+        if homing and mode != TwinMode.MODE_VALIDATED:
+            # Narrow on purpose: the allowance exists for the one move that
+            # brings the carriages together before a program, which is sent in
+            # VALIDATED; in any other mode it would be a hole with no purpose.
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"SetMode.homing is accepted with VALIDATED only, not "
+                f"{MODE_NAMES[mode]} (ADR-0070).",
+            )
 
         # Asked before anything else looks at the scope, so that an unknown
         # asset is reported as an unknown asset rather than as a mode refusal.
@@ -423,8 +453,13 @@ class ModeAuthority:
 
         if mode == self._mode:
             # Not a transition: nothing enters an authority it was not already
-            # under, so there is nothing for the gate above to guard. The reason
-            # is still recorded, because a re-assertion is a decision too.
+            # under, so there is nothing for the opt-in above to guard. The
+            # physical side's readiness is another matter (R-04): a program that
+            # re-asserts VALIDATED is about to command that side, which may have
+            # tripped, gone stale or lost its enable since the mode was entered.
+            # So a mode commanding a physical side is re-checked here too.
+            self._require_physical_side_ready(mode, asset_id, homing)
+            # The reason is still recorded, because a re-assertion is a decision too.
             self._reason = reason
             return Verdict(
                 accepted=True,
@@ -458,6 +493,11 @@ class ModeAuthority:
             # NEVER behind `force`. SetMode.srv: "Never skips a safety check - no
             # value of this field can do that."
             self._require_hardware_opt_in(mode, asset_id)
+            # A physical side announces ready while its arm is still held; a
+            # mode commanding it waits until it is enabled and publishing. A
+            # PRECONDITION and not a safety refusal: it clears by itself, and a
+            # caller may ask again.
+            self._require_physical_side_ready(mode, asset_id, homing)
 
         previous = self._mode
         self._mode = mode
@@ -469,6 +509,36 @@ class ModeAuthority:
             detail=f"{MODE_NAMES[previous]} -> {MODE_NAMES[mode]}",
             commands_hardware=commands_hardware,
         )
+
+    def _require_physical_side_ready(self, mode: int, asset_id: str, homing: bool) -> None:
+        """Refuse ``mode`` while a physical side it commands is not ready (ADR-0070 item 6).
+
+        ``homing`` skips the carriage-agreement question and only it: the
+        readiness question below is asked whatever it says.
+        """
+        if not self._deployment.physical_sides_commanded(mode, asset_id):
+            return
+        # Each question on its own: a carriage apart is refused whether or not
+        # a readiness question was given (R-07).
+        apart = (
+            None
+            if homing or self._physical_carriage_apart is None
+            else self._physical_carriage_apart()
+        )
+        if apart is not None:
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES[mode]} would command a physical carriage that does not stand "
+                f"where the plant's does - {apart}. Refused for good: it does not clear "
+                "by itself",
+            )
+        unready = None if self._physical_side_unready is None else self._physical_side_unready()
+        if unready is not None:
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{PHYSICAL_SIDE_NOT_READY}: {MODE_NAMES[mode]} would command a physical "
+                f"side that is not ready - {unready}",
+            )
 
     def _commands_hardware(self, mode: int, asset_id: str) -> bool:
         """Whether entering ``mode`` places physical actuation under a new authority.

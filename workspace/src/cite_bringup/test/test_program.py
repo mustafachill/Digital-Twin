@@ -20,10 +20,17 @@ Nothing here moves an arm. What moves one is `tests/scenarios/program_cycle.py`.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import signal
 
 from cite_bringup.plan import default_plan_path, load
+from cite_bringup.program import belt as belt_command
+from cite_bringup.program.__main__ import main as program_main
 from cite_bringup.program.cell import (
+    ask_until_accepted,
+    await_arrival,
+    await_heard,
+    carriage_verdict,
     holding_refusal,
     RosCell,
     state_topic,
@@ -31,16 +38,21 @@ from cite_bringup.program.cell import (
     twin_name,
 )
 from cite_bringup.program.from_plan import program, target
+from cite_bringup.program.sides import physical_sides, required_speed_scale, simulated_sides
 from cite_bringup.program.steps import (
     belt,
     EXIT_INTERRUPTED,
     install_interrupt_handlers,
     move,
     run,
+    scaled_motion,
+    speed_scale,
     StepFailed,
     wait,
 )
+from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import RobotState
+from cite_interfaces.srv import TrackArrived
 import pytest
 
 ZONE = "cell_b"
@@ -202,13 +214,175 @@ def test_the_state_topic_is_beside_the_skills(cell) -> None:
     assert state_topic(cell.arm) == cell.arm.skills.move_to.rsplit("/", 1)[0] + "/state"
 
 
-def test_a_track_move_is_one_point_at_the_programs_speed(cell) -> None:
-    """|distance| / speed seconds away, in the controller's clock (ADR-0067)."""
-    trajectory = track_trajectory(cell.track, 0.65, 6.5)
+def test_a_track_move_runs_from_where_the_program_read_it(cell) -> None:
+    """|distance| / speed seconds away, from the read start (ADR-0067, SA2c-S-02 b).
+
+    The start point is what lets a physical side take the commanded speed from
+    the message rather than from where its own carriage stands.
+    """
+    trajectory = track_trajectory(cell.track, 0.0, 0.65, 6.5)
     assert trajectory.joint_names == [cell.track.joint]
-    (point,) = trajectory.points
-    assert list(point.positions) == [0.65]
-    assert (point.time_from_start.sec, point.time_from_start.nanosec) == (6, 500_000_000)
+    start, end = trajectory.points
+    assert list(start.positions) == [0.0]
+    assert (start.time_from_start.sec, start.time_from_start.nanosec) == (0, 0)
+    assert list(end.positions) == [0.65]
+    assert (end.time_from_start.sec, end.time_from_start.nanosec) == (6, 500_000_000)
+    assert list(start.velocities) == [0.0] and list(end.velocities) == [0.0]
+
+
+class _Publisher:
+    def __init__(self) -> None:
+        self.sent: list = []
+
+    def publish(self, message) -> None:
+        self.sent.append(message)
+
+
+def _cancelling(cell, via: str):
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._active = None
+    ros._sent = None
+    ros._via = via
+    ros._track = cell.track
+    ros._track_command = _Publisher()
+    ros._track_target = 0.65
+    ros._track_position = 0.2
+    return ros
+
+
+def test_a_cancel_through_the_twin_never_sends_the_plants_position(cell) -> None:
+    """SA2c-S-02 a: a stop with no position, which the boundary holds per side."""
+    ros = _cancelling(cell, "twin")
+    ros.cancel()
+    (stop,) = ros._track_command.sent
+    assert stop.joint_names == [cell.track.joint]
+    assert list(stop.points) == []
+
+
+def test_a_cancel_on_one_side_holds_that_side_where_it_stands(cell) -> None:
+    ros = _cancelling(cell, "plant")
+    ros.cancel()
+    (held,) = ros._track_command.sent
+    assert [list(p.positions) for p in held.points] == [[0.2], [0.2]]
+
+
+def test_a_side_that_never_arrives_fails_the_track_step() -> None:
+    """SA2c-S-02 c: the counterpart's carriage, asked of the twin, within the ceiling."""
+    now = {"t": 0.0}
+
+    def pause() -> None:
+        now["t"] += 1.0
+
+    with pytest.raises(StepFailed, match="counterpart: stands at"):
+        await_arrival(
+            lambda: (False, "counterpart: stands at 100.0 mm"),
+            pause,
+            deadline=5.0,
+            what="track to 650 mm",
+            clock=lambda: now["t"],
+        )
+    answers = iter([(False, "counterpart: moving"), (True, "")])
+    await_arrival(lambda: next(answers), lambda: None, deadline=5.0, what="t", clock=lambda: 0.0)
+
+
+def _answer(arrived: bool, detail: str, reason: int | None = None, routed: bool = True):
+    """Build a `TrackArrived` answer; AWAY when not arrived unless ``reason`` says otherwise."""
+    if reason is None:
+        reason = TrackArrived.Response.ARRIVED if arrived else TrackArrived.Response.AWAY
+    return TrackArrived.Response(arrived=arrived, reason=reason, routed=routed, detail=detail)
+
+
+def _tracking(cell, plant_m: float, answers: list):
+    """Build a twin-driven cell, its plant carriage at ``plant_m``, the twin saying ``answers``.
+
+    Each answer is a `TrackArrived.Response`, or `(arrived, detail)` for a
+    routed one.
+    """
+    answers = [_answer(*a) if isinstance(a, tuple) else a for a in answers]
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._via = "twin"
+    ros._speed = 1.0
+    ros._track = cell.track
+    ros._track_command = _Publisher()
+    ros._track_target = None
+    ros._track_position = plant_m
+    ros._track_arrived = object()
+    ros._until_true = lambda predicate, what: None
+    asked: list[float] = []
+
+    def ask_arrival(position_m: float, what: str):
+        asked.append(position_m)
+        return lambda: answers.pop(0)
+
+    ros._ask_arrival = ask_arrival
+    ros._pause_between_asks = lambda: None
+    return ros, asked
+
+
+def test_a_track_step_is_not_skipped_on_the_plants_carriage_alone(cell) -> None:
+    """SA-S-01 a: the plant at the target and the counterpart away fails the step."""
+    ros, asked = _tracking(cell, 0.65, [(False, "counterpart: stands at 0.0 mm")])
+    with pytest.raises(StepFailed, match="home it"):
+        ros.track(0.65, 0.1)
+    assert asked == [0.65]
+    assert ros._track_command.sent == []
+
+
+def test_a_track_step_every_side_has_reached_commands_nothing(cell) -> None:
+    ros, asked = _tracking(cell, 0.65, [(True, "every commanded side is at the target")])
+    ros.track(0.65, 0.1)
+    assert asked == [0.65] and ros._track_command.sent == []
+
+
+def test_a_track_step_with_the_plant_away_moves_and_waits_for_every_side(
+    cell, monkeypatch
+) -> None:
+    import cite_bringup.program.cell as cell_module
+
+    ros, asked = _tracking(
+        cell, 0.0, [(False, "plant: stands at 0.0 mm"), (False, "counterpart: moving"), (True, "")]
+    )
+    ros._track_command.get_subscription_count = lambda: 1
+    ros._track_command.topic_name = "t"
+
+    def carriage_arrives(*_args, **_kwargs) -> None:
+        ros._track_position = 0.65
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", carriage_arrives)
+    ros.track(0.65, 0.1)
+    (sent,) = ros._track_command.sent
+    assert [list(point.positions) for point in sent.points] == [[0.0], [0.65]]
+    assert asked == [0.65, 0.65]
+
+
+def test_a_track_step_in_a_mode_that_routes_no_track_command_fails(cell) -> None:
+    """R-03: in SIM the plant alone "arrived" is not the step done."""
+    ros, _ = _tracking(cell, 0.65, [_answer(True, "in SIM every side", routed=False)])
+    with pytest.raises(StepFailed, match="not in a mode that routes"):
+        ros.track(0.65, 0.1)
+    assert ros._track_command.sent == []
+
+
+def test_a_drop_to_sim_while_a_track_step_waits_fails_it(cell, monkeypatch) -> None:
+    """R-03: a mid-run drop to SIM is never taken for both sides arriving."""
+    import cite_bringup.program.cell as cell_module
+
+    ros, _ = _tracking(
+        cell,
+        0.0,
+        [(False, "plant: stands at 0.0 mm"), _answer(True, "in SIM every side", routed=False)],
+    )
+    ros._track_command.get_subscription_count = lambda: 1
+    ros._track_command.topic_name = "t"
+
+    def carriage_arrives(*_args, **_kwargs) -> None:
+        ros._track_position = 0.65
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", carriage_arrives)
+    with pytest.raises(StepFailed, match="not in a mode that routes"):
+        ros.track(0.65, 0.1)
 
 
 def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
@@ -296,3 +470,837 @@ def test_the_twin_name_is_the_sides_name_in_the_twin_scope() -> None:
     assert twin_name("/cite/cell_b/picker/move_to") == "/cite/twin/cell_b/picker/move_to"
     with pytest.raises(ValueError):
         twin_name("/elsewhere/move_to")
+
+
+# --- A physical side, and the speed of a first run (ADR-0070 items 6-7) -------
+
+
+class _Clock:
+    """A clock the test moves, so a ceiling is reached without waiting."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_validated_is_asked_again_while_the_physical_side_is_held() -> None:
+    answers = [
+        (False, f"{PHYSICAL_SIDE_NOT_READY}: entering VALIDATED would ... - held"),
+        (False, f"{PHYSICAL_SIDE_NOT_READY}: entering VALIDATED would ... - held"),
+        (True, "SIM -> VALIDATED"),
+    ]
+    said: list[str] = []
+    pauses: list[None] = []
+    ask_until_accepted(lambda: answers.pop(0), lambda: pauses.append(None), said.append)
+    assert answers == [] and len(pauses) == 2
+    assert len(said) == 1, "one line per new reason, not one per ask"
+
+
+def test_any_other_refusal_is_final_at_once() -> None:
+    asked: list[None] = []
+
+    def ask() -> tuple[bool, str]:
+        asked.append(None)
+        return False, "entering VALIDATED would place physical actuation ... opt-in"
+
+    with pytest.raises(StepFailed, match="refused VALIDATED"):
+        ask_until_accepted(ask, lambda: None, lambda text: None)
+    assert len(asked) == 1
+
+
+def test_a_side_never_ready_fails_at_the_ceiling() -> None:
+    clock = _Clock()
+
+    def pause() -> None:
+        clock.now += 1.0
+
+    with pytest.raises(StepFailed, match="not ready within"):
+        ask_until_accepted(
+            lambda: (False, f"{PHYSICAL_SIDE_NOT_READY}: held"),
+            pause,
+            lambda text: None,
+            ceiling_s=5.0,
+            clock=clock,
+        )
+    assert clock.now > 5.0
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, 1.5, float("nan"), float("inf")])
+def test_a_speed_scale_outside_zero_to_one_is_refused(value: float) -> None:
+    with pytest.raises(ValueError):
+        speed_scale(value)
+
+
+def test_full_speed_is_the_program_as_written() -> None:
+    assert scaled_motion(0.111, 0.35, 0.35, 1.0) == (0.111, 0.0)
+    assert scaled_motion(0.0, 0.35, 0.35, 1.0) == (0.0, 0.0)
+
+
+def test_a_tenth_scales_velocity_and_acceleration_and_never_widens_anything() -> None:
+    velocity, acceleration = scaled_motion(0.111, 0.35, 0.35, 0.1)
+    assert velocity == pytest.approx(0.0111)
+    assert acceleration == pytest.approx(0.035)
+    # A move stating no speed is slowed from the server's default, not from zero.
+    assert scaled_motion(0.0, 0.35, 0.35, 0.1) == pytest.approx((0.035, 0.035))
+
+
+def test_a_bad_speed_scale_is_refused_before_anything_starts(capsys) -> None:
+    with pytest.raises(SystemExit) as exited:
+        program_main(["--zone", ZONE, "--dry-run", "--speed-scale", "2"])
+    assert exited.value.code == 2
+    assert "--speed-scale" in capsys.readouterr().err
+
+
+def test_the_shipped_counterpart_is_the_physical_side() -> None:
+    plan = load(default_plan_path(ZONE))
+    assert physical_sides(plan) == ["counterpart"]
+    assert simulated_sides(plan) == ["plant"]
+
+
+def test_no_belt_is_commanded_on_a_physical_side(monkeypatch, capsys) -> None:
+    commanded: list[str] = []
+    monkeypatch.setenv("CITE_DOMAIN_BASE", "42")
+    monkeypatch.setattr(
+        belt_command,
+        "_set_on_one_side",
+        lambda topic, speed, domain, side: commanded.append(side) or True,
+    )
+    assert belt_command.main(["--zone", ZONE]) == 0
+    assert commanded == ["plant"]
+    assert "counterpart: physical" in capsys.readouterr().out
+    commanded.clear()
+    assert belt_command.main(["--zone", ZONE, "--side", "counterpart", "--stop"]) == 0
+    assert commanded == []
+
+
+def test_a_physical_side_never_runs_at_a_defaulted_speed_scale() -> None:
+    """S-04: with a physical side the operator names the scale; none is assumed."""
+    plan = load(default_plan_path(ZONE))
+    assert physical_sides(plan), f"{ZONE} ships a physical counterpart"
+    with pytest.raises(ValueError, match="must be given explicitly"):
+        required_speed_scale(plan, "")
+    assert required_speed_scale(plan, "0.1") == pytest.approx(0.1)
+
+
+def test_a_scale_the_physical_track_cannot_carry_out_is_refused_before_bring_up() -> None:
+    """SA-S-07: the adapter's own rule, asked of the program's slowest slide."""
+    from cite_bringup.program.sides import minimum_speed_scale
+
+    plan = load(default_plan_path(ZONE))
+    minimum = minimum_speed_scale(plan)
+    assert minimum is not None and 0.0 < minimum < 1.0
+    with pytest.raises(ValueError, match="slower than the physical track carries out"):
+        required_speed_scale(plan, f"{minimum / 2:g}")
+    assert required_speed_scale(plan, f"{minimum:g}") == pytest.approx(minimum)
+    # The plant alone is no physical track.
+    assert required_speed_scale(plan, f"{minimum / 2:g}", via="plant") == pytest.approx(
+        minimum / 2
+    )
+
+
+@pytest.mark.parametrize("typed", ["0", "1.5", "nan", "inf", "abc", "-0.2"])
+def test_the_speed_scale_range_is_the_programs_own_before_bring_up(typed: str) -> None:
+    """R-06/T-02: `./scripts/program` asks this before bring-up, by `steps.speed_scale`."""
+    with pytest.raises(ValueError):
+        required_speed_scale(load(default_plan_path(ZONE)), typed)
+
+
+def test_the_script_checks_the_speed_scale_before_it_brings_anything_up() -> None:
+    """The check and the prompt, read from `scripts/program` itself."""
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
+    check = script.index("cite_bringup.program.sides --zone \"$ZONE\" --speed-scale")
+    assert check < script.index("start_in_own_group")
+    # The prompt is the program's own (SA-S-02, SA-S-05): the script hands it
+    # the terminal and asks nothing itself.
+    assert "--speed-scale \"$SPEED_SCALE\" <&0 &" in script
+    assert "read -r" not in script
+
+
+def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> None:
+    """Operator safety: after a run on a pair with a physical side, the twin is put in SIM.
+
+    SIM forwards nothing to the counterpart, so the person placing the next part
+    is not beside an arm the twin can still command; the next run asks for
+    VALIDATED again through the opt-in and the readiness check.
+    """
+    from cite_interfaces.msg import TwinMode
+
+    sent = []
+
+    class Client:
+        def wait_for_service(self, timeout_sec):
+            return True
+
+        def call_async(self, request):
+            sent.append(request)
+            return request
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    class Accepted:
+        accepted = True
+        current_mode = TwinMode.MODE_SIM
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    ros._until = lambda future, what, ceiling_s=0.0: Accepted()
+    assert ros.leave_validated()
+    (request,) = sent
+    assert request.mode == TwinMode.MODE_SIM
+    assert "nothing crosses to the physical side" in capsys.readouterr().out
+    main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
+    text = main_source.read_text()
+    assert text.index("status = run(") < text.rindex("ros.leave_validated()")
+
+
+def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
+    """SA-S-02: the module asks `required_speed_scale` itself, not only the script."""
+    with pytest.raises(SystemExit) as exited:
+        program_main(["--zone", ZONE, "--dry-run"])
+    assert exited.value.code == 2
+    assert "must be given explicitly" in capsys.readouterr().err
+    # The plant alone is no physical side: the program as written.
+    assert program_main(["--zone", ZONE, "--via", "plant", "--dry-run"]) == 0
+
+
+def test_the_operator_is_asked_only_once_the_twin_is_read_in_sim() -> None:
+    """SA-S-05: the prompt's "nothing crosses" is read, never assumed."""
+    from cite_bringup.program.operator import confirm_operator
+    from cite_interfaces.msg import TwinMode
+
+    said: list[str] = []
+    asked: list[str] = []
+    for mode in (None, TwinMode.MODE_VALIDATED):
+        with pytest.raises(StepFailed):
+            confirm_operator(
+                mode, ["counterpart"], 0.1, said.append, asked.append, lambda: None
+            )
+    assert said == [] and asked == []
+    confirm_operator(
+        TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, asked.append, lambda: None
+    )
+    assert any("speed scale 0.1" in line for line in said) and len(asked) == 1
+
+    def no_answer(_prompt: str) -> str:
+        raise EOFError
+
+    with pytest.raises(StepFailed, match="no operator answer"):
+        confirm_operator(
+            TwinMode.MODE_SIM, ["counterpart"], 0.1, said.append, no_answer, lambda: None
+        )
+
+
+class _PairCell:
+    """`RosCell` on a pair with a physical side, as far as `main` uses it."""
+
+    mode = None
+    left = True
+    carriage: str | None = None
+    #: What each `away_from_start` measures, in order: None is "at the start".
+    away: list[str | None] = []
+    calls: list[str] = []
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        _PairCell.calls = []
+
+    def twin_mode(self):
+        return _PairCell.mode
+
+    def refuse_if_holding(self) -> None:
+        _PairCell.calls.append("refuse_if_holding")
+
+    def carriage_refusal(self, homing: bool = False) -> str | None:
+        return None if homing and _PairCell.carriage == "apart" else _PairCell.carriage
+
+    def away_from_start(self, start) -> str | None:
+        _PairCell.calls.append(f"measure {start.pose}")
+        return _PairCell.away.pop(0)
+
+    def enter_validated(self, homing: bool = False) -> None:
+        _PairCell.calls.append("enter_validated homing" if homing else "enter_validated")
+
+    def cancel(self) -> None:
+        _PairCell.calls.append("cancel")
+
+    def leave_validated(self) -> bool:
+        _PairCell.calls.append("leave_validated")
+        return _PairCell.left
+
+
+def _main_on_a_pair(
+    monkeypatch,
+    mode,
+    left: bool,
+    answers=("",),
+    carriage=None,
+    initialized=True,
+    argv=(),
+    away=("arm away", None),
+    homed=True,
+) -> int:
+    import builtins
+
+    import cite_bringup.program.__main__ as program_module
+    import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
+    import rclpy
+
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = mode, left, carriage
+    _PairCell.away = list(away)
+    answers = list(answers)
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
+    monkeypatch.setattr(
+        program_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
+    )
+
+    def initialize(_plan, sides, _say):
+        _PairCell.calls.append(f"initialize {','.join(sides)}")
+        if not initialized:
+            raise StepFailed("counterpart: picker not initialized: the vendor refused")
+
+    monkeypatch.setattr(program_module, "initialize", initialize)
+
+    def run_home(steps, _cell, _say) -> None:
+        _PairCell.calls.append("home " + " ".join(step.kind for step in steps))
+        if not homed:
+            raise StepFailed("move to zero: result code 3: refused")
+
+    monkeypatch.setattr(home_module, "run_home", run_home)
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": answers.pop(0))
+    return program_main(["--zone", ZONE, "--speed-scale", "0.1", *argv])
+
+
+def test_a_run_whose_return_to_sim_is_unconfirmed_fails(monkeypatch) -> None:
+    """SA-S-05: a failed leave_validated is the run's failure, so no one is asked in next."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=False) != 0
+    assert _PairCell.calls[-1] == "leave_validated"
+
+
+def test_a_twin_not_in_sim_is_never_entered_and_no_one_is_asked(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_VALIDATED, left=True, answers=()) == 1
+    assert _PairCell.calls == []
+
+
+# S-08: a carriage that disagrees is refused BEFORE the operator is asked in.
+
+
+def test_a_carriage_apart_refuses_before_the_operator_is_asked() -> None:
+    from cite_bringup.program.operator import confirm_operator
+    from cite_interfaces.msg import TwinMode
+
+    said: list[str] = []
+    asked: list[str] = []
+    with pytest.raises(StepFailed, match="from outside the cell"):
+        confirm_operator(
+            TwinMode.MODE_SIM,
+            ["counterpart"],
+            0.1,
+            said.append,
+            asked.append,
+            lambda: "bring the physical carriage to 650 mm (home it) - from outside the cell",
+        )
+    assert said == [] and asked == []
+
+
+def test_the_carriages_are_asked_of_the_twin_at_the_plants_own_position(cell) -> None:
+    ros, asked = _tracking(cell, 0.65, [(False, "counterpart: stands at 0.0 mm")])
+    refusal = ros.carriage_refusal()
+    assert asked == [0.65]
+    assert refusal is not None
+    assert "Bring the physical carriage to 650 mm (home it) - from outside the cell" in refusal
+    assert "counterpart: stands at 0.0 mm" in refusal
+    ros, _ = _tracking(cell, 0.65, [(True, "every commanded side is at the target")])
+    assert ros.carriage_refusal() is None
+
+
+def test_an_unheard_physical_carriage_is_waited_for_before_the_operator(cell) -> None:
+    """R-01: an unheard carriage is never taken for one in agreement."""
+    unheard = TrackArrived.Response.UNHEARD
+    ros, asked = _tracking(
+        cell,
+        0.65,
+        [
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(True, "in SIM every side", routed=False),
+        ],
+    )
+    assert ros.carriage_refusal() is None
+    assert asked == [0.65]
+    ros, _ = _tracking(
+        cell,
+        0.65,
+        [
+            _answer(False, "counterpart: no track position heard", unheard, routed=False),
+            _answer(False, "counterpart: stands at 0.0 mm", routed=False),
+        ],
+    )
+    assert "home it" in ros.carriage_refusal()
+
+
+def test_a_physical_carriage_never_heard_refuses_at_the_ceiling_and_says_so() -> None:
+    """R-01, R-04: never heard in time refuses, and is not said as "home it"."""
+    now = {"t": 0.0}
+
+    def pause() -> None:
+        now["t"] += 10.0
+
+    never = _answer(
+        False, "counterpart: no track position heard", TrackArrived.Response.UNHEARD
+    )
+    answer = await_heard(lambda: never, pause, deadline=120.0, clock=lambda: now["t"])
+    assert answer is never and now["t"] > 120.0
+    refusal = carriage_verdict(answer, 0.65, 120.0)
+    assert refusal is not None
+    assert "did not hear the physical carriage" in refusal
+    assert "home it" not in refusal
+    assert "No one is asked into the cell" in refusal
+    assert carriage_verdict(_answer(True, ""), 0.65, 120.0) is None
+    assert "home it" in carriage_verdict(_answer(False, "counterpart: away"), 0.65, 120.0)
+
+
+def test_a_run_whose_carriages_disagree_never_asks_and_never_enters_validated(
+    monkeypatch,
+) -> None:
+    """After the first cycle there is no homing move, so a carriage apart refuses."""
+    from cite_interfaces.msg import TwinMode
+
+    status = _main_on_a_pair(
+        monkeypatch,
+        TwinMode.MODE_SIM,
+        left=True,
+        answers=(),
+        carriage="apart",
+        argv=("--first-cycle", "2"),
+    )
+    assert status == 1
+    assert _PairCell.calls == []
+
+
+# T-01: `./scripts/program` refuses a physical side without the opt-in, before bring-up.
+
+
+@pytest.mark.parametrize("value", [None, "", "0", "true", " 1", "1 "])
+def test_a_physical_side_without_the_exact_opt_in_is_refused_before_bring_up(
+    monkeypatch, capsys, value
+) -> None:
+    from cite_bringup.program import sides
+
+    if value is None:
+        monkeypatch.delenv("CITE_ALLOW_HARDWARE", raising=False)
+    else:
+        monkeypatch.setenv("CITE_ALLOW_HARDWARE", value)
+    assert sides.main(["--zone", ZONE, "--hardware-opt-in"]) == 2
+    said = capsys.readouterr().err
+    assert "counterpart is physical" in said and "CITE_ALLOW_HARDWARE=1" in said
+
+
+def test_a_physical_side_with_the_exact_opt_in_passes(monkeypatch, capsys) -> None:
+    """R-05: the one value that permits it, checked in-process; nothing is brought up."""
+    from cite_bringup.program import sides
+
+    monkeypatch.setenv("CITE_ALLOW_HARDWARE", "1")
+    assert sides.main(["--zone", ZONE, "--hardware-opt-in"]) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_the_script_checks_the_opt_in_before_it_brings_anything_up() -> None:
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
+    check = script.index('cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in')
+    assert check < script.index("start_in_own_group")
+
+
+# --------------------------------------------------------------------------- #
+# Initialize and home before the first cycle (ADR-0070)
+# --------------------------------------------------------------------------- #
+
+
+def test_home_is_the_programs_own_start(cell) -> None:
+    from cite_bringup.program.home import home_steps
+
+    steps = home_steps(cell)
+    first_move = next(s for s in cell.program.steps if s.kind == "move")
+    first_track = next(s for s in cell.program.steps if s.kind == "track")
+    assert [step.kind for step in steps] == ["move", "track"]
+    assert (steps[0].pose, steps[0].velocity_scaling) == (
+        first_move.pose, first_move.velocity_scaling
+    )
+    assert steps[0].pose == "zero", "the real program starts with `reset`"
+    assert (steps[1].position_m, steps[1].speed_mps) == (
+        first_track.position_m, first_track.speed_mps
+    )
+    assert steps[1].position_m == 0.0
+
+
+def test_a_failed_home_step_cancels_and_fails(cell) -> None:
+    from cite_bringup.program.home import home_steps, run_home
+
+    fake = FakeCell(fail_on="zero")
+    with pytest.raises(StepFailed):
+        run_home(home_steps(cell), fake, _quiet)
+    assert fake.calls[-1] == ("cancel",)
+    assert not [call for call in fake.calls if call[0] == "track"]
+
+
+def test_a_first_cycle_away_from_the_start_homes_measures_again_then_runs(monkeypatch) -> None:
+    """Initialize, then not at the start: home under the allowance, measure, re-enter plainly."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "measure zero",
+        "enter_validated homing",
+        "home move track",
+        "measure zero",
+        # The program's own cycle never runs under the homing allowance.
+        "enter_validated",
+        "run",
+        "leave_validated",
+    ]
+
+
+def test_a_first_cycle_already_at_the_start_initializes_and_homes_nothing(
+    monkeypatch,
+) -> None:
+    """R-01: the physical arm is initialized every time, even at the start; no homing move."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, away=(None,)) == 0
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "measure zero",
+        "enter_validated",
+        "run",
+        "leave_validated",
+    ]
+
+
+def test_a_failed_home_stops_without_a_retry_and_returns_to_sim(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, away=("arm away",), homed=False
+    ) == 1
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "measure zero",
+        "enter_validated homing",
+        "home move track",
+        "leave_validated",
+    ]
+
+
+def test_a_home_that_does_not_reach_the_start_stops_without_a_retry(monkeypatch, capsys) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch,
+        TwinMode.MODE_SIM,
+        left=True,
+        away=("arm away", "counterpart: picker_joint2 stands at 0.1000"),
+    ) == 1
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "measure zero",
+        "enter_validated homing",
+        "home move track",
+        "measure zero",
+        "leave_validated",
+    ]
+    said = capsys.readouterr().out
+    assert "still not at the program's start" in said
+    assert "counterpart: picker_joint2 stands at 0.1000" in said
+
+
+def test_before_a_home_a_carriage_apart_does_not_refuse_the_operator(monkeypatch) -> None:
+    """The carriage-agreement refusal before the prompt is the homing move's to clear."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, carriage="apart") == 0
+    assert "home move track" in _PairCell.calls
+    # A carriage never heard still refuses, homing or not.
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, answers=(), carriage="unheard"
+    ) == 1
+    assert _PairCell.calls == []
+
+
+def test_a_later_cycle_neither_initializes_nor_homes(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, argv=("--first-cycle", "2")
+    ) == 0
+    assert _PairCell.calls == ["refuse_if_holding", "enter_validated", "run", "leave_validated"]
+
+
+def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, initialized=False) == 1
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "leave_validated",
+    ]
+
+
+def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> None:
+    import cite_bringup.program.home as home
+
+    plan = load(default_plan_path(ZONE))
+    (manager,) = plan.controller_managers
+    physical = manager.physical_on("counterpart")
+    calls = []
+
+    class Answer:
+        success, detail = True, "track and gripper enabled"
+
+    monkeypatch.setattr(
+        home, "_call_on_domain", lambda service, domain, ceiling, stop: calls.append(
+            (service, domain, ceiling, stop)
+        ) or Answer()
+    )
+    said: list[str] = []
+    environ = {"CITE_DOMAIN_BASE": "40"}
+    home.initialize(plan, ["counterpart"], said.append, environ=environ)
+    ((service, domain, ceiling, stop),) = calls
+    # S-01: the stop sent if the call is interrupted is the one the generated
+    # parameters name for that side's initializer, never a hand-written name.
+    assert stop == (
+        home.initializer_parameter(physical, "linear_motor_stop_service"),
+        2.0 * home.initializer_parameter(physical, "call_deadline_s"),
+    )
+    assert stop[0].endswith("/set_linear_motor_stop")
+    assert service == physical.initialize_service == "/cite/cell_b/picker/initialize"
+    from cite_bringup.plan import domain_base, resolve_domain_id
+
+    assert domain == resolve_domain_id(plan, "counterpart", domain_base(environ))
+    assert domain != resolve_domain_id(plan, "plant", domain_base(environ))
+    assert ceiling == 2.0 * home.initializer_deadline_s(physical)
+
+    Answer.success, Answer.detail = False, "the vendor refused set_linear_motor_enable(1)"
+    with pytest.raises(StepFailed, match="refused set_linear_motor_enable"):
+        home.initialize(plan, ["counterpart"], said.append, environ=environ)
+
+
+def test_a_simulated_side_has_nothing_to_initialize(monkeypatch) -> None:
+    import cite_bringup.program.home as home
+
+    monkeypatch.setattr(home, "_call_on_domain", lambda *_args: pytest.fail("called"))
+    said: list[str] = []
+    home.initialize(
+        load(default_plan_path(ZONE)), ["plant"], said.append, environ={"CITE_DOMAIN_BASE": "40"}
+    )
+    assert any("nothing to initialize" in line for line in said)
+
+
+# --------------------------------------------------------------------------- #
+# The start is measured before any homing move, and after it (ADR-0070)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_start_is_the_programs_first_pose_within_the_arms_goal_tolerance(cell) -> None:
+    from cite_bringup.program.home import home_steps, start_pose
+
+    start = start_pose(cell, home_steps(cell))
+    assert start.pose == "zero"
+    assert start.joints == tuple(f"picker_joint{n}" for n in range(1, 6))
+    assert start.positions == cell.arm.moveit.poses_rad["zero"]
+    assert start.tolerance_rad == cell.arm.arm["arm_goal_tolerance_rad"]
+    assert start.track_m == 0.0
+    assert start.track_tolerance_m == cell.track.goal_tolerance_m
+
+
+def test_one_side_read_directly_is_at_the_start_only_within_both_tolerances(cell) -> None:
+    from cite_bringup.program.home import home_steps, start_pose
+
+    start = start_pose(cell, home_steps(cell))
+    at = dict(zip(start.joints, start.positions))
+    assert start.away_on_one_side(at, 0.0) is None
+    nudged = {**at, "picker_joint3": start.positions[2] + 2 * start.tolerance_rad}
+    assert "picker_joint3 stands at" in start.away_on_one_side(nudged, 0.0)
+    assert "the track stands at 300.0 mm" in start.away_on_one_side(at, 0.30)
+    assert "the track is not heard" in start.away_on_one_side(at, None)
+
+
+class _StartCell:
+    """A cell for `bring_to_start`: measures what it is told, records the rest."""
+
+    def __init__(self, away, fail_on=None) -> None:
+        self.away = list(away)
+        self.fake = FakeCell(fail_on=fail_on)
+        self.calls = self.fake.calls
+
+    def away_from_start(self, start):
+        self.calls.append(("measure",))
+        return self.away.pop(0)
+
+    def enter_validated(self, homing: bool = False) -> None:
+        self.calls.append(("enter_validated", homing))
+
+    def __getattr__(self, name):
+        return getattr(self.fake, name)
+
+
+def test_bring_to_start_initializes_first_and_moves_nothing_when_every_side_is_there(
+    cell,
+) -> None:
+    """R-01: initialized every time, before the start is measured."""
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell([None])
+    assert not bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
+    )
+    assert ros.calls == [("initialize",), ("measure",), ("enter_validated", False)]
+
+
+def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(["arm away", None])
+    assert bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
+    )
+    assert [call[0] for call in ros.calls] == [
+        "initialize", "measure", "enter_validated", "move", "track", "measure", "enter_validated"
+    ]
+    assert ros.calls[2] == ("enter_validated", True)
+    assert ros.calls[-1] == ("enter_validated", False)
+
+
+def test_bring_to_start_via_the_plant_alone_asks_no_mode(cell) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(["arm away", None])
+    assert bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: None, _quiet, via_twin=False
+    )
+    assert [call[0] for call in ros.calls] == ["measure", "move", "track", "measure"]
+
+
+@pytest.mark.parametrize(
+    ("away", "fail_on", "initialize_fails", "calls"),
+    [
+        # The second measurement says a side is still away: stop, no retry.
+        (["arm away", "still away"], None, False,
+         ["measure", "enter_validated", "move", "track", "measure"]),
+        # A home step fails: cancelled, never retried, never measured again.
+        (["arm away"], "zero", False, ["measure", "enter_validated", "move", "cancel"]),
+        # The physical arm cannot be initialized: nothing is measured, nothing moves.
+        (["arm away"], None, True, []),
+    ],
+)
+def test_bring_to_start_stops_on_any_failure_and_retries_nothing(
+    cell, away, fail_on, initialize_fails, calls
+) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(away, fail_on=fail_on)
+
+    def initialize() -> None:
+        if initialize_fails:
+            raise StepFailed("counterpart: picker not initialized: the vendor refused")
+
+    with pytest.raises(StepFailed):
+        bring_to_start(steps, start_pose(cell, steps), ros, initialize, _quiet)
+    assert [call[0] for call in ros.calls] == calls
+
+
+def test_before_a_home_only_a_carriage_heard_apart_is_let_through() -> None:
+    """Homing clears AWAY; an unheard carriage, or one the twin cannot judge, still refuses."""
+    away = _answer(False, "counterpart: stands at 300.0 mm")
+    assert carriage_verdict(away, 0.0, 120.0) is not None
+    assert carriage_verdict(away, 0.0, 120.0, homing=True) is None
+    unheard = _answer(False, "no track position heard", TrackArrived.Response.UNHEARD)
+    assert "did not hear" in carriage_verdict(unheard, 0.0, 120.0, homing=True)
+    other = _answer(False, "not a track", TrackArrived.Response.NOT_A_TRACK)
+    assert carriage_verdict(other, 0.0, 120.0, homing=True) is not None
+
+
+def test_the_twins_measurement_is_said_as_where_a_side_stands() -> None:
+    from cite_bringup.program.cell import away_verdict
+    from cite_interfaces.srv import JointsAt
+
+    at = JointsAt.Response(at=True, reason=JointsAt.Response.AT, detail="")
+    assert away_verdict(at, "the arm", 120.0) is None
+    away = JointsAt.Response(
+        reason=JointsAt.Response.AWAY, detail="counterpart: picker_joint1 stands at 0.2000"
+    )
+    assert "picker_joint1 stands at 0.2000" in away_verdict(away, "the arm", 120.0)
+    unheard = JointsAt.Response(reason=JointsAt.Response.UNHEARD, detail="counterpart: old")
+    assert "not heard fresh within 120 s" in away_verdict(unheard, "the arm", 120.0)
+    assert away_verdict(_answer(True, "every side"), "the track", 120.0) is None
+    assert "stands at" in away_verdict(_answer(False, "plant: stands at 5.0 mm"), "the track", 1)
+
+
+def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
+    """`./scripts/home` runs the same measured sequence, minus the program."""
+    import builtins
+
+    import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
+    from cite_interfaces.msg import TwinMode
+    import rclpy
+
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(
+        "cite_bringup.program.steps.install_interrupt_handlers", lambda: None
+    )
+    monkeypatch.setattr(
+        home_module, "initialize", lambda _plan, sides, _say: _PairCell.calls.append(
+            f"initialize {','.join(sides)}"
+        )
+    )
+    monkeypatch.setattr(
+        home_module, "run_home", lambda steps, _cell, _say: _PairCell.calls.append("home")
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": "")
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = TwinMode.MODE_SIM, True, "apart"
+
+    _PairCell.away = [None]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
+    # R-01: initialized every time, even when already at the start.
+    assert _PairCell.calls == [
+        "initialize counterpart", "measure zero", "enter_validated", "leave_validated"
+    ]
+
+    _PairCell.away = ["arm away", None]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
+    assert _PairCell.calls == [
+        "initialize counterpart",
+        "measure zero",
+        "enter_validated homing",
+        "home",
+        "measure zero",
+        "enter_validated",
+        "leave_validated",
+    ]
+
+    _PairCell.away = ["arm away", "still away"]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
+    assert _PairCell.calls[-2:] == ["measure zero", "leave_validated"]
