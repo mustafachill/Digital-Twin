@@ -709,9 +709,17 @@ class _PairCell:
     #: What each `away_from_start` measures, in order: None is "at the start".
     away: list[str | None] = []
     calls: list[str] = []
+    #: What `console_refusal` answers: None where no operator console serves the pair.
+    console: str | None = None
+    #: The topic each `console_refusal` was asked about.
+    console_asked: list[str] = []
 
     def __init__(self, *_args, **_kwargs) -> None:
         _PairCell.calls = []
+
+    def console_refusal(self, topic: str) -> str | None:
+        _PairCell.console_asked.append(topic)
+        return _PairCell.console
 
     def twin_mode(self):
         return _PairCell.mode
@@ -1467,3 +1475,77 @@ def test_a_stop_reaches_a_belt_whose_subscriber_is_awaited(monkeypatch) -> None:
             interrupted=lambda: True,
         )
     assert time.monotonic() - started < belt_command.MATCH_CEILING_S
+
+
+# --- N-01 (ADR-0071): one operator surface per pair ----------------------------
+
+
+def test_a_terminal_run_is_refused_where_a_console_serves_the_pair(monkeypatch, capsys) -> None:
+    """Nothing is read, asked, entered or left: the console may hold the cell."""
+    from cite_interfaces.msg import TwinMode
+
+    plan = load(default_plan_path(ZONE))
+    _PairCell.console_asked = []
+    monkeypatch.setattr(_PairCell, "console", "an operator console serves this pair")
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, answers=()) == 1
+    assert _PairCell.calls == []
+    assert _PairCell.console_asked == [plan.console.state]
+    assert "REFUSED: an operator console serves this pair" in capsys.readouterr().out
+
+
+def test_without_a_console_the_terminal_run_goes_on(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    _PairCell.console_asked = []
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert len(_PairCell.console_asked) == 1
+
+
+def test_scripts_home_is_refused_where_a_console_serves_the_pair(monkeypatch, capsys) -> None:
+    """N-01 (b): `./scripts/home` runs `program.home`, which asks the same question."""
+    import builtins
+
+    import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
+    from cite_interfaces.msg import TwinMode
+    import rclpy
+
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr("cite_bringup.program.steps.install_interrupt_handlers", lambda: None)
+    monkeypatch.setattr(
+        home_module, "initialize", lambda *_args: pytest.fail("initialized under a console")
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": pytest.fail("asked"))
+    monkeypatch.setattr(_PairCell, "console", "an operator console serves this pair")
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = TwinMode.MODE_SIM, True, None
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
+    # Not even SIM is asked for: the console may be running a cycle in VALIDATED.
+    assert _PairCell.calls == []
+    assert "REFUSED:" in capsys.readouterr().out
+
+
+def test_the_scripts_home_command_reaches_the_same_refusal() -> None:
+    """`./scripts/home` execs `program.home`, which passes the console's topic."""
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "home").read_text()
+    assert "exec python3 -u -m cite_bringup.program.home" in script
+
+
+def test_a_console_refusal_that_cannot_be_read_refuses_too(capsys) -> None:
+    """An unanswerable question is a refusal, never a pass (N-01)."""
+    from cite_bringup.program import cycle
+
+    class Unheard:
+        def console_refusal(self, _topic: str):
+            raise StepFailed("no TwinMode on /cite/twin/mode after 60 s")
+
+        def __getattr__(self, name: str):
+            raise AssertionError(f"{name} was called on a refused run")
+
+    ended = cycle.run_program(
+        Unheard(), [], physical=["counterpart"], scale=0.1, cycles=1,
+        say=print, await_operator=lambda _p: "", console="/cite/cell_b/console/state",
+    )
+    assert ended.status == 1 and ended.sim_confirmed is None
+    assert "REFUSED: could not tell whether an operator console" in capsys.readouterr().out

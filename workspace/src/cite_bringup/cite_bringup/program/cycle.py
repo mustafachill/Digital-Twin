@@ -106,13 +106,21 @@ def home(
     await_operator: Callable[[str], str],
     initialize_physical: Callable[[], None],
     prompt: str,
+    console: str | None = None,
 ) -> Ended:
     """Bring both arms to the program's start; on a physical side, SIM again after.
 
     The gate (`_ask_the_operator`, with ``homing``: a carriage apart is what
     the home brings back), then `home.bring_to_start`. Says `done: ...`,
     `FAILED: ...` or `interrupted`, as `./scripts/home` always has.
+
+    ``console`` is the zone's console state topic, given by a TERMINAL caller:
+    where a console serves the pair the home is refused before anything -
+    SIM is not asked for either, since the console may hold VALIDATED (N-01).
     """
+    refused = _refused_for_a_console(cell, console, say)
+    if refused is not None:
+        return refused
     status = 1
     failure: str | None = None
     try:
@@ -153,6 +161,7 @@ def run_program(
     first_cycle: int = 1,
     on_step: Callable[[int, int, int, Step], None] | None = None,
     banner: str | None = None,
+    console: str | None = None,
 ) -> Ended:
     """Gate, custody, VALIDATED (homing first if asked), the program, then SIM again.
 
@@ -162,8 +171,12 @@ def run_program(
     program runs. On a physical side SIM is asked for once VALIDATED may have
     been asked - after the run, after a failure, after an interrupt - and an
     unconfirmed SIM fails the sequence, so no caller asks a person in next
-    (SA-S-05).
+    (SA-S-05). ``console``, from a terminal caller, refuses the run before
+    anything where an operator console serves the pair (N-01, as `home`).
     """
+    refused = _refused_for_a_console(cell, console, say)
+    if refused is not None:
+        return refused
     entering = False
     outcome: tuple[int, str | None] | None = None
     try:
@@ -209,6 +222,26 @@ def run_program(
     if sim is False:
         status = status or 1
     return Ended(status, failure_text, sim)
+
+
+def _refused_for_a_console(
+    cell, console: str | None, say: Callable[[str], None]
+) -> Ended | None:
+    """Refuse a terminal client where an operator console serves the pair (N-01), or None.
+
+    One operator surface per pair: the console's own sequence goes through
+    this module too, and never passes ``console``.
+    """
+    if console is None:
+        return None
+    try:
+        refusal = cell.console_refusal(console)
+    except StepFailed as failure:
+        refusal = f"could not tell whether an operator console serves this pair: {failure}"
+    if refusal is None:
+        return None
+    say(f"REFUSED: {refusal}")
+    return Ended(1, refusal, None)
 
 
 def _ask_the_operator(

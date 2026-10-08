@@ -41,7 +41,7 @@ from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
 from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, StepFailed
 from cite_bringup.readiness import waits_for_a_physical_side, waits_for_goals_to_end
 from cite_interfaces.action import Grasp, MoveTo
-from cite_interfaces.msg import ResultCode, RobotState, TwinMode
+from cite_interfaces.msg import ConsoleState, ResultCode, RobotState, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 import rclpy
@@ -270,6 +270,18 @@ def ask_until_accepted(
         pause()
 
 
+def console_holds(topic: str, state: ConsoleState | None) -> str:
+    """Say that an operator console serves the pair, and so a terminal client may not."""
+    from cite_bringup.program.console_machine import STATE_NAMES
+
+    doing = "" if state is None else f" (it is {STATE_NAMES.get(state.state, state.state)})"
+    return (
+        f"an operator console serves this pair on {topic}{doing}: one operator surface per "
+        "pair, so this terminal neither asks anyone into the cell nor moves it. Use the "
+        "panel, or stop the console first (ADR-0071)"
+    )
+
+
 def default_scaling(arm: ControllerManager) -> tuple[float, float]:
     """Return the planner's default (velocity, acceleration) scaling, from the generated limits.
 
@@ -460,6 +472,38 @@ class RosCell:
         finally:
             self.node.destroy_subscription(subscription)
         return received[-1].mode
+
+    def console_refusal(self, topic: str) -> str | None:
+        """Say why a terminal client may not drive this pair: a console serves it (N-01).
+
+        ONE operator surface per pair (ADR-0071): where the zone's operator
+        console runs, it alone asks a person into the cell, and a terminal
+        client that also read SIM and asked would be a second invitation -
+        whatever the console is doing, its AWAITING_OPERATOR included. The
+        console is known by its latched `ConsoleState` on ``topic``: a message
+        heard there, or a publisher of it on the graph.
+
+        Read once the twin's own latched mode has been heard on this domain:
+        that message is the event that discovery has reached the pair's
+        participants, so an absence read before it is never taken as no
+        console. DDS cannot prove an absence; this is the graph as known after
+        that event. Raises `StepFailed` when the twin is not heard at all.
+        """
+        heard: list[ConsoleState] = []
+        modes: list[TwinMode] = []
+        subscriptions = [
+            self.node.create_subscription(ConsoleState, topic, heard.append, LATCHED),
+            self.node.create_subscription(TwinMode, TwinMode.TOPIC, modes.append, LATCHED),
+        ]
+        try:
+            self._until_true(lambda: bool(heard or modes), f"TwinMode on {TwinMode.TOPIC}")
+            present = bool(heard) or self.node.count_publishers(topic) > 0
+        finally:
+            for subscription in subscriptions:
+                self.node.destroy_subscription(subscription)
+        if not present:
+            return None
+        return console_holds(topic, heard[-1] if heard else None)
 
     def carriage_refusal(self, homing: bool = False) -> str | None:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).

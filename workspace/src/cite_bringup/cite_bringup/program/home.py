@@ -463,6 +463,9 @@ def main(argv: list[str] | None = None) -> int:
             await_operator=input,
             initialize_physical=lambda: initialize(plan, physical, say_now),
             prompt=HOME_PROMPT,
+            # One operator surface per pair (N-01): `./scripts/home` is refused
+            # where an operator console serves the pair.
+            console=plan.console.state if plan.console is not None else None,
         )
         return ended.status
     finally:

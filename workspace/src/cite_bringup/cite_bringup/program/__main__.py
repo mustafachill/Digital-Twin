@@ -138,6 +138,13 @@ def main(argv: list[str] | None = None) -> int:
                 else None
             ),
             first_cycle=args.first_cycle,
+            # One operator surface per pair (N-01): through the twin, a pair
+            # an operator console serves is refused before anything.
+            console=(
+                plan.console.state
+                if args.via == "twin" and plan.console is not None
+                else None
+            ),
             banner=(
                 f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
                 f"via {args.via} at {scale:g} of its speed"
