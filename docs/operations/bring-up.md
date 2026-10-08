@@ -342,17 +342,21 @@ parameters.
    the physical carriage is never left unchecked. A track step also fails if the twin is in a
    mode that forwards no track command (for example SIM mid-run), rather than counting as
    arrived.
-6. Before the first cycle, and in `./scripts/home`, the start is measured first: every arm
-   joint within the arm's goal tolerance of the program's `reset` pose and every carriage
-   within the track's goal tolerance of 0 m, on every side; a physical side counts only with
-   fresh positions. If every side is there, nothing moves. Otherwise the physical arm is
-   initialized, both sides are homed through the twin in VALIDATED with `SetMode.homing`, and
-   the start is measured again. Any failure stops with where each side stands; nothing is
-   retried. Initializing is what you would do in UFACTORY Studio (`InitializeAsset`, served by
-   `cite_hardware`'s initializer from values generated out of L0): the track motor and the
-   gripper are enabled, and the track is homed only if it has not found its zero; the homing
-   moves the carriage. On a pair that is already up, `./scripts/home --speed-scale 0.1` does
-   the same without restarting anything.
+6. Before the first cycle, and in `./scripts/home`, the physical arm is initialized first,
+   every time. Initializing is what you would do in UFACTORY Studio (`InitializeAsset`, served
+   by `cite_hardware`'s initializer from values generated out of L0): the track motor and the
+   gripper are enabled, the track is homed only if it has not found its zero, and the carriage
+   is brought to the program's first track target at L0's `initialize_speed_mps` only if it is
+   not there (a track on its zero has found its zero; it need not stand at it). The homing and
+   that move move the carriage, behind the deadman's gate. Ctrl-C or SIGTERM during the
+   initialization sends the vendor's track stop before the program exits. Then the start is
+   measured: every arm joint within the arm's goal tolerance of the program's `reset` pose and
+   every carriage within the track's goal tolerance of 0 m, on every side; a physical side
+   counts only with fresh positions. If every side is there, nothing more moves. Otherwise both
+   sides are homed through the twin in VALIDATED with `SetMode.homing`, and the start is
+   measured again. Any failure stops with where each side stands; nothing is retried. On a pair
+   that is already up, `./scripts/home --speed-scale 0.1` does the same without restarting
+   anything.
 7. One cycle of the real program then runs on both arms, at the scale you gave.
 8. On the physical side a close expecting a part is executed, not judged (owner decision
    2026-10-06, ADR-0070): it succeeds once the gripper command completes, the reached width is

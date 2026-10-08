@@ -270,3 +270,21 @@ so the record says what the tree does. The text above is kept as written.
   failed or vendor-rejected `set_linear_motor_pos` or `set_linear_motor_speed` answer now ends
   the accepted track move and stops the carriage (`cite_hardware/track_adapter.py`), where the
   adapter had re-sent the refused segment on every poll (2026-10-06 run, vendor code 82).
+- **2026-10-08, owner decision: initialize every time, and bring the carriage to the start in
+  the initializer.** `bring_to_start` now calls `InitializeAsset` on every physical side before
+  it measures, not only when a side is away; it is idempotent, so an initialized arm at the start
+  does not move. The initializer, after the enables and a homing where needed, reads
+  `get_linear_motor_pos` and, only where the carriage is not within the track's goal tolerance of
+  the program's first track target (generated from the program, not restated), writes
+  `set_linear_motor_speed` at L0's `vendor_axis.initialize_speed_mps` (validator rule
+  `track-initialize-speed-above-max`) and sends one `set_linear_motor_pos` (no wait, no
+  auto-enable), then reads the position until it arrives, within `initialize_deadline_s`:
+  `on_zero == 1` says the track has found its zero, not that the carriage stands there, and a
+  carriage away from the plant's cannot be homed through the twin, whose track step is a move of
+  no length on the plant. The deadman's gate is asked again immediately before the homing and
+  before the move, and a closed gate, a deactivation, a refusal or the deadline stops the
+  carriage. A Ctrl-C, SIGTERM or unanswered call once the request is sent is followed by that
+  side's `set_linear_motor_stop`, named by the generated initializer parameters, before the
+  program exits (`program.home._call_on_domain`). The program reaches the physical side's
+  initializer and that stop on the physical side's own domain, as `program.belt` reaches each
+  side's belt: the same carve-out from ADR-0044 clause 3. Not yet run on the physical arm.
