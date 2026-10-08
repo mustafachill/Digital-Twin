@@ -1421,6 +1421,30 @@ expect_ok   "with the same diagnosis" \
 expect_fail "and so does the two-token spelling of an empty zone" \
             sim_args --zone "" --headless
 
+# ./scripts/console is `./scripts/sim --pair --console`, windowed, and nothing
+# else (ADR-0071): every rule is sim's. Driven only on paths that refuse before a
+# container, as above.
+console_says() { # console_says <expected substring> <args...>
+    local expected="$1"; shift
+    local output
+    output="$("${REPO_ROOT}/scripts/console" "$@" 2>&1 || true)"
+    grep -qF -- "$expected" <<<"$output"
+}
+expect_fail "./scripts/console --headless refuses: the panel needs a window" \
+            "${REPO_ROOT}/scripts/console" --headless
+expect_ok   "and names the headless spelling in full" \
+            console_says "./scripts/sim --pair --console --headless" --headless
+expect_fail "./scripts/console hands --zone to sim, which refuses an undeclared zone" \
+            "${REPO_ROOT}/scripts/console" --zone zone_nobody_declared
+expect_ok   "with sim's own diagnosis" \
+            console_says "no zone 'zone_nobody_declared'" --zone zone_nobody_declared
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/console execs sim with --pair --console and the caller's arguments" \
+            grep -qxF 'exec "${REPO_ROOT}/scripts/sim" --pair --console "$@"' \
+            "${REPO_ROOT}/scripts/console"
+expect_eq   "and resolves no hardware opt-in of its own: sim's is the one" \
+    "0" "$(grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/console" | grep -c 'hardware_opt_in' || true)"
+
 # ./scripts/program checks a named zone the same way, before it stops this
 # checkout's containers or starts any.
 program_says() { # program_says <expected substring> <args...>
