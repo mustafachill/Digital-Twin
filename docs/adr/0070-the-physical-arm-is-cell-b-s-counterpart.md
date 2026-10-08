@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged), 2026-10-08 (owner decision: initialize as in Studio and home before the program): see "Amendment — what was built" at the end)
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged), 2026-10-08 (owner decisions: initialize as in Studio and home before the program; measure the start before homing; a refused track move ends the move): see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -261,3 +261,12 @@ so the record says what the tree does. The text above is kept as written.
   each physical side and then sends the program's own first arm move and first track move through
   the twin to both sides; `./scripts/program` runs both before its first cycle, and
   `./scripts/home` runs them against a pair already up. Not yet run on the physical arm.
+- **2026-10-08, owner decision: measure the start, then home only a side that is away; and a
+  refused track move ends the move.** Before the first cycle and in `./scripts/home`, every side
+  is measured first (arm joints against the `reset` pose with `JointsAt`, carriages against 0 m
+  with `TrackArrived`, a physical side only with fresh positions); nothing moves if every side is
+  there, otherwise the physical arm is initialized and both sides are homed in VALIDATED with
+  `SetMode.homing`, then measured again, and any failure stops without retry. Separately, a
+  failed or vendor-rejected `set_linear_motor_pos` or `set_linear_motor_speed` answer now ends
+  the accepted track move and stops the carriage (`cite_hardware/track_adapter.py`), where the
+  adapter had re-sent the refused segment on every poll (2026-10-06 run, vendor code 82).

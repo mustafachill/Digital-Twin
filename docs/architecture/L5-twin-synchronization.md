@@ -43,7 +43,11 @@
     position are not fresh; the program waits on this, and it is re-checked whenever the mode
     is asserted again, not only on a change. A physical carriage heard standing outside the
     track's goal tolerance of the plant's is a separate, FINAL refusal: it never clears by
-    itself, is not waited on, and the program checks it before the prompt.
+    itself, is not waited on, and the program checks it before the prompt. `SetMode.homing`
+    is the one allowance that skips this carriage-agreement refusal: it is accepted with
+    VALIDATED only, and readiness and the hardware gate still apply. The program uses it only
+    for the move to its start, measured with `JointsAt` and `TrackArrived`, and asks for
+    VALIDATED again without it before its first cycle.
   - **Between cycles.** At the end of each run the program puts the twin in SIM; a failed
     return to SIM fails the run. Before the next run it asks the operator to place the part
     only once it has read the twin's mode as SIM, then asks for VALIDATED again through that
