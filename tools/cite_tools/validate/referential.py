@@ -968,7 +968,16 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
                     "no sooner than the heartbeat it guards is declared lost",
                 )
             )
-        for axis_where, served in _vendor_axes(model, physical):
+        for axis_where, served, max_speed_mps in _vendor_axes(model, physical):
+            if served.initialize_speed_mps > max_speed_mps:
+                findings.append(
+                    error(
+                        "track-initialize-speed-above-max",
+                        f"{axis_where}.initialize_speed_mps",
+                        f"{served.initialize_speed_mps:g} m/s is above the axis's own "
+                        f"max_speed_mps {max_speed_mps:g} m/s",
+                    )
+                )
             if served.position_max_age_s <= served.poll_period_s:
                 findings.append(
                     error(
@@ -1012,9 +1021,9 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
     return findings
 
 
-def _vendor_axes(model: FacilityModel, assets: list) -> list[tuple[str, VendorAxis]]:
-    """``(where, vendor_axis)`` of every vendor-served axis on the physical side of ``assets``."""
-    found: list[tuple[str, VendorAxis]] = []
+def _vendor_axes(model: FacilityModel, assets: list) -> list[tuple[str, VendorAxis, float]]:
+    """``(where, vendor_axis, max_speed_mps)`` of every vendor-served axis on the physical side."""
+    found: list[tuple[str, VendorAxis, float]] = []
     for asset in assets:
         asset_type = model.asset_type(asset.type)
         if asset_type is None or asset_type.axis is None:
@@ -1023,7 +1032,7 @@ def _vendor_axes(model: FacilityModel, assets: list) -> list[tuple[str, VendorAx
         backend = asset_type.hardware_backends.get(backend_id)
         if backend is not None and backend.vendor_axis is not None:
             where = f"types.{asset_type.id}.hardware_backends.{backend_id}.vendor_axis"
-            found.append((where, backend.vendor_axis))
+            found.append((where, backend.vendor_axis, asset_type.axis.max_speed_mps))
     return found
 
 

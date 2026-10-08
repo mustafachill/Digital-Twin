@@ -452,6 +452,61 @@ class TestTheInitializerIsWiredFromL0:
         )
         assert self._section(real_model)["deadline_s"] == pytest.approx(25.0)
 
+    def test_the_initializer_brings_the_carriage_to_the_programs_first_track_target(
+        self,
+    ) -> None:
+        """`on_zero` is a zero found, not a carriage at it: the start is the program's."""
+        section = self._section(REAL_MODEL)
+        (manager,) = plan(REAL_MODEL)["controller_managers"]
+        (program,) = plan(REAL_MODEL)["programs"]
+        first = next(step for step in program["steps"] if step["kind"] == "track")
+        assert section["start_position_m"] == pytest.approx(first["position_m"])
+        track = manager["track"]
+        assert section["start_tolerance_m"] == pytest.approx(track["goal_tolerance_m"])
+        assert section["speed_mps"] == pytest.approx(0.1)
+        assert section["position_scale"] == pytest.approx(1000.0)
+        prefix = f"/cite/{ZONE}/{ARM}/{ARM}_{ARM}/"
+        assert section["linear_motor_speed_service"] == prefix + "set_linear_motor_speed"
+        assert section["linear_motor_set_position_service"] == prefix + "set_linear_motor_pos"
+        assert section["linear_motor_get_position_service"] == prefix + "get_linear_motor_pos"
+
+    def test_the_initialize_speed_follows_its_one_declaration(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / TRACK_TYPE,
+            lambda d: d["asset_type"]["hardware_backends"]["real"]["vendor_axis"].__setitem__(
+                "initialize_speed_mps", 0.05
+            ),
+        )
+        assert self._section(real_model)["speed_mps"] == pytest.approx(0.05)
+
+    def test_an_initialize_speed_above_the_axis_maximum_is_a_rule(
+        self, real_model: Path, edit_yaml: Callable
+    ) -> None:
+        edit_yaml(
+            real_model / TRACK_TYPE,
+            lambda d: d["asset_type"]["hardware_backends"]["real"]["vendor_axis"].__setitem__(
+                "initialize_speed_mps", 1.5
+            ),
+        )
+        assert rules(real_model) == {"track-initialize-speed-above-max"}
+
+    @pytest.mark.parametrize("value", [0.0, None])
+    def test_an_unusable_or_unstated_initialize_speed_is_refused(
+        self, real_model: Path, edit_yaml: Callable, value: object
+    ) -> None:
+        def edit(d: dict) -> None:
+            axis = d["asset_type"]["hardware_backends"]["real"]["vendor_axis"]
+            if value is None:
+                axis.pop("initialize_speed_mps")
+            else:
+                axis["initialize_speed_mps"] = value
+
+        edit_yaml(real_model / TRACK_TYPE, edit)
+        with pytest.raises(ModelError, match="initialize_speed_mps"):
+            load(real_model)
+
     @pytest.mark.parametrize("value", [0.0, -1.0, None])
     def test_an_unusable_or_unstated_initialize_deadline_is_refused(
         self, real_model: Path, edit_yaml: Callable, value: object

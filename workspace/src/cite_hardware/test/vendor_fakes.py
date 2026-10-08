@@ -161,6 +161,11 @@ class FakeTrack:
     ) -> None:
         self.namespace = namespace
         self.position_mm = 100
+        #: Whether an answered `set_linear_motor_pos` puts the carriage at its
+        #: target at once; when false the carriage never moves.
+        self.arrives = False
+        #: How many position reads have arrived, answered or not.
+        self.gets = 0
         self.position_ret = 0
         self.set_ret = 0
         self.set_requests: list[LinearMotorSetPos.Request] = []
@@ -202,6 +207,8 @@ class FakeTrack:
         self.answer_set.wait(timeout=SETTLE_S)
         response.ret = self.set_ret
         response.message = "fake"
+        if self.arrives and response.ret == 0:
+            self.position_mm = request.pos
         self.calls.append("set")
         return response
 
@@ -213,6 +220,7 @@ class FakeTrack:
         return response
 
     def _on_get(self, _request, response):
+        self.gets += 1
         self.answer_get.wait(timeout=SETTLE_S)
         response.ret = self.position_ret
         response.data = self.position_mm

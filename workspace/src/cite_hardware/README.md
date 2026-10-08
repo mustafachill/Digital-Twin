@@ -95,10 +95,16 @@ before running the program, when asked through `cite_interfaces/srv/InitializeAs
 plan's `initialize_service`: `set_linear_motor_enable(1)`, `set_gripper_enable(1)`, then
 `get_linear_motor_on_zero`, and only where it reads 0, `set_linear_motor_back_origin`
 (no wait, no auto-enable; sent once) followed by zero reads every `poll_period_s` until it
-reads 1. It does nothing until asked, refuses while inactive or while the deadman is not
-HEALTHY, and answers `success: false` naming the step and the vendor's code on any refusal.
-A homing that is refused, loses the deadman's gate or exceeds `deadline_s` is followed by
-`set_linear_motor_stop`, as is the process ending during a homing. No `clean_error`. Tested
+reads 1. Then, because `on_zero` says the track has found its zero and not that the carriage
+stands there, `get_linear_motor_pos`, and only where the carriage is not within
+`start_tolerance_m` of `start_position_m` (the program's first track target, generated from the
+program), `set_linear_motor_speed(speed_mps)` and `set_linear_motor_pos` (no wait, no
+auto-enable; sent once) followed by position reads until it is. It does nothing until asked,
+refuses while inactive or while the deadman is not HEALTHY, asks the gate again immediately
+before sending a homing or a move, and answers `success: false` naming the step and the
+vendor's code on any refusal. A homing or move that is refused, loses the deadman's gate, sees
+the node deactivated or exceeds `deadline_s` is followed by `set_linear_motor_stop`, as is the
+process ending during one. No `clean_error`. Tested
 against vendor fakes only (`test/test_initializer_launch.py`); not yet run on the physical arm.
 
 ## Parameters

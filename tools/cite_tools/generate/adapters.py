@@ -24,7 +24,7 @@ from cite_tools.generate.description import (
     description_argument,
     vendor_names,
 )
-from cite_tools.model import ids
+from cite_tools.model import blockly, ids
 from cite_tools.model.resolve import ResolvedAsset, ResolvedCell
 from cite_tools.model.units import fmt_float
 from cite_tools.render import environment
@@ -52,13 +52,17 @@ _TRACK_SERVICES = {
 _GRIPPER_SERVICES = {"get_position_service": "get_gripper_position"}
 #: The initializer's: what the operator does in UFACTORY Studio before running
 #: the program - enable the track motor and the gripper, read whether the track
-#: has found its zero, home it when it has not, stop it if homing fails.
+#: has found its zero, home it when it has not, bring the carriage to the
+#: program's first track target, stop it if any of that fails.
 _INITIALIZER_SERVICES = {
     "linear_motor_enable_service": "set_linear_motor_enable",
     "gripper_enable_service": "set_gripper_enable",
     "linear_motor_on_zero_service": "get_linear_motor_on_zero",
     "linear_motor_back_origin_service": "set_linear_motor_back_origin",
     "linear_motor_stop_service": "set_linear_motor_stop",
+    "linear_motor_speed_service": "set_linear_motor_speed",
+    "linear_motor_set_position_service": "set_linear_motor_pos",
+    "linear_motor_get_position_service": "get_linear_motor_pos",
 }
 
 
@@ -148,6 +152,22 @@ def _refuse_controllers_that_fight(asset: ResolvedAsset, side: str) -> None:
                     "activates every listed controller at once on recovery."
                 )
             claimed[joint] = controller.name
+
+
+def _first_track_target(asset: ResolvedAsset) -> float:
+    """The program's first track target: where the initializer brings the carriage.
+
+    Read off the arm's program, as the bring-up plan's `programs:` block is, so
+    the start is stated once - by the program.
+    """
+    for step in asset.program:
+        if isinstance(step, blockly.Track):
+            return step.position_m
+    raise PhysicalSideError(
+        f"asset {asset.id!r} rides a vendor-served track, and its program moves the track "
+        "nowhere, so the initializer has no start to bring the carriage to "
+        "(`initializer-start-unstated`)"
+    )
 
 
 def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> PhysicalSideView | None:
@@ -300,6 +320,8 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
     initializer = None
     initialize_service = ids.interface(cell.zone, asset.id, ids.INITIALIZE)
     if served_axis is not None and relay is not None:
+        assert axis is not None  # served_axis is set only where it is
+        start_m = _first_track_target(asset)
         initializer = NodeView(
             node=ids.interface(cell.zone, asset.id, ids.INITIALIZER_NODE),
             parameters=(
@@ -312,6 +334,10 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
                 ("poll_period_s", _f(served_axis.poll_period_s)),
                 ("call_deadline_s", _f(timing.call_deadline_s)),
                 ("deadline_s", _f(served_axis.initialize_deadline_s)),
+                ("position_scale", _f(served_axis.position_scale)),
+                ("start_position_m", _f(start_m)),
+                ("start_tolerance_m", _f(axis.goal_tolerance_m)),
+                ("speed_mps", _f(served_axis.initialize_speed_mps)),
                 ("deadman_state_topic", deadman_state_topic),
                 ("deadman_state_max_age_s", _f(timing.state_max_age_s)),
             ),

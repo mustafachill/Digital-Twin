@@ -18,8 +18,9 @@ The initializer runs as its own process; the vendor's enable, zero-read, homing
 and stop services and the deadman's state are faked in the test's own node.
 What is asserted is what crosses to the vendor, in what order, and what the
 `InitializeAsset` caller is told: the enables always, a homing only where the
-track has not found its zero, and every refusal named. Nothing reaches
-hardware.
+track has not found its zero, a move to the start only where the carriage is
+not there, the gate asked immediately before each motion, and every refusal
+named. Nothing reaches hardware.
 
 The numbers are test inputs, not the asset's facts.
 """
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import unittest
 
 from cite_interfaces.msg import DeadmanState
@@ -57,6 +59,13 @@ PARAMETERS = {
     "linear_motor_on_zero_service": f"{VENDOR}/get_linear_motor_on_zero",
     "linear_motor_back_origin_service": f"{VENDOR}/set_linear_motor_back_origin",
     "linear_motor_stop_service": f"{VENDOR}/set_linear_motor_stop",
+    "linear_motor_speed_service": f"{VENDOR}/set_linear_motor_speed",
+    "linear_motor_set_position_service": f"{VENDOR}/set_linear_motor_pos",
+    "linear_motor_get_position_service": f"{VENDOR}/get_linear_motor_pos",
+    "position_scale": 1000.0,
+    "start_position_m": 0.0,
+    "start_tolerance_m": 0.001,
+    "speed_mps": 0.1,
     "poll_period_s": 0.05,
     "call_deadline_s": 0.25,
     "deadline_s": DEADLINE_S,
@@ -85,8 +94,11 @@ class TestInitializer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.harness = Harness("initializer_test")
-        cls.vendor = FakeTrackInit(cls.harness, VENDOR)
-        cls.track = FakeTrack(cls.harness, VENDOR, serve=(FakeTrack.STOP,))
+        #: While set, every zero read is answered only once this steady time
+        #: has passed: the deadman's state has then aged past its bound.
+        cls.hold_zero_until = None
+        cls.vendor = FakeTrackInit(cls.harness, VENDOR, on_call=cls._on_vendor_call)
+        cls.track = FakeTrack(cls.harness, VENDOR)
         cls.deadman = FakeDeadman(cls.harness, DEADMAN)
         cls.client = cls.harness.node.create_client(InitializeAsset, SERVICE)
 
@@ -94,7 +106,19 @@ class TestInitializer(unittest.TestCase):
     def tearDownClass(cls):
         cls.harness.close()
 
+    @classmethod
+    def _on_vendor_call(cls, name, _request):
+        until = cls.hold_zero_until
+        if name == FakeTrackInit.ON_ZERO and until is not None:
+            Harness.wait_for(lambda: time.monotonic() > until, "the deadman state aged")
+
     def setUp(self):
+        type(self).hold_zero_until = None
+        self.track.position_mm = 0
+        self.track.arrives = True
+        self.track.answer_get.set()
+        self.track.set_requests.clear()
+        self.track.speeds.clear()
         self.deadman.publishing.set()
         self.deadman.say(DeadmanState.STATE_HEALTHY, "healthy")
         self.vendor.calls.clear()
@@ -130,6 +154,99 @@ class TestInitializer(unittest.TestCase):
         self.assertEqual(requests[FakeTrackInit.ENABLE].data, 1)
         self.assertEqual(requests[FakeTrackInit.GRIPPER].data, 1)
         self.assertEqual(self.track.stops, stops)
+        self.assertEqual(self.track.set_requests, [], "a carriage at the start is not moved")
+        self.assertIn("not moved", response.detail)
+
+    def test_a_carriage_on_its_zero_but_away_is_brought_to_the_start(self):
+        """`on_zero == 1` is a zero found, not a carriage standing at it."""
+        self.vendor.on_zero = 1
+        self.track.position_mm = 500
+        response = self._initialize()
+        self.assertTrue(response.success, response.detail)
+        self.assertEqual(self._sent(), [
+            FakeTrackInit.ENABLE, FakeTrackInit.GRIPPER, FakeTrackInit.ON_ZERO
+        ])
+        (move,) = self.track.set_requests
+        self.assertEqual(move.pos, 0)
+        self.assertEqual(move.speed, 100, "speed_mps 0.1 at 1000 units per metre")
+        self.assertFalse(move.wait)
+        self.assertFalse(move.auto_enable)
+        self.assertEqual(self.track.speeds, [100], "the speed is written before the move")
+        self.assertEqual(self.track.calls[-1], "set")
+        self.assertIn("brought to the start", response.detail)
+        self.assertEqual(self.track.position_mm, 0)
+
+    def test_a_move_to_the_start_that_never_arrives_stops_the_track(self):
+        self.vendor.on_zero = 1
+        self.track.position_mm = 500
+        self.track.arrives = False
+        stops = self.track.stops
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("not done within", response.detail)
+        self.assertIn("set_linear_motor_stop sent", response.detail)
+        self.harness.wait_for(lambda: self.track.stops == stops + 1, "the track stopped")
+        self.assertEqual(len(self.track.set_requests), 1, "a move is never re-sent")
+
+    def _start_a_move_that_never_arrives(self):
+        self.vendor.on_zero = 1
+        self.track.position_mm = 500
+        self.track.arrives = False
+        self.harness.wait_for(self.client.service_is_ready, "initialize appeared")
+        future = self.client.call_async(InitializeAsset.Request())
+        self.harness.wait_for(lambda: self.track.set_requests, "the move sent")
+        return future
+
+    def test_the_gate_closing_during_the_move_stops_it(self):
+        stops = self.track.stops
+        future = self._start_a_move_that_never_arrives()
+        self.deadman.say(DeadmanState.STATE_AWAITING, "awaiting")
+        self.harness.wait_for(future.done, "initialize answered")
+        self.assertFalse(future.result().success)
+        self.assertIn("move to the start stopped", future.result().detail)
+        self.harness.wait_for(lambda: self.track.stops == stops + 1, "the track stopped")
+
+    def test_a_deactivation_during_the_move_stops_it(self):
+        stops = self.track.stops
+        future = self._start_a_move_that_never_arrives()
+        try:
+            self.assertTrue(self.harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
+            self.harness.wait_for(future.done, "initialize answered")
+            self.assertFalse(future.result().success)
+            self.assertIn("deactivated", future.result().detail)
+            self.harness.wait_for(lambda: self.track.stops == stops + 1, "the track stopped")
+        finally:
+            self.assertTrue(self.harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
+
+    def test_the_gate_is_asked_again_immediately_before_the_homing(self):
+        """A gate that closed while the zero was read sends no homing (SA Low)."""
+        self.deadman.publishing.clear()
+        type(self).hold_zero_until = (
+            time.monotonic() + PARAMETERS["deadman_state_max_age_s"] + 0.1
+        )
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("homing stopped", response.detail)
+        self.assertNotIn(FakeTrackInit.HOME, self._sent())
+
+    def test_the_gate_is_asked_again_immediately_before_the_move(self):
+        """A gate that closed while the position was read sends no speed and no move."""
+        self.vendor.on_zero = 1
+        self.track.position_mm = 500
+        self.track.answer_get.clear()
+        gets = self.track.gets
+        self.harness.wait_for(self.client.service_is_ready, "initialize appeared")
+        future = self.client.call_async(InitializeAsset.Request())
+        self.harness.wait_for(lambda: self.track.gets > gets, "the position read")
+        self.deadman.publishing.clear()
+        aged = time.monotonic() + PARAMETERS["deadman_state_max_age_s"] + 0.1
+        self.harness.wait_for(lambda: time.monotonic() > aged, "the deadman state aged")
+        self.track.answer_get.set()
+        self.harness.wait_for(future.done, "initialize answered")
+        self.assertFalse(future.result().success)
+        self.assertIn("move to the start stopped", future.result().detail)
+        self.assertEqual(self.track.speeds, [])
+        self.assertEqual(self.track.set_requests, [])
 
     def test_a_track_off_its_zero_is_homed_once_until_it_says_so(self):
         response = self._initialize()

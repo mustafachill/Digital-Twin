@@ -1434,6 +1434,11 @@
           "title": "Initialize Deadline S",
           "type": "number"
         },
+        "initialize_speed_mps": {
+          "exclusiveMinimum": 0.0,
+          "title": "Initialize Speed Mps",
+          "type": "number"
+        },
         "poll_period_s": {
           "exclusiveMinimum": 0.0,
           "title": "Poll Period S",
@@ -1461,7 +1466,8 @@
         "position_max_age_s",
         "segment_s",
         "auto_enable",
-        "initialize_deadline_s"
+        "initialize_deadline_s",
+        "initialize_speed_mps"
       ],
       "title": "VendorAxis",
       "type": "object"

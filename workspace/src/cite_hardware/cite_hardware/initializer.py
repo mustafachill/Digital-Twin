@@ -27,7 +27,16 @@ does the same, on request, through the vendor driver's own services:
 3. `get_linear_motor_on_zero`, and ONLY where it reads 0:
 4. `set_linear_motor_back_origin(wait=false, auto_enable=false)`, sent once
    and never re-sent, then `get_linear_motor_on_zero` read every
-   `poll_period_s` until it says 1.
+   `poll_period_s` until it says 1;
+5. `get_linear_motor_pos`, and ONLY where the carriage is not within
+   `start_tolerance_m` of `start_position_m` (the program's first track
+   target, generated from the program): `set_linear_motor_speed(speed_mps)`,
+   then `set_linear_motor_pos(start, wait=false, auto_enable=false)`, sent
+   once and never re-sent, then `get_linear_motor_pos` read every
+   `poll_period_s` until the carriage is within the tolerance. `on_zero == 1`
+   says the track has FOUND its zero, not that the carriage stands there, and
+   a carriage away from the plant's cannot be brought to it by the twin's own
+   track step, which is a move of no length on the plant.
 
 It serves `cite_interfaces/srv/InitializeAsset` under the name the plan states
 (`/cite/<zone>/<asset>/initialize`), and only while active. Every step must
@@ -35,18 +44,19 @@ answer `ret == 0`, and the whole request is bounded by `deadline_s`; anything
 else answers `success: false` naming the step and the vendor's code. No
 `clean_error`: clearing an error is the operator's decision.
 
-**Homing moves the carriage**, so it is behind the deadman's gate like every
-other motion of this side (`cite_hardware.gate`): a request is refused unless
-the deadman says HEALTHY, and a homing during which the gate closes, that is
-refused, or that does not finish within the deadline is followed by
-`set_linear_motor_stop`. So is the process ending while a homing is in flight
-(`stop_before_exit`).
+**Homing and the move to the start move the carriage**, so they are behind the
+deadman's gate like every other motion of this side (`cite_hardware.gate`): a
+request is refused unless the deadman says HEALTHY, the gate is asked again
+immediately before the homing and before the move are sent, and a motion during
+which the gate closes or the node is deactivated, that is refused, or that does
+not finish within the deadline is followed by `set_linear_motor_stop`. So is
+the process ending while a motion is in flight (`stop_before_exit`).
 
 **Every vendor call is sent as the hold gate sends its STOP** (commit
 `6e7a733`): only once this client has matched the vendor's server, and again
 each time `call_deadline_s` passes unanswered, with earlier requests left
-pending so a slow answer still counts. Except the homing, which is a motion and
-is sent once.
+pending so a slow answer still counts. Except the homing and the move to the
+start, which are motions and are sent once.
 
 **Nothing blocks a callback.** The service callback is a coroutine that awaits
 futures completed by other callbacks (vendor answers, a one-shot timer), on a
@@ -55,10 +65,17 @@ re-entrant group under the multi-threaded executor `process.run` spins.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 import sys
 import threading
 
 from cite_hardware.gate import DeadmanGate
+from cite_hardware.mapping import (
+    from_vendor_position,
+    Refused,
+    to_vendor_position,
+    vendor_speed,
+)
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.process import run
 from cite_interfaces.srv import InitializeAsset
@@ -67,7 +84,7 @@ from rclpy.clock import Clock, ClockType
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
 from rclpy.parameter import Parameter
 from rclpy.task import Future
-from xarm_msgs.srv import Call, GetInt16, LinearMotorBackOrigin, SetInt16
+from xarm_msgs.srv import Call, GetInt16, LinearMotorBackOrigin, LinearMotorSetPos, SetInt16
 
 NODE_NAME = "initializer"
 
@@ -106,6 +123,44 @@ SPECS: tuple[Spec, ...] = (
         "the vendor's set_linear_motor_stop service (xarm_msgs/Call)",
     ),
     Spec(
+        "linear_motor_speed_service",
+        Parameter.Type.STRING,
+        "the vendor's set_linear_motor_speed service (xarm_msgs/SetInt16)",
+    ),
+    Spec(
+        "linear_motor_set_position_service",
+        Parameter.Type.STRING,
+        "the vendor's set_linear_motor_pos service (xarm_msgs/LinearMotorSetPos)",
+    ),
+    Spec(
+        "linear_motor_get_position_service",
+        Parameter.Type.STRING,
+        "the vendor's get_linear_motor_pos service (xarm_msgs/GetInt16)",
+    ),
+    Spec(
+        "position_scale",
+        Parameter.Type.DOUBLE,
+        "vendor position units per metre",
+        positive=True,
+    ),
+    Spec(
+        "start_position_m",
+        Parameter.Type.DOUBLE,
+        "the program's first track target, where the carriage is brought, metres",
+    ),
+    Spec(
+        "start_tolerance_m",
+        Parameter.Type.DOUBLE,
+        "how close to start_position_m counts as there: the track's goal tolerance, metres",
+        positive=True,
+    ),
+    Spec(
+        "speed_mps",
+        Parameter.Type.DOUBLE,
+        "the speed the carriage is brought to the start at, metres per second",
+        positive=True,
+    ),
+    Spec(
         "poll_period_s",
         Parameter.Type.DOUBLE,
         "how often the track's zero is read while it homes, seconds",
@@ -120,7 +175,8 @@ SPECS: tuple[Spec, ...] = (
     Spec(
         "deadline_s",
         Parameter.Type.DOUBLE,
-        "the ceiling on one whole initialization, homing included, steady-clock seconds",
+        "the ceiling on one whole initialization, homing and the move to the start "
+        "included, steady-clock seconds",
         positive=True,
     ),
     Spec(
@@ -151,8 +207,8 @@ class Initializer(LifecycleNode):
         self._config: dict | None = None
         self._active = False
         self._busy = False
-        #: Whether a homing this node sent may still be moving the carriage.
-        self._homing = False
+        #: Whether a homing or a move this node sent may still be moving the carriage.
+        self._moving = False
         self._vendor_clients: dict = {}
         self._service = None
         self._gate: DeadmanGate | None = None
@@ -177,6 +233,9 @@ class Initializer(LifecycleNode):
             "linear_motor_on_zero_service": GetInt16,
             "linear_motor_back_origin_service": LinearMotorBackOrigin,
             "linear_motor_stop_service": Call,
+            "linear_motor_speed_service": SetInt16,
+            "linear_motor_set_position_service": LinearMotorSetPos,
+            "linear_motor_get_position_service": GetInt16,
         }
         self._vendor_clients = {
             key: self.create_client(kind, config[key], callback_group=self._group)
@@ -231,14 +290,16 @@ class Initializer(LifecycleNode):
         self._config = None
 
     def stop_before_exit(self) -> tuple[list, float]:
-        """Stop the carriage if a homing this node sent may still be moving it."""
+        """Stop the carriage if a homing or a move this node sent may still be moving it."""
         with self._lock:
             self._active = False
-            homing = self._homing
+            moving = self._moving
         config, client = self._config, self._vendor_clients.get("linear_motor_stop_service")
-        if not homing or config is None or client is None:
+        if not moving or config is None or client is None:
             return [], 0.0
-        self.get_logger().warning("process ending during a homing: set_linear_motor_stop sent")
+        self.get_logger().warning(
+            "process ending during a homing or a move: set_linear_motor_stop sent"
+        )
         return [client.call_async(Call.Request())], 2.0 * config["call_deadline_s"]
 
     # ------------------------------------------------------------------ #
@@ -292,37 +353,117 @@ class Initializer(LifecycleNode):
             f"set_gripper_enable({VENDOR_ENABLE})",
             deadline,
         )
-        if await self._on_zero(deadline):
-            return "track and gripper enabled; the track is on its zero, not homed"
-        self.get_logger().warning("the track has not found its zero: homing it")
-        with self._lock:
-            self._homing = True
-        try:
-            await self._ask(
+        homed = "the track is on its zero, not homed"
+        if not await self._on_zero(deadline):
+            self.get_logger().warning("the track has not found its zero: homing it")
+            await self._motion(
+                "homing",
                 "linear_motor_back_origin_service",
                 LinearMotorBackOrigin.Request(wait=False, auto_enable=False),
                 "set_linear_motor_back_origin",
+                lambda: self._on_zero(deadline),
                 deadline,
-                resend=False,
             )
+            homed = "the track was homed and is on its zero"
+        moved = await self._bring_to_start(deadline)
+        return f"track and gripper enabled; {homed}; {moved}"
+
+    async def _bring_to_start(self, deadline: float) -> str:
+        """Bring the carriage to `start_position_m` unless it is already within tolerance."""
+        config = self._config
+        assert config is not None
+        start = config["start_position_m"]
+        if await self._at_start(deadline):
+            return f"the carriage is at the start ({start * 1000:.1f} mm), not moved"
+        speed = self._vendor_speed()
+        self.get_logger().warning(f"bringing the carriage to the start ({start * 1000:.1f} mm)")
+        self._check_motion_permitted("move to the start")
+        await self._ask(
+            "linear_motor_speed_service",
+            SetInt16.Request(data=speed),
+            f"set_linear_motor_speed({speed})",
+            deadline,
+        )
+        await self._motion(
+            "move to the start",
+            "linear_motor_set_position_service",
+            LinearMotorSetPos.Request(
+                pos=to_vendor_position(start, config["position_scale"]),
+                speed=speed,
+                wait=False,
+                auto_enable=False,
+            ),
+            "set_linear_motor_pos",
+            lambda: self._at_start(deadline),
+            deadline,
+        )
+        return f"the carriage was brought to the start ({start * 1000:.1f} mm)"
+
+    def _vendor_speed(self) -> int:
+        config = self._config
+        assert config is not None
+        try:
+            return vendor_speed(config["speed_mps"], config["position_scale"], config["speed_mps"])
+        except Refused as refusal:
+            raise InitializeFailed(f"move to the start refused: {refusal}") from refusal
+
+    async def _at_start(self, deadline: float) -> bool:
+        config = self._config
+        assert config is not None
+        answer = await self._ask(
+            "linear_motor_get_position_service", GetInt16.Request(), "get_linear_motor_pos",
+            deadline,
+        )
+        position = from_vendor_position(answer.data, config["position_scale"])
+        return abs(position - config["start_position_m"]) <= config["start_tolerance_m"]
+
+    def _check_motion_permitted(self, what: str) -> None:
+        """Refuse a motion unless this node is active and the deadman's gate is open."""
+        with self._lock:
+            active = self._active
+        if not active:
+            raise InitializeFailed(f"{what} stopped: the initializer was deactivated")
+        if not self._gate.permits_motion():  # type: ignore[union-attr]
+            raise InitializeFailed(
+                f"{what} stopped: {self._gate.why_closed()}"  # type: ignore[union-attr]
+            )
+
+    async def _motion(
+        self,
+        what: str,
+        key: str,
+        request,
+        label: str,
+        arrived: Callable[[], Awaitable[bool]],
+        deadline: float,
+    ) -> None:
+        """Send one motion once, gate-checked, and read ``arrived`` until it says so.
+
+        The gate and this node's activity are asked immediately before the
+        request is sent and before every read; a closed gate, a deactivation, a
+        refusal or the deadline stops the carriage and fails the request.
+        """
+        config = self._config
+        assert config is not None
+        with self._lock:
+            self._moving = True
+        try:
+            self._check_motion_permitted(what)
+            await self._ask(key, request, label, deadline, resend=False)
             while True:
                 await self._pause(config["poll_period_s"], deadline)
-                if not self._gate.permits_motion():  # type: ignore[union-attr]
-                    raise InitializeFailed(
-                        f"homing stopped: {self._gate.why_closed()}"  # type: ignore[union-attr]
-                    )
-                if await self._on_zero(deadline):
+                self._check_motion_permitted(what)
+                if await arrived():
                     break
         except InitializeFailed as failure:
             await self._stop_track()
             raise InitializeFailed(
-                f"{failure}; set_linear_motor_stop sent. Home the track with the vendor's "
-                "own tools before starting again"
+                f"{failure}; set_linear_motor_stop sent. Bring the track to its start with "
+                "the vendor's own tools before starting again"
             ) from failure
         finally:
             with self._lock:
-                self._homing = False
-        return "track and gripper enabled; the track was homed and is on its zero"
+                self._moving = False
 
     async def _on_zero(self, deadline: float) -> bool:
         answer = await self._ask(

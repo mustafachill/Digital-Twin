@@ -138,6 +138,12 @@ asset_type:
         # xarm_sdk/cxx/include/xarm/wrapper/xarm_api.h); twice that, because a
         # homing's duration has not been measured here. A ceiling on a failure.
         initialize_deadline_s: 20.0
+        # The speed at which the initializer then brings the carriage to the
+        # program's first track target: the vendor's `on_zero` says the track
+        # has FOUND its zero, not that the carriage stands there. Engineered,
+        # not measured: slow, and at it the whole 0.7 m stroke takes 7 s, so a
+        # homing and that move fit `initialize_deadline_s` together.
+        initialize_speed_mps: 0.1
 
   controllers:
     - suffix: trajectory_controller

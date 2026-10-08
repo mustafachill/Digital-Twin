@@ -724,6 +724,11 @@ class VendorAxis(Strict):
     #: found its zero, its homing, read every `poll_period_s` until it says 1.
     #: A ceiling on a failure, never a schedule.
     initialize_deadline_s: Annotated[float, Field(gt=0.0)]
+    #: The speed at which the initializer brings the carriage to the program's
+    #: first track target once the track is on its zero: `on_zero` says the
+    #: track has FOUND its zero, not that it stands there. Not above the axis's
+    #: own `max_speed_mps` (`track-initialize-speed-above-max`).
+    initialize_speed_mps: Annotated[float, Field(gt=0.0)]
 
 
 class HardwareBackend(Strict):

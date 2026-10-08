@@ -77,7 +77,8 @@
       `deadman-timeout-below-three-heartbeats`, `deadman-tick-not-below-timeout`,
       `state-max-age-not-above-tick`, `state-max-age-not-above-a-poll-period`,
       `track-position-age-not-above-poll`, `track-segment-not-above-poll`,
-      `track-segment-above-deadman-timeout` and `call-deadline-not-below-timeout`.
+      `track-segment-above-deadman-timeout`, `track-initialize-speed-above-max` and
+      `call-deadline-not-below-timeout`.
 
     `divergent-counterpart-backend` (ADR-0048 clause 1) was deleted on 2026-10-05, when per-side
     generation made it unnecessary.
