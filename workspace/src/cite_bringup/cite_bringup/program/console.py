@@ -69,6 +69,7 @@ import signal
 import sys
 import threading
 
+from cite_bringup.gz import KILL_WAIT_S
 from cite_bringup.pair import STOP_GRACE_S
 from cite_bringup.plan import (
     COUNTERPART_SIDE,
@@ -82,7 +83,7 @@ from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
 from cite_bringup.program.cell import RosCell
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
 from cite_bringup.program.from_plan import program, target
-from cite_bringup.program.home import home_steps, initialize, start_pose
+from cite_bringup.program.home import home_steps, initialize, initializer_stop, start_pose
 from cite_bringup.program.part import place_on_simulated_sides
 from cite_bringup.program.sides import (
     minimum_speed_scale,
@@ -109,9 +110,28 @@ from rclpy.signals import SignalHandlerOptions
 EXECUTOR_THREADS = 4
 
 #: How long the end of the process waits for the request in flight to stop, in
-#: wall seconds: a cancel, the cancelled goal's end and a return to SIM, each
-#: answered at once on a working cell. A ceiling on a failure.
-SHUTDOWN_CEILING_S = 40.0
+#: wall seconds. Normally a cancel, the cancelled goal's end and a return to SIM,
+#: each answered at once. It is a bound, not a hope (R2-02): from the start of
+#: the shutdown every wait of the request's cell and initializer is cut at
+#: `SHUTDOWN_CEILING_S - STOP_TAIL_S` (`ConsoleMachine.stop_deadline`).
+SHUTDOWN_CEILING_S = 30.0
+
+#: What the request may still spend after that cut, in wall seconds: the
+#: initializer's second track stop (checked against each physical side's own
+#: `call_deadline_s` when the console configures), a cell's last spin slice,
+#: and closing its node.
+STOP_TAIL_S = 5.0
+
+#: What the request may spend after the shutdown began in waits that no deadline
+#: cuts, in wall seconds, each sequential with the cut ones: a belt setpoint's
+#: acknowledgement on each of the two sides (`belt.ACK_CEILING_S`), and a
+#: killed Gazebo command's output and reaping (`gz.KILL_WAIT_S`, twice).
+_UNCUT_S = 2 * ACK_CEILING_S + 2 * KILL_WAIT_S
+if not _UNCUT_S <= SHUTDOWN_CEILING_S - STOP_TAIL_S:
+    raise ImportError(
+        f"the request's uncut waits ({_UNCUT_S:g} s) must fit before the shutdown's cut "
+        f"({SHUTDOWN_CEILING_S - STOP_TAIL_S:g} s)"
+    )
 
 #: How long the end of the process waits for each simulated side's belt
 #: subscriber before it stops that belt, in wall seconds; each side then waits
@@ -119,10 +139,14 @@ SHUTDOWN_CEILING_S = 40.0
 SHUTDOWN_BELT_MATCH_S = 10.0
 
 #: The longest the end of the process can take before it shuts its context down:
-#: the request's stop, then each side's belt stop. It is STRICTLY BELOW the pair
-#: supervisor's `STOP_GRACE_S`, the time the supervisor gives a participant
-#: after its SIGINT before escalating, so the supervisor never kills a console
-#: still stopping what it started. Two sides at most (plant and counterpart).
+#: the wait for the request (`SHUTDOWN_CEILING_S`, which the request's stop
+#: cannot outlast: see `STOP_TAIL_S` and `_UNCUT_S`), then ONE belt stop per side,
+#: made by the shutdown alone once the request has ended (the request leaves its
+#: belts to it while the process closes, so the two never queue on one lock).
+#: It is STRICTLY BELOW the pair supervisor's `STOP_GRACE_S`, the time the
+#: supervisor gives a participant after its SIGINT before escalating, so the
+#: supervisor never kills a console still stopping what it started. Two sides
+#: at most (plant and counterpart).
 SHUTDOWN_WORST_S = SHUTDOWN_CEILING_S + len((PLANT_SIDE, COUNTERPART_SIDE)) * (
     SHUTDOWN_BELT_MATCH_S + ACK_CEILING_S
 )
@@ -188,6 +212,7 @@ class CellConsole(LifecycleNode):
             physical = physical_sides(plan)
             # The floor `required_speed_scale` applies, shown to the panel.
             minimum = (minimum_speed_scale(plan) if physical else None) or 0.0
+            _require_track_stops_within_the_tail(plan, physical)
         except (ValueError, PlanError, OSError, KeyError) as error:
             self.get_logger().error(f"cannot configure: {error}")
             return TransitionCallbackReturn.FAILURE
@@ -199,7 +224,7 @@ class CellConsole(LifecycleNode):
             steps=steps,
             make_cell=self._make_cell,
             initialize_physical=lambda say, interrupted: initialize(
-                plan, physical, say, interrupted=interrupted
+                plan, physical, say, interrupted=interrupted, stop_deadline=self._stop_deadline
             ),
             place_parts=lambda may_hold, say, interrupted: place_on_simulated_sides(
                 plan.zone, may_hold, say, interrupted
@@ -294,7 +319,7 @@ class CellConsole(LifecycleNode):
         nothing new starts while the endpoints are still there.
         """
         if self._machine is not None and not self._machine.shutdown(
-            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S
+            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S, STOP_TAIL_S
         ):
             self.get_logger().error(
                 "shutdown: what was in progress, or a belt, did not confirm its stop"
@@ -340,8 +365,14 @@ class CellConsole(LifecycleNode):
             track=cell.track,
             interrupted=interrupted,
             node_name=_CELL_NODE,
+            stop_deadline=self._stop_deadline,
             **scale,
         )
+
+    def _stop_deadline(self) -> float | None:
+        """The machine's shutdown deadline for the request in flight (R2-02), or None."""
+        machine = self._machine
+        return None if machine is None else machine.stop_deadline()
 
     # ------------------------------------------------------------- handlers
 
@@ -472,6 +503,27 @@ class CellConsole(LifecycleNode):
             self._publisher.publish(message)
 
 
+def _require_track_stops_within_the_tail(plan: Plan, physical: list[str]) -> None:
+    """Raise `PlanError` if a physical initializer's track stop could outlast `STOP_TAIL_S`.
+
+    After the shutdown's cut an interrupted initialization still sends its
+    second track stop and waits for its answer (`home._call_on_domain`); that
+    wait is the side's own (`home.initializer_stop`), and it must fit in the
+    tail the shutdown's bound allows for it (R2-02).
+    """
+    for side in physical:
+        for manager in plan.controller_managers:
+            target_side = manager.physical_on(side)
+            if target_side is None or target_side.initialize_service is None:
+                continue
+            _, ceiling_s = initializer_stop(target_side)
+            if ceiling_s > STOP_TAIL_S / 2.0:
+                raise PlanError(
+                    f"{side}: {manager.asset}'s track stop may wait {ceiling_s:g} s, more than "
+                    f"the console's shutdown allows after its cut ({STOP_TAIL_S / 2.0:g} s)"
+                )
+
+
 def _owner(goal_handle) -> bytes:
     """Return an action goal's id, as the owner of the request it starts."""
     return bytes(goal_handle.goal_id.uuid)
@@ -536,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
         machine = node.machine
         if machine is not None and not machine.shutdown(
-            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S
+            SHUTDOWN_CEILING_S, SHUTDOWN_BELT_MATCH_S, STOP_TAIL_S
         ):
             print(
                 "cell_console: what was in progress, or a belt, did not confirm its stop "

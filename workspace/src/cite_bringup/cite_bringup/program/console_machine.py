@@ -55,6 +55,7 @@ from __future__ import annotations
 from collections.abc import Callable, MutableSet, Sequence
 from dataclasses import dataclass
 import threading
+import time
 
 from cite_bringup.program import cycle
 from cite_bringup.program.home import StartPose
@@ -250,6 +251,9 @@ class ConsoleMachine:
         self._sequence = 0
         #: Set once the process began to close: every request is refused after.
         self._closing = False
+        #: When the request in flight must have ended its stop, monotonic, or
+        #: None before the shutdown began (`stop_deadline`).
+        self._stop_deadline: float | None = None
         #: Who asked for the request in progress (an action goal's id), or None.
         self._owner: object = None
         #: The request's own cancel, asked beside the stop (an action goal's).
@@ -275,6 +279,17 @@ class ConsoleMachine:
     def snapshot(self) -> Snapshot:
         with self._lock:
             return self._snapshot()
+
+    def stop_deadline(self) -> float | None:
+        """Return the shutdown's deadline for the request in flight, monotonic, or None.
+
+        None until `shutdown` begins. The cells and the initializer this
+        machine drives are built with it (R2-02): none of their waits - a
+        cancel, its goal's end, a return to SIM, a server, the initializer's
+        answer - runs past it, so the stop in flight ends within the
+        shutdown's own ceiling.
+        """
+        return self._stop_deadline
 
     def interrupted(self) -> bool:
         """Whether a stop, or the request's own cancel, was asked for the request in progress."""
@@ -550,21 +565,53 @@ class ConsoleMachine:
             "motion already in progress on a physical side runs to its end",
         )
 
-    def shutdown(self, ceiling_s: float, belt_match_ceiling_s: float | None = None) -> bool:
+    def shutdown(
+        self,
+        ceiling_s: float,
+        belt_match_ceiling_s: float | None = None,
+        tail_s: float = 0.0,
+    ) -> bool:
         """Refuse everything from now on, stop what is in progress, wait, stop the belts.
 
-        For the end of the process and the node's lifecycle shutdown. Waits for
-        the request within ``ceiling_s``; the belts' stop waits for each side's
-        subscriber within ``belt_match_ceiling_s``. Returns whether nothing was
-        left running.
+        For the end of the process and the node's lifecycle shutdown. Returns
+        whether nothing was left running. What it spends, and nothing more
+        (R2-02):
+
+        * the wait for the request in flight, at most ``ceiling_s``. From the
+          start of the shutdown its cell's and its initializer's waits are cut
+          at ``ceiling_s - tail_s`` (`stop_deadline`); ``tail_s`` is what the
+          request may still spend after that cut, which the caller bounds;
+        * then, only once that request has ended, the belts' stop, ONCE: the
+          request leaves its belts to this stop while the process closes, so
+          the two never queue on one lock. Each side waits for its subscriber
+          within ``belt_match_ceiling_s``, then for the acknowledgement within
+          `belt.ACK_CEILING_S`. A request that did not end within
+          ``ceiling_s``, or a belt stop already held by another shutdown, is
+          reported and not waited for.
         """
         with self._lock:
             self._closing = True
+            if self._stop_deadline is None:
+                self._stop_deadline = time.monotonic() + max(0.0, ceiling_s - tail_s)
         self.stop()
         with self._lock:
             idle = self._changed.wait_for(lambda: not self._busy, timeout=ceiling_s)
-        belts = self._stop_belts(self._log, belt_match_ceiling_s)
-        return idle and belts is None
+        if not idle:
+            self._log(
+                f"shutdown: the request in progress did not end within {ceiling_s:g} s; "
+                "its belts, if any, are not stopped from here"
+            )
+            return False
+        if not self._belt_lock.acquire(blocking=False):
+            self._log("shutdown: another stop is commanding the belts; not waited for")
+            return False
+        try:
+            belts = self._stop_belts_held(self._log, belt_match_ceiling_s)
+        finally:
+            self._belt_lock.release()
+        if belts is not None:
+            self._log(f"shutdown: {belts}")
+        return belts is None
 
     # ------------------------------------------------------------ mechanism
 
@@ -683,7 +730,10 @@ class ConsoleMachine:
         if stopped or failure is not None:
             with self._lock:
                 self._at_start = False
-            belts = self._stop_belts(self._sayer())
+                # While the process closes, the shutdown stops the belts once
+                # this request has ended, with its own short ceilings (R2-02).
+                closing = self._closing
+            belts = None if closing else self._stop_belts(self._sayer())
             if belts is not None:
                 problems.append(belts)
         if failure is not None:
@@ -740,16 +790,22 @@ class ConsoleMachine:
     ) -> str | None:
         """Stop the belts this console started, if it did; say why not, or None."""
         with self._belt_lock:
-            if not self._belts_running:
-                return None
-            try:
-                confirmed = self._set_belts(False, say, None, match_ceiling_s)
-            except Exception as error:  # noqa: BLE001 - reported as the stop's failure
-                return f"the belts could not be stopped: {error!r}"
-            if not confirmed:
-                return "a side's belt did not confirm the stop; it may still be running"
-            self._belts_running = False
+            return self._stop_belts_held(say, match_ceiling_s)
+
+    def _stop_belts_held(
+        self, say: Callable[[str], None], match_ceiling_s: float | None = None
+    ) -> str | None:
+        """`_stop_belts`, with `_belt_lock` already held by the caller."""
+        if not self._belts_running:
             return None
+        try:
+            confirmed = self._set_belts(False, say, None, match_ceiling_s)
+        except Exception as error:  # noqa: BLE001 - reported as the stop's failure
+            return f"the belts could not be stopped: {error!r}"
+        if not confirmed:
+            return "a side's belt did not confirm the stop; it may still be running"
+        self._belts_running = False
+        return None
 
     def _awaiter(self, cell) -> Callable[[str], str]:
         """Return the `read` `confirm_operator` asks the operator with, for ``cell``.

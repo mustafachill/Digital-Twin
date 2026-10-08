@@ -123,6 +123,7 @@ class FakeCell:
         # while the cancel runs.
         self._call("cancel")
         self._rig.state_during_cancel.append(self._rig.machine.snapshot().state)
+        self._rig.on_cancel()
         if self._rig.cancel_fails:
             raise StepFailed("the cancel was not answered")
 
@@ -171,6 +172,11 @@ class Rig:
         self.on_call: tuple | None = None
         self.on_call_hook = lambda: None
         self.cancel_fails = False
+        #: Run inside every cancel: a slow stop, as an unanswered cancel is.
+        self.on_cancel = lambda: None
+        #: How long a belt STOP takes, and which thread made each one.
+        self.belt_stop_s = 0.0
+        self.belt_stoppers: list[str] = []
         self.belts_confirm = True
         self.spawn_fails_on: str | None = None
         self.holding_step = threading.Event()
@@ -211,6 +217,10 @@ class Rig:
 
     def _set_belts(self, running: bool, say, interrupted, ceiling) -> bool:
         self.calls.append(("belts", running))
+        if not running:
+            self.belt_stoppers.append(threading.current_thread().name)
+            # A side whose subscriber is slow to match, as `belt.MATCH_CEILING_S` allows.
+            time.sleep(self.belt_stop_s)
         return self.belts_confirm
 
     def _on_change(self, snapshot) -> None:
@@ -1004,3 +1014,62 @@ def test_the_node_never_publishes_an_older_snapshot_after_a_newer_one() -> None:
     assert [message.state for message in published] == [ConsoleState.READY]
     node._publish(rig.machine.snapshot())
     assert len(published) == 2
+
+
+# --- R2-02: the shutdown is bounded, and stops the belts once ------------------
+
+
+def test_shutdown_never_queues_behind_the_requests_own_belt_stop() -> None:
+    """The request leaves its belts to the shutdown, which stops them once, itself."""
+    rig = Rig().homed()
+    rig.hold_on = ("move", "pick")
+    rig.belt_stop_s = 0.5
+    join = rig.in_thread(lambda: rig.machine.run_program(1.0, 1))
+    assert rig.holding_step.wait(SETTLE_S)
+    assert rig.machine.shutdown(SETTLE_S, 0.1, tail_s=0.0)
+    join()
+    assert rig.calls.count(("belts", False)) == 1
+    assert rig.belt_stoppers == [threading.current_thread().name]
+
+
+def test_a_slow_stop_does_not_hold_the_shutdown_past_its_ceiling() -> None:
+    """A request that does not end within the ceiling is reported, and its belts untouched."""
+    rig = Rig().homed()
+    rig.hold_on = ("move", "pick")
+    release = threading.Event()
+    # A cancel nobody answers, and that ignores the deadline: the worst fake.
+    rig.on_cancel = lambda: release.wait(SETTLE_S)
+    join = rig.in_thread(lambda: rig.machine.run_program(1.0, 1))
+    assert rig.holding_step.wait(SETTLE_S)
+    started = time.monotonic()
+    try:
+        assert not rig.machine.shutdown(0.5, 0.1, tail_s=0.1)
+        assert time.monotonic() - started < 0.5 + 1.0
+        assert ("belts", False) not in rig.calls
+    finally:
+        release.set()
+        join()
+
+
+def test_the_shutdown_cuts_the_requests_waits_at_its_deadline() -> None:
+    """A stop that waits as long as it is let - a cancel, a return to SIM - ends at the cut."""
+    rig = Rig().homed()
+    assert rig.machine.stop_deadline() is None
+    rig.hold_on = ("move", "pick")
+
+    def cancel_until_the_cut() -> None:
+        while True:
+            deadline = rig.machine.stop_deadline()
+            if deadline is not None and time.monotonic() >= deadline:
+                return
+            time.sleep(0.005)
+
+    rig.on_cancel = cancel_until_the_cut
+    join = rig.in_thread(lambda: rig.machine.run_program(1.0, 1))
+    assert rig.holding_step.wait(SETTLE_S)
+    started = time.monotonic()
+    assert rig.machine.shutdown(1.0, 0.1, tail_s=0.5)
+    elapsed = time.monotonic() - started
+    join()
+    assert 0.4 <= elapsed < 1.0, elapsed
+    assert rig.machine.stop_deadline() == pytest.approx(started + 0.5, abs=0.1)

@@ -309,6 +309,7 @@ class RosCell:
     #: operator console's stop, so a cell assembled without it never stops.
     _interrupted: Callable[[], bool] | None = None
     _uninterruptible = 0
+    _stop_deadline: Callable[[], float | None] | None = None
     #: The result of the goal in flight, awaited by a cancel for the goal's end.
     _result = None
 
@@ -322,12 +323,18 @@ class RosCell:
         speed: float = 1.0,
         interrupted: Callable[[], bool] | None = None,
         node_name: str = "fixed_program",
+        stop_deadline: Callable[[], float | None] | None = None,
     ) -> None:
         skills = arm.skills
         #: Asked before every spin: True stops whatever is waiting with
         #: `Interrupted` (ADR-0071). None for a terminal run, whose stop is
         #: Ctrl-C's KeyboardInterrupt on the main thread.
         self._interrupted = interrupted
+        #: The operator console's shutdown deadline, monotonic, or None before
+        #: its shutdown began (R2-02): no wait of this cell - a cancel's, a
+        #: return to SIM's, a server's - runs past it, so the stop in flight
+        #: when the process ends ends within the console's own ceiling.
+        self._stop_deadline = stop_deadline
         #: How deep inside a cancel or a return to SIM this cell is: there the
         #: predicate is not asked, because those ARE the stop.
         self._uninterruptible = 0
@@ -386,8 +393,9 @@ class RosCell:
         program itself always asks without it (ADR-0070).
         """
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{SetMode.Request.SERVICE} is not served; is the pair up?")
+        self._await_ready(
+            client.service_is_ready, f"{SetMode.Request.SERVICE} is not served; is the pair up?"
+        )
         request = SetMode.Request(
             mode=TwinMode.MODE_VALIDATED,
             reason=(
@@ -427,8 +435,13 @@ class RosCell:
 
     def _leave_validated(self) -> bool:
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            print(f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served")
+        try:
+            self._await_ready(
+                client.service_is_ready,
+                f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served",
+            )
+        except StepFailed as failure:
+            print(failure, flush=True)
             return False
         request = SetMode.Request(
             mode=TwinMode.MODE_SIM,
@@ -756,8 +769,9 @@ class RosCell:
         """Return a call answering the twin's `TrackArrived` for ``position_m``, whole."""
         client = self._track_arrived
         assert client is not None and self._track is not None
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{what}: {TrackArrived.Request.SERVICE} is not served")
+        self._await_ready(
+            client.service_is_ready, f"{what}: {TrackArrived.Request.SERVICE} is not served"
+        )
         request = TrackArrived.Request(
             joint=self._track.joint,
             position_m=float(position_m),
@@ -772,8 +786,9 @@ class RosCell:
     def _ask_joints_at(self, start):
         """Return a call answering the twin's `JointsAt` for the arm's start pose."""
         client = self.node.create_client(JointsAt, JointsAt.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{JointsAt.Request.SERVICE} is not served; is the pair up?")
+        self._await_ready(
+            client.service_is_ready, f"{JointsAt.Request.SERVICE} is not served; is the pair up?"
+        )
         request = JointsAt.Request(
             joints=list(start.joints),
             positions=[float(value) for value in start.positions],
@@ -808,8 +823,7 @@ class RosCell:
             self._track_position = message.position[message.name.index(self._track.joint)]
 
     def _goal(self, client: ActionClient, goal, what: str) -> None:
-        if not client.wait_for_server(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{what}: {client._action_name} is not served")
+        self._await_ready(client.server_is_ready, f"{what}: {client._action_name} is not served")
         self._sent = client.send_goal_async(goal)
         handle = self._until(self._sent, f"{what}: acceptance")
         if handle.accepted:
@@ -831,9 +845,9 @@ class RosCell:
         # same wall-clock bound it was.
         deadline = time.monotonic() + ceiling_s
         while not future.done():
-            remaining = deadline - time.monotonic()
+            remaining = self._clamped(deadline) - time.monotonic()
             if remaining <= 0.0:
-                raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s")
+                raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s{self._why()}")
             self._spin_once(min(_SPIN_SLICE_S, remaining))
         return future.result()
 
@@ -845,9 +859,33 @@ class RosCell:
         # then reported "nothing within 60 s" (ADR-0066).
         deadline = time.monotonic() + SERVER_WAIT_S
         while not predicate():
-            if time.monotonic() > deadline:
-                raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s")
+            if time.monotonic() > self._clamped(deadline):
+                raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s{self._why()}")
             self._spin_once(0.1)
+
+    def _await_ready(self, ready, refusal: str) -> None:
+        """Wait for a server to be discovered, within `SERVER_WAIT_S`, or raise ``refusal``.
+
+        Spun in slices like every other wait, so a stop and the console's
+        shutdown deadline reach it; `wait_for_service` blocked for its whole
+        timeout without either.
+        """
+        deadline = time.monotonic() + SERVER_WAIT_S
+        while not ready():
+            if time.monotonic() > self._clamped(deadline):
+                raise StepFailed(f"{refusal}{self._why()}")
+            self._spin_once(_SPIN_SLICE_S)
+
+    def _clamped(self, deadline: float) -> float:
+        """Return ``deadline``, or the console's shutdown deadline if that is sooner (R2-02)."""
+        limit = None if self._stop_deadline is None else self._stop_deadline()
+        return deadline if limit is None else min(deadline, limit)
+
+    def _why(self) -> str:
+        limit = None if self._stop_deadline is None else self._stop_deadline()
+        if limit is not None and time.monotonic() >= limit:
+            return ", cut short by the console's shutdown deadline"
+        return ""
 
     def _spin_once(self, timeout_sec: float) -> None:
         """Spin this node once, unless the console asked this cell to stop (ADR-0071)."""

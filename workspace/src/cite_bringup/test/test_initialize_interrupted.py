@@ -36,6 +36,7 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import time
 
 from cite_bringup.program import home
 from cite_bringup.program.steps import Interrupted, StepFailed
@@ -140,3 +141,36 @@ def test_an_interrupted_initialization_stops_the_track_then_re_raises(rig) -> No
     with pytest.raises(KeyboardInterrupt):
         home._call_on_domain(SERVICE, DOMAIN, 3.0, STOP)
     assert track.stops == stops + 2, "stopped twice before the interrupt was re-raised"
+
+
+def test_what_an_interrupt_comes_to_is_said_where_the_caller_says_things(rig) -> None:
+    """R2-06: the console shows the outcome, not only a terminal it does not have."""
+    track, interrupt, received = rig
+    interrupt.clear()
+    calls = len(received)
+    said: list[str] = []
+    with pytest.raises(Interrupted):
+        home._call_on_domain(
+            SERVICE, DOMAIN, 1.0, STOP, interrupted=lambda: len(received) > calls,
+            say=said.append,
+        )
+    assert f"{SERVICE} did not answer within 1 s of its call" in said
+    sent = [line for line in said if line.startswith("interrupted during an initialization")]
+    assert len(sent) == 2, said
+
+
+def test_a_shutdown_deadline_ends_the_answer_wait_and_still_stops_twice(rig) -> None:
+    """R2-02: past the console's shutdown deadline the answer is not awaited, the stop is."""
+    track, interrupt, received = rig
+    interrupt.clear()
+    calls, stops = len(received), track.stops
+    said: list[str] = []
+    started = time.monotonic()
+    with pytest.raises(Interrupted):
+        home._call_on_domain(
+            SERVICE, DOMAIN, 30.0, STOP, interrupted=lambda: len(received) > calls,
+            say=said.append, stop_deadline=lambda: started,
+        )
+    assert time.monotonic() - started < 10.0, "the answer was awaited past the deadline"
+    assert any("shutdown deadline" in line for line in said), said
+    assert track.stops == stops + 2

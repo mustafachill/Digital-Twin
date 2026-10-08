@@ -1539,3 +1539,11 @@ def test_the_consoles_shutdown_ends_before_the_supervisor_escalates() -> None:
     assert console.SHUTDOWN_WORST_S == console.SHUTDOWN_CEILING_S + 2 * (
         console.SHUTDOWN_BELT_MATCH_S + console.ACK_CEILING_S
     )
+    # R2-02: what the request in flight can still spend fits in that ceiling:
+    # its uncut waits before the cut, and the shipped plan's track stops in
+    # the tail after it.
+    assert console._UNCUT_S <= console.SHUTDOWN_CEILING_S - console.STOP_TAIL_S
+    plan = load(default_plan_path("cell_b"))
+    from cite_bringup.program.sides import physical_sides
+
+    console._require_track_stops_within_the_tail(plan, physical_sides(plan))

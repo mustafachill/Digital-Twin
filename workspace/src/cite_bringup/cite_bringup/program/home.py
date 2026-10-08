@@ -266,12 +266,16 @@ def initialize(
     say: Callable[[str], None],
     environ=os.environ,
     interrupted: Callable[[], bool] | None = None,
+    stop_deadline: Callable[[], float | None] | None = None,
 ):
     """Call each physical arm's `InitializeAsset` on its side's domain, or raise StepFailed.
 
     ``interrupted`` is the operator console's stop (ADR-0071), asked while an
     answer is awaited; True there is handled as Ctrl-C is: the track is stopped
-    and `steps.Interrupted` raised.
+    and `steps.Interrupted` raised. ``stop_deadline`` is the console's shutdown
+    deadline (monotonic, or None before its shutdown), past which the answer
+    is no longer awaited after an interrupt (R2-02). What an interrupt comes
+    to is said through ``say``, so the console shows it (R2-06).
     """
     if not sides:
         return
@@ -297,6 +301,8 @@ def initialize(
                 ceiling_s,
                 stop,
                 interrupted=interrupted,
+                say=say,
+                stop_deadline=stop_deadline,
             )
             if not response.success:
                 raise StepFailed(f"{side}: {manager.asset} not initialized: {response.detail}")
@@ -309,6 +315,8 @@ def _call_on_domain(
     ceiling_s: float,
     stop: tuple[str, float],
     interrupted: Callable[[], bool] | None = None,
+    say: Callable[[str], None] | None = None,
+    stop_deadline: Callable[[], float | None] | None = None,
 ):
     """Call `InitializeAsset` once on ``domain``, in a context of its own, once matched.
 
@@ -326,8 +334,12 @@ def _call_on_domain(
     ``ceiling_s`` the call was given, and the track is stopped a second time
     once it comes (or the ceiling passes); only then is the interrupt
     re-raised, so nothing reports the stop done while the initializer may still
-    move. Neither stop nor the wait is itself interrupted.
+    move. Neither stop nor the wait is itself interrupted; the wait ends early
+    only at ``stop_deadline`` - the console's shutdown deadline (R2-02) - and
+    the second stop is still sent then. Each outcome is said through ``say``
+    (standard output when None).
     """
+    say = say_now if say is None else say
     from cite_interfaces.srv import InitializeAsset
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
@@ -367,16 +379,24 @@ def _call_on_domain(
             # A second Ctrl-C (the terminal's and the script's) must not
             # abandon the stop half-way, as in `steps.run`.
             with _interrupts_ignored():
-                _stop_track(executor, stopper, stop[1])
-                if _await_answer(executor, future, deadline):
-                    say_now(f"{service} answered after the interrupt")
+                _stop_track(executor, stopper, stop[1], say)
+                limit = None if stop_deadline is None else stop_deadline()
+                if _await_answer(
+                    executor, future, deadline if limit is None else min(deadline, limit)
+                ):
+                    say(f"{service} answered after the interrupt")
+                elif limit is not None and limit < deadline:
+                    say(
+                        f"{service} did not answer before the console's shutdown deadline; "
+                        "the initializer may still be moving the carriage"
+                    )
                 else:
-                    say_now(f"{service} did not answer within {ceiling_s:g} s of its call")
-                _stop_track(executor, stopper, stop[1])
+                    say(f"{service} did not answer within {ceiling_s:g} s of its call")
+                _stop_track(executor, stopper, stop[1], say)
             raise
         except BaseException:
             with _interrupts_ignored():
-                _stop_track(executor, stopper, stop[1])
+                _stop_track(executor, stopper, stop[1], say)
             raise
         return future.result()
     finally:
@@ -392,30 +412,34 @@ def _await_answer(executor, future, deadline: float) -> bool:
     return True
 
 
-def _stop_track(executor, stopper, ceiling_s: float) -> None:
+def _stop_track(
+    executor, stopper, ceiling_s: float, say: Callable[[str], None] | None = None
+) -> None:
     """Send the vendor's track stop once matched and wait for its answer, within ``ceiling_s``.
 
-    Reported, never raised: the failure that called for it is what is raised.
+    Reported through ``say`` (standard output when None), never raised: the
+    failure that called for it is what is raised.
     """
     from xarm_msgs.srv import Call
 
+    say = say_now if say is None else say
     deadline = time.monotonic() + ceiling_s
     while not stopper.service_is_ready():
         if time.monotonic() > deadline:
-            say_now(f"could not stop the track: nothing serves {stopper.srv_name}")
+            say(f"could not stop the track: nothing serves {stopper.srv_name}")
             return
         executor.spin_once(timeout_sec=0.05)
     answer = stopper.call_async(Call.Request())
     while not answer.done():
         if time.monotonic() > deadline:
-            say_now(f"{stopper.srv_name} did not answer within {ceiling_s:g} s")
+            say(f"{stopper.srv_name} did not answer within {ceiling_s:g} s")
             return
         executor.spin_once(timeout_sec=0.05)
     result = answer.result()
     if result is None or result.ret != 0:
-        say_now(f"the vendor refused {stopper.srv_name}: {result}")
+        say(f"the vendor refused {stopper.srv_name}: {result}")
     else:
-        say_now(f"interrupted during an initialization: {stopper.srv_name} sent")
+        say(f"interrupted during an initialization: {stopper.srv_name} sent")
 
 
 def say_now(text: str) -> None:

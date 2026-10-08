@@ -635,7 +635,7 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     sent = []
 
     class Client:
-        def wait_for_service(self, timeout_sec):
+        def service_is_ready(self):
             return True
 
         def call_async(self, request):
@@ -1091,14 +1091,16 @@ def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> No
     monkeypatch.setattr(
         home,
         "_call_on_domain",
-        lambda service, domain, ceiling, stop, interrupted=None: calls.append(
-            (service, domain, ceiling, stop)
-        ) or Answer()
+        lambda service, domain, ceiling, stop, interrupted=None, say=None, stop_deadline=None:
+        calls.append((service, domain, ceiling, stop, say)) or Answer()
     )
     said: list[str] = []
     environ = {"CITE_DOMAIN_BASE": "40"}
     home.initialize(plan, ["counterpart"], said.append, environ=environ)
-    ((service, domain, ceiling, stop),) = calls
+    ((service, domain, ceiling, stop, say),) = calls
+    # R2-06: what an interrupt comes to is said where the caller says things,
+    # so the console's panel shows it.
+    assert say == said.append
     # S-01: the stop sent if the call is interrupted is the one the generated
     # parameters name for that side's initializer, never a hand-written name.
     assert stop == (
@@ -1413,7 +1415,7 @@ def _asking_for_sim(monkeypatch, answers: list) -> tuple[RosCell, list]:
             self.result = ResultCode(detail=detail)
 
     class Client:
-        def wait_for_service(self, timeout_sec):
+        def service_is_ready(self):
             return True
 
         def call_async(self, request):
@@ -1549,3 +1551,60 @@ def test_a_console_refusal_that_cannot_be_read_refuses_too(capsys) -> None:
     )
     assert ended.status == 1 and ended.sim_confirmed is None
     assert "REFUSED: could not tell whether an operator console" in capsys.readouterr().out
+
+
+# --- R2-02 (ADR-0071): no wait of a console's cell outlasts its shutdown -------
+
+
+def test_a_cancel_is_cut_at_the_consoles_shutdown_deadline(monkeypatch) -> None:
+    """The goal's end is not awaited for `CANCEL_CEILING_S` once the shutdown's cut passed."""
+    answer, end = _Later(0), _Later(10**9)
+    _spinning(monkeypatch, [("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    ros._stop_deadline = lambda: time.monotonic() - 1.0
+    started = time.monotonic()
+    with pytest.raises(StepFailed, match="cut short by the console's shutdown deadline"):
+        ros.cancel()
+    assert time.monotonic() - started < 1.0
+
+
+def test_a_return_to_sim_is_cut_at_the_consoles_shutdown_deadline(monkeypatch, capsys) -> None:
+    """A SetMode server never found is not waited for `SERVER_WAIT_S` past the cut."""
+    import cite_bringup.program.cell as cell_module
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", lambda *_a, **_k: None)
+
+    class Client:
+        def service_is_ready(self):
+            return False
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    ros._stop_deadline = lambda: time.monotonic() - 1.0
+    started = time.monotonic()
+    assert not ros.leave_validated()
+    assert time.monotonic() - started < 1.0
+    assert "is not served, cut short" in capsys.readouterr().out
+
+
+def test_without_a_shutdown_a_cells_waits_keep_their_own_ceilings() -> None:
+    ros = object.__new__(RosCell)
+    assert ros._clamped(123.0) == 123.0
+    ros._stop_deadline = lambda: None
+    assert ros._clamped(123.0) == 123.0
+    ros._stop_deadline = lambda: 100.0
+    assert ros._clamped(123.0) == 100.0
