@@ -140,6 +140,18 @@ class StepFailed(RuntimeError):
     """A step the cell did not complete. The message says which and why."""
 
 
+class Interrupted(KeyboardInterrupt):
+    """The operator stopped the program from the console rather than the terminal (ADR-0071).
+
+    A `KeyboardInterrupt`, so that every path written for Ctrl-C takes it
+    unchanged: `run` cancels the goal in flight and stops the belt, `run_home`
+    cancels and re-raises, an initialization stops the track. It is raised
+    inside the thread that is waiting, at the next point it would spin, by a
+    cell given an ``interrupted`` predicate (`RosCell`) - never delivered
+    asynchronously, so it cannot land half-way through a cancel.
+    """
+
+
 class Cell(Protocol):
     """What a program needs from the cell. `RosCell` is the real one."""
 
@@ -178,12 +190,16 @@ def run(
     cycles: int,
     say: Callable[[str], None] = print,
     first_cycle: int = 1,
+    on_step: Callable[[int, int, int, Step], None] | None = None,
 ) -> int:
     """Run ``steps`` ``cycles`` times (0: until stopped). Return an exit status.
 
     ``first_cycle`` only numbers the log lines: a caller that runs one cycle per
     invocation (``scripts/program``, which puts a part on the table between
     cycles) passes its own count so that cycle 3 is not reported as cycle 1.
+    ``on_step`` is told `(cycle, number, count, step)` before each step, beside
+    the line said for it, for a caller that reports progress as data rather
+    than as text (the operator console's feedback, ADR-0071).
 
     However it ends — the last cycle, a failed step, Ctrl-C — the active goal is
     cancelled, and, IF THE PROGRAM DRIVES A BELT, the belt is commanded to zero on
@@ -204,6 +220,8 @@ def run(
             cycle += 1
             for number, step in enumerate(steps, start=1):
                 say(f"[cycle {cycle}, step {number}/{len(steps)}] {step}")
+                if on_step is not None:
+                    on_step(cycle, number, len(steps), step)
                 execute(step, cell)
         say(f"done: {done} cycle(s)")
         status = 0

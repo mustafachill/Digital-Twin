@@ -27,15 +27,52 @@ before the match reaches nobody, CLAUDE.md §10) and exits.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Sequence
 import os
 import sys
 import time
 
-from cite_bringup.plan import default_plan_path, domain_base, load, resolve_domain_id
+from cite_bringup.plan import default_plan_path, domain_base, load, Plan, resolve_domain_id
 from cite_bringup.program.sides import is_physical
 
 #: How long to wait for the belt's subscriber, in wall seconds. A hang detector.
 MATCH_CEILING_S = 60.0
+
+
+def set_belts(
+    plan: Plan,
+    stop: bool,
+    say: Callable[[str], None],
+    sides: Sequence[str] | None = None,
+) -> bool:
+    """Command each simulated side's belt on that side; return whether every one took it.
+
+    At its installed speed, or zero with ``stop``. ``sides`` names the sides to
+    command, every side the zone runs when None. Never a physical side: there
+    is no physical belt driver, and the belt is not twinned (ADR-0067,
+    ADR-0070 item 7). Named or not, one is skipped and said so. Shared by this
+    command and the operator console (ADR-0071).
+    """
+    named = [plan.side_named(name).name for name in (sides or [])]
+    chosen = []
+    for side in named or [side.name for side in plan.sides]:
+        if is_physical(plan, side):
+            say(f"  --  {side}: physical, and no belt is driven there")
+        else:
+            chosen.append(side)
+    if len(plan.conveyors) != 1:
+        raise ValueError(f"zone {plan.zone} has {len(plan.conveyors)} belts, not one")
+    (conveyor,) = plan.conveyors
+    speed = 0.0 if stop else conveyor.installed_speed_mps
+    base = domain_base(os.environ)
+    every = True
+    for side in chosen:
+        domain = resolve_domain_id(plan, side, base)
+        if not _set_on_one_side(conveyor.command_topic, speed, domain, side):
+            every = False
+        else:
+            say(f"  ok  {side}: {conveyor.asset} at {speed:g} m/s")
+    return every
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,29 +87,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     plan = load(default_plan_path(args.zone))
-    # Never a physical side: there is no physical belt driver, and the belt is
-    # not twinned (ADR-0067, ADR-0070 item 7). Named or not, it is skipped and
-    # said so.
-    named = [plan.side_named(name).name for name in (args.side or [])]
-    sides = []
-    for side in named or [side.name for side in plan.sides]:
-        if is_physical(plan, side):
-            print(f"  --  {side}: physical, and no belt is driven there", flush=True)
-        else:
-            sides.append(side)
-    if len(plan.conveyors) != 1:
-        parser.error(f"zone {args.zone} has {len(plan.conveyors)} belts, not one")
-    (conveyor,) = plan.conveyors
-    speed = 0.0 if args.stop else conveyor.installed_speed_mps
-    base = domain_base(os.environ)
-    status = 0
-    for side in sides:
-        domain = resolve_domain_id(plan, side, base)
-        if not _set_on_one_side(conveyor.command_topic, speed, domain, side):
-            status = 1
-        else:
-            print(f"  ok  {side}: {conveyor.asset} at {speed:g} m/s", flush=True)
-    return status
+    try:
+        every = set_belts(plan, args.stop, lambda text: print(text, flush=True), args.side)
+    except ValueError as error:
+        parser.error(str(error))
+    return 0 if every else 1
 
 
 def _set_on_one_side(topic: str, speed: float, domain: int, side: str) -> bool:

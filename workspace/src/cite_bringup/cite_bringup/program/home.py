@@ -74,6 +74,7 @@ from cite_bringup.program.steps import (
     _interrupts_ignored,
     execute,
     EXIT_INTERRUPTED,
+    Interrupted,
     Step,
     StepFailed,
 )
@@ -260,8 +261,19 @@ def initializer_stop(physical) -> tuple[str, float]:
     return service, ceiling_s
 
 
-def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ=os.environ):
-    """Call each physical arm's `InitializeAsset` on its side's domain, or raise StepFailed."""
+def initialize(
+    plan: Plan,
+    sides: list[str],
+    say: Callable[[str], None],
+    environ=os.environ,
+    interrupted: Callable[[], bool] | None = None,
+):
+    """Call each physical arm's `InitializeAsset` on its side's domain, or raise StepFailed.
+
+    ``interrupted`` is the operator console's stop (ADR-0071), asked while an
+    answer is awaited; True there is handled as Ctrl-C is: the track is stopped
+    and `steps.Interrupted` raised.
+    """
     if not sides:
         return
     try:
@@ -281,21 +293,32 @@ def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ
                 raise StepFailed(str(error)) from None
             say(f"==> {side}: initializing {manager.asset} ({physical.initialize_service})")
             response = _call_on_domain(
-                physical.initialize_service, resolve_domain_id(plan, side, base), ceiling_s, stop
+                physical.initialize_service,
+                resolve_domain_id(plan, side, base),
+                ceiling_s,
+                stop,
+                interrupted=interrupted,
             )
             if not response.success:
                 raise StepFailed(f"{side}: {manager.asset} not initialized: {response.detail}")
             say(f"  ok  {side}: {response.detail}")
 
 
-def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str, float]):
+def _call_on_domain(
+    service: str,
+    domain: int,
+    ceiling_s: float,
+    stop: tuple[str, float],
+    interrupted: Callable[[], bool] | None = None,
+):
     """Call `InitializeAsset` once on ``domain``, in a context of its own, once matched.
 
     The initialization may move the carriage, so once the request is sent, an
     interrupt (Ctrl-C, SIGTERM) or no answer within ``ceiling_s`` is followed
     by the vendor's track stop on that domain - ``stop`` is its name and how
     long to wait for its answer (`initializer_stop`) - before the failure is
-    re-raised (S-01).
+    re-raised (S-01). ``interrupted`` returning True while the answer is
+    awaited is such an interrupt (ADR-0071).
     """
     from cite_interfaces.srv import InitializeAsset
     import rclpy
@@ -319,6 +342,9 @@ def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str
                     f"nothing serves {service} on domain {domain} after "
                     f"{MATCH_CEILING_S:.0f} s; is that side up?"
                 )
+            if interrupted is not None and interrupted():
+                # Nothing sent yet, so there is nothing to stop.
+                raise Interrupted(f"stopped from the operator console before {service}")
             executor.spin_once(timeout_sec=0.1)
         future = client.call_async(InitializeAsset.Request())
         try:
@@ -326,6 +352,8 @@ def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str
             while not future.done():
                 if time.monotonic() > deadline:
                     raise StepFailed(f"{service} did not answer within {ceiling_s:g} s")
+                if interrupted is not None and interrupted():
+                    raise Interrupted(f"stopped from the operator console during {service}")
                 executor.spin_once(timeout_sec=0.1)
         except BaseException:
             # A second Ctrl-C (the terminal's and the script's) must not

@@ -1074,7 +1074,9 @@ def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> No
         success, detail = True, "track and gripper enabled"
 
     monkeypatch.setattr(
-        home, "_call_on_domain", lambda service, domain, ceiling, stop: calls.append(
+        home,
+        "_call_on_domain",
+        lambda service, domain, ceiling, stop, interrupted=None: calls.append(
             (service, domain, ceiling, stop)
         ) or Answer()
     )

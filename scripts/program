@@ -222,56 +222,14 @@ ok "both sides are up"
 
 # One box per side per cycle, and the program run one cycle at a time:
 # `python3 -m cite_bringup.program` puts no part on the table itself, so a
-# `--cycles N` run of it would reach cycle 2 with nothing to pick. The box keeps
-# the one name `workpiece`, because the belt's `<carry>` list, the beams' `<watch>`
-# list and the grasp hold all match that model name exactly (see
-# `cite_bringup.workpiece.workpiece_sdf`); a uniquely named box would ride
-# through the cell untouched. So the previous cycle's box is taken off the end
-# of the belt first.
+# `--cycles N` run of it would reach cycle 2 with nothing to pick. How a box is
+# put there - and why the previous cycle's is taken off first, under the one
+# name the belts and the grasp hold match - is `cite_bringup.program.part`,
+# which the operator console (ADR-0071) calls too.
 replace_boxes() {
-    python3 - "$ZONE" "$1" <<'PY'
-import sys
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-from cite_bringup.gz import plan_for, run
-from cite_bringup.program.sides import is_physical
-from cite_bringup.workpiece import (
-    SPAWN_DROP_M, frame, part_of, spawn, workpiece_sdf, world_name)
-
-zone, remove_first = sys.argv[1], sys.argv[2] == "1"
-name = "workpiece"
-plan = plan_for(zone)
-world = world_name(plan.world)
-pick = frame(plan, f"{zone}__infeed_table__surface")
-part = part_of(plan, name)
-at = (pick[0], pick[1], pick[2] + part.size_m[2] / 2.0 + SPAWN_DROP_M)
-with NamedTemporaryFile("w", suffix=".sdf", delete=False) as sdf:
-    sdf.write(workpiece_sdf(part))
-try:
-    for side in plan.sides:
-        if is_physical(plan, side.name):
-            print(f"  --  {side.name}: physical; no box is spawned or removed there")
-            continue
-        if remove_first:
-            # Queued in the world ahead of the create below, so the name is
-            # free by the time the create is processed; if it is not, the
-            # create fails and says so.
-            removed = run(
-                ["gz", "service", "-s", f"/world/{world}/remove",
-                 "--reqtype", "gz.msgs.Entity", "--reptype", "gz.msgs.Boolean",
-                 "--timeout", "5000", "--req", f'name: "{name}" type: MODEL'],
-                zone=zone, side=side.name, timeout=60,
-            )
-            if "data: true" not in removed.stdout:
-                sys.exit(f"{side.name}: could not remove the previous {name}: "
-                         f"{removed.stdout.strip()} {removed.stderr.strip()}")
-        problem = spawn(zone, side.name, name, at, Path(sdf.name), timeout_s=180.0)
-        if problem is not None:
-            sys.exit(f"{side.name}: {problem}")
-        print(f"  ok  {side.name}: a {name} on the pick table")
-finally:
-    Path(sdf.name).unlink(missing_ok=True)
-PY
+    local replace=()
+    [ "$1" != "1" ] || replace=(--replace)
+    python3 -m cite_bringup.program.part --zone "$ZONE" "${replace[@]}"
 }
 
 # Each side's belt, on that side's own domain and never through the boundary:

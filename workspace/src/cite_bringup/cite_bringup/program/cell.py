@@ -23,16 +23,22 @@ plant's own servers, which is a single side.
 
 Nothing here runs inside a callback. The program is a plain loop on the main
 thread that spins the node while it waits, so a blocking call cannot starve an
-executor (CLAUDE.md §10).
+executor (CLAUDE.md §10). The operator console (ADR-0071) runs the same loop on
+a worker thread of its own, and stops it through ``interrupted``: every wait
+here spins through `RosCell._spin_once`, which raises `steps.Interrupted` there
+once the console asks - except inside a cancel and a return to SIM, which are
+the stop itself and are never cut short.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import time
+from typing import Callable
 
 from cite_bringup import track_command
 from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
-from cite_bringup.program.steps import scaled_motion, speed_scale, StepFailed
+from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, StepFailed
 from cite_bringup.readiness import waits_for_a_physical_side
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
@@ -92,6 +98,11 @@ _ASK_AGAIN_S = 0.5
 #: How long one wait between two `TrackArrived` asks blocks, in wall seconds: a
 #: poll bounded by the track step's own ceiling, spent spinning this node.
 _ARRIVAL_ASK_S = 0.1
+
+#: The longest one spin blocks while a future is awaited, in wall seconds: how
+#: soon an interruption is seen. Not a schedule - `spin_once` returns on the
+#: first callback - and not a ceiling, which is the caller's.
+_SPIN_SLICE_S = 0.1
 
 
 def twin_name(name: str) -> str:
@@ -282,6 +293,11 @@ def gripper_effort_n(arm: ControllerManager) -> float:
 class RosCell:
     """Drive one arm, its track and (for the ADR-0066 record) a belt, via the twin or not."""
 
+    #: Class-level defaults of the two attributes `__init__` sets for the
+    #: operator console's stop, so a cell assembled without it never stops.
+    _interrupted: Callable[[], bool] | None = None
+    _uninterruptible = 0
+
     def __init__(
         self,
         arm: ControllerManager,
@@ -290,8 +306,17 @@ class RosCell:
         conveyor: Conveyor | None = None,
         track: Track | None = None,
         speed: float = 1.0,
+        interrupted: Callable[[], bool] | None = None,
+        node_name: str = "fixed_program",
     ) -> None:
         skills = arm.skills
+        #: Asked before every spin: True stops whatever is waiting with
+        #: `Interrupted` (ADR-0071). None for a terminal run, whose stop is
+        #: Ctrl-C's KeyboardInterrupt on the main thread.
+        self._interrupted = interrupted
+        #: How deep inside a cancel or a return to SIM this cell is: there the
+        #: predicate is not asked, because those ARE the stop.
+        self._uninterruptible = 0
         #: The fraction of its own speed every move and every track slide runs
         #: at (`--speed-scale`). One command through the twin, so both sides run
         #: at the same fraction.
@@ -301,7 +326,7 @@ class RosCell:
         self._via = via
         self._effort_n = gripper_effort_n(arm)
         self.node = Node(
-            "fixed_program", parameter_overrides=[Parameter("use_sim_time", value=True)]
+            node_name, parameter_overrides=[Parameter("use_sim_time", value=True)]
         )
         self._move_to = ActionClient(self.node, MoveTo, name(skills.move_to))
         self._grasp = ActionClient(self.node, Grasp, name(skills.grasp))
@@ -366,7 +391,7 @@ class RosCell:
         def pause() -> None:
             ask_again = time.monotonic() + _ASK_AGAIN_S
             while time.monotonic() < ask_again:
-                rclpy.spin_once(self.node, timeout_sec=_ASK_AGAIN_S)
+                self._spin_once(_ASK_AGAIN_S)
 
         ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
 
@@ -380,8 +405,13 @@ class RosCell:
         NOT disable the arm: the deadman keeps it enabled while heartbeats
         arrive, and it holds where it stands. Return whether the twin confirmed
         SIM: a refusal, a timeout or no server is said and returns False, which
-        the caller makes the run's failure (SA-S-05).
+        the caller makes the run's failure (SA-S-05). Never interrupted: it is
+        where a stop ends on a pair with a physical side.
         """
+        with self._not_interrupted():
+            return self._leave_validated()
+
+    def _leave_validated(self) -> bool:
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
             print(f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served")
@@ -540,7 +570,7 @@ class RosCell:
                     f"wait {seconds:.2f} s: the cell's clock did not get there in "
                     f"{ceiling_s:.0f} wall seconds; is the simulator running?"
                 )
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            self._spin_once(0.1)
 
     def track(self, position_m: float, speed_mps: float) -> None:
         """Slide the carriage to ``position_m`` at ``speed_mps`` and wait for it.
@@ -607,7 +637,7 @@ class RosCell:
                     f"{what}: the carriage stands at {self._track_position * 1000:.1f} mm "
                     f"after {ceiling_s:.0f} wall seconds; is the controller active?"
                 )
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            self._spin_once(0.1)
         if self._track_arrived is not None:
             # Through the twin, this domain's joint states are the plant's
             # only: the counterpart's carriage - the physical one - is asked of
@@ -616,6 +646,15 @@ class RosCell:
         self._track_target = None
 
     def cancel(self) -> None:
+        """Cancel the goal in flight and hold the track; never itself interrupted."""
+        with self._not_interrupted():
+            self._cancel()
+
+    def close(self) -> None:
+        """Release this cell's node. The cell is not used again."""
+        self.node.destroy_node()
+
+    def _cancel(self) -> None:
         if self._track_target is not None and self._track_command is not None:
             # Abandoned mid-move: stop every carriage where IT stands, rather
             # than leave it running to a target nobody is waiting for. Through
@@ -681,7 +720,7 @@ class RosCell:
         # this node hears `/clock`.
         again = time.monotonic() + _ARRIVAL_ASK_S
         while time.monotonic() < again:
-            rclpy.spin_once(self.node, timeout_sec=_ARRIVAL_ASK_S)
+            self._spin_once(_ARRIVAL_ASK_S)
 
     def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
         ask_twin = self._ask_arrival(position_m, what)
@@ -715,9 +754,15 @@ class RosCell:
             raise StepFailed(f"{what}: result code {code.code}: {code.detail}")
 
     def _until(self, future, what: str, ceiling_s: float = STEP_CEILING_S):
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=ceiling_s)
-        if not future.done():
-            raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s")
+        # Spun in slices rather than in one `spin_until_future_complete`, so
+        # that an interruption is seen within one slice; the ceiling is the
+        # same wall-clock bound it was.
+        deadline = time.monotonic() + ceiling_s
+        while not future.done():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s")
+            self._spin_once(min(_SPIN_SLICE_S, remaining))
         return future.result()
 
     def _until_true(self, predicate, what: str) -> None:
@@ -730,4 +775,22 @@ class RosCell:
         while not predicate():
             if time.monotonic() > deadline:
                 raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s")
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            self._spin_once(0.1)
+
+    def _spin_once(self, timeout_sec: float) -> None:
+        """Spin this node once, unless the console asked this cell to stop (ADR-0071)."""
+        if (
+            self._interrupted is not None
+            and self._uninterruptible == 0
+            and self._interrupted()
+        ):
+            raise Interrupted("stopped from the operator console")
+        rclpy.spin_once(self.node, timeout_sec=timeout_sec)
+
+    @contextmanager
+    def _not_interrupted(self):
+        self._uninterruptible += 1
+        try:
+            yield
+        finally:
+            self._uninterruptible -= 1
