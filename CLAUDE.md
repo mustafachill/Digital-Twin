@@ -27,8 +27,8 @@ interface, and the system continuously measures how far the model is from realit
 one command will drive one real xArm 5 and one virtual xArm 5 in Gazebo, both running the real
 robot's own program with the arm on a linear track, as the two sides of the paired zone
 `cell_b`. The counterpart is declared to be the physical arm and its side is built
-([ADR-0070](docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)); it has not yet driven
-the arm (Phase 2.B, charter §8).
+([ADR-0070](docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md)); one signal has run the
+real program on both arms together (Phase 2.B, charter §8).
 
 It is also a **rebuild**. A first iteration (v1) was archived under `legacy/` and deleted at
 the end of Phase 1; it survives only in version control, and **its patterns are not
@@ -80,11 +80,11 @@ names text that is `git show 960e6b4:CLAUDE.md`.
 
 **What does not work yet, stated plainly:**
 
-- **No full cycle has run on the physical arm.** One signal has driven the physical xArm 5 and
-  its twin together through the first steps of the real program at reduced speed; the run
-  then stopped on the controller's own collision detection (C31). What was run and what stopped
-  it: [`docs/operations/bring-up.md`](docs/operations/bring-up.md), "First physical runs". A
-  physical plant on a paired zone is refused at validate time (ADR-0041 Decision 3).
+- **The physical cycle is demonstrated, not measured.** One signal has run the real program's
+  full cycle on the physical xArm 5 and its twin together, supervised
+  ([`docs/operations/bring-up.md`](docs/operations/bring-up.md), "First physical runs"); no
+  fidelity number exists yet, and registration is not built. A physical plant on a paired zone
+  is refused at validate time (ADR-0041 Decision 3).
 - **Nothing automated brings a pair up**, so the twin boundary is held only by `cite_twin`'s own
   tests against fake sides (ADR-0057). `DivergenceMetrics.valid` is false by construction.
 - **Runs are not deterministic**: the seed does not reach the physics solver, and

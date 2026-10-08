@@ -1917,7 +1917,13 @@ is destroyed.
 of ours. On the physical side, `move_group` exiting brings the whole side down by design, so
 there the crash only ever happens at teardown.
 
-### #98 — The physical arm stops on C31 during streamed motion (2026-10-06)
+### #98 — The physical arm stops on C31 during streamed motion (2026-10-06) — closed 2026-10-08
+**Closed.** With the track initialized and the arms brought to the start before the cycle, the
+full cycle ran at 0.1 and 1.0 of the program's speed (`docs/operations/bring-up.md`, "First full
+physical cycles"). The one C31 seen after that was real contact with a misplaced part. The
+earlier C31 stops are not attributed further. Kept below as written:
+
+*Original entry (2026-10-06):*
 On the first physical runs (`docs/operations/bring-up.md`, "First physical runs"), the xArm
 raised `C31: Collision Caused Abnormal Joint Current` about two seconds into the first joint
 move, with no contact reported by the owner at the cell. The vendor plugin then deactivated the

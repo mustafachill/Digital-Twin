@@ -395,6 +395,21 @@ Reduced speed and a human on the stop, in both stages.
 
 Raise the scale only after a run that showed nothing unexpected.
 
+### First full physical cycles (2026-10-08)
+
+On `main` at `0ceb80d`, supervised, owner at the hardware E-stop, over the lab Wi-Fi:
+
+- **What made the difference** was initializing the linear track as the operator does in
+  UFACTORY Studio (`InitializeAsset`: motor and gripper enabled, homed when it has not found its
+  zero) and bringing both arms to the program's start before the cycle (measure, home if away,
+  measure again). Before it, track moves were refused by the vendor (code 82, not on zero).
+- **`--speed-scale 0.1`:** initialize, home, then all 22 steps on both arms: pick, track to
+  650 mm with the part, place, track back, arm to zero. The run before it stopped on C31 at
+  the descent to the part; the owner traced it to a misplaced part (real contact), so the
+  controller was right.
+- **`--speed-scale 1.0` (the program's own speed):** initialize (already at the start, no
+  homing move) and all 22 steps on both arms.
+
 ### First physical runs (2026-10-06)
 
 Supervised, owner at the hardware E-stop, `--speed-scale 0.1`, over the lab Wi-Fi. Observations,
