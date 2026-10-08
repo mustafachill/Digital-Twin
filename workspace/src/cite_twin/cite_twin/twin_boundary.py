@@ -103,7 +103,7 @@ from cite_interfaces.msg import (
     TwinMode,
 )
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode, TrackArrived
+from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
     address,
@@ -117,6 +117,7 @@ from cite_twin.boundary import (
     SKILL_ACTION_TYPES,
 )
 from cite_twin.divergence import assess, compare, JointMerge, Operand, UNMEASURED
+from cite_twin.joints_at import joints_at
 from cite_twin.mode import (
     deployment_from_plan,
     far_side_is_physical,
@@ -410,6 +411,10 @@ class TwinBoundary:
         #: arrival, heard in every mode, because a stop, an arrival check and
         #: the precondition above are owed whatever the mode is.
         self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
+        #: Per (side, joint): the same for every joint a side publishes, heard
+        #: in every mode, for `JointsAt` - the program's start measured before
+        #: anything is commanded (ADR-0070). Answered as a verdict only.
+        self._joint_positions: dict[tuple[str, str], tuple[float, float]] = {}
 
         # Both sides, read per asset, because the hardware gate asks which sides
         # the requested mode commands and what each of them DECLARES - never
@@ -610,6 +615,13 @@ class TwinBoundary:
             callback_group=self._group,
         )
 
+        self._joints_at = self._plant.node.create_service(
+            JointsAt,
+            JointsAt.Request.SERVICE,
+            self._on_joints_at,
+            callback_group=self._group,
+        )
+
         self._timer = self._plant.node.create_timer(
             period, self._publish_divergence, callback_group=self._group
         )
@@ -709,7 +721,7 @@ class TwinBoundary:
                 )
             else:
                 verdict = self._authority.request(
-                    request.mode, "", request.reason, request.force
+                    request.mode, "", request.reason, request.force, request.homing
                 )
             changed = verdict.accepted and verdict.mode != before
             if changed:
@@ -1025,6 +1037,43 @@ class TwinBoundary:
         )
         return response
 
+    def _on_joints_at(
+        self, request: JointsAt.Request, response: JointsAt.Response
+    ) -> JointsAt.Response:
+        """Answer whether every side the zone declares stands at the requested positions.
+
+        ADR-0070: the program's start, measured before anything is commanded,
+        so every side is judged in every mode. A physical side counts only with
+        fresh positions; which sides are physical is the plan's, read at
+        start-up (`_physical_watches`), conservatively for every joint asked.
+        """
+        with self._lock:
+            sides = tuple(self._sides)
+            heard = {
+                (side_name, joint): position
+                for side_name in sides
+                for joint in request.joints
+                if (position := self._joint_positions.get((side_name, joint))) is not None
+            }
+        physical = [COUNTERPART_SIDE] if self._physical_watches else []
+        reason, detail = joints_at(
+            sides,
+            heard,
+            physical,
+            list(request.joints),
+            list(request.positions),
+            request.tolerance,
+            time.monotonic(),
+            self._state_max_age_s,
+        )
+        response.reason = reason
+        response.at = reason == JointsAt.Response.AT
+        response.detail = detail or (
+            f"every side ({', '.join(sides)}) stands within {request.tolerance:g} of "
+            "every position asked"
+        )
+        return response
+
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
         """Command to zero every belt on a side ``mode`` no longer routes to.
 
@@ -1137,6 +1186,9 @@ class TwinBoundary:
             )
             if watch is not None:
                 watch.heard_joints(positions, time.monotonic())
+            arrived = time.monotonic()
+            for joint, position in positions.items():
+                self._joint_positions[(side_name, joint)] = (position, arrived)
             for joint in self._track_asset_by_joint:
                 if joint in positions:
                     self._track_positions[(side_name, joint)] = (

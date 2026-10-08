@@ -700,6 +700,8 @@ class _PairCell:
     mode = None
     left = True
     carriage: str | None = None
+    #: What each `away_from_start` measures, in order: None is "at the start".
+    away: list[str | None] = []
     calls: list[str] = []
 
     def __init__(self, *_args, **_kwargs) -> None:
@@ -711,11 +713,15 @@ class _PairCell:
     def refuse_if_holding(self) -> None:
         _PairCell.calls.append("refuse_if_holding")
 
-    def carriage_refusal(self) -> str | None:
-        return _PairCell.carriage
+    def carriage_refusal(self, homing: bool = False) -> str | None:
+        return None if homing and _PairCell.carriage == "apart" else _PairCell.carriage
 
-    def enter_validated(self) -> None:
-        _PairCell.calls.append("enter_validated")
+    def away_from_start(self, start) -> str | None:
+        _PairCell.calls.append(f"measure {start.pose}")
+        return _PairCell.away.pop(0)
+
+    def enter_validated(self, homing: bool = False) -> None:
+        _PairCell.calls.append("enter_validated homing" if homing else "enter_validated")
 
     def cancel(self) -> None:
         _PairCell.calls.append("cancel")
@@ -726,15 +732,25 @@ class _PairCell:
 
 
 def _main_on_a_pair(
-    monkeypatch, mode, left: bool, answers=("",), carriage=None, initialized=True, argv=()
+    monkeypatch,
+    mode,
+    left: bool,
+    answers=("",),
+    carriage=None,
+    initialized=True,
+    argv=(),
+    away=("arm away", None),
+    homed=True,
 ) -> int:
     import builtins
 
     import cite_bringup.program.__main__ as program_module
     import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
     import rclpy
 
     _PairCell.mode, _PairCell.left, _PairCell.carriage = mode, left, carriage
+    _PairCell.away = list(away)
     answers = list(answers)
     monkeypatch.setattr(cell_module, "RosCell", _PairCell)
     monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
@@ -750,13 +766,13 @@ def _main_on_a_pair(
             raise StepFailed("counterpart: picker not initialized: the vendor refused")
 
     monkeypatch.setattr(program_module, "initialize", initialize)
-    monkeypatch.setattr(
-        program_module,
-        "run_home",
-        lambda steps, _cell, _say: _PairCell.calls.append(
-            "home " + " ".join(step.kind for step in steps)
-        ),
-    )
+
+    def run_home(steps, _cell, _say) -> None:
+        _PairCell.calls.append("home " + " ".join(step.kind for step in steps))
+        if not homed:
+            raise StepFailed("move to zero: result code 3: refused")
+
+    monkeypatch.setattr(home_module, "run_home", run_home)
     monkeypatch.setattr(builtins, "input", lambda _prompt="": answers.pop(0))
     return program_main(["--zone", ZONE, "--speed-scale", "0.1", *argv])
 
@@ -858,10 +874,16 @@ def test_a_physical_carriage_never_heard_refuses_at_the_ceiling_and_says_so() ->
 def test_a_run_whose_carriages_disagree_never_asks_and_never_enters_validated(
     monkeypatch,
 ) -> None:
+    """After the first cycle there is no homing move, so a carriage apart refuses."""
     from cite_interfaces.msg import TwinMode
 
     status = _main_on_a_pair(
-        monkeypatch, TwinMode.MODE_SIM, left=True, answers=(), carriage="apart"
+        monkeypatch,
+        TwinMode.MODE_SIM,
+        left=True,
+        answers=(),
+        carriage="apart",
+        argv=("--first-cycle", "2"),
     )
     assert status == 1
     assert _PairCell.calls == []
@@ -932,18 +954,90 @@ def test_a_failed_home_step_cancels_and_fails(cell) -> None:
     assert not [call for call in fake.calls if call[0] == "track"]
 
 
-def test_the_first_cycle_initializes_then_homes_then_runs(monkeypatch) -> None:
+def test_a_first_cycle_away_from_the_start_homes_measures_again_then_runs(monkeypatch) -> None:
+    """Not at the start: initialize, home under the allowance, measure, re-enter plainly."""
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
     assert _PairCell.calls == [
         "refuse_if_holding",
+        "measure zero",
         "initialize counterpart",
-        "enter_validated",
+        "enter_validated homing",
         "home move track",
+        "measure zero",
+        # The program's own cycle never runs under the homing allowance.
+        "enter_validated",
         "run",
         "leave_validated",
     ]
+
+
+def test_a_first_cycle_already_at_the_start_moves_nothing_before_the_program(
+    monkeypatch,
+) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, away=(None,)) == 0
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "measure zero",
+        "enter_validated",
+        "run",
+        "leave_validated",
+    ]
+
+
+def test_a_failed_home_stops_without_a_retry_and_returns_to_sim(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, away=("arm away",), homed=False
+    ) == 1
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "measure zero",
+        "initialize counterpart",
+        "enter_validated homing",
+        "home move track",
+        "leave_validated",
+    ]
+
+
+def test_a_home_that_does_not_reach_the_start_stops_without_a_retry(monkeypatch, capsys) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch,
+        TwinMode.MODE_SIM,
+        left=True,
+        away=("arm away", "counterpart: picker_joint2 stands at 0.1000"),
+    ) == 1
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "measure zero",
+        "initialize counterpart",
+        "enter_validated homing",
+        "home move track",
+        "measure zero",
+        "leave_validated",
+    ]
+    said = capsys.readouterr().out
+    assert "still not at the program's start" in said
+    assert "counterpart: picker_joint2 stands at 0.1000" in said
+
+
+def test_before_a_home_a_carriage_apart_does_not_refuse_the_operator(monkeypatch) -> None:
+    """The carriage-agreement refusal before the prompt is the homing move's to clear."""
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, carriage="apart") == 0
+    assert "home move track" in _PairCell.calls
+    # A carriage never heard still refuses, homing or not.
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, answers=(), carriage="unheard"
+    ) == 1
+    assert _PairCell.calls == []
 
 
 def test_a_later_cycle_neither_initializes_nor_homes(monkeypatch) -> None:
@@ -959,7 +1053,12 @@ def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, initialized=False) == 1
-    assert _PairCell.calls == ["refuse_if_holding", "initialize counterpart"]
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "measure zero",
+        "initialize counterpart",
+        "leave_validated",
+    ]
 
 
 def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> None:
@@ -1003,3 +1102,195 @@ def test_a_simulated_side_has_nothing_to_initialize(monkeypatch) -> None:
         load(default_plan_path(ZONE)), ["plant"], said.append, environ={"CITE_DOMAIN_BASE": "40"}
     )
     assert any("nothing to initialize" in line for line in said)
+
+
+# --------------------------------------------------------------------------- #
+# The start is measured before any homing move, and after it (ADR-0070)
+# --------------------------------------------------------------------------- #
+
+
+def test_the_start_is_the_programs_first_pose_within_the_arms_goal_tolerance(cell) -> None:
+    from cite_bringup.program.home import home_steps, start_pose
+
+    start = start_pose(cell, home_steps(cell))
+    assert start.pose == "zero"
+    assert start.joints == tuple(f"picker_joint{n}" for n in range(1, 6))
+    assert start.positions == cell.arm.moveit.poses_rad["zero"]
+    assert start.tolerance_rad == cell.arm.arm["arm_goal_tolerance_rad"]
+    assert start.track_m == 0.0
+    assert start.track_tolerance_m == cell.track.goal_tolerance_m
+
+
+def test_one_side_read_directly_is_at_the_start_only_within_both_tolerances(cell) -> None:
+    from cite_bringup.program.home import home_steps, start_pose
+
+    start = start_pose(cell, home_steps(cell))
+    at = dict(zip(start.joints, start.positions))
+    assert start.away_on_one_side(at, 0.0) is None
+    nudged = {**at, "picker_joint3": start.positions[2] + 2 * start.tolerance_rad}
+    assert "picker_joint3 stands at" in start.away_on_one_side(nudged, 0.0)
+    assert "the track stands at 300.0 mm" in start.away_on_one_side(at, 0.30)
+    assert "the track is not heard" in start.away_on_one_side(at, None)
+
+
+class _StartCell:
+    """A cell for `bring_to_start`: measures what it is told, records the rest."""
+
+    def __init__(self, away, fail_on=None) -> None:
+        self.away = list(away)
+        self.fake = FakeCell(fail_on=fail_on)
+        self.calls = self.fake.calls
+
+    def away_from_start(self, start):
+        self.calls.append(("measure",))
+        return self.away.pop(0)
+
+    def enter_validated(self, homing: bool = False) -> None:
+        self.calls.append(("enter_validated", homing))
+
+    def __getattr__(self, name):
+        return getattr(self.fake, name)
+
+
+def test_bring_to_start_moves_nothing_when_every_side_is_there(cell) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell([None])
+    initialized = []
+    assert not bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: initialized.append(1), _quiet
+    )
+    assert ros.calls == [("measure",), ("enter_validated", False)]
+    assert initialized == []
+
+
+def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(["arm away", None])
+    initialized = []
+    assert bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: initialized.append(1), _quiet
+    )
+    assert initialized == [1]
+    assert [call[0] for call in ros.calls] == [
+        "measure", "enter_validated", "move", "track", "measure", "enter_validated"
+    ]
+    assert ros.calls[1] == ("enter_validated", True)
+    assert ros.calls[-1] == ("enter_validated", False)
+
+
+def test_bring_to_start_via_the_plant_alone_asks_no_mode(cell) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(["arm away", None])
+    assert bring_to_start(
+        steps, start_pose(cell, steps), ros, lambda: None, _quiet, via_twin=False
+    )
+    assert [call[0] for call in ros.calls] == ["measure", "move", "track", "measure"]
+
+
+@pytest.mark.parametrize(
+    ("away", "fail_on", "initialize_fails", "calls"),
+    [
+        # The second measurement says a side is still away: stop, no retry.
+        (["arm away", "still away"], None, False,
+         ["measure", "enter_validated", "move", "track", "measure"]),
+        # A home step fails: cancelled, never retried, never measured again.
+        (["arm away"], "zero", False, ["measure", "enter_validated", "move", "cancel"]),
+        # The physical arm cannot be initialized: nothing moves.
+        (["arm away"], None, True, ["measure"]),
+    ],
+)
+def test_bring_to_start_stops_on_any_failure_and_retries_nothing(
+    cell, away, fail_on, initialize_fails, calls
+) -> None:
+    from cite_bringup.program.home import bring_to_start, home_steps, start_pose
+
+    steps = home_steps(cell)
+    ros = _StartCell(away, fail_on=fail_on)
+
+    def initialize() -> None:
+        if initialize_fails:
+            raise StepFailed("counterpart: picker not initialized: the vendor refused")
+
+    with pytest.raises(StepFailed):
+        bring_to_start(steps, start_pose(cell, steps), ros, initialize, _quiet)
+    assert [call[0] for call in ros.calls] == calls
+
+
+def test_before_a_home_only_a_carriage_heard_apart_is_let_through() -> None:
+    """Homing clears AWAY; an unheard carriage, or one the twin cannot judge, still refuses."""
+    away = _answer(False, "counterpart: stands at 300.0 mm")
+    assert carriage_verdict(away, 0.0, 120.0) is not None
+    assert carriage_verdict(away, 0.0, 120.0, homing=True) is None
+    unheard = _answer(False, "no track position heard", TrackArrived.Response.UNHEARD)
+    assert "did not hear" in carriage_verdict(unheard, 0.0, 120.0, homing=True)
+    other = _answer(False, "not a track", TrackArrived.Response.NOT_A_TRACK)
+    assert carriage_verdict(other, 0.0, 120.0, homing=True) is not None
+
+
+def test_the_twins_measurement_is_said_as_where_a_side_stands() -> None:
+    from cite_bringup.program.cell import away_verdict
+    from cite_interfaces.srv import JointsAt
+
+    at = JointsAt.Response(at=True, reason=JointsAt.Response.AT, detail="")
+    assert away_verdict(at, "the arm", 120.0) is None
+    away = JointsAt.Response(
+        reason=JointsAt.Response.AWAY, detail="counterpart: picker_joint1 stands at 0.2000"
+    )
+    assert "picker_joint1 stands at 0.2000" in away_verdict(away, "the arm", 120.0)
+    unheard = JointsAt.Response(reason=JointsAt.Response.UNHEARD, detail="counterpart: old")
+    assert "not heard fresh within 120 s" in away_verdict(unheard, "the arm", 120.0)
+    assert away_verdict(_answer(True, "every side"), "the track", 120.0) is None
+    assert "stands at" in away_verdict(_answer(False, "plant: stands at 5.0 mm"), "the track", 1)
+
+
+def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
+    """`./scripts/home` runs the same measured sequence, minus the program."""
+    import builtins
+
+    import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
+    from cite_interfaces.msg import TwinMode
+    import rclpy
+
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(
+        "cite_bringup.program.steps.install_interrupt_handlers", lambda: None
+    )
+    monkeypatch.setattr(
+        home_module, "initialize", lambda _plan, sides, _say: _PairCell.calls.append(
+            f"initialize {','.join(sides)}"
+        )
+    )
+    monkeypatch.setattr(
+        home_module, "run_home", lambda steps, _cell, _say: _PairCell.calls.append("home")
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": "")
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = TwinMode.MODE_SIM, True, "apart"
+
+    _PairCell.away = [None]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
+    assert _PairCell.calls == ["measure zero", "enter_validated", "leave_validated"]
+
+    _PairCell.away = ["arm away", None]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
+    assert _PairCell.calls == [
+        "measure zero",
+        "initialize counterpart",
+        "enter_validated homing",
+        "home",
+        "measure zero",
+        "enter_validated",
+        "leave_validated",
+    ]
+
+    _PairCell.away = ["arm away", "still away"]
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
+    assert _PairCell.calls[-2:] == ["measure zero", "leave_validated"]

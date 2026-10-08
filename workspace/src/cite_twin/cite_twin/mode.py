@@ -396,15 +396,20 @@ class ModeAuthority:
         """Why the current mode was entered, for the record."""
         return self._reason
 
-    def request(self, mode: int, asset_id: str, reason: str, force: bool) -> Verdict:
+    def request(
+        self, mode: int, asset_id: str, reason: str, force: bool, homing: bool = False
+    ) -> Verdict:
         """Decide one `SetMode` call and, if it is accepted, take the mode.
 
         The order of the checks is the decision. The hardware gate is evaluated
         after the cheap refusals so that a malformed request is answered as a
         malformed request, and before anything `force` can reach.
+
+        ``homing`` is `SetMode.homing`: with VALIDATED only, it skips the
+        carriage-agreement refusal and nothing else (ADR-0070).
         """
         try:
-            return self._decide(mode, asset_id, reason, force)
+            return self._decide(mode, asset_id, reason, force, homing)
         except ModeError as refusal:
             return Verdict(
                 accepted=False,
@@ -414,7 +419,9 @@ class ModeAuthority:
                 commands_hardware=False,
             )
 
-    def _decide(self, mode: int, asset_id: str, reason: str, force: bool) -> Verdict:
+    def _decide(
+        self, mode: int, asset_id: str, reason: str, force: bool, homing: bool
+    ) -> Verdict:
         if mode not in MODE_NAMES:
             raise ModeError(
                 ResultCode.PRECONDITION_FAILED,
@@ -426,6 +433,15 @@ class ModeAuthority:
                 ResultCode.PRECONDITION_FAILED,
                 "SetMode.reason is required, so that every transition has a why on the "
                 "record. A transition nobody has to justify is one nobody reviews.",
+            )
+        if homing and mode != TwinMode.MODE_VALIDATED:
+            # Narrow on purpose: the allowance exists for the one move that
+            # brings the carriages together before a program, which is sent in
+            # VALIDATED; in any other mode it would be a hole with no purpose.
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"SetMode.homing is accepted with VALIDATED only, not "
+                f"{MODE_NAMES[mode]} (ADR-0070).",
             )
 
         # Asked before anything else looks at the scope, so that an unknown
@@ -442,7 +458,7 @@ class ModeAuthority:
             # re-asserts VALIDATED is about to command that side, which may have
             # tripped, gone stale or lost its enable since the mode was entered.
             # So a mode commanding a physical side is re-checked here too.
-            self._require_physical_side_ready(mode, asset_id)
+            self._require_physical_side_ready(mode, asset_id, homing)
             # The reason is still recorded, because a re-assertion is a decision too.
             self._reason = reason
             return Verdict(
@@ -481,7 +497,7 @@ class ModeAuthority:
             # mode commanding it waits until it is enabled and publishing. A
             # PRECONDITION and not a safety refusal: it clears by itself, and a
             # caller may ask again.
-            self._require_physical_side_ready(mode, asset_id)
+            self._require_physical_side_ready(mode, asset_id, homing)
 
         previous = self._mode
         self._mode = mode
@@ -494,14 +510,20 @@ class ModeAuthority:
             commands_hardware=commands_hardware,
         )
 
-    def _require_physical_side_ready(self, mode: int, asset_id: str) -> None:
-        """Refuse ``mode`` while a physical side it commands is not ready (ADR-0070 item 6)."""
+    def _require_physical_side_ready(self, mode: int, asset_id: str, homing: bool) -> None:
+        """Refuse ``mode`` while a physical side it commands is not ready (ADR-0070 item 6).
+
+        ``homing`` skips the carriage-agreement question and only it: the
+        readiness question below is asked whatever it says.
+        """
         if not self._deployment.physical_sides_commanded(mode, asset_id):
             return
         # Each question on its own: a carriage apart is refused whether or not
         # a readiness question was given (R-07).
         apart = (
-            None if self._physical_carriage_apart is None else self._physical_carriage_apart()
+            None
+            if homing or self._physical_carriage_apart is None
+            else self._physical_carriage_apart()
         )
         if apart is not None:
             raise ModeError(

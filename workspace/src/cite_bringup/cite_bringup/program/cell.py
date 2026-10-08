@@ -37,7 +37,7 @@ from cite_bringup.readiness import waits_for_a_physical_side
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ResultCode, RobotState, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode, TrackArrived
+from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -150,7 +150,7 @@ def _require_routed(answer, what: str) -> None:
 
 
 def await_heard(ask, pause, deadline: float, clock=time.monotonic):
-    """Ask `TrackArrived` until its answer is not UNHEARD, or ``deadline`` passes.
+    """Ask `TrackArrived` (or `JointsAt`) until its answer is not UNHEARD, or ``deadline`` passes.
 
     R-01: a physical carriage whose position the twin has not heard fresh is
     neither agreeing nor apart, so the check before the operator waits for it,
@@ -159,18 +159,24 @@ def await_heard(ask, pause, deadline: float, clock=time.monotonic):
     """
     while True:
         answer = ask()
-        if answer.reason != TrackArrived.Response.UNHEARD or clock() > deadline:
+        if answer.reason != type(answer).UNHEARD or clock() > deadline:
             return answer
         pause()
 
 
-def carriage_verdict(answer, plant_m: float, ceiling_s: float) -> str | None:
+def carriage_verdict(
+    answer, plant_m: float, ceiling_s: float, homing: bool = False
+) -> str | None:
     """Say why the operator may not be asked in, from the twin's last answer, or None.
 
     AWAY never clears by itself, so it says what to do from outside the cell;
-    UNHEARD is said as unheard, never as "home it" (R-04).
+    UNHEARD is said as unheard, never as "home it" (R-04). Before a homing
+    move (``homing``) AWAY is no refusal: bringing the carriages together is
+    what that move does, and the start is measured again after it (ADR-0070).
     """
     if answer.reason == TrackArrived.Response.ARRIVED:
+        return None
+    if homing and answer.reason == TrackArrived.Response.AWAY:
         return None
     if answer.reason == TrackArrived.Response.AWAY:
         return (
@@ -186,6 +192,20 @@ def carriage_verdict(answer, plant_m: float, ceiling_s: float) -> str | None:
             "No one is asked into the cell"
         )
     return f"the twin cannot judge the carriages ({answer.detail}); no one is asked into the cell"
+
+
+def away_verdict(answer, what: str, ceiling_s: float) -> str | None:
+    """Say where a side stands away from the start, from the twin's last answer, or None.
+
+    ``answer`` is a `JointsAt` or a `TrackArrived` response, after
+    `await_heard`-style waiting: a position never heard fresh is not at the
+    start, and is said as unheard (ADR-0070).
+    """
+    if getattr(answer, "at", False) or getattr(answer, "arrived", False):
+        return None
+    if answer.reason == type(answer).UNHEARD:
+        return f"{what}: not heard fresh within {ceiling_s:.0f} s ({answer.detail})"
+    return f"{what}: {answer.detail}"
 
 
 def holding_refusal(state: RobotState | None, topic: str) -> str | None:
@@ -307,23 +327,36 @@ class RosCell:
             if track is not None and via == "twin"
             else None
         )
-        if track is not None:
-            self.node.create_subscription(
-                JointState, arm.joint_state_topic, self._on_joint_state, STATE
-            )
+        #: Every joint position this domain's joint states carry, by name.
+        self._positions: dict[str, float] = {}
+        self.node.create_subscription(
+            JointState, arm.joint_state_topic, self._on_joint_state, STATE
+        )
         self._state_topic = state_topic(arm)
         self._active = None
         self._sent = None
 
     # --------------------------------------------------------------- setup
 
-    def enter_validated(self) -> None:
-        """Put the twin in VALIDATED, where L5 routes a command to both sides."""
+    def enter_validated(self, homing: bool = False) -> None:
+        """Put the twin in VALIDATED, where L5 routes a command to both sides.
+
+        ``homing`` asks it with `SetMode.homing`, for the homing move before the
+        first cycle only (`program.home.bring_to_start`): the carriages may
+        stand apart then, since that move is what brings them together. The
+        program itself always asks without it (ADR-0070).
+        """
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
             raise StepFailed(f"{SetMode.Request.SERVICE} is not served; is the pair up?")
         request = SetMode.Request(
-            mode=TwinMode.MODE_VALIDATED, reason="fixed program (ADR-0066)"
+            mode=TwinMode.MODE_VALIDATED,
+            reason=(
+                "homing to the program's start (ADR-0070)"
+                if homing
+                else "fixed program (ADR-0066)"
+            ),
+            homing=homing,
         )
 
         def ask() -> tuple[bool, str]:
@@ -382,7 +415,7 @@ class RosCell:
             self.node.destroy_subscription(subscription)
         return received[-1].mode
 
-    def carriage_refusal(self) -> str | None:
+    def carriage_refusal(self, homing: bool = False) -> str | None:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).
 
         Asked in SIM, before the operator is: the twin answers `TrackArrived`
@@ -391,7 +424,9 @@ class RosCell:
         `PHYSICAL_SIDE_READY_CEILING_S` (R-01); one heard standing elsewhere
         never clears by itself, so it is said now, with what to do - from
         outside the cell - rather than once VALIDATED is asked of an operator
-        who confirmed it clear. Never heard in time refuses too.
+        who confirmed it clear. Never heard in time refuses too. Before a
+        homing move (``homing``) a carriage apart is no refusal: that move
+        brings it to the start (`carriage_verdict`).
         """
         if self._track_arrived is None or self._track is None:
             return None
@@ -405,7 +440,40 @@ class RosCell:
             self._pause_between_asks,
             time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S,
         )
-        return carriage_verdict(answer, plant_m, PHYSICAL_SIDE_READY_CEILING_S)
+        return carriage_verdict(answer, plant_m, PHYSICAL_SIDE_READY_CEILING_S, homing)
+
+    def away_from_start(self, start) -> str | None:
+        """Measure the program's start on every side; say where a side is not, or None.
+
+        ``start`` is a `program.home.StartPose`. Through the twin every side is
+        asked of the boundary - the arm with `JointsAt`, the carriage with
+        `TrackArrived` - and a physical side counts only with fresh positions,
+        waited for within `PHYSICAL_SIDE_READY_CEILING_S`. Via the plant alone
+        this domain's own joint states are read. Nothing is commanded (ADR-0070).
+        """
+        if self._via != "twin":
+            self._until_true(
+                lambda: all(joint in self._positions for joint in start.joints)
+                and (self._track is None or self._track_position is not None),
+                "the arm's joints on its joint states",
+            )
+            return start.away_on_one_side(self._positions, self._track_position)
+        deadline = time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S
+        found = []
+        answer = await_heard(
+            self._ask_joints_at(start), self._pause_between_asks, deadline
+        )
+        found.append(
+            away_verdict(answer, f"the arm at {start.pose}", PHYSICAL_SIDE_READY_CEILING_S)
+        )
+        if start.track_m is not None and self._track_arrived is not None:
+            what = f"the track at {start.track_m * 1000:.0f} mm"
+            answer = await_heard(
+                self._ask_arrival(start.track_m, what), self._pause_between_asks, deadline
+            )
+            found.append(away_verdict(answer, what, PHYSICAL_SIDE_READY_CEILING_S))
+        found = [reason for reason in found if reason is not None]
+        return "; ".join(found) if found else None
 
     def refuse_if_holding(self) -> None:
         """Refuse to start if the arm says it holds a part (see `holding_refusal`).
@@ -592,6 +660,22 @@ class RosCell:
 
         return ask
 
+    def _ask_joints_at(self, start):
+        """Return a call answering the twin's `JointsAt` for the arm's start pose."""
+        client = self.node.create_client(JointsAt, JointsAt.Request.SERVICE)
+        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
+            raise StepFailed(f"{JointsAt.Request.SERVICE} is not served; is the pair up?")
+        request = JointsAt.Request(
+            joints=list(start.joints),
+            positions=[float(value) for value in start.positions],
+            tolerance=float(start.tolerance_rad),
+        )
+
+        def ask():
+            return self._until(client.call_async(request), "JointsAt")
+
+        return ask
+
     def _pause_between_asks(self) -> None:
         # Bounded by the wall clock: `spin_once` returns on any callback, and
         # this node hears `/clock`.
@@ -610,6 +694,7 @@ class RosCell:
         await_arrival(ask, self._pause_between_asks, wall_end, what)
 
     def _on_joint_state(self, message: JointState) -> None:
+        self._positions.update(zip(message.name, message.position))
         if self._track is not None and self._track.joint in message.name:
             self._track_position = message.position[message.name.index(self._track.joint)]
 

@@ -107,11 +107,25 @@ srv/InitializeAsset.srv
   ---
   bool success
   string detail
+srv/JointsAt.srv
+  string SERVICE="/cite/twin/joints_at"
+  string[] joints
+  float64[] positions
+  float64 tolerance
+  ---
+  uint8 AT=0
+  uint8 AWAY=1
+  uint8 UNHEARD=2
+  uint8 MALFORMED=3
+  bool at
+  uint8 reason
+  string detail
 srv/SetMode.srv
   string SERVICE="/cite/twin/set_mode"
   uint8 mode
   string reason
   bool force
+  bool homing
   ---
   bool accepted
   ResultCode result

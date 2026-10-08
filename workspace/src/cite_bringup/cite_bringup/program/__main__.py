@@ -24,10 +24,12 @@
 
 The steps are the real robot's program as the bring-up plan states it
 (`from_plan`, ADR-0067). Before the first cycle (`--first-cycle 1`, the
-default) every physical side's arm is initialized and both arms are brought to
-the program's start (`program.home`, ADR-0070). It does NOT put parts on the
-table, and it does NOT run the belt: the caller supplies one part per cycle and
-starts each side's belt on that side, which is what `./scripts/program` does.
+default) the program's start is measured on every side, and only where a side
+is not there is every physical side's arm initialized and both arms brought to
+it, and the start measured again (`program.home.bring_to_start`, ADR-0070).
+It does NOT put parts on the table, and it does NOT run the belt: the caller
+supplies one part per cycle and starts each side's belt on that side, which is
+what `./scripts/program` does.
 It refuses to start on an arm that says it holds a part, because the program
 opens the gripper before it closes it.
 
@@ -49,7 +51,7 @@ import sys
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program.from_plan import program, target
-from cite_bringup.program.home import home_steps, initialize, run_home
+from cite_bringup.program.home import bring_to_start, home_steps, initialize, start_pose
 from cite_bringup.program.operator import confirm_operator
 from cite_bringup.program.sides import physical_sides, required_speed_scale
 from cite_bringup.program.steps import (
@@ -99,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     # Before the first cycle only: each later invocation by `./scripts/program`
     # numbers its cycle after the first.
     homing = home_steps(cell) if args.first_cycle == 1 else []
+    start = start_pose(cell, homing) if homing else None
     if args.dry_run:
         for number, step in enumerate(homing, start=1):
             print(f"home {number}. {step}")
@@ -124,18 +127,30 @@ def main(argv: list[str] | None = None) -> int:
             if physical:
                 # Read, not assumed: the operator is asked in only while the
                 # twin forwards nothing to the physical side (SA-S-05).
+                # Before the first cycle a carriage apart is no refusal here:
+                # homing brings it to the start, and the start is measured.
                 confirm_operator(
-                    ros.twin_mode(), physical, scale, say_now, input, ros.carriage_refusal
+                    ros.twin_mode(),
+                    physical,
+                    scale,
+                    say_now,
+                    input,
+                    lambda: ros.carriage_refusal(homing=bool(homing)),
                 )
             ros.refuse_if_holding()
-            if homing and physical:
-                # What the operator does in Studio before running the program.
-                initialize(plan, physical, say_now)
-            if args.via == "twin":
-                entering = True
-                ros.enter_validated()
+            entering = args.via == "twin"
             if homing:
-                run_home(homing, ros, say_now)
+                bring_to_start(
+                    homing,
+                    start,
+                    ros,
+                    # What the operator does in Studio before running the program.
+                    lambda: initialize(plan, physical, say_now),
+                    say_now,
+                    via_twin=entering,
+                )
+            elif entering:
+                ros.enter_validated()
         except (StepFailed, KeyboardInterrupt) as failure:
             interrupted = isinstance(failure, KeyboardInterrupt)
             print(

@@ -12,23 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Initialize the physical arm and bring both arms home: `python3 -m cite_bringup.program.home`.
+"""Bring both arms to the program's start: `python3 -m cite_bringup.program.home`.
 
     --zone cell_b --speed-scale 0.1
 
-What the operator does in UFACTORY Studio before running the program, and then
-the program's own start, through the twin, on both sides with one signal
-(ADR-0070):
+The program's own start, measured first and moved to only if a side is not
+there, through the twin, on both sides with one signal (ADR-0070,
+`bring_to_start`):
 
-1. **Initialize** each physical side's arm: its `InitializeAsset` service
-   (`cite_hardware`'s initializer, under the plan's `initialize_service`) is
-   called on that side's own domain. It enables the track motor and the
-   gripper and, only where the track has not found its zero, homes the track.
-   A simulated side has nothing to initialize and is skipped.
-2. **Home**: the program's own first arm move (its `reset` block, the pose
-   `zero`) and its own first track move (to 0 m), at the program's speeds
-   scaled by `--speed-scale`, sent once through the twin boundary in VALIDATED
-   and so to both sides, then back to SIM.
+1. **Measure**: is every side at the start? Every arm joint within the arm's
+   goal tolerance of the program's first pose (its `reset` block, `zero`),
+   asked of the twin with `JointsAt`, and every carriage within the track's
+   goal tolerance of the program's first track target (0 m), asked with
+   `TrackArrived`. A physical side counts only with fresh positions. If every
+   side is there, nothing moves.
+2. Otherwise **initialize** each physical side's arm: its `InitializeAsset`
+   service (`cite_hardware`'s initializer, under the plan's
+   `initialize_service`) is called on that side's own domain. It enables the
+   track motor and the gripper and, only where the track has not found its
+   zero, homes the track. A simulated side has nothing to initialize.
+3. **Home**: the program's first arm move and first track move, at the
+   program's speeds scaled by `--speed-scale`, sent once through the twin
+   boundary in VALIDATED asked with `SetMode.homing` - the one allowance that
+   lets the carriages stand apart, since this move is what brings them
+   together - and so to both sides.
+4. **Measure again**. Not at the start, or any step failing, stops: nothing is
+   retried and nothing is forced. Otherwise the program may start, and it asks
+   VALIDATED again WITHOUT the allowance, so its cycle never runs under it.
 
 `python3 -m cite_bringup.program` runs both before its first cycle, and
 `./scripts/home` runs this module against a pair that is already up. On a
@@ -39,18 +49,21 @@ read in SIM - homing the track and both moves move the physical cell.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 import os
 import sys
 import time
 
 from cite_bringup.plan import (
+    ControllerManager,
     default_plan_path,
     domain_base,
     load,
     Plan,
     PlanError,
     resolve_domain_id,
+    resolve_uri,
 )
 from cite_bringup.program.from_plan import program, Target, target
 from cite_bringup.program.steps import (
@@ -82,6 +95,110 @@ def home_steps(cell: Target) -> list[Step]:
         raise ValueError(f"the program {cell.program.source} moves the arm nowhere")
     slide = next((step for step in steps if step.kind == "track"), None)
     return [move] if slide is None else [move, slide]
+
+
+@dataclass(frozen=True)
+class StartPose:
+    """The program's start, as `away_from_start` measures it (ADR-0070)."""
+
+    #: The pose the program's first arm move goes to, and its joint values.
+    pose: str
+    joints: tuple[str, ...]
+    positions: tuple[float, ...]
+    #: The arm's declared goal tolerance (`arm_goal_tolerance_rad`).
+    tolerance_rad: float
+    #: The program's first track target and the track's goal tolerance, or
+    #: `None` both for an arm that rides no track.
+    track_m: float | None
+    track_tolerance_m: float | None
+
+    def away_on_one_side(
+        self, positions: Mapping[str, float], track_m: float | None
+    ) -> str | None:
+        """Say where ONE side, read directly, is not at the start, or None."""
+        away = [
+            f"{joint} stands at {positions[joint]:.4f}, not within "
+            f"{self.tolerance_rad:g} of {target:.4f}"
+            for joint, target in zip(self.joints, self.positions)
+            if abs(positions[joint] - target) > self.tolerance_rad
+        ]
+        if self.track_m is not None and (
+            track_m is None or abs(track_m - self.track_m) > self.track_tolerance_m
+        ):
+            stands = "is not heard" if track_m is None else f"stands at {track_m * 1000:.1f} mm"
+            away.append(
+                f"the track {stands}, not within {self.track_tolerance_m * 1000:g} mm "
+                f"of {self.track_m * 1000:.1f} mm"
+            )
+        return "; ".join(away) if away else None
+
+
+def arm_joints(arm: ControllerManager) -> tuple[str, ...]:
+    """Return the arm's joints, in order, from its trajectory controller's generated configuration.
+
+    The order the planning group, and so every named pose, states them in: the
+    controller and the group are generated from one model.
+    """
+    controller = arm.trajectory_action.rsplit("/", 1)[0]
+    document = yaml.safe_load(resolve_uri(arm.parameters).read_text())
+    return tuple(document[controller]["ros__parameters"]["joints"])
+
+
+def start_pose(cell: Target, steps: list[Step]) -> StartPose:
+    """Return the start ``steps`` (`home_steps`) bring the arm and its track to."""
+    move = steps[0]
+    arm = cell.arm
+    positions = arm.moveit.home_rad if move.pose == "home" else arm.moveit.poses_rad[move.pose]
+    joints = arm_joints(arm)
+    if len(joints) != len(positions):
+        raise PlanError(
+            f"the pose {move.pose} states {len(positions)} value(s) for {len(joints)} joint(s)"
+        )
+    slide = next((step for step in steps if step.kind == "track"), None)
+    return StartPose(
+        pose=move.pose,
+        joints=joints,
+        positions=tuple(float(value) for value in positions),
+        tolerance_rad=float(arm.arm["arm_goal_tolerance_rad"]),
+        track_m=None if slide is None else slide.position_m,
+        track_tolerance_m=None if slide is None else cell.track.goal_tolerance_m,
+    )
+
+
+def bring_to_start(
+    steps: list[Step],
+    start: StartPose,
+    ros,
+    initialize_physical: Callable[[], None],
+    say: Callable[[str], None],
+    via_twin: bool = True,
+) -> bool:
+    """Measure the start; home only if a side is not there; measure again (ADR-0070).
+
+    Returns whether a homing move was made. Ends, through the twin, in
+    VALIDATED asked WITHOUT `SetMode.homing`, so whatever runs next runs under
+    the ordinary carriage-agreement refusal. Raises `StepFailed` - and retries
+    nothing - when initializing, entering VALIDATED, a home step, or the second
+    measurement fails; ``ros`` is a `RosCell`.
+    """
+    away = ros.away_from_start(start)
+    if away is None:
+        say(f"every side is at the program's start ({start.pose}): no homing move")
+        if via_twin:
+            ros.enter_validated()
+        return False
+    say(f"not at the program's start: {away}")
+    initialize_physical()
+    if via_twin:
+        ros.enter_validated(homing=True)
+    run_home(steps, ros, say)
+    away = ros.away_from_start(start)
+    if away is not None:
+        raise StepFailed(f"homed, and still not at the program's start: {away}")
+    say(f"every side is at the program's start ({start.pose})")
+    if via_twin:
+        ros.enter_validated()
+    return True
 
 
 def run_home(steps: list[Step], cell, say: Callable[[str], None]) -> None:
@@ -193,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
     physical = physical_sides(plan)
     cell = target(plan)
     steps = home_steps(cell)
+    start = start_pose(cell, steps)
 
     from cite_bringup.program.cell import RosCell
     import rclpy
@@ -206,12 +324,17 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if physical:
                 confirm_operator(
-                    ros.twin_mode(), physical, scale, say_now, input, ros.carriage_refusal,
+                    ros.twin_mode(),
+                    physical,
+                    scale,
+                    say_now,
+                    input,
+                    lambda: ros.carriage_refusal(homing=True),
                     prompt=HOME_PROMPT,
                 )
-            initialize(plan, physical, say_now)
-            ros.enter_validated()
-            run_home(steps, ros, say_now)
+            bring_to_start(
+                steps, start, ros, lambda: initialize(plan, physical, say_now), say_now
+            )
             say_now("done: both arms are at the program's start")
             status = 0
         except StepFailed as failure:

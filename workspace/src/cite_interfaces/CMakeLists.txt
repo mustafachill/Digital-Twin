@@ -24,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/TwinMode.msg
   srv/GetModelVersion.srv
   srv/InitializeAsset.srv
+  srv/JointsAt.srv
   srv/SetMode.srv
   srv/TrackArrived.srv
   action/Grasp.action
