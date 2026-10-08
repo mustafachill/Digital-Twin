@@ -1,0 +1,16 @@
+# Start robot: the first button of the operator console (ADR-0071).
+#
+# Initializes every physical side's arm (`InitializeAsset`, on that side's own
+# domain; nothing on an all-simulated pair), then reads the plant arm's custody
+# and refuses an arm that says it holds a part. Commands no arm motion of its
+# own; on a physical side the initializer may home the track and bring the
+# carriage to the program's start (InitializeAsset.srv). Until it succeeds the
+# console refuses Home and Start program. Refused while another request runs.
+#
+# Served under `/cite/<zone>/console/<NAME>` (ConsoleState.msg says how the
+# name is composed).
+
+string NAME="start_robot"
+---
+bool success   # the arm is started; the console is READY
+string detail  # what was done, or why it was refused or failed

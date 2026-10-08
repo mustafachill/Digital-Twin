@@ -1,0 +1,16 @@
+# Stop: a SOFTWARE stop, not an E-stop (ADR-0071 decision 4).
+#
+# Cancels the request in flight - the goal sent through the twin, the track
+# held where each carriage stands (`RosCell.cancel`), every belt the console
+# started commanded to zero - over the same command path everything else uses.
+# It is no safety function: the physical E-stop is the only closure
+# (cross-cutting-safety.md). After it the console does NOT home on its own
+# (ADR-0037); it is READY, or FAULT when the stop itself could not be confirmed.
+# Refused with success false when nothing is in progress.
+#
+# Served under `/cite/<zone>/console/<NAME>` (ConsoleState.msg).
+
+string NAME="stop"
+---
+bool success   # a request was in progress and was asked to stop
+string detail  # or why there was nothing to stop

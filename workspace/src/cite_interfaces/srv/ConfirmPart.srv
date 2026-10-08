@@ -1,0 +1,13 @@
+# The operator's go-ahead: the part is on the table and the cell is clear (ADR-0071).
+#
+# Replaces the Enter keypress `cite_bringup.program.operator` asked for at a
+# terminal. Accepted ONLY while the console is AWAITING_PART, which it enters
+# only after reading the twin's mode as SIM; refused in every other state, so a
+# confirmation sent early is never held over for a later question.
+#
+# Served under `/cite/<zone>/console/<NAME>` (ConsoleState.msg).
+
+string NAME="confirm_part"
+---
+bool success   # the confirmation answered the question the console was asking
+string detail  # or why it was refused

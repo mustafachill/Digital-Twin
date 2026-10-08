@@ -11,7 +11,7 @@ exists, and it is why this package sits at the bottom of the dependency graph.
 
 ## What is here
 
-18 definitions — 8 `.msg`, 5 `.srv`, 5 `.action` — listed in `CMakeLists.txt` and frozen
+24 definitions — 9 `.msg`, 8 `.srv`, 7 `.action` — listed in `CMakeLists.txt` and frozen
 against `test/interfaces.baseline`. Read the shapes with `ros2 interface show`; they are not
 restated here (P1). The conventions they follow are in
 [`docs/interfaces/README.md`](../../../docs/interfaces/README.md).
@@ -33,6 +33,7 @@ than by reading the definitions.
 | `DeadmanState` | `cite_hardware/deadman.py`, started first by `cite_bringup`'s `hardware.launch.py` on a physical side (ADR-0070 item 6); read by the relays and by the twin boundary's readiness gate |
 | `InitializeAsset` | `cite_hardware/initializer.py`, on a physical side only, under the plan's `initialize_service` (ADR-0070); called by `cite_bringup.program.home` |
 | `TwinMode`, `DivergenceMetrics`, `SetMode`, `TrackArrived`, `JointsAt` | `cite_twin/twin_boundary.py`, which the pair supervisor starts under `./scripts/sim --pair` and `./scripts/program` (ADR-0057) and no launch file starts; it refuses a zone declaring one side, and the one shipped zone, `cell_b`, declares two. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
+| `ConsoleState`, `StartRobot`, `ConfirmPart`, `StopCell`, `HomeRobot`, `RunProgram` | `cite_bringup/program/console.py` (`cell_console`), on the plant's domain, which the pair supervisor starts once the twin boundary has announced readiness (ADR-0071). Names are `/cite/<zone>/console/<NAME>`, composed by one helper from the constants `ConsoleState.msg` documents |
 
 `TwinMode` and `DivergenceMetrics` each carry their own topic name as a `string TOPIC`
 constant, and `SetMode` carries its own as a `string SERVICE` on the request — so each name exists in one place and a consumer reads it
