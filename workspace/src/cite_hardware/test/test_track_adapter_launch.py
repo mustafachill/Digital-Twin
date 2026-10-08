@@ -426,17 +426,30 @@ class TestTrackAdapter(unittest.TestCase):
             lambda: len(track.set_requests) > sent, "a segment after the target", 0.75
         )
 
-    def test_a_hung_position_read_refuses_motion(self, proc_output):
-        """S-11: a read never answered is abandoned, and no speed is derived without one."""
+    def test_a_hung_position_read_refuses_motion(self, proc_output, adapter):
+        """S-11: a read never answered is abandoned, and no speed is derived without one.
+
+        The unserved adapter reads the same fake `get_linear_motor_pos`, so its
+        reads hang too and it logs the same abandonment: the wait names the
+        adapter under test, or the command can arrive while that adapter still
+        holds a position younger than `position_max_age_s` - fresh by contract.
+        """
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
         self._wait_for_position(0.1)
         self.track.answer_get.clear()
         proc_output.assertWaitFor(
             expected_output="get_linear_motor_pos unanswered within position_max_age_s",
+            process=adapter,
             timeout=SETTLE_S,
         )
         before = len(self.track.set_requests)
         self.commands.publish(_command([0.3], 1.0))
+        # Nothing else in this file hangs a read, so this refusal is this test's.
+        proc_output.assertWaitFor(
+            expected_output="track command refused: the carriage position has not been read",
+            process=adapter,
+            timeout=SETTLE_S,
+        )
         self.harness.hold_for(
             lambda: len(self.track.set_requests) > before, "a move on a stale position", 0.75
         )
