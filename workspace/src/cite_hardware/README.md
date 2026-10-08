@@ -2,7 +2,8 @@
 
 **L2 — the physical side's adapters for an xArm 5 on its linear track.** Three managed
 (lifecycle) nodes that let the physical counterpart of `cell_b` present the names the
-simulated side presents, and stop it when its commander goes away
+simulated side presents, and stop it when its commander goes away, and a fourth, the
+initializer, that does what the operator does in UFACTORY Studio before the program
 ([ADR-0070](../../../docs/adr/0070-the-physical-arm-is-cell-b-s-counterpart.md) items 3, 4
 and 5).
 
@@ -84,6 +85,19 @@ The heartbeat is `cite_interfaces/TwinHeartbeat` on `TwinHeartbeat.TOPIC`, publi
 twin boundary (`cite_twin`) onto each side's own domain, carrying one `boundary_id` per boundary
 start. The deadman latches the first id it hears; another id, or a second heartbeat publisher,
 trips it.
+
+## The initializer
+
+`initializer.py` (ADR-0070, 2026-10-08) does what the operator does by hand in UFACTORY Studio
+before running the program, when asked through `cite_interfaces/srv/InitializeAsset` on the
+plan's `initialize_service`: `set_linear_motor_enable(1)`, `set_gripper_enable(1)`, then
+`get_linear_motor_on_zero`, and only where it reads 0, `set_linear_motor_back_origin`
+(no wait, no auto-enable; sent once) followed by zero reads every `poll_period_s` until it
+reads 1. It does nothing until asked, refuses while inactive or while the deadman is not
+HEALTHY, and answers `success: false` naming the step and the vendor's code on any refusal.
+A homing that is refused, loses the deadman's gate or exceeds `deadline_s` is followed by
+`set_linear_motor_stop`, as is the process ending during a homing. No `clean_error`. Tested
+against vendor fakes only (`test/test_initializer_launch.py`); not yet run on the physical arm.
 
 ## Parameters
 

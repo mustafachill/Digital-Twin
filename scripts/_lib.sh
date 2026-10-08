@@ -1254,8 +1254,8 @@ source_overlay() {
 # resolve_hardware_opt_in — the ONE place the opt-in is resolved, with the
 # precedence shell > repository-root `.env` (read fail closed, `env_file_opt_in`)
 # > 0. Called only by the entry points
-# that may start the physical side: `./scripts/program`, `./scripts/sim --pair`
-# and `./scripts/enter hardware`. Every other command — test, scenario, lint,
+# that may start or command the physical side: `./scripts/program`,
+# `./scripts/home`, `./scripts/sim --pair` and `./scripts/enter hardware`. Every other command — test, scenario, lint,
 # build, CI — never calls it, so for them a `1` in `.env` is not read and the
 # opt-in stays the shell's, unset meaning 0; `scripts/_selftest.sh` holds both
 # halves of that. A value set in the shell wins even when it is empty, so

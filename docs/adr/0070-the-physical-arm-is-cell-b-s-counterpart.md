@@ -1,6 +1,6 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
-- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged): see "Amendment — what was built" at the end)
+- **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged), 2026-10-08 (owner decision: initialize as in Studio and home before the program): see "Amendment — what was built" at the end)
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1
@@ -246,3 +246,18 @@ so the record says what the tree does. The text above is kept as written.
   decides. Prompted by the first physical run's step 1 ("move to zero"), failed with "the arm
   reached the trajectory's last point, but the controller did not report the goal met (MoveIt
   error code -4)".
+- **2026-10-08, owner decision: the physical arm is initialized as the operator does in UFACTORY
+  Studio, and both arms are brought home, before the program.** The second supervised paired run
+  stopped at its first track move on vendor code 82 (`LINEAR_MOTOR_NOT_INIT`): the track had not
+  found its zero, and nothing in this repository enabled or homed it, which the operator does by
+  hand in Studio before running the program. A lifecycle node on the physical side,
+  `cite_hardware`'s initializer, serves `cite_interfaces/srv/InitializeAsset` under
+  `/cite/<zone>/<asset>/initialize`: it enables the track motor and the gripper and, only where
+  `get_linear_motor_on_zero` reads 0, homes the track (sent once, behind the deadman's gate, and
+  followed by a stop when it is refused or does not finish within L0's
+  `vendor_axis.initialize_deadline_s`). Four vendor services join the allow-list for it
+  (`set_linear_motor_enable`, `set_gripper_enable`, `get_linear_motor_on_zero`,
+  `set_linear_motor_back_origin`); no `clean_error`. `cite_bringup.program.home` calls it on
+  each physical side and then sends the program's own first arm move and first track move through
+  the twin to both sides; `./scripts/program` runs both before its first cycle, and
+  `./scripts/home` runs them against a pair already up. Not yet run on the physical arm.

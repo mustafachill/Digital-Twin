@@ -23,11 +23,13 @@
                      where it must be given (`sides.required_speed_scale`)
 
 The steps are the real robot's program as the bring-up plan states it
-(`from_plan`, ADR-0067). It does NOT put parts on the table, and it does NOT run
-the belt: the caller supplies one part per cycle and starts each side's belt on
-that side, which is what `./scripts/program` does. It refuses to start on an arm
-that says it holds a part, because the program opens the gripper before it
-closes it.
+(`from_plan`, ADR-0067). Before the first cycle (`--first-cycle 1`, the
+default) every physical side's arm is initialized and both arms are brought to
+the program's start (`program.home`, ADR-0070). It does NOT put parts on the
+table, and it does NOT run the belt: the caller supplies one part per cycle and
+starts each side's belt on that side, which is what `./scripts/program` does.
+It refuses to start on an arm that says it holds a part, because the program
+opens the gripper before it closes it.
 
 Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in
 flight, holds the track where it stands and exits non-zero.
@@ -47,6 +49,7 @@ import sys
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program.from_plan import program, target
+from cite_bringup.program.home import home_steps, initialize, run_home
 from cite_bringup.program.operator import confirm_operator
 from cite_bringup.program.sides import physical_sides, required_speed_scale
 from cite_bringup.program.steps import (
@@ -93,7 +96,12 @@ def main(argv: list[str] | None = None) -> int:
     physical = physical_sides(plan) if args.via == "twin" else []
     cell = target(plan)
     steps = program(cell)
+    # Before the first cycle only: each later invocation by `./scripts/program`
+    # numbers its cycle after the first.
+    homing = home_steps(cell) if args.first_cycle == 1 else []
     if args.dry_run:
+        for number, step in enumerate(homing, start=1):
+            print(f"home {number}. {step}")
         for number, step in enumerate(steps, start=1):
             print(f"{number:2d}. {step}")
         return 0
@@ -111,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
         ros = RosCell(cell.arm, args.via, track=cell.track, speed=scale)
+        entering = False
         try:
             if physical:
                 # Read, not assumed: the operator is asked in only while the
@@ -119,14 +128,27 @@ def main(argv: list[str] | None = None) -> int:
                     ros.twin_mode(), physical, scale, say_now, input, ros.carriage_refusal
                 )
             ros.refuse_if_holding()
+            if homing and physical:
+                # What the operator does in Studio before running the program.
+                initialize(plan, physical, say_now)
             if args.via == "twin":
+                entering = True
                 ros.enter_validated()
-        except StepFailed as failure:
-            print(f"FAILED before the first step: {failure}", flush=True)
-            return 1
-        except KeyboardInterrupt:
-            print("interrupted before the first step", flush=True)
-            return EXIT_INTERRUPTED
+            if homing:
+                run_home(homing, ros, say_now)
+        except (StepFailed, KeyboardInterrupt) as failure:
+            interrupted = isinstance(failure, KeyboardInterrupt)
+            print(
+                "interrupted before the first step"
+                if interrupted
+                else f"FAILED before the first step: {failure}",
+                flush=True,
+            )
+            if physical and entering:
+                # VALIDATED may have been entered: the operator's next step is
+                # in the cell, so SIM is asked for whatever happened.
+                ros.leave_validated()
+            return EXIT_INTERRUPTED if interrupted else 1
         riding = f" on {cell.track.asset}" if cell.track is not None else ""
         say_now(
             f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "

@@ -654,7 +654,7 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     assert "nothing crosses to the physical side" in capsys.readouterr().out
     main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
     text = main_source.read_text()
-    assert text.index("status = run(") < text.index("ros.leave_validated()")
+    assert text.index("status = run(") < text.rindex("ros.leave_validated()")
 
 
 def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
@@ -717,12 +717,17 @@ class _PairCell:
     def enter_validated(self) -> None:
         _PairCell.calls.append("enter_validated")
 
+    def cancel(self) -> None:
+        _PairCell.calls.append("cancel")
+
     def leave_validated(self) -> bool:
         _PairCell.calls.append("leave_validated")
         return _PairCell.left
 
 
-def _main_on_a_pair(monkeypatch, mode, left: bool, answers=("",), carriage=None) -> int:
+def _main_on_a_pair(
+    monkeypatch, mode, left: bool, answers=("",), carriage=None, initialized=True, argv=()
+) -> int:
     import builtins
 
     import cite_bringup.program.__main__ as program_module
@@ -735,9 +740,25 @@ def _main_on_a_pair(monkeypatch, mode, left: bool, answers=("",), carriage=None)
     monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
     monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
     monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
-    monkeypatch.setattr(program_module, "run", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        program_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
+    )
+
+    def initialize(_plan, sides, _say):
+        _PairCell.calls.append(f"initialize {','.join(sides)}")
+        if not initialized:
+            raise StepFailed("counterpart: picker not initialized: the vendor refused")
+
+    monkeypatch.setattr(program_module, "initialize", initialize)
+    monkeypatch.setattr(
+        program_module,
+        "run_home",
+        lambda steps, _cell, _say: _PairCell.calls.append(
+            "home " + " ".join(step.kind for step in steps)
+        ),
+    )
     monkeypatch.setattr(builtins, "input", lambda _prompt="": answers.pop(0))
-    return program_main(["--zone", ZONE, "--speed-scale", "0.1"])
+    return program_main(["--zone", ZONE, "--speed-scale", "0.1", *argv])
 
 
 def test_a_run_whose_return_to_sim_is_unconfirmed_fails(monkeypatch) -> None:
@@ -877,3 +898,108 @@ def test_the_script_checks_the_opt_in_before_it_brings_anything_up() -> None:
     script = (Path(__file__).resolve().parents[4] / "scripts" / "program").read_text()
     check = script.index('cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in')
     assert check < script.index("start_in_own_group")
+
+
+# --------------------------------------------------------------------------- #
+# Initialize and home before the first cycle (ADR-0070)
+# --------------------------------------------------------------------------- #
+
+
+def test_home_is_the_programs_own_start(cell) -> None:
+    from cite_bringup.program.home import home_steps
+
+    steps = home_steps(cell)
+    first_move = next(s for s in cell.program.steps if s.kind == "move")
+    first_track = next(s for s in cell.program.steps if s.kind == "track")
+    assert [step.kind for step in steps] == ["move", "track"]
+    assert (steps[0].pose, steps[0].velocity_scaling) == (
+        first_move.pose, first_move.velocity_scaling
+    )
+    assert steps[0].pose == "zero", "the real program starts with `reset`"
+    assert (steps[1].position_m, steps[1].speed_mps) == (
+        first_track.position_m, first_track.speed_mps
+    )
+    assert steps[1].position_m == 0.0
+
+
+def test_a_failed_home_step_cancels_and_fails(cell) -> None:
+    from cite_bringup.program.home import home_steps, run_home
+
+    fake = FakeCell(fail_on="zero")
+    with pytest.raises(StepFailed):
+        run_home(home_steps(cell), fake, _quiet)
+    assert fake.calls[-1] == ("cancel",)
+    assert not [call for call in fake.calls if call[0] == "track"]
+
+
+def test_the_first_cycle_initializes_then_homes_then_runs(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert _PairCell.calls == [
+        "refuse_if_holding",
+        "initialize counterpart",
+        "enter_validated",
+        "home move track",
+        "run",
+        "leave_validated",
+    ]
+
+
+def test_a_later_cycle_neither_initializes_nor_homes(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(
+        monkeypatch, TwinMode.MODE_SIM, left=True, argv=("--first-cycle", "2")
+    ) == 0
+    assert _PairCell.calls == ["refuse_if_holding", "enter_validated", "run", "leave_validated"]
+
+
+def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, initialized=False) == 1
+    assert _PairCell.calls == ["refuse_if_holding", "initialize counterpart"]
+
+
+def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> None:
+    import cite_bringup.program.home as home
+
+    plan = load(default_plan_path(ZONE))
+    (manager,) = plan.controller_managers
+    physical = manager.physical_on("counterpart")
+    calls = []
+
+    class Answer:
+        success, detail = True, "track and gripper enabled"
+
+    monkeypatch.setattr(
+        home, "_call_on_domain", lambda service, domain, ceiling: calls.append(
+            (service, domain, ceiling)
+        ) or Answer()
+    )
+    said: list[str] = []
+    environ = {"CITE_DOMAIN_BASE": "40"}
+    home.initialize(plan, ["counterpart"], said.append, environ=environ)
+    ((service, domain, ceiling),) = calls
+    assert service == physical.initialize_service == "/cite/cell_b/picker/initialize"
+    from cite_bringup.plan import domain_base, resolve_domain_id
+
+    assert domain == resolve_domain_id(plan, "counterpart", domain_base(environ))
+    assert domain != resolve_domain_id(plan, "plant", domain_base(environ))
+    assert ceiling == 2.0 * home.initializer_deadline_s(physical)
+
+    Answer.success, Answer.detail = False, "the vendor refused set_linear_motor_enable(1)"
+    with pytest.raises(StepFailed, match="refused set_linear_motor_enable"):
+        home.initialize(plan, ["counterpart"], said.append, environ=environ)
+
+
+def test_a_simulated_side_has_nothing_to_initialize(monkeypatch) -> None:
+    import cite_bringup.program.home as home
+
+    monkeypatch.setattr(home, "_call_on_domain", lambda *_args: pytest.fail("called"))
+    said: list[str] = []
+    home.initialize(
+        load(default_plan_path(ZONE)), ["plant"], said.append, environ={"CITE_DOMAIN_BASE": "40"}
+    )
+    assert any("nothing to initialize" in line for line in said)

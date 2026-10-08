@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Initialize the physical arm and bring both arms to the program's start, on a
+# pair that is ALREADY RUNNING.
+#
+#   ./scripts/home                       the model's only zone
+#   ./scripts/home --zone cell_b         name the zone; needed only when the model declares several
+#   ./scripts/home --speed-scale 0.1     both moves at 10% of the program's speed, both sides
+#                                        (required, explicitly, whenever a side is physical)
+#
+# WHAT IT DOES (ADR-0070). What the operator does by hand in UFACTORY Studio
+# before running the program, then the program's own start, through the twin:
+# every physical side's arm is initialized on that side (`InitializeAsset`: the
+# track motor and the gripper enabled, the track homed only where it has not
+# found its zero), then the program's first arm move (`reset`, every joint at
+# zero) and its first track move (0 m) are sent once through the twin boundary
+# in VALIDATED, to both sides, and the twin is put back in SIM. The logic is
+# `cite_bringup.program.home`, which `./scripts/program` also runs before its
+# first cycle.
+#
+# It starts NOTHING and restarts nothing: it attaches to the container a running
+# `./scripts/sim --pair` or `./scripts/program` is in, and refuses when there is
+# none. On a physical side it needs the hardware opt-in, as `./scripts/program`
+# does, and the operator is asked at this terminal, once the twin is read in SIM,
+# to clear the cell: the track may home and both arms move.
+#
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+ZONE=""
+SPEED_SCALE=""
+WANT=""
+for arg in "$@"; do
+    if [ -n "$WANT" ]; then
+        case "$arg" in ""|-*|*:=*) die "${WANT} needs a value and was given '${arg}'." ;; esac
+        case "$WANT" in
+            --zone) ZONE="$arg" ;;
+            --speed-scale) SPEED_SCALE="$arg" ;;
+        esac
+        WANT=""; continue
+    fi
+    case "$arg" in
+        --zone|--speed-scale) WANT="$arg" ;;
+        -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
+        *)          die "unknown argument '${arg}'. Try --help." ;;
+    esac
+done
+[ -z "$WANT" ] || die "${WANT} needs a value."
+case "$SPEED_SCALE" in ''|[0-9]*|.[0-9]*) ;; *) die "--speed-scale needs a number." ;; esac
+
+if [ -z "$ZONE" ]; then
+    ZONE="$(default_zone)" || die "no zone was named, and the model leaves none to default to (see above)."
+else
+    require_declared_zone "$ZONE" || die "--zone named a zone the model does not declare (see above)."
+fi
+
+# Shell > repository-root .env > 0, as for ./scripts/program: this command
+# moves a physical side.
+resolve_hardware_opt_in
+
+# ---------------------------------------------------------------- on the host
+if ! in_container; then
+    # The running pair's container, and nothing else: a fresh one would see
+    # no cell. A windowed pair runs in `gui`, a headless one in `dev`.
+    RUNNING="$(compose ps --services --status running 2>/dev/null || true)"
+    SERVICE=""
+    for candidate in gui dev; do
+        if grep -qx "$candidate" <<<"$RUNNING"; then SERVICE="$candidate"; break; fi
+    done
+    [ -n "$SERVICE" ] || die "no pair is running in this checkout's container. Start one with
+  ./scripts/sim --pair   or   ./scripts/program"
+    info "Attaching to the running '${SERVICE}' container"
+    exec_in_container "$SERVICE" ./scripts/home "$@"
+fi
+
+# ----------------------------------------------------------- in the container
+# `compose exec` does not run the image's entrypoint, which sources the overlay.
+source_overlay || die "nothing is built in this container; is a pair running here?"
+
+python3 -m cite_bringup.program.sides --zone "$ZONE" --hardware-opt-in \
+    || die "refused (see above)."
+SPEED_SCALE="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --speed-scale "$SPEED_SCALE")" \
+    || die "refused (see above)."
+exec python3 -u -m cite_bringup.program.home --zone "$ZONE" --speed-scale "$SPEED_SCALE"

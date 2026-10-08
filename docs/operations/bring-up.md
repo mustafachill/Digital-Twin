@@ -342,11 +342,18 @@ parameters.
    the physical carriage is never left unchecked. A track step also fails if the twin is in a
    mode that forwards no track command (for example SIM mid-run), rather than counting as
    arrived.
-6. One cycle of the real program then runs on both arms, at the scale you gave.
-7. On the physical side a close expecting a part is executed, not judged (owner decision
+6. Before the first cycle, once you have pressed Enter, the program initializes the physical
+   arm as you would in UFACTORY Studio (`InitializeAsset`, served by `cite_hardware`'s
+   initializer from values generated out of L0): the track motor and the gripper are enabled,
+   and the track is homed only if it has not found its zero; the homing moves the carriage.
+   Then both arms go to the program's start (its `reset` pose and track 0 m) through the twin.
+   On a pair that is already up, `./scripts/home --speed-scale 0.1` does the same without
+   restarting anything.
+7. One cycle of the real program then runs on both arms, at the scale you gave.
+8. On the physical side a close expecting a part is executed, not judged (owner decision
    2026-10-06, ADR-0070): it succeeds once the gripper command completes, the reached width is
    logged, and only a relay refusal, vendor abort or timeout fails the step.
-8. Likewise an arm motion on the physical side that ends at the trajectory's last point succeeds
+9. Likewise an arm motion on the physical side that ends at the trajectory's last point succeeds
    even if the controller did not report the goal met (owner decision 2026-10-06, ADR-0070);
    the classification is logged, and every other abort, timeout or cancel still fails the step.
 

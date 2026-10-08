@@ -29,6 +29,9 @@ from collections.abc import Callable, Sequence
 from cite_bringup.program.steps import StepFailed
 from cite_interfaces.msg import TwinMode
 
+#: What the operator is asked before a run of the program.
+PLACE_PROMPT = "Place the part on the table by hand, clear the cell, then press Enter. "
+
 
 def confirm_operator(
     mode: int | None,
@@ -37,6 +40,7 @@ def confirm_operator(
     say: Callable[[str], None],
     read: Callable[[str], str],
     carriage_refusal: Callable[[], str | None],
+    prompt: str = PLACE_PROMPT,
 ) -> None:
     """Ask the operator to place the part and clear the cell, once the twin is in SIM.
 
@@ -45,7 +49,7 @@ def confirm_operator(
     ``carriage_refusal`` is asked next, in SIM (`RosCell.carriage_refusal`): a
     physical carriage standing away from the plant's refuses the run before the
     operator is asked, never after (S-08). ``read`` is `input`: an end of input
-    is no answer, and refuses.
+    is no answer, and refuses. ``prompt`` is what the operator is asked.
     """
     if mode is None:
         raise StepFailed(
@@ -68,7 +72,7 @@ def confirm_operator(
             "and holds where it stands."
         )
     try:
-        read("Place the part on the table by hand, clear the cell, then press Enter. ")
+        read(prompt)
     except EOFError:
         raise StepFailed(
             "no operator answer (end of input): a physical side needs one at this terminal"

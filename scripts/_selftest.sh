@@ -667,13 +667,13 @@ expect_fail "and refuses on the same .env when nothing resolved it" \
 rm -f "${ENV_ROOT}/.env"
 rmdir "$ENV_ROOT"
 
-# Who resolves it. Exactly the three entry points that may start the physical
-# side call `resolve_hardware_opt_in`; test, scenario, lint, build and everything
+# Who resolves it. Exactly the entry points that may start or command the
+# physical side call `resolve_hardware_opt_in`; test, scenario, lint, build and everything
 # CI runs do not, so a developer's `1` in .env never reaches them and their
 # "refused without the opt-in" behaviour holds. A new caller has to be added here
 # deliberately.
-expect_eq "only enter, program and sim resolve the opt-in from .env" \
-    "enter program sim" \
+expect_eq "only enter, home, program and sim resolve the opt-in from .env" \
+    "enter home program sim" \
     "$(cd "${REPO_ROOT}/scripts" && grep -l 'resolve_hardware_opt_in' -- * \
         | grep -vx -e _lib.sh -e _selftest.sh | sort | tr '\n' ' ' | sed 's/ $//')"
 expect_fail "and no CI workflow resolves it" \
