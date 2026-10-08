@@ -54,8 +54,10 @@ from cite_bringup.plan import (
 )
 from cite_bringup.readiness import (
     announced_boundary,
+    announced_console,
     announced_side,
     boundary_announcement,
+    console_announcement,
     ready_announcement,
     READY_TOKEN,
 )
@@ -1345,3 +1347,127 @@ def test_a_side_hears_sigint_when_the_supervisor_inherited_it_ignored(
         signal.signal(signal.SIGINT, previous)
     assert text.count("sigint-ignored=False") == 2, text
     assert "sigint-ignored=True" not in text, text
+
+
+# --- The operator console (ADR-0071) -------------------------------------------
+#
+# A fourth participant, started the boundary's way one step later. As above,
+# every console here is a `python3` process wearing the REAL spec.
+
+
+def _fake_console(tmp_path: Path, script: str) -> pair.SideSpec:
+    """Return the REAL console spec with a `python3` process for its command."""
+    real = pair.console_spec(
+        _paired_plan(tmp_path), tmp_path / "plan.yaml", {DOMAIN_BASE_ENV: "41"}
+    )
+    return replace(real, argv=(sys.executable, "-c", script))
+
+
+def _console_announces(tmp_path: Path, *, then: str = "") -> pair.SideSpec:
+    announcement = console_announcement(ZONE)
+    return _fake_console(
+        tmp_path,
+        "import os, time\n"
+        "print('the console process is running', flush=True)\n"
+        f"print({announcement!r}, flush=True)\n" + then,
+    )
+
+
+def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
+    tmp_path: Path,
+) -> None:
+    """The boundary's two facts, and the one a side is given: its domain, the plant's."""
+    plan = _paired_plan(tmp_path)
+    path = tmp_path / "plan.yaml"
+    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"})
+    assert spec.argv == (
+        "ros2",
+        "run",
+        "cite_bringup",
+        "cell_console.py",
+        "--zone",
+        plan.zone,
+        "--plan",
+        str(path),
+    )
+    assert spec.env == {DOMAIN_ENV: str(resolve_domain_id(plan, PLANT_SIDE, 41))}
+    # `ros2 run`, so only the group signal reaches the program it starts.
+    assert spec.stop_reach == pair.STOP_GROUP
+    assert spec.announces == plan.zone
+
+
+def test_the_console_is_started_once_the_boundary_announced_and_stopped_first(
+    tmp_path: Path,
+) -> None:
+    """After the boundary, on its announcement; before it, when the pair ends.
+
+    The console is the client that sends the boundary its goals, so it is
+    started only once there is a boundary to send them to, and stopped while
+    the boundary is still there to carry its cancel.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the operator console announced", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        _joined_then_ended(tmp_path, release),
+        boundary=_boundary_announces(tmp_path, then="time.sleep(600)\n"),
+        console=_console_announces(tmp_path, then="time.sleep(600)\n"),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        log=log,
+        if_it_hangs=(
+            "The sides are held open until the supervisor prints that the console "
+            "announced, so this is a console never started or never joined on."
+        ),
+    )
+    assert text.index("the twin boundary announced readiness") < text.index(
+        "starting the operator console"
+    ), text
+    assert text.index("starting the operator console") < text.index(
+        "[console] the console process is running"
+    )
+    assert "the operator console announced readiness; the pair is complete" in text
+    # The boundary's announcement no longer completes the pair: the console does.
+    assert "the twin boundary announced readiness; the pair is complete" not in text
+    assert text.index("stopping console") < text.index("stopping boundary")
+    assert text.index("stopping boundary") < text.index("stopping plant")
+    reported = [line.split(":")[0] for line in text.splitlines() if ": ready=" in line]
+    assert reported == [
+        "[pair] plant",
+        "[pair] counterpart",
+        "[pair] boundary",
+        "[pair] console",
+    ]
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_console_that_never_announces_fails_the_pair_naming_the_console(
+    tmp_path: Path,
+) -> None:
+    """Under the boundary's ceiling, and said as the console's silence."""
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        [
+            _announces("plant", then="time.sleep(600)\n"),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        boundary=_boundary_announces(tmp_path, then="time.sleep(600)\n"),
+        console=_fake_console(tmp_path, "import time\ntime.sleep(600)\n"),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+    )
+    assert code == 1
+    assert "console never announced readiness and never exited" in text
+    assert f"within {BOUNDARY_S:g} s" in text
+    assert "operator console" in text
+    assert "boundary: ready=True" in text
+    assert "stopping boundary" in text and "stopping plant" in text
+
+
+def test_the_console_token_is_not_the_boundarys_or_a_sides() -> None:
+    console_line = console_announcement(ZONE)
+    assert announced_console(console_line) == ZONE
+    assert announced_boundary(console_line) is None
+    assert announced_side(console_line) is None
+    assert announced_console(boundary_announcement(ZONE)) is None
+    assert announced_console(ready_announcement("plant", ZONE)) is None

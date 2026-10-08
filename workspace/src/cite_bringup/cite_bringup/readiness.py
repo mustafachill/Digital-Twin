@@ -128,7 +128,37 @@ def announced_boundary(line: str) -> str | None:
     prefix the emitter's own framework put there, and that formatting is
     upstream's and not ours.
     """
-    if BOUNDARY_TOKEN not in line:
+    return _zone_announced(BOUNDARY_TOKEN, line)
+
+
+#: The fixed word the operator console prints once it is being served
+#: (ADR-0071). A third word for a third fact: *the console spanning nothing but
+#: the plant's domain is serving its requests*. The supervisor starts it only
+#: after the boundary announced, because every request it serves goes through
+#: the boundary; a word shared with the boundary's would let one announcement be
+#: read as both.
+CONSOLE_TOKEN = "CITE_CONSOLE_READY"
+
+
+def console_announcement(zone: str) -> str:
+    """Format the one line the operator console emits when it is being served.
+
+    The zone is named for the reason the boundary names it: the supervisor
+    knows which zone it started the console for, and checks the line against
+    it. Printed from inside the executor that serves the console's endpoints,
+    once they exist, so it says they are served rather than that they will be.
+    """
+    return f"{CONSOLE_TOKEN} zone={zone}"
+
+
+def announced_console(line: str) -> str | None:
+    """Return the zone named by a console ready line, or ``None`` if it is not one."""
+    return _zone_announced(CONSOLE_TOKEN, line)
+
+
+def _zone_announced(token: str, line: str) -> str | None:
+    """Return the `zone=` field of a line carrying ``token``, or ``None``."""
+    if token not in line:
         return None
     for field in line.split():
         if field.startswith("zone="):

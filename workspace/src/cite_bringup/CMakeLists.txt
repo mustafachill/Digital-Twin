@@ -29,11 +29,15 @@ ament_python_install_package(${PROJECT_NAME})
 # transport. SIMULATION-ONLY - `simulation.launch.py` is the only thing in this
 # repository that starts it, and `test_the_bridge_is_simulation_only.py` fails if
 # that stops being true.
+# ADR-0071's operator console server, which the pair supervisor starts once the
+# twin boundary has announced. The node is `program/console.py`; this is the
+# file `ros2 run` executes.
 install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
   ${PROJECT_NAME}/lifecycle_driver.py
   ${PROJECT_NAME}/grasp_hold_bridge.py
   ${PROJECT_NAME}/hold_gate.py
+  ${PROJECT_NAME}/cell_console.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -127,6 +131,10 @@ if(BUILD_TESTING)
   # nothing - which the launch announces and the supervisor reports as a pair.
   ament_add_pytest_test(readiness_witness test/test_readiness_witness.py)
   ament_add_pytest_test(program test/test_program.py)
+  # ADR-0071: the operator console's state machine against a fake cell - what
+  # it refuses, the order it calls the program's library in, and what a stop
+  # and a failure leave it in. No graph.
+  ament_add_pytest_test(console_machine test/test_console_machine.py)
   # S-01 (ADR-0070): an initialization interrupted or unanswered once sent is
   # followed by the vendor's track stop; against fakes, on a domain of its own.
   ament_add_pytest_test(initialize_interrupted test/test_initialize_interrupted.py)
