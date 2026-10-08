@@ -20,8 +20,8 @@ holds the refusals - nothing before Start robot, one request at a time, a speed
 scale sent with every goal and never defaulted (`sides.required_speed_scale`'s
 rule, floor included, where a side is physical), Start program only with both
 arms known to be at the program's start, the go-ahead only while it is asked for
-and only while the twin is heard in SIM, nothing while the twin is in a
-commanding mode this console did not enter, and nothing once the process is
+and only while the twin is heard in SIM, nothing while the twin is in any
+mode but SIM that this console did not enter, and nothing once the process is
 closing - and it runs the program's ONE sequencer, `program.cycle`, the same
 `python3 -m cite_bringup.program` and `program.home` run:
 
@@ -98,9 +98,14 @@ STATE_NAMES = {
     ConsoleState.FAULT: "FAULT",
 }
 
-#: The twin's modes that command a side: entered by another client, they mean
-#: someone else may be moving the physical arm.
-_COMMANDING = {TwinMode.MODE_VALIDATED: "VALIDATED", TwinMode.MODE_VIRTUAL_LEAD: "VIRTUAL_LEAD"}
+#: Every twin mode's name, read off the contract. On a pair with a physical
+#: side every mode but SIM commands a side (N-04): entered by another client,
+#: any of them means someone else may be moving the physical arm.
+_MODE_NAMES = {
+    getattr(TwinMode, name): name[len("MODE_"):]
+    for name in dir(TwinMode)
+    if name.startswith("MODE_") and isinstance(getattr(TwinMode, name), int)
+}
 
 
 @dataclass(frozen=True)
@@ -178,6 +183,10 @@ class _Observed:
         except StepFailed as failure:
             self.failure = str(failure)
             raise
+
+
+class _NotAtStart(Exception):
+    """Start program measured the arms away from the program's start: refused (N-03)."""
 
 
 class ConsoleMachine:
@@ -404,15 +413,16 @@ class ConsoleMachine:
             failure = f"unexpected: {error!r}"
         if observed is not None and observed.cancel_failure is not None:
             problems.append(f"the cancel failed: {observed.cancel_failure}")
-        outcome = self._finish(
-            "Home", stopped, failure, problems, "both arms are at the program's start"
+        # At the start is said in the same snapshot that releases the request
+        # (R2-03): nothing reads READY and idle with it still unknown.
+        return self._finish(
+            "Home",
+            stopped,
+            failure,
+            problems,
+            "both arms are at the program's start",
+            at_start=True,
         )
-        if outcome.success:
-            with self._lock:
-                self._at_start = True
-                snapshot = self._snapshot()
-            self._on_change(snapshot)
-        return outcome
 
     def run_program(
         self,
@@ -444,10 +454,19 @@ class ConsoleMachine:
         problems: list[str] = []
         completed = 0
         observed = None
+        refusal: str | None = None
         try:
             cell = self._make_cell(scale, self.interrupted)
             observed = _Observed(cell, self._set_entered)
             try:
+                # Measured, not only remembered (N-03): `at_start` says what
+                # this console last saw, and anything may have moved the arms
+                # since. Away is a refusal, as the command line's measurement is.
+                away = observed.away_from_start(self._start)
+                if away is not None:
+                    raise _NotAtStart(
+                        f"the arms are not at the program's start: {away}. Home first"
+                    )
                 for number in range(1, cycles + 1):
                     self._raise_if_stopped()
                     with self._lock:
@@ -491,12 +510,19 @@ class ConsoleMachine:
                         self._at_start = True
             finally:
                 cell.close()
+        except _NotAtStart as away:
+            refusal = str(away)
         except Interrupted:
             stopped = True
         except StepFailed as step_failure:
             failure = str(step_failure)
         except Exception as error:  # noqa: BLE001 - never leave the console busy
             failure = f"unexpected: {error!r}"
+        if refusal is not None:
+            # Nothing was started: no part placed, no belt run, no mode asked.
+            self._log(f"Start program refused: {refusal}")
+            self._end(ConsoleState.READY, error=refusal, at_start=False)
+            return Outcome(False, refusal)
         if observed is not None and observed.cancel_failure is not None:
             problems.append(f"the cancel failed: {observed.cancel_failure}")
         outcome = self._finish(
@@ -627,10 +653,11 @@ class ConsoleMachine:
             return f"another request is in progress ({STATE_NAMES[self._state]})"
         if foreign_mode_refuses and self._physical and not self._entered:
             mode = self._heard_twin_mode()
-            if mode in _COMMANDING:
+            if mode is not None and mode != TwinMode.MODE_SIM:
                 return (
-                    f"the twin is in {_COMMANDING[mode]}, which this console did not ask "
-                    f"for: another client may be commanding {', '.join(self._physical)}. "
+                    f"the twin is in {_MODE_NAMES.get(mode, mode)}, which this console did "
+                    "not ask for: another client may be commanding "
+                    f"{', '.join(self._physical)}. "
                     "Nothing is accepted until the twin is back in SIM"
                 )
         return None
@@ -692,8 +719,17 @@ class ConsoleMachine:
         self._on_change(snapshot)
         return None
 
-    def _end(self, state: int, *, started: bool | None = None, error: str = "") -> None:
+    def _end(
+        self,
+        state: int,
+        *,
+        started: bool | None = None,
+        error: str = "",
+        at_start: bool | None = None,
+    ) -> None:
         with self._lock:
+            if at_start is not None:
+                self._at_start = at_start
             self._state = state
             self._busy = False
             self._owner = None
@@ -720,8 +756,12 @@ class ConsoleMachine:
         failure: str | None,
         problems: list[str],
         done: str,
+        at_start: bool = False,
     ) -> Outcome:
         """End a motion request: READY, or FAULT with why. Never a homing move (ADR-0037).
+
+        ``at_start`` True says the arms are at the program's start when the
+        request completed, under the same lock that releases it.
 
         Reached only once the cell has returned: every cancel answered and the
         cancelled goal's end read (`RosCell.cancel`), so READY is said of a
@@ -742,7 +782,7 @@ class ConsoleMachine:
             verb = "stopped" if stopped else "ended"
             return self._fault("; ".join([f"{what} {verb}, and the stop was not confirmed",
                                           *problems]))
-        self._end(ConsoleState.READY)
+        self._end(ConsoleState.READY, at_start=True if at_start and not stopped else None)
         if stopped:
             return Outcome(False, f"{what} was stopped; nothing homes on its own (ADR-0037)")
         return Outcome(True, f"{what}: {done}")

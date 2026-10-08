@@ -579,8 +579,10 @@ def test_a_run_on_a_simulated_pair_places_a_part_then_runs_each_cycle() -> None:
     assert outcome.success, outcome.detail
     assert outcome.cycles_completed == 2
     head = rig.calls[: rig.calls.index(("enter_validated", False)) + 1]
-    # Start robot left every simulated side's world unknown, so each is cleared.
+    # The start measured first (N-03); Start robot left every simulated side's
+    # world unknown, so each is cleared.
     assert head == [
+        ("measure",),
         ("place", ("counterpart", "plant")),
         ("belts", True),
         ("refuse_if_holding",),
@@ -589,7 +591,8 @@ def test_a_run_on_a_simulated_pair_places_a_part_then_runs_each_cycle() -> None:
     # The second cycle clears the first cycle's part, and the belts already run.
     places = [call for call in rig.calls if call[0] == "place"]
     assert places == [("place", ("counterpart", "plant"))] * 2
-    second = rig.calls.index(("place", ("counterpart", "plant")), 1)
+    first = rig.calls.index(("place", ("counterpart", "plant")))
+    second = rig.calls.index(("place", ("counterpart", "plant")), first + 1)
     assert ("belts", True) not in rig.calls[second:]
     assert rig.moves() == ["pick", "place"] * 2
     # No operator is asked and no SIM is asked for on a simulated pair.
@@ -1073,3 +1076,81 @@ def test_the_shutdown_cuts_the_requests_waits_at_its_deadline() -> None:
     join()
     assert 0.4 <= elapsed < 1.0, elapsed
     assert rig.machine.stop_deadline() == pytest.approx(started + 0.5, abs=0.1)
+
+
+# --- R2-03: at the start is said with the release, never after it -------------
+
+
+def test_a_completed_home_releases_the_request_already_at_the_start() -> None:
+    """No snapshot reads the console idle after a home with the start still unknown."""
+    rig = Rig().started()
+    rig.away = [None]
+    rig.snapshots.clear()
+    assert rig.machine.home(1.0).success
+    released = next(snapshot for snapshot in rig.snapshots if not snapshot.busy)
+    assert released.state == ConsoleState.READY
+    assert released.at_start
+
+
+def test_a_stopped_home_is_released_not_at_the_start() -> None:
+    rig = Rig().started()
+    rig.away = ["arm away", None]
+    rig.hold_on = ("move", "zero")
+    join = rig.in_thread(lambda: rig.machine.home(1.0))
+    assert rig.holding_step.wait(SETTLE_S)
+    assert rig.machine.stop().success
+    assert not join().success
+    assert not rig.machine.snapshot().at_start
+
+
+# --- N-03: Start program measures the start, not only remembers it ------------
+
+
+def test_start_program_measures_the_start_and_refuses_when_away() -> None:
+    rig = Rig().homed()
+    rig.away = ["picker_joint1 stands at 0.2000, not within 0.01 of 0.0000"]
+    outcome = rig.machine.run_program(1.0, 1)
+    assert not outcome.success
+    assert "not at the program's start" in outcome.detail and "Home first" in outcome.detail
+    # Measured first, and nothing after: no part, no belt, no mode, no step.
+    assert [call[0] for call in rig.calls] == ["measure", "close"]
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and not snapshot.busy
+    assert not snapshot.at_start
+    assert "Home first" in rig.machine.motion_refusal(1.0, 1)
+
+
+def test_start_program_at_the_start_measures_once_then_runs() -> None:
+    rig = Rig().homed()
+    assert rig.machine.run_program(1.0, 1).success
+    assert rig.calls[0] == ("measure",)
+    assert [call for call in rig.calls if call == ("measure",)] == [("measure",)]
+
+
+# --- N-04: every mode but SIM is foreign on a physical pair, unless entered here
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        TwinMode.MODE_REAL,
+        TwinMode.MODE_SHADOW,
+        TwinMode.MODE_VALIDATED,
+        TwinMode.MODE_CLOSED_LOOP,
+        TwinMode.MODE_VIRTUAL_LEAD,
+    ],
+)
+def test_every_mode_but_sim_this_console_did_not_enter_refuses(mode: int) -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    rig.heard = mode
+    refusal = rig.machine.motion_refusal(0.1, 1)
+    assert refusal is not None and "did not ask for" in refusal
+    assert not rig.machine.start_robot().success
+    assert rig.speeds == []
+
+
+def test_the_mode_this_console_entered_is_not_foreign() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    rig.machine._set_entered(True)
+    rig.heard = TwinMode.MODE_VALIDATED
+    assert rig.machine.motion_refusal(0.1, 1) is None
