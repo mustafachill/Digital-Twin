@@ -370,7 +370,7 @@ class CellConsole(LifecycleNode):
         )
 
     def _stop_deadline(self) -> float | None:
-        """The machine's shutdown deadline for the request in flight (R2-02), or None."""
+        """Return the machine's shutdown deadline for the request in flight (R2-02), or None."""
         machine = self._machine
         return None if machine is None else machine.stop_deadline()
 

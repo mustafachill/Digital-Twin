@@ -42,7 +42,7 @@ PHYSICAL = ["counterpart"]
 
 
 class Cell:
-    """`RosCell` on a pair with a physical side, in SIM; ``raises`` maps a call to what it raises."""
+    """`RosCell` on a pair with a physical side, in SIM; ``raises``: what a call raises."""
 
     def __init__(self, log: list[str], raises: dict | None = None, left: bool = True) -> None:
         self.log = log
