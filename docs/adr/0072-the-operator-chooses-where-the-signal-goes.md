@@ -140,3 +140,35 @@ Option C.
 - **When `SetMode` ownership is enforced (open-work #100):** who may switch the target.
 - **When an all-simulated pair can be started (open-work #101):** the plant-only deployment may
   cover part of that need.
+
+## Amendment — what review added (2026-10-09)
+
+The safety and code reviews of the first implementation added five mechanisms. All of them are
+in the tree and covered by tests.
+
+1. **A mode hold at the boundary.** `/cite/twin/hold_mode` (`HoldMode.srv`) works with a
+   `holder` field on `SetMode`.
+   - **Taking it.** A run takes the hold on `SIM` before anyone is asked anything, under the
+     boundary's lock, and it keeps the hold for the whole request.
+   - **What it blocks.** While the hold is held, another client's change to any mode other than
+     `SIM` is refused, even with `force`. A change into `SIM` is never refused.
+   - **What it allows.** The holder's own transitions carry the hold.
+   - **Releasing it.** The hold is released only after `SIM` has been confirmed. If the holder's
+     node leaves the graph, the hold lapses after a bounded time.
+   - **What it does not do.** The hold fixes the mode, not who may send a goal (open-work #100).
+2. **Custody is read through L5.** `/cite/twin/holding` (`Holding.srv`) answers whether each
+   side's arm is holding a part. The boundary reads each side's latched `RobotState` on that
+   side's own domain, so no client opens another side's domain for custody.
+3. **The physical carriage must be stationary before anyone is invited in.**
+   - `TwinSides.stationary` lists a physical side whose carriage has stayed within the track's
+     `goal_tolerance_m` across fresh samples at least `state_max_age_s` apart. Both values come
+     from the plan.
+   - The operator's go-ahead for the real arm or the twin waits for it, with a time bound.
+   - `SIM` itself is never refused.
+4. **A track that has not found its zero publishes no position.** The track adapter reads the
+   vendor's `get_linear_motor_on_zero` when it activates and after every vendor error. Until the
+   track reads as on zero, the physical side is not ready, and the real arm and the twin are not
+   offered.
+5. **Single sources.** The panel reads `startable_targets`, `floored_targets` and
+   `counterpart_running` from `ConsoleState`, and holds no map from target to sides of its own.
+   The boundary's `--sides` argument is required and has no default.

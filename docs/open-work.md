@@ -1970,6 +1970,8 @@ absence. A client that starts before the other has been discovered can miss it, 
 In that window each surface can invite a person into the cell while the other enters VALIDATED.
 `SetMode` to the current mode is accepted by the boundary.
 
+**Narrowed 2026-10-09 by ADR-0072's mode hold:** a run now holds `SIM` at the boundary before anyone is asked anything and keeps the hold for the whole request, so another client's mode change is refused while a run holds the twin. What remains: the discovery-based refusal between two surfaces before either holds, and goals from any sender (#103).
+
 **What closing it means.** A single owner, enforced by `cite_twin`: the console or client
 registers, and `SetMode(VALIDATED)` from anyone else is refused while it is held. Until then, the
 operating rule is one operator surface per pair.
@@ -2012,6 +2014,30 @@ no twin and no operator gate. This needs two independent mistakes on the hardwar
 **What closing it means.** Also refuse when the physical side is visibly present, for example
 when `DeadmanState` or any `cite_hardware` node has a publisher on the domain. A stray `/clock`
 cannot hide that evidence.
+
+### #103 — What the ADR-0072 reviews deferred (2026-10-09)
+
+Each item below was deferred on purpose. Each one fails toward refusing a command, or depends on
+the one-operator-surface rule (#100).
+
+- **The boundary routes a goal from any sender** (safety S2-03).
+  - While a run holds `REAL` or `VALIDATED`, a stray `MoveTo` or `Grasp` sent by hand to a
+    `/cite/twin/...` endpoint reaches the physical arm between the program's own motions.
+  - The hold fixes the mode, not who may command.
+  - Closing it means giving dispatch a holder token, so the boundary refuses any goal that does
+    not come from the holder.
+- **The hold is cooperative** (S2-06). A refused `SetMode` returns the holder's id, so any client
+  could then send that id as its own. Real authentication needs SROS2.
+- **The deadman does not know the mode** (design R-26). In `SIM` the physical arm is enabled and
+  idle, and keeping it still rests on the routing table. Carrying "physical commanded" in
+  `TwinHeartbeat` would let the deadman hold the arm stopped. That is a contract change and needs
+  its own record.
+- **The initializer moves the track outside the mode gate.** `InitializeAsset` is called directly
+  on the physical side's domain (ADR-0070), after its own clear-the-cell confirmation. The mode
+  hold does not cover it.
+- **"Stationary" judges only the carriage, not the arm joints.** With the plan's values (1 mm
+  over at least 0.25 s), a creep slower than about 4 mm/s reads as stationary.
+- **A real-arm-only deployment without the simulation is not supported.** The plant always runs.
 
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
