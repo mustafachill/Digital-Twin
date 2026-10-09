@@ -48,10 +48,31 @@ Rectangle {
     anchors.margins: 12
     spacing: 8
 
+    RowLayout {
+      Layout.fillWidth: true
+      Label {
+        Layout.fillWidth: true
+        text: "Cell console"
+        font.pixelSize: 20
+        font.bold: true
+      }
+      // The 3D view back to where the window opened it, zoom included. It
+      // moves no robot, so it is not gated on the console: only on the
+      // configuration having given the panel its home pose.
+      Button {
+        text: "Reset view"
+        flat: true
+        enabled: CellConsole.resetViewEnabled
+        onClicked: CellConsole.resetView()
+      }
+    }
     Label {
-      text: "Cell console"
-      font.pixelSize: 20
-      font.bold: true
+      Layout.fillWidth: true
+      visible: CellConsole.viewError !== ""
+      text: CellConsole.viewError
+      textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
+      color: "#c62828"
     }
 
     // ---------------------------------------------------------------- no console

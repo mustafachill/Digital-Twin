@@ -22,7 +22,9 @@
 // the sequences that keep or clear it are the tested ones. Everything ROS is
 // in `ConsoleClient`, on a thread of its own; each thing it hears is queued onto
 // this object's (the Qt) thread, so no property is touched from two threads and
-// nothing on the Qt thread ever waits for the graph.
+// nothing on the Qt thread ever waits for the graph. "Reset view" is the one
+// thing it asks of the window rather than the console: `CameraClient`, over gz
+// transport, on a thread of its own as well, its answer queued back the same way.
 //
 // Its names are this plugin's XML parameters, written by the generated GUI
 // configuration (generate/gui.py) under the keys of the plan's `console:` block.
@@ -43,7 +45,9 @@
 
 #include <gz/gui/Plugin.hh>
 
+#include "cite_console_gui/camera_client.hpp"
 #include "cite_console_gui/console_client.hpp"
+#include "cite_console_gui/console_config.hpp"
 #include "cite_console_gui/enablement.hpp"
 #include "cite_console_gui/selection.hpp"
 
@@ -87,6 +91,12 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(QVariantList targetChoicesEnabled READ targetChoicesEnabled NOTIFY viewChanged)
   Q_PROPERTY(int selectedTarget READ selectedTarget NOTIFY viewChanged)
 
+  // "Reset view" (ADR-0071): the 3D view's camera back to where the window
+  // opened it. Enabled whenever the configuration gave the panel its home pose;
+  // it moves no robot, so neither the console's state nor its absence touches it.
+  Q_PROPERTY(bool resetViewEnabled READ resetViewEnabled NOTIFY viewChanged)
+  Q_PROPERTY(QString viewError READ viewError NOTIFY viewChanged)
+
   // The last request's progress and how it ended.
   Q_PROPERTY(QString progress READ progress NOTIFY progressChanged)
   Q_PROPERTY(QString outcome READ outcome NOTIFY outcomeChanged)
@@ -121,6 +131,8 @@ public:
   QStringList targetChoices() const;
   QVariantList targetChoicesEnabled() const;
   int selectedTarget() const;
+  bool resetViewEnabled() const {return static_cast<bool>(camera_);}
+  QString viewError() const {return view_error_;}
   QString progress() const {return progress_;}
   QString outcome() const {return outcome_;}
 
@@ -131,6 +143,7 @@ public:
   Q_INVOKABLE void startProgram(double speed_scale, int cycles);
   Q_INVOKABLE void stop();
   Q_INVOKABLE void confirm();
+  Q_INVOKABLE void resetView();
 
 signals:
   void viewChanged();
@@ -146,6 +159,11 @@ private:
   void set_outcome(const QString & text);
 
   std::unique_ptr<ConsoleClient> client_;
+  std::unique_ptr<CameraClient> camera_;
+  CameraPose home_camera_pose_;
+  QString view_error_;
+  // The last Reset-view failure put on the outcome line, to take back.
+  QString view_outcome_;
   PanelSelection selection_;
   QString config_error_;
   QString state_name_;

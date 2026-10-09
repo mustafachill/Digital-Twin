@@ -14,7 +14,11 @@
 
 #include "cite_console_gui/console_config.hpp"
 
+#include <array>
+#include <cmath>
 #include <cstring>
+#include <locale>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,7 +40,7 @@ std::string joined(const std::vector<std::string> & items)
 
 bool is_known(const char * name)
 {
-  if (std::strcmp(name, GZ_GUI_ELEMENT) == 0) {
+  if (std::strcmp(name, GZ_GUI_ELEMENT) == 0 || std::strcmp(name, HOME_CAMERA_POSE_KEY) == 0) {
     return true;
   }
   for (const char * key : CONSOLE_KEYS) {
@@ -95,6 +99,35 @@ std::string read_console_names(const tinyxml2::XMLElement * plugin_element, Cons
     problem += " Regenerate it: ./scripts/validate-model --write";
   }
   return problem;
+}
+
+std::string read_home_camera_pose(const tinyxml2::XMLElement * plugin_element, CameraPose & pose)
+{
+  const tinyxml2::XMLElement * element =
+    plugin_element == nullptr ? nullptr : plugin_element->FirstChildElement(HOME_CAMERA_POSE_KEY);
+  const char * text = element == nullptr ? nullptr : element->GetText();
+  if (text == nullptr) {
+    return std::string("The GUI configuration names no ") + HOME_CAMERA_POSE_KEY +
+           " for this panel. Regenerate it: ./scripts/validate-model --write";
+  }
+
+  // The C locale, whatever the window's: "0.5" is a number here everywhere.
+  std::istringstream stream{std::string(text)};
+  stream.imbue(std::locale::classic());
+  std::array<double, 6> values{};
+  for (double & value : values) {
+    if (!(stream >> value) || !std::isfinite(value)) {
+      return std::string("The GUI configuration's ") + HOME_CAMERA_POSE_KEY + " '" + text +
+             "' is not six finite numbers (x y z roll pitch yaw).";
+    }
+  }
+  stream >> std::ws;
+  if (!stream.eof()) {
+    return std::string("The GUI configuration's ") + HOME_CAMERA_POSE_KEY + " '" + text +
+           "' has more than six numbers (x y z roll pitch yaw).";
+  }
+  pose = CameraPose{values[0], values[1], values[2], values[3], values[4], values[5]};
+  return "";
 }
 
 }  // namespace cite_console_gui
