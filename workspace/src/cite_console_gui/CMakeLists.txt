@@ -27,9 +27,14 @@ find_package(gz-msgs REQUIRED)
 find_package(gz_math_vendor REQUIRED)
 find_package(gz-math REQUIRED)
 
-# What the buttons may do, as a pure function of what the console last said.
+# What the buttons may do, as a pure function of what the console last said,
+# and what the panel shows of each side's connection (health.hpp).
 # No Qt and no ROS, so the whole table is tested without a window or a graph.
-add_library(cite_console_gui_enablement STATIC src/enablement.cpp src/selection.cpp)
+add_library(cite_console_gui_enablement STATIC
+  src/enablement.cpp
+  src/selection.cpp
+  src/health.cpp
+)
 target_include_directories(cite_console_gui_enablement PUBLIC include)
 set_target_properties(cite_console_gui_enablement PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -101,6 +106,10 @@ if(BUILD_TESTING)
   # Every state, every flag: which buttons the panel enables.
   ament_add_gtest(test_enablement test/test_enablement.cpp)
   target_link_libraries(test_enablement cite_console_gui_enablement)
+
+  # What the panel shows of each side's connection: live, stale or absent.
+  ament_add_gtest(test_health test/test_health.cpp)
+  target_link_libraries(test_health cite_console_gui_enablement)
 
   # The one place the contract's constants become the panel's: every
   # ConsoleState and TwinMode constant, read from the generated headers.

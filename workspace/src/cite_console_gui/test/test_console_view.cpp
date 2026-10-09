@@ -33,6 +33,8 @@ using cite_console_gui::Target;
 using cite_console_gui::target_from;
 using cite_console_gui::target_value;
 using cite_console_gui::twin_mode_name;
+using cite_console_gui::validation_phase_from;
+using cite_console_gui::ValidationPhase;
 using cite_console_gui::view_from;
 using cite_interfaces::msg::ConsoleState;
 using cite_interfaces::msg::TwinMode;
@@ -204,4 +206,28 @@ TEST(ConsoleView, APhysicalSideIsReadFromTheListOfThem)
   EXPECT_FALSE(view_from(state).has_physical_side);
   state.physical_sides.push_back("counterpart");
   EXPECT_TRUE(view_from(state).has_physical_side);
+}
+
+TEST(ConsoleView, EveryContractPhaseIsAKnownValidationPhase)
+{
+  EXPECT_EQ(validation_phase_from(ConsoleState::PHASE_NONE), ValidationPhase::NONE);
+  EXPECT_EQ(validation_phase_from(ConsoleState::PHASE_VALIDATING), ValidationPhase::VALIDATING);
+  EXPECT_EQ(validation_phase_from(ConsoleState::PHASE_RUNNING), ValidationPhase::RUNNING);
+  EXPECT_EQ(validation_phase_from(200), ValidationPhase::UNKNOWN);
+}
+
+TEST(ConsoleView, TheViewCarriesTheOfferAndThePhase)
+{
+  ConsoleState state;
+  state.state = ConsoleState::RUNNING;
+  state.validate_then_run_offered = true;
+  state.phase = ConsoleState::PHASE_RUNNING;
+  auto view = view_from(state);
+  EXPECT_TRUE(view.validate_then_run_offered);
+  EXPECT_EQ(view.validation_phase, ValidationPhase::RUNNING);
+  state.validate_then_run_offered = false;
+  state.phase = ConsoleState::PHASE_NONE;
+  view = view_from(state);
+  EXPECT_FALSE(view.validate_then_run_offered);
+  EXPECT_EQ(view.validation_phase, ValidationPhase::NONE);
 }

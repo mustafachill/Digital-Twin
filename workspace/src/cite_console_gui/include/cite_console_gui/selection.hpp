@@ -55,6 +55,12 @@ public:
   /// with Start program enabled and at least one cycle.
   bool may_run(double speed_scale, int cycles) const;
 
+  /// Validate then run at `speed_scale` for `cycles` may be sent (ADR-0073):
+  /// its button is enabled, at least one cycle, and the scale is one the panel
+  /// offers for the twin target, whose floor applies to both phases. The
+  /// selected target plays no part: the request carries none.
+  bool may_validate_then_run(double speed_scale, int cycles) const;
+
 private:
   void settle(const ConsoleView & before);
 

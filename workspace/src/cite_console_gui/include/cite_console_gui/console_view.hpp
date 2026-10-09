@@ -44,6 +44,11 @@ Target target_from(std::uint8_t value);
 /// console rejects) for `NONE`.
 std::uint8_t target_value(Target target);
 
+/// ConsoleState.PHASE_* (ConsoleState.phase, and ValidateThenRun's feedback
+/// `phase` and result `ended_in`) as a validation phase; `UNKNOWN` for a value
+/// the contract this panel was built against does not define.
+ValidationPhase validation_phase_from(std::uint8_t value);
+
 /// What the buttons depend on, from a ConsoleState that was just heard from
 /// the publisher identified by `publisher` (its rmw GID; empty if unknown).
 ConsoleView view_from(

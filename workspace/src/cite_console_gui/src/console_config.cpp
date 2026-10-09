@@ -17,6 +17,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 #include <locale>
 #include <sstream>
 #include <string>
@@ -40,8 +41,17 @@ std::string joined(const std::vector<std::string> & items)
 
 bool is_known(const char * name)
 {
-  if (std::strcmp(name, GZ_GUI_ELEMENT) == 0 || std::strcmp(name, HOME_CAMERA_POSE_KEY) == 0) {
-    return true;
+  for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_MODEL_KEY, TWIN_SIDES_KEY,
+      HEARTBEAT_STALE_AFTER_KEY})
+  {
+    if (std::strcmp(name, key) == 0) {
+      return true;
+    }
+  }
+  for (const CameraPresetKey & preset : CAMERA_PRESET_KEYS) {
+    if (std::strcmp(name, preset.key) == 0) {
+      return true;
+    }
   }
   for (const char * key : CONSOLE_KEYS) {
     if (std::strcmp(name, key) == 0) {
@@ -51,13 +61,27 @@ bool is_known(const char * name)
   return false;
 }
 
+/// The text of `plugin_element`'s `key` child, or nullptr if there is none.
+const char * child_text(const tinyxml2::XMLElement * plugin_element, const char * key)
+{
+  const tinyxml2::XMLElement * element =
+    plugin_element == nullptr ? nullptr : plugin_element->FirstChildElement(key);
+  return element == nullptr ? nullptr : element->GetText();
+}
+
+std::string unnamed(const char * key)
+{
+  return std::string("The GUI configuration names no ") + key +
+         " for this panel. Regenerate it: ./scripts/validate-model --write";
+}
+
 }  // namespace
 
 std::string read_console_names(const tinyxml2::XMLElement * plugin_element, ConsoleNames & names)
 {
   std::string * const targets[] = {
     &names.state, &names.start_robot, &names.confirm_operator,
-    &names.stop, &names.home, &names.run_program,
+    &names.stop, &names.home, &names.run_program, &names.validate_then_run,
   };
   static_assert(
     sizeof(targets) / sizeof(targets[0]) == CONSOLE_KEYS.size(),
@@ -103,12 +127,15 @@ std::string read_console_names(const tinyxml2::XMLElement * plugin_element, Cons
 
 std::string read_home_camera_pose(const tinyxml2::XMLElement * plugin_element, CameraPose & pose)
 {
-  const tinyxml2::XMLElement * element =
-    plugin_element == nullptr ? nullptr : plugin_element->FirstChildElement(HOME_CAMERA_POSE_KEY);
-  const char * text = element == nullptr ? nullptr : element->GetText();
+  return read_camera_pose(plugin_element, HOME_CAMERA_POSE_KEY, pose);
+}
+
+std::string read_camera_pose(
+  const tinyxml2::XMLElement * plugin_element, const char * key, CameraPose & pose)
+{
+  const char * text = child_text(plugin_element, key);
   if (text == nullptr) {
-    return std::string("The GUI configuration names no ") + HOME_CAMERA_POSE_KEY +
-           " for this panel. Regenerate it: ./scripts/validate-model --write";
+    return unnamed(key);
   }
 
   // The C locale, whatever the window's: "0.5" is a number here everywhere.
@@ -117,16 +144,64 @@ std::string read_home_camera_pose(const tinyxml2::XMLElement * plugin_element, C
   std::array<double, 6> values{};
   for (double & value : values) {
     if (!(stream >> value) || !std::isfinite(value)) {
-      return std::string("The GUI configuration's ") + HOME_CAMERA_POSE_KEY + " '" + text +
+      return std::string("The GUI configuration's ") + key + " '" + text +
              "' is not six finite numbers (x y z roll pitch yaw).";
     }
   }
   stream >> std::ws;
   if (!stream.eof()) {
-    return std::string("The GUI configuration's ") + HOME_CAMERA_POSE_KEY + " '" + text +
+    return std::string("The GUI configuration's ") + key + " '" + text +
            "' has more than six numbers (x y z roll pitch yaw).";
   }
   pose = CameraPose{values[0], values[1], values[2], values[3], values[4], values[5]};
+  return "";
+}
+
+std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewConfig & config)
+{
+  ViewConfig read;
+  for (const CameraPresetKey & preset : CAMERA_PRESET_KEYS) {
+    CameraPose pose;
+    const std::string problem = read_camera_pose(plugin_element, preset.key, pose);
+    if (!problem.empty()) {
+      return problem;
+    }
+    read.presets.emplace_back(preset.label, pose);
+  }
+
+  const char * model = child_text(plugin_element, FOLLOW_MODEL_KEY);
+  if (model == nullptr || std::string(model).find_first_not_of(" \t\n") == std::string::npos) {
+    return unnamed(FOLLOW_MODEL_KEY);
+  }
+  read.follow_model = model;
+
+  const char * sides = child_text(plugin_element, TWIN_SIDES_KEY);
+  if (sides != nullptr) {
+    std::istringstream stream{std::string(sides)};
+    for (std::string side; stream >> side; ) {
+      read.twin_sides.push_back(side);
+    }
+  }
+  if (read.twin_sides.empty()) {
+    return unnamed(TWIN_SIDES_KEY);
+  }
+
+  const char * stale = child_text(plugin_element, HEARTBEAT_STALE_AFTER_KEY);
+  if (stale == nullptr) {
+    return unnamed(HEARTBEAT_STALE_AFTER_KEY);
+  }
+  std::istringstream stream{std::string(stale)};
+  stream.imbue(std::locale::classic());
+  double seconds = 0.0;
+  if (!(stream >> seconds) || !std::isfinite(seconds) || seconds <= 0.0 ||
+    !(stream >> std::ws).eof())
+  {
+    return std::string("The GUI configuration's ") + HEARTBEAT_STALE_AFTER_KEY + " '" + stale +
+           "' is not one positive, finite number of seconds.";
+  }
+  read.heartbeat_stale_after_s = seconds;
+
+  config = std::move(read);
   return "";
 }
 

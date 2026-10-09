@@ -15,7 +15,7 @@
 // The panel's enablement table, over every phase, every flag and every target
 // (ADR-0071, ADR-0072).
 //
-// Two halves. The exhaustive half walks all 9 phases x 2^11 flags x 4
+// Two halves. The exhaustive half walks all 9 phases x 2^12 flags x 4
 // selections and holds each button to an INDEPENDENT statement of the rule: a
 // table of named rows, each one situation in which one button is offered
 // (P-R03). A button is expected enabled exactly when some row for it matches,
@@ -44,6 +44,7 @@ using cite_console_gui::ButtonStates;
 using cite_console_gui::ConsoleView;
 using cite_console_gui::counterpart_running;
 using cite_console_gui::enabled_for;
+using cite_console_gui::floor_applies;
 using cite_console_gui::Phase;
 using cite_console_gui::phase_name;
 using cite_console_gui::settled_selection;
@@ -52,6 +53,8 @@ using cite_console_gui::speed_choice_enabled;
 using cite_console_gui::Target;
 using cite_console_gui::target_choice_enabled;
 using cite_console_gui::target_name;
+using cite_console_gui::validation_phase_name;
+using cite_console_gui::ValidationPhase;
 
 namespace
 {
@@ -113,12 +116,13 @@ std::string describe(const ConsoleView & v, Target selected)
          " started=" + std::to_string(v.robot_started) + " busy=" + std::to_string(v.busy) +
          " sim=" + std::to_string(v.twin_in_sim) +
          " physical=" + std::to_string(v.has_physical_side) +
+         " offered=" + std::to_string(v.validate_then_run_offered) +
          " available=[" + names_of(v.available_targets) +
          "] startable=[" + names_of(v.startable_targets) +
          "] selected=" + target_name(selected);
 }
 
-enum class Button { START_ROBOT, HOME, START_PROGRAM, STOP, CONFIRM };
+enum class Button { START_ROBOT, HOME, START_PROGRAM, STOP, CONFIRM, VALIDATE_THEN_RUN };
 
 /// A flag a row requires: either way, set, or clear.
 enum class Need { ANY, YES, NO };
@@ -141,6 +145,8 @@ struct Row
   std::set<Target> selected;  // empty: any selection, none included
   Need selected_served;       // the selection is one of available_targets
   Need selected_startable;    // the selection is one of startable_targets
+  Need offered = Need::ANY;   // validate_then_run_offered
+  Need twin_startable = Need::ANY;  // the twin is one of startable_targets
 };
 
 constexpr Need ANY = Need::ANY;
@@ -169,6 +175,9 @@ const std::vector<Row> & rows()
       {Phase::FAULT}, ANY, ANY, NO, YES, {}, ANY, ANY},
     {"the console asks the operator: Confirm", Button::CONFIRM,
       {Phase::AWAITING_OPERATOR}, ANY, ANY, ANY, ANY, {}, ANY, ANY},
+    {"a started robot, READY and idle, the console offering it and the twin startable, "
+      "may validate then run - whatever target is selected", Button::VALIDATE_THEN_RUN,
+      {Phase::READY}, YES, NO, ANY, ANY, {}, ANY, ANY, YES, YES},
   };
   return table;
 }
@@ -184,7 +193,9 @@ bool matches(const Row & row, const ConsoleView & v, Target selected)
          satisfies(row.physical, v.has_physical_side) &&
          (row.selected.empty() || row.selected.count(selected) == 1) &&
          satisfies(row.selected_served, served) &&
-         satisfies(row.selected_startable, startable);
+         satisfies(row.selected_startable, startable) &&
+         satisfies(row.offered, v.validate_then_run_offered) &&
+         satisfies(row.twin_startable, v.startable_targets.count(Target::TWIN) == 1);
 }
 
 bool expected(Button button, const ConsoleView & v, Target selected)
@@ -200,7 +211,7 @@ bool expected(Button button, const ConsoleView & v, Target selected)
   return false;
 }
 
-constexpr int FLAG_BITS = 11;
+constexpr int FLAG_BITS = 12;
 
 /// The view for one combination of the flags `bits` encodes.
 ConsoleView walked(Phase phase, int bits)
@@ -214,6 +225,7 @@ ConsoleView walked(Phase phase, int bits)
   v.has_physical_side = bits & 16;
   v.available_targets = targets_of((bits >> 5) & 7);
   v.startable_targets = targets_of((bits >> 8) & 7);
+  v.validate_then_run_offered = bits & 2048;
   return v;
 }
 
@@ -235,6 +247,8 @@ TEST(Enablement, EveryPhaseFlagAndSelectionFollowsTheTableOfSituations)
           << describe(v, selected);
         EXPECT_EQ(got.stop, expected(Button::STOP, v, selected)) << describe(v, selected);
         EXPECT_EQ(got.confirm, expected(Button::CONFIRM, v, selected)) << describe(v, selected);
+        EXPECT_EQ(got.validate_then_run, expected(Button::VALIDATE_THEN_RUN, v, selected))
+          << describe(v, selected);
       }
     }
   }
@@ -554,4 +568,103 @@ TEST(PhaseNames, EveryPhaseHasADistinctName)
     names.insert(phase_name(phase));
   }
   EXPECT_EQ(names.size(), ALL_PHASES.size());
+}
+
+TEST(ValidateThenRun, OfferedStartedReadyAndBothArmsAtTheStartEnablesIt)
+{
+  ConsoleView v = ready({Target::TWIN});
+  v.validate_then_run_offered = true;
+  // It carries no target: every selection, none included, enables it alike.
+  for (const Target selected : SELECTIONS) {
+    EXPECT_TRUE(enabled_for(v, selected).validate_then_run) << target_name(selected);
+  }
+}
+
+TEST(ValidateThenRun, EachMissingConditionDisablesItAlone)
+{
+  // Independent rows: one condition removed from the enabling view each time.
+  struct Row
+  {
+    const char * situation;
+    void (* change)(ConsoleView &);
+  };
+  const std::vector<Row> rows = {
+    {"not offered (a plant-only deployment)",
+      [](ConsoleView & v) {v.validate_then_run_offered = false;}},
+    {"the twin not startable (an arm away from the start)",
+      [](ConsoleView & v) {v.startable_targets = {Target::SIM, Target::REAL};}},
+    {"a request in progress", [](ConsoleView & v) {v.busy = true;}},
+    {"Start robot has not succeeded", [](ConsoleView & v) {v.robot_started = false;}},
+    {"not READY (FAULT)", [](ConsoleView & v) {v.phase = Phase::FAULT;}},
+    {"not READY (NOT_STARTED)", [](ConsoleView & v) {v.phase = Phase::NOT_STARTED;}},
+    {"no console heard", [](ConsoleView & v) {v.heard = false;}},
+  };
+  for (const Row & row : rows) {
+    ConsoleView v = ready({Target::TWIN});
+    v.validate_then_run_offered = true;
+    row.change(v);
+    EXPECT_FALSE(enabled_for(v, Target::TWIN).validate_then_run) << row.situation;
+    EXPECT_FALSE(enabled_for(v, Target::NONE).validate_then_run) << row.situation;
+  }
+}
+
+TEST(ValidateThenRun, WhileItRunsOnlyStopIsOffered)
+{
+  ConsoleView v = view(Phase::RUNNING, true, true, BOTH_SIDES, {Target::TWIN});
+  v.validate_then_run_offered = true;
+  v.validation_phase = ValidationPhase::VALIDATING;
+  ButtonStates expected;
+  expected.stop = true;
+  EXPECT_EQ(enabled_for(v, Target::TWIN), expected);
+}
+
+TEST(ValidateThenRun, ThePhaseNamesClaimNoMoreThanASimulationPass)
+{
+  // ADR-0073 decision 5: never "safe", "verified" or "validated".
+  EXPECT_STREQ(validation_phase_name(ValidationPhase::VALIDATING), "Validating in simulation");
+  EXPECT_STREQ(validation_phase_name(ValidationPhase::RUNNING), "Running twin");
+  EXPECT_STREQ(validation_phase_name(ValidationPhase::NONE), "");
+  for (const ValidationPhase phase : {ValidationPhase::NONE, ValidationPhase::VALIDATING,
+      ValidationPhase::RUNNING, ValidationPhase::UNKNOWN})
+  {
+    const std::string name = validation_phase_name(phase);
+    for (const char * word : {"safe", "Safe", "verified", "Verified", "validated", "Validated"}) {
+      EXPECT_EQ(name.find(word), std::string::npos) << name;
+    }
+  }
+}
+
+TEST(SpeedChoices, TheFloorIsShownWhereItApplies)
+{
+  ConsoleView v = ready();
+  v.minimum_speed_scale = 0.25;
+  v.floored_targets = {Target::REAL, Target::TWIN};
+  EXPECT_FALSE(floor_applies(v, Target::SIM));
+  EXPECT_TRUE(floor_applies(v, Target::REAL));
+  EXPECT_TRUE(floor_applies(v, Target::TWIN));
+  // No target selected: assumed, as `speed_choice_enabled` applies it.
+  EXPECT_TRUE(floor_applies(v, Target::NONE));
+  // No floor stated (no physical side running): nothing to show.
+  v.minimum_speed_scale = 0.0;
+  for (const Target target : SELECTIONS) {
+    EXPECT_FALSE(floor_applies(v, target)) << target_name(target);
+  }
+  // No console: nothing.
+  v.minimum_speed_scale = 0.25;
+  v.heard = false;
+  EXPECT_FALSE(floor_applies(v, Target::TWIN));
+}
+
+TEST(SpeedChoices, EveryChoiceBelowTheFloorIsDisabledExactlyWhereTheFloorApplies)
+{
+  ConsoleView v = ready();
+  v.minimum_speed_scale = 0.25;
+  v.floored_targets = {Target::REAL, Target::TWIN};
+  for (const Target target : SELECTIONS) {
+    for (const double scale : SPEED_CHOICES) {
+      const bool below = scale < v.minimum_speed_scale;
+      EXPECT_EQ(speed_choice_enabled(scale, v, target), !(below && floor_applies(v, target)))
+        << target_name(target) << " " << scale;
+    }
+  }
 }

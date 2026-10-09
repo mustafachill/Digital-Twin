@@ -44,7 +44,10 @@ using cite_console_gui::ConsoleClient;
 using cite_console_gui::ConsoleNames;
 using cite_interfaces::action::HomeRobot;
 using cite_interfaces::action::RunProgram;
+using cite_interfaces::action::ValidateThenRun;
 using cite_interfaces::msg::ConsoleState;
+using cite_interfaces::msg::TwinHeartbeat;
+using cite_interfaces::msg::TwinSides;
 using cite_interfaces::srv::ConfirmOperator;
 using cite_interfaces::srv::StartRobot;
 using cite_interfaces::srv::StopCell;
@@ -76,6 +79,7 @@ ConsoleNames names_for(const std::string & test)
   names.stop = base + "stop";
   names.home = base + "home";
   names.run_program = base + "run_program";
+  names.validate_then_run = base + "validate_then_run";
   return names;
 }
 
@@ -91,6 +95,12 @@ public:
         record([&]() {states.push_back(state); publishers.push_back(publisher);});
       };
     callbacks.on_state_lost = [this]() {record([&]() {++lost;});};
+    callbacks.on_twin_sides = [this](const TwinSides & message) {
+        record([&]() {sides.push_back(message);});
+      };
+    callbacks.on_twin_sides_lost = [this]() {record([&]() {++sides_lost;});};
+    callbacks.on_heartbeat = [this]() {record([&]() {++heartbeats;});};
+    callbacks.on_heartbeat_lost = [this]() {record([&]() {++heartbeat_lost;});};
     callbacks.on_progress = [this](const std::string & text) {
         record([&]() {progress.push_back(text);});
       };
@@ -115,6 +125,10 @@ public:
   std::vector<std::string> progress;
   std::vector<std::string> outcomes;
   int lost{0};
+  std::vector<TwinSides> sides;
+  int sides_lost{0};
+  int heartbeats{0};
+  int heartbeat_lost{0};
   /// Set once the client is destroyed: nothing may be told after that.
   std::atomic<bool> closed{false};
   std::atomic<int> after_close{0};
@@ -209,6 +223,18 @@ public:
         return rclcpp_action::CancelResponse::ACCEPT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {});
+    validate_then_run_ = rclcpp_action::create_server<ValidateThenRun>(
+      node_, names.validate_then_run,
+      [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const ValidateThenRun::Goal> goal) {
+        note(
+          "validate_then_run " + std::to_string(goal->speed_scale) + " cycles " +
+          std::to_string(goal->cycles));
+        return rclcpp_action::GoalResponse::REJECT;
+      },
+      [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>>) {
+        return rclcpp_action::CancelResponse::ACCEPT;
+      },
+      [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>>) {});
     rclcpp::ExecutorOptions executor_options;
     executor_options.context = context_;
     executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>(executor_options);
@@ -268,10 +294,62 @@ private:
   rclcpp::Service<StopCell>::SharedPtr stop_;
   rclcpp_action::Server<HomeRobot>::SharedPtr home_;
   rclcpp_action::Server<RunProgram>::SharedPtr run_;
+  rclcpp_action::Server<ValidateThenRun>::SharedPtr validate_then_run_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread spinner_;
   std::mutex mutex_;
   std::vector<std::string> requests_;
+};
+
+/// The twin boundary as far as the panel can tell on its own domain: its
+/// latched TwinSides and its heartbeat, on a context of its own. Each
+/// publisher is on a node no executor holds, so withdrawing it unmatches it.
+class FakeBoundary
+{
+public:
+  FakeBoundary()
+  : context_(std::make_shared<rclcpp::Context>())
+  {
+    rclcpp::InitOptions options;
+    options.shutdown_on_signal = false;
+    context_->init(0, nullptr, options);
+    node_ = std::make_shared<rclcpp::Node>(
+      "fake_twin_boundary", rclcpp::NodeOptions().context(context_));
+    sides_ = node_->create_publisher<TwinSides>(TwinSides::TOPIC, cite::qos::latched());
+    heartbeat_ = node_->create_publisher<TwinHeartbeat>(TwinHeartbeat::TOPIC, cite::qos::state());
+  }
+
+  ~FakeBoundary() {context_->shutdown("the test ended");}
+
+  void publish_sides(const std::vector<std::string> & running, const std::string & detail)
+  {
+    TwinSides message;
+    message.running = running;
+    message.commandable = {running.front()};
+    message.detail = detail;
+    sides_->publish(message);
+  }
+
+  void beat()
+  {
+    TwinHeartbeat message;
+    message.sequence = ++sequence_;
+    heartbeat_->publish(message);
+  }
+
+  /// The heartbeat publisher's subscriber count: a heartbeat sent before the
+  /// panel matched reaches nobody (STATE is volatile).
+  std::size_t heartbeat_subscribers() const {return heartbeat_->get_subscription_count();}
+
+  void withdraw_sides() {sides_.reset();}
+  void withdraw_heartbeat() {heartbeat_.reset();}
+
+private:
+  rclcpp::Context::SharedPtr context_;
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<TwinSides>::SharedPtr sides_;
+  rclcpp::Publisher<TwinHeartbeat>::SharedPtr heartbeat_;
+  std::uint64_t sequence_{0};
 };
 
 bool unserved(const std::string & line)
@@ -352,6 +430,15 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
     std::to_string(ConsoleState::TARGET_TWIN) + " cycles 3",
   };
   EXPECT_EQ(console.requests(), expected);
+
+  // ADR-0073: the scale and cycles as given, and no target.
+  EXPECT_EQ(
+    sent_once_served(
+      recorder, [&]() {client.validate_then_run(0.5, 2);}, &Recorder::progress),
+    "Validate then run: rejected by the console (see last error).");
+  const auto requests = console.requests();
+  ASSERT_FALSE(requests.empty());
+  EXPECT_EQ(requests.back(), "validate_then_run " + std::to_string(0.5) + " cycles 2");
 }
 
 TEST(ConsoleClient, TheLatchedStateIsHeardAndItsPublisherLeavingIsNoConsole)
@@ -424,11 +511,12 @@ TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
   client.stop();
   client.home(1.0, ConsoleState::TARGET_SIM);
   client.run_program(1.0, ConsoleState::TARGET_SIM, 1);
+  client.validate_then_run(1.0, 1);
   const auto took = std::chrono::steady_clock::now() - started;
 
   // Said on the caller's thread before each call returned: nothing waited.
   std::lock_guard<std::mutex> lock(recorder.mutex);
-  ASSERT_EQ(recorder.outcomes.size(), 5u);
+  ASSERT_EQ(recorder.outcomes.size(), 6u);
   for (const auto & line : recorder.outcomes) {
     EXPECT_TRUE(unserved(line)) << line;
   }
@@ -466,4 +554,47 @@ TEST(ConsoleClient, ItTearsDownWithARequestInFlightAndStateArriving)
   EXPECT_EQ(recorder.after_close, 0) << "a callback ran after the client was destroyed";
   std::lock_guard<std::mutex> lock(recorder.mutex);
   EXPECT_TRUE(recorder.outcomes.empty()) << "the unanswered request was reported as ended";
+}
+
+TEST(ConsoleClient, TheBoundarysSidesAreHeardAndTheirPublisherLeavingIsSaid)
+{
+  // Latched: published before the client exists, still heard.
+  FakeBoundary boundary;
+  boundary.publish_sides({"plant", "counterpart"}, "counterpart: deadman TRIPPED");
+  Recorder recorder;
+  ConsoleClient client(names_for("sides"), recorder.callbacks());
+  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.sides.empty();}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.sides.back().running, (std::vector<std::string>{"plant", "counterpart"}));
+    EXPECT_EQ(recorder.sides.back().detail, "counterpart: deadman TRIPPED");
+    EXPECT_EQ(recorder.sides_lost, 0);
+  }
+  boundary.withdraw_sides();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.sides_lost == 1;}))
+    << "TwinSides' publisher left and the panel was not told";
+}
+
+TEST(ConsoleClient, EachHeartbeatArrivalIsSaidAndItsPublisherLeavingIsAbsence)
+{
+  FakeBoundary boundary;
+  Recorder recorder;
+  ConsoleClient client(names_for("heartbeat"), recorder.callbacks());
+  // STATE is volatile: a heartbeat sent before the panel's subscription
+  // matched reaches nobody (CLAUDE.md §10), so the first is sent once it has.
+  // A hang detector, ended by the match.
+  const auto deadline = std::chrono::steady_clock::now() + SETTLE;
+  while (boundary.heartbeat_subscribers() == 0 && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  ASSERT_GT(boundary.heartbeat_subscribers(), 0u);
+  boundary.beat();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.heartbeats > 0;}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.heartbeat_lost, 0);
+  }
+  boundary.withdraw_heartbeat();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.heartbeat_lost == 1;}))
+    << "the heartbeat's publisher left and the panel was not told";
 }

@@ -52,6 +52,12 @@ bool PanelSelection::may_run(double speed_scale, int cycles) const
          speed_choice_enabled(speed_scale, view_, selected_);
 }
 
+bool PanelSelection::may_validate_then_run(double speed_scale, int cycles) const
+{
+  return buttons_.validate_then_run && cycles >= 1 &&
+         speed_choice_enabled(speed_scale, view_, Target::TWIN);
+}
+
 void PanelSelection::settle(const ConsoleView & before)
 {
   selected_ = settled_selection(before, view_, selected_);

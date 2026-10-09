@@ -12,24 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The panel's "Reset view": ask the window's 3D view to move its camera, with
-// no Qt and no ROS in it.
+// The panel's view buttons - Reset view, the presets and Follow robot: ask the
+// window's 3D view to move its camera, with no Qt and no ROS in it.
 //
 // WHO MOVES THE CAMERA. gz-gui 8's CameraTracking plugin, which the generated
-// GUI configuration loads, serves `MOVE_TO_POSE_SERVICE` (gz.msgs.GUICamera in,
-// gz.msgs.Boolean out) and moves the 3D view's user camera to the request's
-// pose on its next render. gz-gui 8 has no in-process event that does this
-// (gz/gui/GuiEvents.hh has none), so the service is the documented way. Its
-// name is not scoped by the world; it is scoped by the gz-transport partition,
-// and this client's node is in the GUI process, so it carries the process's
-// GZ_PARTITION - the same one the window's CameraTracking advertises on.
+// GUI configuration loads. It serves, among others (read off the vendor's
+// libCameraTracking.so, gz-gui 8):
+//   - `MOVE_TO_POSE_SERVICE` (gz.msgs.GUICamera in, gz.msgs.Boolean out): move
+//     the user camera to the request's pose on its next render;
+//   - `FOLLOW_SERVICE` (gz.msgs.StringMsg in, gz.msgs.Boolean out): follow the
+//     named model from then on; an empty name stops following.
+// gz-gui 8 has no in-process event that does either (gz/gui/GuiEvents.hh has
+// none), so the services are the documented way. Their names are not scoped by
+// the world; they are scoped by the gz-transport partition, and this client's
+// node is in the GUI process, so it carries the process's GZ_PARTITION - the
+// same one the window's CameraTracking advertises on.
 //
-// NOTHING HERE BLOCKS THE CALLER. `move_to` hands the pose to a worker thread
-// of this object's own and returns; the worker makes the request with a
+// A camera that is following a model is put back on it every frame, so a move
+// to a pose would not hold: every pose this client sends is preceded by an
+// empty follow, which stops any following first (`CameraCommand::to_pose`).
+//
+// NOTHING HERE BLOCKS THE CALLER. `request` hands the command to a worker
+// thread of this object's own and returns; the worker makes each call with a
 // bounded wait, so a window without CameraTracking is reported as an answer
 // that did not come, never waited for on the caller's thread. A press while a
-// request is in flight replaces any pose still waiting (the latest one wins).
-// `done` runs on the worker thread: the owner moves it to its own.
+// command is in flight replaces any command still waiting (the latest one
+// wins): N presses during one command are at most one more. `done` runs on the
+// worker thread: the owner moves it to its own.
 
 #ifndef CITE_CONSOLE_GUI__CAMERA_CLIENT_HPP_
 #define CITE_CONSOLE_GUI__CAMERA_CLIENT_HPP_
@@ -51,38 +60,76 @@ namespace cite_console_gui
 /// gz-gui 8's CameraTracking: move the user camera to a pose.
 constexpr const char * MOVE_TO_POSE_SERVICE = "/gui/move_to/pose";
 
-/// How long a request may wait for its answer, on the worker thread. The
+/// gz-gui 8's CameraTracking: follow a model by name; an empty name stops.
+constexpr const char * FOLLOW_SERVICE = "/gui/follow";
+
+/// How long one call may wait for its answer, on the worker thread. The
 /// service is in the same process when it exists, and answers at once; the
 /// bound only decides when an absent one is reported.
 constexpr unsigned int MOVE_TO_POSE_TIMEOUT_MS = 1000;
 
+/// One press of a view button: what to follow, then where to move.
+struct CameraCommand
+{
+  /// Sent first, when set: the model to follow; empty stops following.
+  std::optional<std::string> follow;
+  /// Sent next, when set: the pose to move the camera to.
+  std::optional<CameraPose> pose;
+
+  /// Stop following, then move to `pose`: Reset view and every preset.
+  static CameraCommand to_pose(const CameraPose & pose)
+  {
+    return CameraCommand{std::string(), pose};
+  }
+
+  /// Follow `model` from now on: Follow robot.
+  static CameraCommand following(const std::string & model)
+  {
+    return CameraCommand{model, std::nullopt};
+  }
+};
+
 class CameraClient
 {
 public:
-  /// `ok` is the service's answer; `detail` says what went wrong when not ok.
+  /// `ok` is the services' answer; `detail` says what went wrong when not ok.
+  /// Called once per command that was sent.
   using Done = std::function<void(bool ok, const std::string & detail)>;
 
   explicit CameraClient(
-    Done done, std::string service = MOVE_TO_POSE_SERVICE,
-    unsigned int timeout_ms = MOVE_TO_POSE_TIMEOUT_MS);
+    Done done, std::string pose_service = MOVE_TO_POSE_SERVICE,
+    unsigned int timeout_ms = MOVE_TO_POSE_TIMEOUT_MS,
+    std::string follow_service = FOLLOW_SERVICE);
   ~CameraClient();
 
   CameraClient(const CameraClient &) = delete;
   CameraClient & operator=(const CameraClient &) = delete;
 
-  /// Ask for the camera to move to `pose`. Returns at once.
-  void move_to(const CameraPose & pose);
+  /// Ask for `command`. Returns at once.
+  void request(const CameraCommand & command);
+
+  /// Stop following and move the camera to `pose`. Returns at once.
+  void move_to(const CameraPose & pose) {request(CameraCommand::to_pose(pose));}
+
+  /// What destruction does first, callable before it: drop the command still
+  /// waiting, refuse any later one, and let the call in flight be the last.
+  /// Returns at once; the destructor then joins after that call only.
+  void close();
 
 private:
   void run();
+  /// Make one command's calls in order; the first that fails ends it. Returns
+  /// what went wrong, or an empty string.
+  std::string send(const CameraCommand & command);
 
   Done done_;
-  std::string service_;
+  std::string pose_service_;
   unsigned int timeout_ms_;
+  std::string follow_service_;
   gz::transport::Node node_;
   std::mutex mutex_;
   std::condition_variable wake_;
-  std::optional<CameraPose> pending_;
+  std::optional<CameraCommand> pending_;
   bool stopping_{false};
   std::thread worker_;
 };

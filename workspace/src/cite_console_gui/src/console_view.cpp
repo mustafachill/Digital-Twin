@@ -79,6 +79,20 @@ std::uint8_t target_value(Target target)
   return 0;
 }
 
+ValidationPhase validation_phase_from(std::uint8_t value)
+{
+  switch (value) {
+    case ConsoleState::PHASE_NONE:
+      return ValidationPhase::NONE;
+    case ConsoleState::PHASE_VALIDATING:
+      return ValidationPhase::VALIDATING;
+    case ConsoleState::PHASE_RUNNING:
+      return ValidationPhase::RUNNING;
+    default:
+      return ValidationPhase::UNKNOWN;
+  }
+}
+
 ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publisher)
 {
   ConsoleView view;
@@ -112,6 +126,8 @@ ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publ
   view.minimum_speed_scale = state.minimum_speed_scale;
   view.twin_in_sim = state.twin_mode == TwinMode::MODE_SIM;
   view.has_physical_side = !state.physical_sides.empty();
+  view.validate_then_run_offered = state.validate_then_run_offered;
+  view.validation_phase = validation_phase_from(state.phase);
   return view;
 }
 
