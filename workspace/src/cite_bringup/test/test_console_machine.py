@@ -31,6 +31,7 @@ from cite_bringup.program.console_machine import (
     HOME_PROMPT,
     PLACE_PROMPT,
     START_PROMPT,
+    VALIDATED_PLACE_PROMPT,
 )
 from cite_bringup.program.home import StartPose
 from cite_bringup.program.steps import (
@@ -42,7 +43,7 @@ from cite_bringup.program.steps import (
     StepFailed,
     track,
 )
-from cite_bringup.program.targets import ALL, TWIN
+from cite_bringup.program.targets import ALL, SIM, TWIN
 from cite_interfaces.msg import ConsoleState, TwinMode
 import pytest
 
@@ -1377,3 +1378,230 @@ def test_a_terminal_client_does_not_hold_back_the_return_to_sim() -> None:
     outcome = rig.machine.stop()
     assert outcome.success, outcome.detail
     assert rig.calls == [("return_to_sim",), ("close",)]
+
+
+# --- ADR-0073: validate in simulation, then run the twin ----------------------
+
+
+def _physical_calls(rig: Rig) -> list[tuple]:
+    """Every call of ``rig`` that reaches, reads or gates the physical side.
+
+    On a pair whose counterpart is physical: a hold on SIM for a prompt, a
+    carriage judged, a twin mode other than SIM entered, an initialization,
+    and any measurement or custody read naming the counterpart.
+    """
+    reached = [
+        call
+        for call in rig.calls
+        if call[0] in ("hold_sim", "carriage_refusal", "initialize")
+        or (call[0] == "enter" and call[1] != SIM)
+    ]
+    reached += [("measure", sides) for sides in rig.measured_sides if "counterpart" in sides]
+    reached += [("custody", sides) for sides in rig.custody_sides if "counterpart" in sides]
+    return reached
+
+
+def _validate(rig: Rig, scale: float = 0.1, cycles: int = 1):
+    """Start Validate then run on a thread, its feedback recorded; return (join, feedback)."""
+    # What the home before it measured and read is not this request's.
+    rig.measured_sides.clear()
+    rig.custody_sides.clear()
+    feedback: list[tuple] = []
+    join = rig.in_thread(
+        lambda: rig.machine.validate_then_run(
+            scale, cycles, lambda *report: feedback.append(report)
+        )
+    )
+    return join, feedback
+
+
+def test_validate_then_run_runs_the_simulation_then_the_twin() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    join, feedback = _validate(rig)
+    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
+    snapshot = rig.machine.snapshot()
+    # Phase 2's go-ahead: the twin and its physical side named, and the
+    # simulation pass said to be no evidence of physical safety (decision 5).
+    assert snapshot.phase == ConsoleState.PHASE_RUNNING
+    assert snapshot.prompt.endswith(VALIDATED_PLACE_PROMPT)
+    assert "Target: the twin" in snapshot.prompt and "counterpart" in snapshot.prompt
+    assert "not evidence" in snapshot.prompt
+    # Phase 1 ran on the simulation alone before anything physical was asked.
+    phase_1 = rig.calls[: rig.calls.index(("hold_sim",))]
+    assert ("enter", SIM, False) in phase_1
+    assert [call[1] for call in phase_1 if call[0] == "move"] == ["pick", "place"]
+    assert rig.measured_sides == [("plant",), ("plant", "counterpart")]
+    assert rig.custody_sides[0] == ("plant",)
+    assert rig.machine.confirm_operator().success
+    outcome = join()
+    assert outcome.success, outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert outcome.cycles_completed == 1
+    assert "passed in simulation" in outcome.detail
+    for word in ("verified", "validated for", " safe"):
+        assert word not in outcome.detail
+    assert ("enter", TWIN, False) in rig.calls
+    assert rig.moves() == ["pick", "place", "pick", "place"]
+    # One hold for the whole request, let go once, after the twin's SIM.
+    (at,) = rig.released[released:]
+    returns = [index for index, call in enumerate(rig.calls) if call == ("return_to_sim",)]
+    assert returns and at > returns[-1]
+    # Feedback: phase 1's opening and steps, then phase 2's.
+    phases = [report[0] for report in feedback]
+    assert phases[0] == ConsoleState.PHASE_VALIDATING
+    switch = phases.index(ConsoleState.PHASE_RUNNING)
+    assert set(phases[:switch]) == {ConsoleState.PHASE_VALIDATING}
+    assert set(phases[switch:]) == {ConsoleState.PHASE_RUNNING}
+    assert feedback[0][1:4] == (0, 0, 0) and feedback[switch][1:4] == (0, 0, 0)
+    assert any(report[1:3] == (1, 1) for report in feedback[1:switch])
+    assert any(report[1:3] == (1, 1) for report in feedback[switch + 1:])
+    # The published phase followed, and is NONE once the request ended.
+    published = [state.phase for state in rig.snapshots]
+    assert ConsoleState.PHASE_VALIDATING in published
+    assert ConsoleState.PHASE_RUNNING in published
+    final = rig.machine.snapshot()
+    assert final.phase == ConsoleState.PHASE_NONE and final.state == ConsoleState.READY
+    assert _at_start(final)
+
+
+def test_a_phase_1_failure_sends_nothing_to_the_physical_side() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    rig.fail_on = ("move", "pick")
+    join, feedback = _validate(rig)
+    outcome = join()
+    assert not outcome.success
+    assert outcome.ended_in == ConsoleState.PHASE_VALIDATING
+    assert outcome.cycles_completed == 0
+    assert "nothing was sent to the real arm" in outcome.detail
+    assert _physical_calls(rig) == []
+    assert all(state.phase != ConsoleState.PHASE_RUNNING for state in rig.snapshots)
+    assert {report[0] for report in feedback} == {ConsoleState.PHASE_VALIDATING}
+    assert len(rig.released[released:]) == 1
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.FAULT and snapshot.phase == ConsoleState.PHASE_NONE
+
+
+def test_a_phase_1_stop_sends_nothing_to_the_physical_side() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    rig.hold_on = ("move", "pick")
+    join, _ = _validate(rig)
+    assert rig.holding_step.wait(SETTLE_S)
+    assert rig.machine.snapshot().phase == ConsoleState.PHASE_VALIDATING
+    assert rig.machine.stop().success
+    outcome = join()
+    assert not outcome.success and "stopped" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_VALIDATING
+    assert _physical_calls(rig) == []
+    assert ("cancel",) in rig.calls
+    assert len(rig.released[released:]) == 1
+    assert rig.machine.snapshot().state == ConsoleState.READY
+
+
+def test_a_side_away_after_phase_1_is_refused_and_nothing_homes() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    # The plant at the start for phase 1; the counterpart away for phase 2.
+    rig.away = [None, "counterpart: joint1 away"]
+    join, _ = _validate(rig)
+    outcome = join()
+    assert not outcome.success
+    assert outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert "counterpart: joint1 away" in outcome.detail
+    assert "Nothing homes" in outcome.detail and "does not carry over" in outcome.detail
+    # Phase 1's cycle alone moved; no homing move, no prompt, no twin mode.
+    assert rig.moves() == ["pick", "place"]
+    assert ("move", "zero") not in rig.calls and ("track", 0.0) not in rig.calls
+    assert ("hold_sim",) not in rig.calls and ("enter", TWIN, False) not in rig.calls
+    assert len(rig.released[released:]) == 1
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and "Nothing homes" in snapshot.last_error
+    assert not snapshot.counterpart_at_start
+    assert TWIN not in snapshot.startable_targets
+
+
+def test_validate_then_run_is_refused_without_the_twin() -> None:
+    rig = Rig().homed()
+    assert rig.machine.snapshot().validate_then_run_offered
+    # A plant-only deployment: the simulation alone is offered.
+    rig.available = [SIM]
+    assert not rig.machine.snapshot().validate_then_run_offered
+    refusal = rig.machine.validation_refusal(1.0, 1)
+    assert refusal is not None and "needs the twin" in refusal
+    outcome = rig.machine.validate_then_run(1.0, 1)
+    assert not outcome.success and "needs the twin" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_NONE
+    assert rig.calls == [] and rig.speeds == []
+    assert "needs the twin" in rig.machine.snapshot().last_error
+
+
+def test_validate_then_run_needs_both_sides_known_at_the_start() -> None:
+    rig = Rig().started()
+    assert "Home first" in rig.machine.validation_refusal(1.0, 1)
+    assert not rig.machine.validate_then_run(1.0, 1).success
+    assert rig.calls == []
+
+
+@pytest.mark.parametrize("scale, cycles", [(0.0, 1), (1.5, 1), (1.0, 0)])
+def test_validate_then_run_takes_an_explicit_scale_and_cycle_count(scale, cycles) -> None:
+    rig = Rig().homed()
+    assert rig.machine.validation_refusal(scale, cycles) is not None
+    assert not rig.machine.validate_then_run(scale, cycles).success
+    assert rig.speeds == []
+
+
+def test_validate_then_run_judges_the_scale_by_the_twins_floor() -> None:
+    rig = Rig().homed()
+    assert rig.machine.validation_refusal(0.5, 1) is None
+    assert rig.scales_checked[-1] == (0.5, TWIN)
+
+
+def test_a_stop_at_the_phase_2_prompt_ends_in_running_and_lets_go_once() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    join, _ = _validate(rig, cycles=2)
+    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
+    assert rig.machine.stop().success
+    outcome = join()
+    assert not outcome.success and outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert ("enter", TWIN, False) not in rig.calls
+    assert len(rig.released[released:]) == 1
+    assert rig.machine.snapshot().state == ConsoleState.READY
+
+
+def test_the_hold_is_kept_when_phase_2_does_not_confirm_sim() -> None:
+    """S2-04 across the phases: SIM not confirmed after a twin cycle keeps the hold."""
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    rig.left = [False]
+    join, _ = _validate(rig, cycles=2)
+    rig.answer()
+    outcome = join()
+    assert not outcome.success and outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert rig.released[released:] == []
+    assert "keeps its hold" in rig.machine.snapshot().last_error
+
+
+def test_the_simulation_pass_does_not_carry_over() -> None:
+    """Decision 4: each request validates again; a refused phase 2 leaves nothing behind."""
+    rig = Rig().homed()
+    rig.away = [None, "counterpart: joint1 away"]
+    assert not rig.machine.validate_then_run(1.0, 1).success
+    rig.away = [None]
+    assert rig.machine.home(1.0, TWIN).success
+    rig.calls.clear()
+    outcome = rig.machine.validate_then_run(1.0, 1)
+    assert outcome.success, outcome.detail
+    # Phase 1 ran again before the twin did.
+    assert rig.calls.index(("enter", SIM, False)) < rig.calls.index(("enter", TWIN, False))
+
+
+def test_an_all_simulated_pair_runs_both_phases_without_a_prompt() -> None:
+    rig = Rig().homed()
+    outcome = rig.machine.validate_then_run(1.0, 2)
+    assert outcome.success, outcome.detail
+    assert outcome.cycles_completed == 2
+    assert rig.asked() == 0
+    assert rig.moves() == ["pick", "place"] * 3

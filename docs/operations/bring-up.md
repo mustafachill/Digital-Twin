@@ -247,6 +247,18 @@ side.
 | **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
 
+**Validate then run** ([ADR-0073](../adr/0073-validate-in-simulation-then-run-the-twin.md)) is
+served by the console as the `ValidateThenRun` action; the panel has no button for it yet. One
+request runs one cycle on the simulation alone at the chosen scale. If that cycle fails or is
+stopped, the request ends and nothing is sent to the real arm. If it passes, both sides are
+measured at the program's start: a side away is refused and nothing homes in between, so Home
+with the twin and press again. Then the twin runs the requested cycles with every gate a Twin
+Start program has, and each go-ahead prompt says that the simulation pass is not evidence that
+the physical cycle is safe. The pass never carries over to another request. It is accepted only
+when the Twin target is offered (`ConsoleState.validate_then_run_offered`) and both sides are at
+the start; `ConsoleState.phase` shows which phase runs. What holds it today is the console
+machine's tests against a fake cell and a launch test of its refusals; it has not run on a cell.
+
 **The speed selector** preselects 1.0, the program's own speed, and also offers 0.5, 0.25 and 0.1.
 A choice below the physical side's floor is disabled when the target includes the real arm. The scale is sent with every Home and every
 Start program, and the server never assumes one.
