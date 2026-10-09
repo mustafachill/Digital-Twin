@@ -135,8 +135,8 @@ plan:
   # `cell_console` serves them on the plant's domain and its panel calls them.
   # Only on a paired zone, because every request it serves goes through the
   # twin boundary. `state` is its latched ConsoleState topic; `start_robot`,
-  # `confirm_operator` and `stop` its services; `home` and `run_program` its
-  # actions.
+  # `confirm_operator` and `stop` its services; `home`, `run_program` and
+  # `validate_then_run` (ADR-0073) its actions.
   console:
 {% for key, name in console %}
     {{ key }}: {{ name }}

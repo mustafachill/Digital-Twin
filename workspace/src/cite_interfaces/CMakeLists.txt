@@ -41,6 +41,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   action/Place.action
   action/RunProgram.action
   action/Transfer.action
+  action/ValidateThenRun.action
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )
 

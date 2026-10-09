@@ -42,6 +42,15 @@ uint8 TARGET_SIM=1   # the simulation (the plant) only: the twin in SIM
 uint8 TARGET_REAL=2  # the real arm (the counterpart) only: the twin in REAL
 uint8 TARGET_TWIN=3  # both sides with one signal: the twin in VALIDATED
 
+# THE PHASES OF A VALIDATE-THEN-RUN REQUEST (ADR-0073, ValidateThenRun.action).
+# Stated here once; the action's result and feedback refer to these values.
+uint8 PHASE_NONE=0        # no ValidateThenRun request is in progress
+uint8 PHASE_VALIDATING=1  # phase 1: one cycle on the simulation alone; nothing is
+                          # sent to the physical side
+uint8 PHASE_RUNNING=2     # phase 2: the twin, after phase 1 passed in simulation in
+                          # this same request. "Passed in simulation" is no evidence
+                          # that the physical cycle is safe
+
 builtin_interfaces/Time stamp
 
 uint8 state                 # one of the constants above
@@ -78,3 +87,10 @@ float64 minimum_speed_scale # the lowest scale a goal for a target in floored_ta
                             # accepted at: the slowest the physical track carries the
                             # program's slowest slide at (`sides.minimum_speed_scale`);
                             # 0 where no running side is physical
+bool validate_then_run_offered  # ValidateThenRun is accepted on this deployment:
+                                # TARGET_TWIN is in available_targets (ADR-0073
+                                # decision 6). Derived by the console, so no panel
+                                # restates the rule; a request also needs
+                                # TARGET_TWIN in startable_targets
+uint8 phase                 # PHASE_* of the ValidateThenRun request in progress;
+                            # PHASE_NONE for any other request, or none

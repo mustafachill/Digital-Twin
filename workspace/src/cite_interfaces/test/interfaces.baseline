@@ -11,6 +11,9 @@ msg/ConsoleState.msg
   uint8 TARGET_SIM=1
   uint8 TARGET_REAL=2
   uint8 TARGET_TWIN=3
+  uint8 PHASE_NONE=0
+  uint8 PHASE_VALIDATING=1
+  uint8 PHASE_RUNNING=2
   builtin_interfaces/Time stamp
   uint8 state
   bool robot_started
@@ -28,6 +31,8 @@ msg/ConsoleState.msg
   string[] physical_sides
   float64 speed_scale
   float64 minimum_speed_scale
+  bool validate_then_run_offered
+  uint8 phase
 msg/DeadmanState.msg
   uint8 STATE_INACTIVE=0
   uint8 STATE_AWAITING=1
@@ -318,3 +323,17 @@ action/Transfer.action
   uint8 PHASE_RETREATING=4
   uint8 phase
   builtin_interfaces/Duration waited
+action/ValidateThenRun.action
+  float64 speed_scale
+  uint32 cycles
+  ---
+  bool success
+  string detail
+  uint8 ended_in
+  uint32 cycles_completed
+  ---
+  uint8 phase
+  uint32 cycle
+  uint32 step_index
+  uint32 step_count
+  string step

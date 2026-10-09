@@ -1869,6 +1869,7 @@ class TestTheConsoleNames:
             "stop": ids.CONSOLE_STOP,
             "home": ids.CONSOLE_HOME,
             "run_program": ids.CONSOLE_RUN_PROGRAM,
+            "validate_then_run": ids.CONSOLE_VALIDATE_THEN_RUN,
         }
         assert plan["console"] == {
             key: ids.zone_scope("cell_b", ids.CONSOLE_SCOPE, leaf) for key, leaf in leaves.items()
