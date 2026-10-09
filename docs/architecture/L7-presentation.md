@@ -8,7 +8,8 @@
     mode directly from `TwinMode`.
   - **Not built:** the browser-based HMI the charter places in Phase 4, remote access, and any
     telemetry view. ADR-0018 still makes no commitment to that stack.
-  - **Tests:** the button-enablement table and the ROS client are tested headlessly. Nothing in CI
+  - **Tests:** the button-enablement table, the ROS client and the generated plugin parameters
+    are tested headlessly. Nothing in CI
     renders the panel.
 
 ## What L7 may depend on
@@ -20,7 +21,9 @@ An L7 package depends on:
 - its own toolkit. For the panel that is `gz_gui_vendor`, `gz_plugin_vendor` and Qt 5 through
   rosdep.
 
-It never depends on `cite_bringup`, `cite_twin`, `cite_tools` or `cite_generated`. Nothing below L7
+It never depends on `cite_bringup`, `cite_twin`, `cite_tools` or `cite_generated` at build or
+run time. One test, `test_console_config`, reads `cite_generated`'s installed GUI configuration,
+so `cite_generated` is a test-only dependency. Nothing below L7
 names an L7 package. That includes `simulation.launch.py`, which would otherwise be an upward
 L2→L7 dependency.
 

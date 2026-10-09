@@ -227,7 +227,7 @@ corner of the 3D view. **Nothing moves until a button is pressed.**
 
 | Button | What it does | Enabled when |
 |---|---|---|
-| **Start robot** | On a physical side: reads the twin as SIM, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running |
+| **Start robot** | On a physical side: reads the twin as SIM, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running (the server also refuses while a terminal program client is on the graph) |
 | **Home** | Measures both arms against the program's start. If a side is away, it asks the operator to confirm and brings both arms there, then measures again. | The robot is started and the console is READY |
 | **Start program** | Measures the start again, then runs N cycles of the real program through the twin. On a physical side, each cycle first asks the operator to place the part by hand. | The robot is started, READY, and the arms are known to be at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
@@ -248,13 +248,17 @@ Start program is accepted.
 
 **One operator surface per pair.** `./scripts/program` never starts a console. While a console
 serves the pair, `./scripts/home` and `python3 -m cite_bringup.program` refuse and point at the
-panel. That check depends on DDS discovery, so it is advisory and not an interlock (open-work #100).
+panel. The console in turn refuses Start robot, Home and Start program while a terminal program
+client (`fixed_program`) is on the graph; Stop and the return to SIM are never refused. Both checks
+depend on DDS discovery, so they are advisory and not an interlock (open-work #100). A refused
+request's reason appears in the panel's last-error line.
 
-**Not yet run through the panel:** a full cycle on the physical arm. Every console path is tested
-headlessly against fake sides, but the repository cannot start an all-simulated Gazebo pair, so
-the first complete Home and program cycle through the panel is the supervised physical run. Run it
-at `--speed-scale 0.1` first, with the owner at the hardware E-stop, as in "First motion, always:
-two stages".
+**Not yet run through the panel:** a full cycle on the physical arm. The console's refusals,
+Start robot and a cancelled Home are tested headlessly against fake sides; open-work #101 lists
+what is not. The repository cannot start an all-simulated Gazebo pair, so the first complete Home
+and program cycle through the panel is the supervised physical run. **The panel has no
+`--speed-scale` argument and preselects 1.0:** before the first Home, select **0.1×** in the speed
+selector, with the owner at the hardware E-stop, as in "First motion, always: two stages".
 
 ### Reaching one side
 
