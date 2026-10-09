@@ -185,7 +185,9 @@ public:
     home_ = rclcpp_action::create_server<HomeRobot>(
       node_, names.home,
       [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const HomeRobot::Goal> goal) {
-        note("home " + std::to_string(goal->speed_scale));
+        note(
+          "home " + std::to_string(goal->speed_scale) + " target " +
+          std::to_string(goal->target));
         return rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<HomeRobot>>) {
@@ -196,8 +198,8 @@ public:
       node_, names.run_program,
       [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const RunProgram::Goal> goal) {
         note(
-          "run_program " + std::to_string(goal->speed_scale) + " " +
-          std::to_string(goal->cycles));
+          "run_program " + std::to_string(goal->speed_scale) + " target " +
+          std::to_string(goal->target) + " cycles " + std::to_string(goal->cycles));
         return rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {
@@ -318,15 +320,21 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
     sent_once_served(recorder, [&]() {client.stop();}, &Recorder::outcomes),
     "Stop: done. fake stop");
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.home(0.5);}, &Recorder::progress),
+    sent_once_served(
+      recorder, [&]() {client.home(0.5, ConsoleState::TARGET_REAL);}, &Recorder::progress),
     "Home: rejected by the console (see last error).");
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.run_program(0.25, 3);}, &Recorder::progress),
+    sent_once_served(
+      recorder, [&]() {client.run_program(0.25, ConsoleState::TARGET_TWIN, 3);},
+      &Recorder::progress),
     "Start program: rejected by the console (see last error).");
 
+  // ADR-0072: each goal carries the target it was given, field for field.
   const std::vector<std::string> expected = {
-    "start_robot", "confirm_operator", "stop", "home " + std::to_string(0.5),
-    "run_program " + std::to_string(0.25) + " 3",
+    "start_robot", "confirm_operator", "stop",
+    "home " + std::to_string(0.5) + " target " + std::to_string(ConsoleState::TARGET_REAL),
+    "run_program " + std::to_string(0.25) + " target " +
+    std::to_string(ConsoleState::TARGET_TWIN) + " cycles 3",
   };
   EXPECT_EQ(console.requests(), expected);
 }
@@ -361,8 +369,8 @@ TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
   client.start_robot();
   client.confirm_operator();
   client.stop();
-  client.home(1.0);
-  client.run_program(1.0, 1);
+  client.home(1.0, ConsoleState::TARGET_SIM);
+  client.run_program(1.0, ConsoleState::TARGET_SIM, 1);
   const auto took = std::chrono::steady_clock::now() - started;
 
   // Said on the caller's thread before each call returned: nothing waited.

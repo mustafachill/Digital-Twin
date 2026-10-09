@@ -95,8 +95,10 @@ public:
   void start_robot();
   void confirm_operator();
   void stop();
-  void home(double speed_scale);
-  void run_program(double speed_scale, std::uint32_t cycles);
+  /// `target` is the ConsoleState.TARGET_* the goal carries (ADR-0072), sent
+  /// as given: the console, not this client, refuses one it does not serve.
+  void home(double speed_scale, std::uint8_t target);
+  void run_program(double speed_scale, std::uint8_t target, std::uint32_t cycles);
 
 private:
   using Home = cite_interfaces::action::HomeRobot;

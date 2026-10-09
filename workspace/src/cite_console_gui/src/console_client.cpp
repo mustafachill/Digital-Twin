@@ -178,7 +178,7 @@ void ConsoleClient::stop()
     });
 }
 
-void ConsoleClient::home(double speed_scale)
+void ConsoleClient::home(double speed_scale, std::uint8_t target)
 {
   if (!home_->action_server_is_ready()) {
     outcome("Home: the console does not serve it right now.");
@@ -186,6 +186,7 @@ void ConsoleClient::home(double speed_scale)
   }
   Home::Goal goal;
   goal.speed_scale = speed_scale;
+  goal.target = target;
 
   rclcpp_action::Client<Home>::SendGoalOptions options;
   options.goal_response_callback =
@@ -208,7 +209,8 @@ void ConsoleClient::home(double speed_scale)
   home_->async_send_goal(goal, options);
 }
 
-void ConsoleClient::run_program(double speed_scale, std::uint32_t cycles)
+void ConsoleClient::run_program(
+  double speed_scale, std::uint8_t target, std::uint32_t cycles)
 {
   if (!run_program_->action_server_is_ready()) {
     outcome("Start program: the console does not serve it right now.");
@@ -216,6 +218,7 @@ void ConsoleClient::run_program(double speed_scale, std::uint32_t cycles)
   }
   Run::Goal goal;
   goal.speed_scale = speed_scale;
+  goal.target = target;
   goal.cycles = cycles;
 
   rclcpp_action::Client<Run>::SendGoalOptions options;

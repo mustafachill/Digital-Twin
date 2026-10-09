@@ -16,7 +16,8 @@
 //
 // Every value compared here is a constant from the generated message headers
 // (ConsoleState, TwinMode); none is written as a number. A state this panel
-// does not recognise becomes `Phase::UNKNOWN` rather than a guess.
+// does not recognise becomes `Phase::UNKNOWN`, and a target it does not
+// recognise is not offered, rather than a guess.
 
 #ifndef CITE_CONSOLE_GUI__CONSOLE_VIEW_HPP_
 #define CITE_CONSOLE_GUI__CONSOLE_VIEW_HPP_
@@ -33,6 +34,14 @@ namespace cite_console_gui
 /// ConsoleState.state as a phase; `UNKNOWN` for a value the contract this
 /// panel was built against does not define.
 Phase phase_from(std::uint8_t state);
+
+/// ConsoleState.TARGET_* as a target; `NONE` for 0 and for a value the
+/// contract this panel was built against does not define.
+Target target_from(std::uint8_t value);
+
+/// The ConsoleState.TARGET_* a goal carries for `target`; 0 (unset, which the
+/// console rejects) for `NONE`.
+std::uint8_t target_value(Target target);
 
 /// What the buttons depend on, from a ConsoleState that was just heard.
 ConsoleView view_from(const cite_interfaces::msg::ConsoleState & state);
