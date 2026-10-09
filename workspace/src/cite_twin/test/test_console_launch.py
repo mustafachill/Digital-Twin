@@ -32,7 +32,8 @@ CANCELLED: the console's stop interrupts the waiting cell, the track is held on
 each side at that side's own position, and the console is READY again with no
 homing move after it.
 
-**What it does not cover, stated exactly.** A Start program goal that runs:
+**What it does not cover, stated exactly.** A Start program or Validate then
+run goal that runs (only their refusals at the goal are covered here):
 each cycle first spawns a work-piece through Gazebo (`program.part`), and this
 rig has no Gazebo, so a run would fail there. The fakes serve no `Grasp`, and
 their arms and carriages never move, so no program step past the first motion
@@ -55,7 +56,7 @@ from cite_bringup.program.cell import state_topic
 from cite_bringup.program.from_plan import target
 from cite_bringup.program.home import arm_joints
 from cite_bringup.readiness import console_announcement
-from cite_interfaces.action import HomeRobot, RunProgram
+from cite_interfaces.action import HomeRobot, RunProgram, ValidateThenRun
 from cite_interfaces.msg import ConsoleState, RobotState, TwinMode
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
@@ -179,11 +180,15 @@ class TestTheConsole(unittest.TestCase):
         cls.stop = cls.node.create_client(StopCell, NAMES.stop)
         cls.home = ActionClient(cls.node, HomeRobot, NAMES.home)
         cls.run_program = ActionClient(cls.node, RunProgram, NAMES.run_program)
+        cls.validate_then_run = ActionClient(
+            cls.node, ValidateThenRun, NAMES.validate_then_run
+        )
 
     @classmethod
     def tearDownClass(cls):
         cls.home.destroy()
         cls.run_program.destroy()
+        cls.validate_then_run.destroy()
         cls.node.destroy_node()
         rclpy.shutdown()
 
@@ -248,6 +253,10 @@ class TestTheConsole(unittest.TestCase):
         self.assertEqual(refused.state, ConsoleState.NOT_STARTED)
         handle = self._send(self.run_program, _run_goal())
         self.assertFalse(handle.accepted, "Start program was accepted before Start robot")
+        handle = self._send(
+            self.validate_then_run, ValidateThenRun.Goal(speed_scale=1.0, cycles=1)
+        )
+        self.assertFalse(handle.accepted, "Validate then run was accepted before Start robot")
         self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)
         self.assertFalse(self._call(self.stop, StopCell.Request()).success)
 
@@ -265,6 +274,21 @@ class TestTheConsole(unittest.TestCase):
         )
         self.assertEqual(ready.prompt, "")
         self.assertEqual(ready.minimum_speed_scale, 0.0)
+        # ADR-0073: the twin is offered, so Validate then run is; none in progress.
+        self.assertTrue(ready.validate_then_run_offered)
+        self.assertEqual(ready.phase, ConsoleState.PHASE_NONE)
+        # ...but not before a Home put both arms at the start, and never with an
+        # unset scale or cycle count; the state says why.
+        for goal in (
+            ValidateThenRun.Goal(speed_scale=1.0, cycles=1),
+            ValidateThenRun.Goal(speed_scale=0.0, cycles=1),
+            ValidateThenRun.Goal(speed_scale=1.0, cycles=0),
+        ):
+            self.assertFalse(self._send(self.validate_then_run, goal).accepted, str(goal))
+        self._spin_until(
+            lambda: "at least 1" in self.states[-1].last_error,
+            "the validate-then-run refusal in the console's state",
+        )
         self.assertFalse(
             self._send(self.run_program, _run_goal()).accepted
         )

@@ -555,6 +555,8 @@ class ConsoleNames:
     stop: str
     home: str
     run_program: str
+    #: The validate-then-run action (ADR-0073).
+    validate_then_run: str
 
 
 @dataclass(frozen=True)
@@ -1142,7 +1144,15 @@ def _console(entry: object | None) -> ConsoleNames | None:
         return None
     names = {
         key: _require(entry, key, "console")
-        for key in ("state", "start_robot", "confirm_operator", "stop", "home", "run_program")
+        for key in (
+            "state",
+            "start_robot",
+            "confirm_operator",
+            "stop",
+            "home",
+            "run_program",
+            "validate_then_run",
+        )
     }
     for key, name in names.items():
         if not isinstance(name, str) or not name.startswith("/"):

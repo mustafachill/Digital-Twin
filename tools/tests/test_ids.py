@@ -104,6 +104,7 @@ class TestTheConsoleNames:
             ids.CONSOLE_STOP,
             ids.CONSOLE_HOME,
             ids.CONSOLE_RUN_PROGRAM,
+            ids.CONSOLE_VALIDATE_THEN_RUN,
         )
         names = [ids.zone_scope("cell_b", ids.CONSOLE_SCOPE, leaf) for leaf in leaves]
         assert names == [
@@ -113,6 +114,7 @@ class TestTheConsoleNames:
             "/cite/cell_b/console/stop",
             "/cite/cell_b/console/home",
             "/cite/cell_b/console/run_program",
+            "/cite/cell_b/console/validate_then_run",
         ]
 
     def test_frame_has_no_leading_slash(self) -> None:

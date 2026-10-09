@@ -20,6 +20,7 @@ serves the operator's buttons as typed contracts and publishes what it is doing:
     console.start_robot       cite_interfaces/srv/StartRobot
     console.home              cite_interfaces/action/HomeRobot
     console.run_program       cite_interfaces/action/RunProgram
+    console.validate_then_run cite_interfaces/action/ValidateThenRun (ADR-0073)
     console.confirm_operator  cite_interfaces/srv/ConfirmOperator
     console.stop              cite_interfaces/srv/StopCell
     console.state             cite_interfaces/msg/ConsoleState (LATCHED)
@@ -45,7 +46,8 @@ runs. Started by the supervisor it configures and activates ITSELF, in `main`,
 and only then announces on standard output (`readiness.console_announcement`),
 from inside the executor serving those endpoints - the boundary's pattern.
 
-**Threads.** The long requests - Start robot, Home, Start program - block their
+**Threads.** The long requests - Start robot, Home, Start program, Validate
+then run - block their
 handler until they end, in a reentrant callback group of their own, on a
 `MultiThreadedExecutor` with threads to spare: the machine admits one such
 request at a time, so Stop, the go-ahead, a cancel and the twin's mode always
@@ -93,7 +95,7 @@ from cite_bringup.program.sides import (
     simulated_sides,
 )
 from cite_bringup.readiness import console_announcement
-from cite_interfaces.action import HomeRobot, RunProgram
+from cite_interfaces.action import HomeRobot, RunProgram, ValidateThenRun
 from cite_interfaces.msg import ConsoleState, TwinMode, TwinSides
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
@@ -317,6 +319,17 @@ class CellConsole(LifecycleNode):
                 cancel_callback=self._on_cancel,
                 callback_group=self._work,
             ),
+            ActionServer(
+                self,
+                ValidateThenRun,
+                names.validate_then_run,
+                execute_callback=self._execute_validate_then_run,
+                goal_callback=lambda goal: self._judged(
+                    self._machine.validation_refusal(goal.speed_scale, goal.cycles)
+                ),
+                cancel_callback=self._on_cancel,
+                callback_group=self._work,
+            ),
         ]
         self._publish(self._machine.snapshot())
         # On the steady clock: this node reads simulated time, and a timer in a
@@ -425,7 +438,10 @@ class CellConsole(LifecycleNode):
         return response
 
     def _accept(self, scale: float, cycles: int | None, target: int) -> GoalResponse:
-        refusal = self._machine.motion_refusal(scale, cycles, target)
+        return self._judged(self._machine.motion_refusal(scale, cycles, target))
+
+    def _judged(self, refusal: str | None) -> GoalResponse:
+        """Accept a goal the machine found no refusal for; publish why one is rejected."""
         if refusal is not None:
             self.get_logger().warning(f"goal rejected: {refusal}")
             # The rejection carries no reason to its client: the state does.
@@ -474,6 +490,29 @@ class CellConsole(LifecycleNode):
         return RunProgram.Result(
             success=outcome.success,
             detail=outcome.detail,
+            cycles_completed=outcome.cycles_completed,
+        )
+
+    def _execute_validate_then_run(self, goal_handle):
+        def feedback(phase: int, cycle: int, number: int, count: int, text: str) -> None:
+            goal_handle.publish_feedback(
+                ValidateThenRun.Feedback(
+                    phase=phase, cycle=cycle, step_index=number, step_count=count, step=text
+                )
+            )
+
+        outcome = self._machine.validate_then_run(
+            goal_handle.request.speed_scale,
+            goal_handle.request.cycles,
+            feedback,
+            owner=_owner(goal_handle),
+            cancelled=lambda: goal_handle.is_cancel_requested,
+        )
+        self._settle(goal_handle, outcome)
+        return ValidateThenRun.Result(
+            success=outcome.success,
+            detail=outcome.detail,
+            ended_in=outcome.ended_in,
             cycles_completed=outcome.cycles_completed,
         )
 
@@ -570,6 +609,8 @@ class CellConsole(LifecycleNode):
                 physical_sides=self._machine.physical if self._machine else [],
                 speed_scale=float(snapshot.speed_scale),
                 minimum_speed_scale=float(snapshot.minimum_speed_scale),
+                validate_then_run_offered=snapshot.validate_then_run_offered,
+                phase=snapshot.phase,
             )
             message.stamp = self.get_clock().now().to_msg()
             self._publisher.publish(message)

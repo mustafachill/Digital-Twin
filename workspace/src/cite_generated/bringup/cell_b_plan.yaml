@@ -130,8 +130,8 @@ plan:
   # `cell_console` serves them on the plant's domain and its panel calls them.
   # Only on a paired zone, because every request it serves goes through the
   # twin boundary. `state` is its latched ConsoleState topic; `start_robot`,
-  # `confirm_operator` and `stop` its services; `home` and `run_program` its
-  # actions.
+  # `confirm_operator` and `stop` its services; `home`, `run_program` and
+  # `validate_then_run` (ADR-0073) its actions.
   console:
     state: /cite/cell_b/console/state
     start_robot: /cite/cell_b/console/start_robot
@@ -139,6 +139,7 @@ plan:
     stop: /cite/cell_b/console/stop
     home: /cite/cell_b/console/home
     run_program: /cite/cell_b/console/run_program
+    validate_then_run: /cite/cell_b/console/validate_then_run
 
   controller_managers:
     - asset: picker
