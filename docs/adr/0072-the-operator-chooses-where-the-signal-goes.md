@@ -148,13 +148,15 @@ in the tree and covered by tests.
 
 1. **A mode hold at the boundary.** `/cite/twin/hold_mode` (`HoldMode.srv`) works with a
    `holder` field on `SetMode`.
-   - **Taking it.** A run takes the hold on `SIM` before anyone is asked anything, under the
-     boundary's lock, and it keeps the hold for the whole request.
+   - **Taking it.** A run whose target includes a physical side takes the hold on `SIM` before
+     anyone is asked anything, under the boundary's lock. A simulation-only run takes it when it
+     enters its mode. Either way the run keeps the hold for the whole request.
    - **What it blocks.** While the hold is held, another client's change to any mode other than
      `SIM` is refused, even with `force`. A change into `SIM` is never refused.
    - **What it allows.** The holder's own transitions carry the hold.
-   - **Releasing it.** The hold is released only after `SIM` has been confirmed. If the holder's
-     node leaves the graph, the hold lapses after a bounded time.
+   - **Releasing it.** After a run that left `SIM`, the hold is released only once `SIM` has been
+     confirmed. Start robot never leaves `SIM` and releases at its end. If the holder's node
+     leaves the graph, the hold lapses after a bounded time.
    - **What it does not do.** The hold fixes the mode, not who may send a goal (open-work #100).
 2. **Custody is read through L5.** `/cite/twin/holding` (`Holding.srv`) answers whether each
    side's arm is holding a part. The boundary reads each side's latched `RobotState` on that

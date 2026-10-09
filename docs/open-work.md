@@ -2017,8 +2017,9 @@ cannot hide that evidence.
 
 ### #103 — What the ADR-0072 reviews deferred (2026-10-09)
 
-Each item below was deferred on purpose. Each one fails toward refusing a command, or depends on
-the one-operator-surface rule (#100).
+Each item below was deferred on purpose. All but the first fail toward refusing a command or
+depend on the one-operator-surface rule (#100). **The first does not:** a stray goal can reach the
+physical arm during a held run, and deferring it is the project owner's explicit decision.
 
 - **The boundary routes a goal from any sender** (safety S2-03).
   - While a run holds `REAL` or `VALIDATED`, a stray `MoveTo` or `Grasp` sent by hand to a
