@@ -1,6 +1,6 @@
 # Interfaces
 
-- **Status:** `BUILT` — `cite_interfaces` exists and holds **24 definitions** (9 `.msg`,
+- **Status:** `BUILT` — `cite_interfaces` exists and holds **25 definitions** (10 `.msg`,
   8 `.srv`, 7 `.action`), every one frozen against a stored baseline at
   `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
   build rather than surfacing at runtime. The conventions below are what that package does,
