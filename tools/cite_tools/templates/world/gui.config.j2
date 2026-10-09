@@ -278,5 +278,21 @@
        above, the same text. The panel asks the window's CameraTracking plugin
        for it; it moves no robot. -->
   <home_camera_pose>{{ camera_pose }}</home_camera_pose>
+
+  <!-- The panel's other views (generate/gui.py `camera_presets`), each framed
+       from where L0 places this zone's assets, and the model its "Follow
+       robot" asks CameraTracking to follow: the arm's name in this world. They
+       move the 3D view only. -->
+{% for key, pose in panel.presets %}
+  <{{ key }}>{{ [pose.x, pose.y, pose.z, pose.roll, pose.pitch, pose.yaw] | map("m") | join(" ") }}</{{ key }}>
+{% endfor %}
+  <follow_model>{{ panel.follow_model | xml }}</follow_model>
+
+  <!-- What the panel shows of each side's connection: the sides this pair
+       runs, and how long the twin boundary's heartbeat may go unheard before
+       the panel shows it as stale (a physical side's deadman timeout, where
+       there is one). A display, never a safety function. -->
+  <twin_sides>{{ panel.twin_sides | xml }}</twin_sides>
+  <heartbeat_stale_after_s>{{ panel.heartbeat_stale_after_s | m }}</heartbeat_stale_after_s>
 </plugin>
 {% endif %}
