@@ -152,7 +152,8 @@ in the tree and covered by tests.
      anyone is asked anything, under the boundary's lock. A simulation-only run takes it when it
      enters its mode. Either way the run keeps the hold for the whole request.
    - **What it blocks.** While the hold is held, another client's change to any mode other than
-     `SIM` is refused, even with `force`. A change into `SIM` is never refused.
+     `SIM` is refused, even with `force`. A change into `SIM` is never refused; it ends the
+     holder's run at its next step, which is the safe direction.
    - **What it allows.** The holder's own transitions carry the hold.
    - **Releasing it.** After a run that left `SIM`, the hold is released only once `SIM` has been
      confirmed. Start robot never leaves `SIM` and releases at its end. If the holder's node

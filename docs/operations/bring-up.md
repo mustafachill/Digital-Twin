@@ -242,7 +242,7 @@ side.
 
 | Button | What it does | Enabled when |
 |---|---|---|
-| **Start robot** | On a physical side: reads the twin as SIM, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running (the server also refuses while a terminal program client is on the graph) |
+| **Start robot** | On a physical side: holds the twin in SIM at the boundary, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running (the server also refuses while a terminal program client is on the graph) |
 | **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm) and brings them there, then measures again. | The robot is started, the console is READY and a target is chosen |
 | **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
@@ -252,7 +252,8 @@ A choice below the physical side's floor is disabled when the target includes th
 Start program, and the server never assumes one.
 
 **The confirmation panel** shows the server's exact prompt, which names the target and the physical
-sides it will move. The server asks only after reading the twin as SIM and the physical carriage as
+sides it will move. The server asks only after holding the
+twin in SIM at the boundary and the physical carriage as
 stationary, so nothing is forwarded to the physical side while a person is in the cell. While a run
 is in progress the console holds the twin's mode (`/cite/twin/hold_mode`): another client's mode
 change is refused until the run returns to SIM and releases it. Confirm

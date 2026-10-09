@@ -2019,7 +2019,8 @@ cannot hide that evidence.
 
 Each item below was deferred on purpose. All but the first fail toward refusing a command or
 depend on the one-operator-surface rule (#100). **The first does not:** a stray goal can reach the
-physical arm during a held run, and deferring it is the project owner's explicit decision.
+physical arm during a held run. **The project owner decided on 2026-10-09 not to close it:** the
+cell is an educational lab, and one operator surface per pair is the operating rule.
 
 - **The boundary routes a goal from any sender** (safety S2-03).
   - While a run holds `REAL` or `VALIDATED`, a stray `MoveTo` or `Grasp` sent by hand to a

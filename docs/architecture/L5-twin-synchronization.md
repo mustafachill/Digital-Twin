@@ -56,7 +56,7 @@
     VALIDATED again without it before its first cycle.
   - **Between cycles.** At the end of each run the program puts the twin in SIM; a failed
     return to SIM fails the run. Before the next run it asks the operator to place the part
-    only once it has read the twin's mode as SIM, then asks for VALIDATED again through that
+    only once it holds the twin in SIM at the boundary (`/cite/twin/hold_mode`, ADR-0072), then asks for VALIDATED again through that
     check.
 
   Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` starts the plant alone with the
