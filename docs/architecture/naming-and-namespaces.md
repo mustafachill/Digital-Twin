@@ -138,6 +138,7 @@ controller manager. The deadman's state follows the asset rule, as
 | `/cite/facility/...` | Facility-scope state that belongs to no single asset |
 | `/cite/twin/...` | L5 mode, divergence metrics, track arrival, the heartbeat a physical side's deadman watches, registration |
 | `/cite/line/...` | Reserved for line-level state (charter §5's L4); **unused in the main tree** ([ADR-0069](../adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md)) |
+| `/cite/<zone>/console/...` | The operator console's services, actions and state ([ADR-0071](../adr/0071-the-first-operator-surface-is-a-panel-in-the-gazebo-window.md)). **Zone-scoped**, unlike the three above: `console` is a reserved zone scope (`ids.ZONE_SCOPES`), refused as an asset id, and the names are emitted into the plan's `console:` block |
 | `cite_world` | The facility root frame, tied to the survey origin |
 
 **The first three are FACILITY-SINGULAR, and that is what bounds a deployment to one

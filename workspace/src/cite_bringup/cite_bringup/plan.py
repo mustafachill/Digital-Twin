@@ -339,6 +339,11 @@ class Side:
     name: str
     gz_partition: str
     domain_offset: int
+    #: The Gazebo GUI configuration this side's window opens with: the camera
+    #: framing, and on the plant of a paired zone the operator console's panel
+    #: (ADR-0071 decision 5). Per side, so that only one window of a pair carries
+    #: the panel. Read only when Gazebo opens a window.
+    gui_config: Path
 
 
 @dataclass(frozen=True)
@@ -524,6 +529,22 @@ class TwinTiming:
     #: The oldest joint, controller or deadman state counted as current on a
     #: physical side; `None` where the zone has no physical side.
     state_max_age_s: float | None
+
+
+@dataclass(frozen=True)
+class ConsoleNames:
+    """Every name the zone's operator console serves, from the plan's `console:` (ADR-0071).
+
+    Formed once, by the generator (`cite_tools.model.ids.zone_scope`), and read
+    here; nothing in bring-up composes one.
+    """
+
+    state: str
+    start_robot: str
+    confirm_operator: str
+    stop: str
+    home: str
+    run_program: str
 
 
 @dataclass(frozen=True)
@@ -906,8 +927,6 @@ class Program:
 class Plan:
     zone: str
     world: Path
-    #: The Gazebo GUI configuration a windowed run opens with (camera framing).
-    gui_config: Path
     scene: Path
     static_frames: Path
     topology: Path
@@ -934,6 +953,8 @@ class Plan:
     programs: tuple[Program, ...] = ()
     #: The twin boundary's timing; `None` on a zone that runs no boundary.
     twin: TwinTiming | None = None
+    #: The operator console's names; `None` on a zone that runs no console.
+    console: ConsoleNames | None = None
 
     def side_named(self, name: str) -> Side:
         """Return the side called ``name``, or refuse.
@@ -1088,7 +1109,6 @@ def load(path: Path) -> Plan:
     return Plan(
         zone=_require(plan, "zone", "plan"),
         world=resolve_uri(_require(plan, "world", "plan")),
-        gui_config=resolve_uri(_require(plan, "gui_config", "plan")),
         scene=resolve_uri(_require(plan, "scene", "plan")),
         static_frames=resolve_uri(_require(plan, "static_frames", "plan")),
         topology=resolve_uri(_require(plan, "topology", "plan")),
@@ -1102,7 +1122,22 @@ def load(path: Path) -> Plan:
             _program(entry, index) for index, entry in enumerate(_sequence(plan, "programs"))
         ),
         twin=_twin(_optional(plan, "twin")),
+        console=_console(_optional(plan, "console")),
     )
+
+
+def _console(entry: object | None) -> ConsoleNames | None:
+    """Read the operator console's names, or `None` where the plan states none."""
+    if entry is None:
+        return None
+    names = {
+        key: _require(entry, key, "console")
+        for key in ("state", "start_robot", "confirm_operator", "stop", "home", "run_program")
+    }
+    for key, name in names.items():
+        if not isinstance(name, str) or not name.startswith("/"):
+            raise PlanError(f"console: {key!r} must be an absolute name, not {name!r}")
+    return ConsoleNames(**names)
 
 
 def _twin(entry: object | None) -> TwinTiming | None:
@@ -1221,6 +1256,7 @@ def _sides(plan: object, path: Path) -> tuple[Side, ...]:
             name=str(_require(entry, "name", f"side {index}")),
             gz_partition=str(_require(entry, "gz_partition", f"side {index}")),
             domain_offset=_offset(_require(entry, "domain_offset", f"side {index}"), index),
+            gui_config=resolve_uri(_require(entry, "gui_config", f"side {index}")),
         )
         for index, entry in enumerate(entries)
     )

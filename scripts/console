@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Open the operator console: the twin pair, the console and its panel in the
+# plant's Gazebo window (ADR-0071).
+#
+#   ./scripts/console                  the model's only zone
+#   ./scripts/console --zone cell_b    name the zone; needed only when the model declares several
+#
+# EXACTLY `./scripts/sim --pair --console`, windowed, and nothing else: this
+# command exists so that the operator has one word for it. Every rule -- the zone
+# default, the container, the display, the hardware opt-in a physical side needs
+# (shell > repository-root .env > 0) -- is `./scripts/sim`'s, applied there and
+# nowhere here. Any other argument is handed to it unchanged.
+#
+# --headless is refused: the panel is the point, and a headless console is
+# `./scripts/sim --pair --console --headless`, said in full.
+#
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+for arg in "$@"; do
+    case "$arg" in
+        --headless) die "./scripts/console opens the panel in a window and cannot run headless.
+  A console with no window: ./scripts/sim --pair --console --headless" ;;
+        -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
+    esac
+done
+
+exec "${REPO_ROOT}/scripts/sim" --pair --console "$@"

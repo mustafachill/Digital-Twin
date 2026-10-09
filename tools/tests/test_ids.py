@@ -80,6 +80,41 @@ class TestRejection:
         with pytest.raises(ids.InvalidIdentifierError):
             ids.scope("cell_a", "state")
 
+    def test_a_scope_reserved_inside_a_zone_cannot_be_an_asset_id(self) -> None:
+        """ADR-0071: `/cite/<zone>/console` is the operator console's, never an asset's."""
+        for reserved in ids.ZONE_SCOPES:
+            with pytest.raises(ids.InvalidIdentifierError, match="reserved inside every zone"):
+                ids.namespace("cell_b", reserved)
+
+    def test_a_zone_scope_is_only_one_reserved_inside_a_zone(self) -> None:
+        with pytest.raises(ids.InvalidIdentifierError):
+            ids.zone_scope("cell_b", "twin", "state")
+        with pytest.raises(ids.InvalidIdentifierError):
+            ids.zone_scope("twin", ids.CONSOLE_SCOPE, "state")
+
+
+class TestTheConsoleNames:
+    """ADR-0071: the operator console's names, formed here and nowhere else."""
+
+    def test_every_console_name_is_under_the_zone(self) -> None:
+        leaves = (
+            ids.CONSOLE_STATE,
+            ids.CONSOLE_START_ROBOT,
+            ids.CONSOLE_CONFIRM_OPERATOR,
+            ids.CONSOLE_STOP,
+            ids.CONSOLE_HOME,
+            ids.CONSOLE_RUN_PROGRAM,
+        )
+        names = [ids.zone_scope("cell_b", ids.CONSOLE_SCOPE, leaf) for leaf in leaves]
+        assert names == [
+            "/cite/cell_b/console/state",
+            "/cite/cell_b/console/start_robot",
+            "/cite/cell_b/console/confirm_operator",
+            "/cite/cell_b/console/stop",
+            "/cite/cell_b/console/home",
+            "/cite/cell_b/console/run_program",
+        ]
+
     def test_frame_has_no_leading_slash(self) -> None:
         # A slash-prefixed TF frame id is accepted by tf2 and then never matches
         # anything, which is among the least obvious failures in ROS 2.

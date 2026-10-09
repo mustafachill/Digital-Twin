@@ -42,9 +42,11 @@ does — see this package's README.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import os
+import signal
 import subprocess
+import time
 
 from cite_bringup.plan import (
     default_plan_path,
@@ -145,12 +147,77 @@ def process_environment(
     return merged
 
 
+#: How often a command run with ``interrupted`` is asked whether to go on, in
+#: wall seconds: how soon an interruption is seen. Not a schedule - the wait
+#: ends the moment the command exits - and not a ceiling, which is ``timeout``.
+_INTERRUPT_POLL_S = 0.1
+
+#: How long `run` waits for a command it killed to release its output, in wall
+#: seconds. A kill reaches the command's whole process group, so its pipes
+#: close at once; this bounds the case where a descendant left the group and
+#: still holds them, which would otherwise hold the stop for ever.
+KILL_WAIT_S = 2.0
+#
+# THE TRADE-OFF BOTH OF THESE MAKE (R-01). A command run with ``interrupted``
+# starts a session of its own so that a stop can kill it whole - and that same
+# session takes it out of the pair supervisor's sweep of the console's process
+# group, so a console that dies without its own shutdown (SIGKILL, a crash)
+# would leave it running. `_die_with_the_caller` ties the command back to the
+# caller's lifetime instead: the kernel sends it SIGKILL when the thread that
+# started it ends (PR_SET_PDEATHSIG). What that covers and what it does not:
+#
+# - The command itself, always. A wrapper's DESCENDANTS are not covered - the
+#   setting is cleared across fork - so the executable `ros2 run` forks
+#   outlives an abrupt end of the console; on an orderly end the console's
+#   stop kills the group (`_kill_group`), and on any end the descendant is
+#   bounded only by its own exit.
+# - "The caller" is the THREAD that forked, not the process: a command started
+#   from a thread that ends before it does is killed then. The console starts
+#   these from the executor's worker threads, which live as long as the
+#   executor, and a thread that ends while its own command still runs has
+#   abandoned that command anyway.
+# - Linux only, and set by `setpriv(1)` (util-linux, in every Ubuntu image)
+#   as a prefix to the command rather than by a `preexec_fn` (R-02): no Python
+#   runs in the forked child, which `subprocess` warns is unsafe in a process
+#   with threads, as the console is. The setting survives the exec into the
+#   command, since `setpriv` and the command are one process.
+# - A starter that ended before the setting took effect would never deliver the
+#   signal, so a POSIX shell between `setpriv` and the command checks that its
+#   parent is still the starter and exits at once if not, then execs the
+#   command: the command keeps the pid `run` started, its session and its
+#   setting.
+
+
+def _die_with_the_caller(parent: int) -> list[str]:
+    """Return the command prefix that has the child killed when its starter ends (R-01).
+
+    ``parent`` is the starter's pid, read before the fork. The prefix ends in
+    a shell whose positional parameters are the command, so the command is
+    appended to it as it is.
+    """
+    return [
+        "setpriv",
+        "--pdeathsig",
+        "KILL",
+        "--",
+        "sh",
+        "-c",
+        f'[ "$PPID" = {int(parent)} ] || exit 1; exec "$@"',
+        "sh",
+    ]
+
+
+class CommandInterrupted(RuntimeError):
+    """A command `run` killed because its caller's ``interrupted`` said to stop."""
+
+
 def run(
     argv: Sequence[str],
     *,
     zone: str,
     timeout: float,
     side: str = PLANT_SIDE,
+    interrupted: Callable[[], bool] | None = None,
     **kwargs: object,
 ) -> subprocess.CompletedProcess:
     """Run a Gazebo-transport command in ``zone``'s partition and capture it.
@@ -171,15 +238,73 @@ def run(
     loop asking for a list of world names until something kills them, which is
     how this defect presented (`subprocess.TimeoutExpired` after 120 s), and a
     caller that forgot a timeout would hang the run instead of failing it.
+
+    ``interrupted``, when given, is asked while the command runs - the
+    operator console's stop (ADR-0071) - and True there kills the command and
+    raises `CommandInterrupted`, rather than holding the stop for up to
+    ``timeout``. The command is killed as a timeout kills it.
+
+    With ``interrupted`` the command runs in a session of its own, and a stop
+    or the ceiling kills its WHOLE process group: `ros2 run` is a wrapper that
+    forks the real executable, and a kill of the wrapper alone left that child
+    holding the output pipes, so reading them never ended (R2-01). What is
+    left of the output is then read for at most `KILL_WAIT_S`. The session
+    takes the command out of its caller's process group, so it is tied to the
+    caller's lifetime instead (`_die_with_the_caller`, R-01).
     """
-    return subprocess.run(
-        list(argv),
-        env=process_environment(plan_for(zone), side=side),
-        capture_output=True,
+    environment = process_environment(plan_for(zone), side=side)
+    if interrupted is None:
+        return subprocess.run(
+            list(argv),
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            **kwargs,
+        )
+    deadline = time.monotonic() + timeout
+    with subprocess.Popen(
+        [*_die_with_the_caller(os.getpid()), *argv],
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
+        start_new_session=True,
         **kwargs,
-    )
+    ) as process:
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=_INTERRUPT_POLL_S)
+            except subprocess.TimeoutExpired:
+                pass
+            else:
+                return subprocess.CompletedProcess(
+                    list(argv), process.returncode, stdout, stderr
+                )
+            if interrupted():
+                _kill_group(process)
+                raise CommandInterrupted(f"{argv[0]} was stopped before it finished")
+            if time.monotonic() > deadline:
+                stdout, stderr = _kill_group(process)
+                raise subprocess.TimeoutExpired(
+                    list(argv), timeout, output=stdout, stderr=stderr
+                )
+
+
+def _kill_group(process: subprocess.Popen) -> tuple[str, str]:
+    """Kill ``process``'s whole process group; return what it printed, read within a bound."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        return process.communicate(timeout=KILL_WAIT_S)
+    except subprocess.TimeoutExpired:
+        # A descendant outside the group still holds the pipes: what it may
+        # print is not waited for. The command itself is dead and reaped.
+        process.kill()
+        process.wait(timeout=KILL_WAIT_S)
+        return "", ""
 
 
 class ModelPoses:

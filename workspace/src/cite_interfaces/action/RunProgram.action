@@ -1,0 +1,36 @@
+# Start program: run the real robot's program through the twin (ADR-0071).
+#
+# Per cycle: a work-piece on every simulated side's pick table and that side's
+# belt running (`program.part`, `program.belt`); then the per-cycle order of
+# `cite_bringup.program.cycle.run_program` - the one `python3 -m
+# cite_bringup.program` runs - on a pair with a physical side the twin's mode
+# READ as SIM, the physical carriage checked and the operator's ConfirmOperator
+# awaited; the arm's custody read; VALIDATED; one cycle of the program; and,
+# with a physical side, SIM again. Unlike `./scripts/program` it does not
+# initialize or home before its first cycle: it is rejected unless
+# ConsoleState.at_start says both arms are at the program's start (Home first),
+# and unless Start robot has succeeded and the console is READY. A failed step
+# ends the run and leaves the console in FAULT; nothing is retried and nothing
+# homes. Cancelling the goal is the same software stop as StopCell.
+#
+# Served under the plan's `console.run_program` (ConsoleState.msg).
+
+float64 speed_scale     # (0, 1] of the program's own speed, sent explicitly by
+                        # the operator's panel. Never defaulted: a goal with 0, or
+                        # any value outside (0, 1] or below
+                        # ConsoleState.minimum_speed_scale, is rejected (ADR-0071
+                        # decision 2)
+uint32 cycles           # how many cycles, at least 1. 0 is REJECTED rather than
+                        # read as "until stopped": a run with no end is asked for
+                        # by number, never by leaving a field unset
+---
+bool success
+string detail           # what was done, or which step failed and why; a run that
+                        # completed every cycle reports so even if a stop arrived
+                        # after its last step
+uint32 cycles_completed # cycles that ran every step to the end
+---
+uint32 cycle            # 1-based number of the cycle in progress
+uint32 step_index       # 1-based number of the step in progress within it
+uint32 step_count       # how many steps one cycle has
+string step             # the step in progress, as the operator reads it

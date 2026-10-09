@@ -47,6 +47,9 @@ answers some interfaces and not others.
 | `cite_bringup/side_launch.py` | the pieces both launches run, written once: facility nodes, lifecycle driver, controller chain, MoveIt, planning scene, skill servers, witness, and every gate and refusal |
 | `cite_bringup/hold_gate.py` | the physical side's gate: the deadman says AWAITING, every vendor service is advertised and a STOP sent to the vendor is acknowledged; nothing that can move the arm starts before it exits 0 |
 | `cite_bringup/program/sides.py` | which sides of a zone are physical, read from the plan; `./scripts/program` skips every Gazebo-only step there |
+| `cite_bringup/program/console.py`, `console_machine.py` | the operator console server, `cell_console` (ADR-0071): a managed node on the plant's domain serving `StartRobot`, `HomeRobot`, `RunProgram`, `ConfirmOperator` and `StopCell` under the names the plan's `console:` block states (`/cite/<zone>/console/...`) and a latched `ConsoleState`; every refusal is the ROS-free `ConsoleMachine`'s. Started by the pair supervisor only when asked (`./scripts/sim --pair --console`); `cell_console.py` is the file `ros2 run` executes. Its Stop is a software stop on the command path, not an E-stop |
+| `cite_bringup/program/cycle.py` | the program's one sequencer - SIM read, the operator asked, custody, VALIDATED, the program, SIM again - shared by `python3 -m cite_bringup.program`, `program.home` and the console |
+| `cite_bringup/program/part.py` | puts a work-piece on each simulated side's pick table, removing the previous one first; called by `./scripts/program` and the console |
 
 The split is so the plan reader can be unit-tested. A launch file is awkward to test; a
 function that turns YAML into dataclasses is not, and most of what can go wrong — a missing
@@ -423,6 +426,8 @@ ready file is a false join**.
 | both sides announce | the twin boundary is started, on that event and on nothing else |
 | the boundary exits before announcing | stop everything; exit non-zero naming **the boundary**, not a side |
 | the boundary neither announces nor exits | its own ceiling fires, saying so of the boundary |
+| the boundary announces | with `--console` only, the operator console is started (ADR-0071), on that event, under the boundary's ceiling; it commands nothing until an operator asks |
+| the console exits, or neither announces nor exits | as for the boundary, naming **the console**; when the pair ends the console is stopped first, then the boundary, then the sides |
 
 **It holds no `rclpy` context, and that is checked rather than promised.**
 `test/test_pair.py` walks its import graph and fails if it reaches a ROS client library, and
@@ -446,10 +451,10 @@ ADR-0044 records. A boundary that fails is reported as the boundary: both sides 
 working, and a diagnosis naming one of them sends the reader to a cell that is fine.
 
 **What it costs you.** The supervisor owns every participant's output, so the plain
-single-launch console becomes three labelled interleaved streams, every line prefixed with the
-participant it came from. The stop path is sequential and the boundary is a third participant,
-so a worst case in which nothing will go costs `3 × (STOP_GRACE_S + STOP_KILL_S)` — stated
-rather than absorbed by shortening either ceiling.
+single-launch console becomes four labelled interleaved streams, every line prefixed with the
+participant it came from. The stop path is sequential and the boundary and the operator console
+are a third and a fourth participant, so a worst case in which nothing will go costs
+`4 × (STOP_GRACE_S + STOP_KILL_S)` — stated rather than absorbed by shortening either ceiling.
 
 **What it is not.** It is not L5 and it is not a scenario harness. It decides nothing about
 what crosses between the sides, and there is still no automated paired scenario: ADR-0057's

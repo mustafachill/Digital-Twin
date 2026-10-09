@@ -23,25 +23,32 @@ plant's own servers, which is a single side.
 
 Nothing here runs inside a callback. The program is a plain loop on the main
 thread that spins the node while it waits, so a blocking call cannot starve an
-executor (CLAUDE.md §10).
+executor (CLAUDE.md §10). The operator console (ADR-0071) runs the same loop on
+a worker thread of its own, and stops it through ``interrupted``: every wait
+here spins through `RosCell._spin_once`, which raises `steps.Interrupted` there
+once the console asks - except inside a cancel and a return to SIM, which are
+the stop itself and are never cut short.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import time
+from typing import Callable
 
 from cite_bringup import track_command
 from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
-from cite_bringup.program.steps import scaled_motion, speed_scale, StepFailed
-from cite_bringup.readiness import waits_for_a_physical_side
+from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, StepFailed
+from cite_bringup.readiness import waits_for_a_physical_side, waits_for_goals_to_end
 from cite_interfaces.action import Grasp, MoveTo
-from cite_interfaces.msg import ResultCode, RobotState, TwinMode
-from cite_interfaces.qos import COMMAND, LATCHED, STATE
+from cite_interfaces.msg import ConsoleState, ResultCode, RobotState, TwinMode
+from cite_interfaces.qos import COMMAND, LATCHED, SENSOR, STATE
 from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 from trajectory_msgs.msg import JointTrajectory
@@ -92,6 +99,11 @@ _ASK_AGAIN_S = 0.5
 #: How long one wait between two `TrackArrived` asks blocks, in wall seconds: a
 #: poll bounded by the track step's own ceiling, spent spinning this node.
 _ARRIVAL_ASK_S = 0.1
+
+#: The longest one spin blocks while a future is awaited, in wall seconds: how
+#: soon an interruption is seen. Not a schedule - `spin_once` returns on the
+#: first callback - and not a ceiling, which is the caller's.
+_SPIN_SLICE_S = 0.1
 
 
 def twin_name(name: str) -> str:
@@ -259,6 +271,31 @@ def ask_until_accepted(
         pause()
 
 
+#: The name of the node a TERMINAL client's cell creates: `python3 -m
+#: cite_bringup.program` and `./scripts/home`, by either route. Written once:
+#: the operator console reads it off the graph to refuse a motion request while
+#: such a client runs (S-01), so a second spelling would be a console that never
+#: sees one. The console's own cells are named otherwise (`console._CELL_NODE`).
+TERMINAL_NODE = "fixed_program"
+
+#: The simulated clock, bridged from Gazebo onto a simulated side's domain
+#: (`simulation.launch.py`'s `CLOCK_BRIDGE`). A physical side runs on the wall
+#: clock (`hardware.launch.py`, L-7) and nothing on it publishes this name.
+SIMULATED_CLOCK = "/clock"
+
+
+def console_holds(topic: str, state: ConsoleState | None) -> str:
+    """Say that an operator console serves the pair, and so a terminal client may not."""
+    from cite_bringup.program.console_machine import STATE_NAMES
+
+    doing = "" if state is None else f" (it is {STATE_NAMES.get(state.state, state.state)})"
+    return (
+        f"an operator console serves this pair on {topic}{doing}: one operator surface per "
+        "pair, so this terminal neither asks anyone into the cell nor moves it. Use the "
+        "panel, or stop the console first (ADR-0071)"
+    )
+
+
 def default_scaling(arm: ControllerManager) -> tuple[float, float]:
     """Return the planner's default (velocity, acceleration) scaling, from the generated limits.
 
@@ -282,6 +319,14 @@ def gripper_effort_n(arm: ControllerManager) -> float:
 class RosCell:
     """Drive one arm, its track and (for the ADR-0066 record) a belt, via the twin or not."""
 
+    #: Class-level defaults of the two attributes `__init__` sets for the
+    #: operator console's stop, so a cell assembled without it never stops.
+    _interrupted: Callable[[], bool] | None = None
+    _uninterruptible = 0
+    _stop_deadline: Callable[[], float | None] | None = None
+    #: The result of the goal in flight, awaited by a cancel for the goal's end.
+    _result = None
+
     def __init__(
         self,
         arm: ControllerManager,
@@ -290,8 +335,23 @@ class RosCell:
         conveyor: Conveyor | None = None,
         track: Track | None = None,
         speed: float = 1.0,
+        interrupted: Callable[[], bool] | None = None,
+        node_name: str = TERMINAL_NODE,
+        stop_deadline: Callable[[], float | None] | None = None,
     ) -> None:
         skills = arm.skills
+        #: Asked before every spin: True stops whatever is waiting with
+        #: `Interrupted` (ADR-0071). None for a terminal run, whose stop is
+        #: Ctrl-C's KeyboardInterrupt on the main thread.
+        self._interrupted = interrupted
+        #: The operator console's shutdown deadline, monotonic, or None before
+        #: its shutdown began (R2-02): no wait of this cell - a cancel's, a
+        #: return to SIM's, a server's - runs past it, so the stop in flight
+        #: when the process ends ends within the console's own ceiling.
+        self._stop_deadline = stop_deadline
+        #: How deep inside a cancel or a return to SIM this cell is: there the
+        #: predicate is not asked, because those ARE the stop.
+        self._uninterruptible = 0
         #: The fraction of its own speed every move and every track slide runs
         #: at (`--speed-scale`). One command through the twin, so both sides run
         #: at the same fraction.
@@ -301,7 +361,7 @@ class RosCell:
         self._via = via
         self._effort_n = gripper_effort_n(arm)
         self.node = Node(
-            "fixed_program", parameter_overrides=[Parameter("use_sim_time", value=True)]
+            node_name, parameter_overrides=[Parameter("use_sim_time", value=True)]
         )
         self._move_to = ActionClient(self.node, MoveTo, name(skills.move_to))
         self._grasp = ActionClient(self.node, Grasp, name(skills.grasp))
@@ -347,8 +407,9 @@ class RosCell:
         program itself always asks without it (ADR-0070).
         """
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{SetMode.Request.SERVICE} is not served; is the pair up?")
+        self._await_ready(
+            client.service_is_ready, f"{SetMode.Request.SERVICE} is not served; is the pair up?"
+        )
         request = SetMode.Request(
             mode=TwinMode.MODE_VALIDATED,
             reason=(
@@ -366,7 +427,7 @@ class RosCell:
         def pause() -> None:
             ask_again = time.monotonic() + _ASK_AGAIN_S
             while time.monotonic() < ask_again:
-                rclpy.spin_once(self.node, timeout_sec=_ASK_AGAIN_S)
+                self._spin_once(_ASK_AGAIN_S)
 
         ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
 
@@ -380,24 +441,48 @@ class RosCell:
         NOT disable the arm: the deadman keeps it enabled while heartbeats
         arrive, and it holds where it stands. Return whether the twin confirmed
         SIM: a refusal, a timeout or no server is said and returns False, which
-        the caller makes the run's failure (SA-S-05).
+        the caller makes the run's failure (SA-S-05). Never interrupted: it is
+        where a stop ends on a pair with a physical side.
         """
+        with self._not_interrupted():
+            return self._leave_validated()
+
+    def _leave_validated(self) -> bool:
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            print(f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served")
+        try:
+            self._await_ready(
+                client.service_is_ready,
+                f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served",
+            )
+        except StepFailed as failure:
+            print(failure, flush=True)
             return False
         request = SetMode.Request(
             mode=TwinMode.MODE_SIM,
             reason="the program ended; a person may enter the physical cell",
         )
-        try:
-            response = self._until(client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S)
-        except StepFailed as failure:
-            print(f"could not leave VALIDATED: {failure}", flush=True)
-            return False
-        if not response.accepted or response.current_mode != TwinMode.MODE_SIM:
-            print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
-            return False
+        # The boundary refuses a transition while a goal it dispatched is still
+        # running (`waits_for_goals_to_end`): after a cancel that refusal clears
+        # once the goal ends on every side, so it is asked again within the
+        # cancel's own ceiling, and any other refusal is final (ADR-0071).
+        deadline = time.monotonic() + CANCEL_CEILING_S
+        while True:
+            try:
+                response = self._until(
+                    client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S
+                )
+            except StepFailed as failure:
+                print(f"could not leave VALIDATED: {failure}", flush=True)
+                return False
+            if response.accepted and response.current_mode == TwinMode.MODE_SIM:
+                break
+            if (
+                not waits_for_goals_to_end(response.result.detail)
+                or time.monotonic() > deadline
+            ):
+                print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
+                return False
+            self._pause_between_asks()
         print("the twin is in SIM: nothing crosses to the physical side", flush=True)
         return True
 
@@ -414,6 +499,74 @@ class RosCell:
         finally:
             self.node.destroy_subscription(subscription)
         return received[-1].mode
+
+    def console_refusal(self, topic: str) -> str | None:
+        """Say why a terminal client may not drive this pair: a console serves it (N-01).
+
+        ONE operator surface per pair (ADR-0071): where the zone's operator
+        console runs, it alone asks a person into the cell, and a terminal
+        client that also read SIM and asked would be a second invitation -
+        whatever the console is doing, its AWAITING_OPERATOR included. The
+        console is known by its latched `ConsoleState` on ``topic``: a message
+        heard there, or a publisher of it on the graph.
+
+        Read once a latched message of the pair's own has been heard on this
+        domain - through the twin, the twin's mode; via the plant alone (R-05),
+        where no twin runs, the arm's `RobotState`: that message is the event
+        that discovery has reached the pair's participants, so an absence read
+        before it is never taken as no console. DDS cannot prove an absence;
+        this is the graph as known after that event. Raises `StepFailed` when
+        that message is not heard at all.
+        """
+        heard: list[ConsoleState] = []
+        witnessed: list = []
+        if self._via == "twin":
+            witness, witness_topic = TwinMode, TwinMode.TOPIC
+        else:
+            witness, witness_topic = RobotState, self._state_topic
+        subscriptions = [
+            self.node.create_subscription(ConsoleState, topic, heard.append, LATCHED),
+            self.node.create_subscription(witness, witness_topic, witnessed.append, LATCHED),
+        ]
+        try:
+            self._until_true(
+                lambda: bool(heard or witnessed), f"{witness.__name__} on {witness_topic}"
+            )
+            present = bool(heard) or self.node.count_publishers(topic) > 0
+        finally:
+            for subscription in subscriptions:
+                self.node.destroy_subscription(subscription)
+        if not present:
+            return None
+        return console_holds(topic, heard[-1] if heard else None)
+
+    def simulated_side_refusal(self) -> str | None:
+        """Say why this domain is not shown to be a simulated side, or None (S-02r).
+
+        `--via plant` checks its domain from the environment before any
+        context exists (`plan.require_domain`); a shell that exported the
+        counterpart's ROS_DOMAIN_ID would derive the base from it and pass that
+        check. This is the graph's own answer: a simulated side's Gazebo
+        publishes `SIMULATED_CLOCK` here, and a physical side publishes no such
+        thing. A clock message heard is the event; none heard within
+        `SERVER_WAIT_S` is no evidence, and refuses. Asked before any goal or
+        mode, so a refusal moves nothing.
+        """
+        heard: list[Clock] = []
+        # Best effort subscribes to a publisher of either reliability.
+        subscription = self.node.create_subscription(
+            Clock, SIMULATED_CLOCK, heard.append, SENSOR
+        )
+        try:
+            self._until_true(lambda: bool(heard), f"{SIMULATED_CLOCK} on this domain")
+        except StepFailed as error:
+            return (
+                f"{error}: nothing shows this domain is a simulated side, and a "
+                "physical side publishes no simulated clock"
+            )
+        finally:
+            self.node.destroy_subscription(subscription)
+        return None
 
     def carriage_refusal(self, homing: bool = False) -> str | None:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).
@@ -540,7 +693,7 @@ class RosCell:
                     f"wait {seconds:.2f} s: the cell's clock did not get there in "
                     f"{ceiling_s:.0f} wall seconds; is the simulator running?"
                 )
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            self._spin_once(0.1)
 
     def track(self, position_m: float, speed_mps: float) -> None:
         """Slide the carriage to ``position_m`` at ``speed_mps`` and wait for it.
@@ -607,7 +760,7 @@ class RosCell:
                     f"{what}: the carriage stands at {self._track_position * 1000:.1f} mm "
                     f"after {ceiling_s:.0f} wall seconds; is the controller active?"
                 )
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            self._spin_once(0.1)
         if self._track_arrived is not None:
             # Through the twin, this domain's joint states are the plant's
             # only: the counterpart's carriage - the physical one - is asked of
@@ -616,6 +769,15 @@ class RosCell:
         self._track_target = None
 
     def cancel(self) -> None:
+        """Cancel the goal in flight and hold the track; never itself interrupted."""
+        with self._not_interrupted():
+            self._cancel()
+
+    def close(self) -> None:
+        """Release this cell's node. The cell is not used again."""
+        self.node.destroy_node()
+
+    def _cancel(self) -> None:
         if self._track_target is not None and self._track_command is not None:
             # Abandoned mid-move: stop every carriage where IT stands, rather
             # than leave it running to a target nobody is waiting for. Through
@@ -632,14 +794,24 @@ class RosCell:
                 )
         handle, self._active = self._active, None
         sent, self._sent = self._sent, None
+        result, self._result = self._result, None
         if handle is None and sent is not None:
             # Interrupted before the server answered: the goal may still be
             # accepted, and an accepted goal nobody cancels runs to its end.
             handle = self._until(sent, "the acceptance of the goal to cancel", CANCEL_CEILING_S)
             if not handle.accepted:
                 return
+            result = None
         if handle is not None:
             self._until(handle.cancel_goal_async(), "the cancel", CANCEL_CEILING_S)
+            # A cancel ANSWERED is not a goal ENDED: the goal ends on every side
+            # after it, and until then the twin refuses SIM for it and the arm
+            # may still be moving. Its terminal status is read, within the same
+            # ceiling, before the stop counts as done (ADR-0071, S-03); unread,
+            # the cancel fails and says so.
+            if result is None:
+                result = handle.get_result_async()
+            self._until(result, "the end of the cancelled goal", CANCEL_CEILING_S)
 
     # --------------------------------------------------------------- mechanism
 
@@ -647,8 +819,9 @@ class RosCell:
         """Return a call answering the twin's `TrackArrived` for ``position_m``, whole."""
         client = self._track_arrived
         assert client is not None and self._track is not None
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{what}: {TrackArrived.Request.SERVICE} is not served")
+        self._await_ready(
+            client.service_is_ready, f"{what}: {TrackArrived.Request.SERVICE} is not served"
+        )
         request = TrackArrived.Request(
             joint=self._track.joint,
             position_m=float(position_m),
@@ -663,8 +836,9 @@ class RosCell:
     def _ask_joints_at(self, start):
         """Return a call answering the twin's `JointsAt` for the arm's start pose."""
         client = self.node.create_client(JointsAt, JointsAt.Request.SERVICE)
-        if not client.wait_for_service(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{JointsAt.Request.SERVICE} is not served; is the pair up?")
+        self._await_ready(
+            client.service_is_ready, f"{JointsAt.Request.SERVICE} is not served; is the pair up?"
+        )
         request = JointsAt.Request(
             joints=list(start.joints),
             positions=[float(value) for value in start.positions],
@@ -681,7 +855,7 @@ class RosCell:
         # this node hears `/clock`.
         again = time.monotonic() + _ARRIVAL_ASK_S
         while time.monotonic() < again:
-            rclpy.spin_once(self.node, timeout_sec=_ARRIVAL_ASK_S)
+            self._spin_once(_ARRIVAL_ASK_S)
 
     def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
         ask_twin = self._ask_arrival(position_m, what)
@@ -699,8 +873,7 @@ class RosCell:
             self._track_position = message.position[message.name.index(self._track.joint)]
 
     def _goal(self, client: ActionClient, goal, what: str) -> None:
-        if not client.wait_for_server(timeout_sec=SERVER_WAIT_S):
-            raise StepFailed(f"{what}: {client._action_name} is not served")
+        self._await_ready(client.server_is_ready, f"{what}: {client._action_name} is not served")
         self._sent = client.send_goal_async(goal)
         handle = self._until(self._sent, f"{what}: acceptance")
         if handle.accepted:
@@ -708,16 +881,24 @@ class RosCell:
         self._sent = None
         if not handle.accepted:
             raise StepFailed(f"{what}: {client._action_name} rejected the goal")
-        wrapped = self._until(handle.get_result_async(), what)
+        self._result = handle.get_result_async()
+        wrapped = self._until(self._result, what)
         self._active = None
+        self._result = None
         code = wrapped.result.result
         if code.code != ResultCode.SUCCESS:
             raise StepFailed(f"{what}: result code {code.code}: {code.detail}")
 
     def _until(self, future, what: str, ceiling_s: float = STEP_CEILING_S):
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=ceiling_s)
-        if not future.done():
-            raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s")
+        # Spun in slices rather than in one `spin_until_future_complete`, so
+        # that an interruption is seen within one slice; the ceiling is the
+        # same wall-clock bound it was.
+        deadline = time.monotonic() + ceiling_s
+        while not future.done():
+            remaining = self._clamped(deadline) - time.monotonic()
+            if remaining <= 0.0:
+                raise StepFailed(f"{what} did not finish within {ceiling_s:.0f} s{self._why()}")
+            self._spin_once(min(_SPIN_SLICE_S, remaining))
         return future.result()
 
     def _until_true(self, predicate, what: str) -> None:
@@ -728,6 +909,48 @@ class RosCell:
         # then reported "nothing within 60 s" (ADR-0066).
         deadline = time.monotonic() + SERVER_WAIT_S
         while not predicate():
-            if time.monotonic() > deadline:
-                raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s")
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            if time.monotonic() > self._clamped(deadline):
+                raise StepFailed(f"no {what} after {SERVER_WAIT_S:.0f} s{self._why()}")
+            self._spin_once(0.1)
+
+    def _await_ready(self, ready, refusal: str) -> None:
+        """Wait for a server to be discovered, within `SERVER_WAIT_S`, or raise ``refusal``.
+
+        Spun in slices like every other wait, so a stop and the console's
+        shutdown deadline reach it; `wait_for_service` blocked for its whole
+        timeout without either.
+        """
+        deadline = time.monotonic() + SERVER_WAIT_S
+        while not ready():
+            if time.monotonic() > self._clamped(deadline):
+                raise StepFailed(f"{refusal}{self._why()}")
+            self._spin_once(_SPIN_SLICE_S)
+
+    def _clamped(self, deadline: float) -> float:
+        """Return ``deadline``, or the console's shutdown deadline if that is sooner (R2-02)."""
+        limit = None if self._stop_deadline is None else self._stop_deadline()
+        return deadline if limit is None else min(deadline, limit)
+
+    def _why(self) -> str:
+        limit = None if self._stop_deadline is None else self._stop_deadline()
+        if limit is not None and time.monotonic() >= limit:
+            return ", cut short by the console's shutdown deadline"
+        return ""
+
+    def _spin_once(self, timeout_sec: float) -> None:
+        """Spin this node once, unless the console asked this cell to stop (ADR-0071)."""
+        if (
+            self._interrupted is not None
+            and self._uninterruptible == 0
+            and self._interrupted()
+        ):
+            raise Interrupted("stopped from the operator console")
+        rclpy.spin_once(self.node, timeout_sec=timeout_sec)
+
+    @contextmanager
+    def _not_interrupted(self):
+        self._uninterruptible += 1
+        try:
+            yield
+        finally:
+            self._uninterruptible -= 1

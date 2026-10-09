@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import signal
+import time
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program import belt as belt_command
@@ -407,6 +408,10 @@ def test_an_interrupt_before_acceptance_still_cancels(monkeypatch) -> None:
             Handle.cancelled = True
             return Done(None)
 
+        def get_result_async(self):
+            # The cancelled goal's end, which a cancel now reads (S-03).
+            return Done(None)
+
     monkeypatch.setattr(cell_module.rclpy, "spin_until_future_complete", lambda *a, **k: None)
     ros = object.__new__(RosCell)
     ros.node = None
@@ -565,7 +570,7 @@ def test_no_belt_is_commanded_on_a_physical_side(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         belt_command,
         "_set_on_one_side",
-        lambda topic, speed, domain, side: commanded.append(side) or True,
+        lambda topic, speed, domain, side, *_rest: commanded.append(side) or True,
     )
     assert belt_command.main(["--zone", ZONE]) == 0
     assert commanded == ["plant"]
@@ -630,7 +635,7 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     sent = []
 
     class Client:
-        def wait_for_service(self, timeout_sec):
+        def service_is_ready(self):
             return True
 
         def call_async(self, request):
@@ -652,9 +657,10 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     (request,) = sent
     assert request.mode == TwinMode.MODE_SIM
     assert "nothing crosses to the physical side" in capsys.readouterr().out
-    main_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/__main__.py")
-    text = main_source.read_text()
-    assert text.index("status = run(") < text.rindex("ros.leave_validated()")
+    # The sequencer `__main__` runs (`program.cycle`) asks for SIM after the run.
+    cycle_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/cycle.py")
+    text = cycle_source.read_text()
+    assert text.index("status = run(") < text.rindex("cell.leave_validated()")
 
 
 def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
@@ -703,9 +709,17 @@ class _PairCell:
     #: What each `away_from_start` measures, in order: None is "at the start".
     away: list[str | None] = []
     calls: list[str] = []
+    #: What `console_refusal` answers: None where no operator console serves the pair.
+    console: str | None = None
+    #: The topic each `console_refusal` was asked about.
+    console_asked: list[str] = []
 
     def __init__(self, *_args, **_kwargs) -> None:
         _PairCell.calls = []
+
+    def console_refusal(self, topic: str) -> str | None:
+        _PairCell.console_asked.append(topic)
+        return _PairCell.console
 
     def twin_mode(self):
         return _PairCell.mode
@@ -746,6 +760,7 @@ def _main_on_a_pair(
 
     import cite_bringup.program.__main__ as program_module
     import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.cycle as cycle_module
     import cite_bringup.program.home as home_module
     import rclpy
 
@@ -757,7 +772,7 @@ def _main_on_a_pair(
     monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
     monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
     monkeypatch.setattr(
-        program_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
+        cycle_module, "run", lambda *_args, **_kwargs: _PairCell.calls.append("run") or 0
     )
 
     def initialize(_plan, sides, _say):
@@ -1074,14 +1089,18 @@ def test_initialize_calls_each_physical_arm_on_its_own_domain(monkeypatch) -> No
         success, detail = True, "track and gripper enabled"
 
     monkeypatch.setattr(
-        home, "_call_on_domain", lambda service, domain, ceiling, stop: calls.append(
-            (service, domain, ceiling, stop)
-        ) or Answer()
+        home,
+        "_call_on_domain",
+        lambda service, domain, ceiling, stop, interrupted=None, say=None, stop_deadline=None:
+        calls.append((service, domain, ceiling, stop, say)) or Answer()
     )
     said: list[str] = []
     environ = {"CITE_DOMAIN_BASE": "40"}
     home.initialize(plan, ["counterpart"], said.append, environ=environ)
-    ((service, domain, ceiling, stop),) = calls
+    ((service, domain, ceiling, stop, say),) = calls
+    # R2-06: what an interrupt comes to is said where the caller says things,
+    # so the console's panel shows it.
+    assert say == said.append
     # S-01: the stop sent if the call is interrupted is the one the generated
     # parameters name for that side's initializer, never a hand-written name.
     assert stop == (
@@ -1304,3 +1323,381 @@ def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
     _PairCell.away = ["arm away", "still away"]
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
     assert _PairCell.calls[-2:] == ["measure zero", "leave_validated"]
+
+
+# --- S-03 (ADR-0071): a stop is done when the goal has ENDED and SIM is back ---
+
+
+class _Later:
+    """A future that is done after ``spins`` spins of the cell."""
+
+    def __init__(self, spins: int, value=None) -> None:
+        self.left = spins
+        self._value = value
+
+    def done(self) -> bool:
+        return self.left <= 0
+
+    def result(self):
+        return self._value
+
+
+def _spinning(monkeypatch, futures: list) -> list[str]:
+    """Make each spin advance the first future in ``futures`` that is not done."""
+    import cite_bringup.program.cell as cell_module
+
+    order: list[str] = []
+
+    def spin_once(_node, timeout_sec=None) -> None:
+        for name, future in futures:
+            if not future.done():
+                future.left -= 1
+                if future.done():
+                    order.append(name)
+                return
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", spin_once)
+    return order
+
+
+def test_a_cancel_reads_the_cancelled_goals_end_before_it_returns(monkeypatch) -> None:
+    answer, end = _Later(2), _Later(3)
+    order = _spinning(monkeypatch, [("cancel answered", answer), ("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    ros.cancel()
+    assert order == ["cancel answered", "goal ended"]
+    assert ros._result is None and ros._active is None
+
+
+def test_a_cancelled_goal_that_never_ends_fails_the_cancel_at_its_ceiling(monkeypatch) -> None:
+    import cite_bringup.program.cell as cell_module
+
+    monkeypatch.setattr(cell_module, "CANCEL_CEILING_S", 0.05)
+    answer, end = _Later(0), _Later(10**9)
+    _spinning(monkeypatch, [("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    with pytest.raises(StepFailed, match="the end of the cancelled goal"):
+        ros.cancel()
+
+
+def _asking_for_sim(monkeypatch, answers: list) -> tuple[RosCell, list]:
+    import cite_bringup.program.cell as cell_module
+    from cite_interfaces.msg import ResultCode
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", lambda *_a, **_k: None)
+    monkeypatch.setattr(cell_module, "_ARRIVAL_ASK_S", 0.0)
+    sent: list = []
+
+    class Response:
+        def __init__(self, mode: int, detail: str) -> None:
+            self.accepted = detail == ""
+            self.current_mode = mode
+            self.result = ResultCode(detail=detail)
+
+    class Client:
+        def service_is_ready(self):
+            return True
+
+        def call_async(self, request):
+            sent.append(request)
+            return _Later(0, Response(*answers.pop(0)))
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    return ros, sent
+
+
+def test_sim_is_asked_again_while_the_boundary_still_has_goals_in_flight(monkeypatch) -> None:
+    """After a cancel the boundary refuses SIM until the goal ends; that clears by itself."""
+    from cite_bringup.readiness import GOALS_STILL_RUNNING
+    from cite_interfaces.msg import TwinMode
+
+    refused = (TwinMode.MODE_VALIDATED, f"SIM describes a cell in which 1 {GOALS_STILL_RUNNING}")
+    ros, sent = _asking_for_sim(
+        monkeypatch, [refused, refused, (TwinMode.MODE_SIM, "")]
+    )
+    assert ros.leave_validated()
+    assert len(sent) == 3
+
+
+def test_any_other_refusal_of_sim_is_final(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    ros, sent = _asking_for_sim(
+        monkeypatch, [(TwinMode.MODE_VALIDATED, "refused for another reason")]
+    )
+    assert not ros.leave_validated()
+    assert len(sent) == 1
+
+
+def test_sim_refused_for_goals_that_never_end_fails_at_the_cancel_ceiling(monkeypatch) -> None:
+    import cite_bringup.program.cell as cell_module
+    from cite_bringup.readiness import GOALS_STILL_RUNNING
+    from cite_interfaces.msg import TwinMode
+
+    monkeypatch.setattr(cell_module, "CANCEL_CEILING_S", 0.05)
+    refused = (TwinMode.MODE_VALIDATED, f"1 {GOALS_STILL_RUNNING}")
+    ros, sent = _asking_for_sim(monkeypatch, [refused] * 100000)
+    assert not ros.leave_validated()
+    assert len(sent) >= 1
+
+
+def test_a_stop_reaches_a_belt_whose_subscriber_is_awaited(monkeypatch) -> None:
+    """S-08 (ADR-0071): the console's stop is asked while a side's belt is matched."""
+    from cite_bringup.program.steps import Interrupted
+
+    started = time.monotonic()
+    with pytest.raises(Interrupted):
+        belt_command._set_on_one_side(
+            "/cite/cell_b/nobody_subscribes", 0.0, 90 + os.getpid() % 9, "plant",
+            interrupted=lambda: True,
+        )
+    assert time.monotonic() - started < belt_command.MATCH_CEILING_S
+
+
+# --- N-01 (ADR-0071): one operator surface per pair ----------------------------
+
+
+def test_a_terminal_run_is_refused_where_a_console_serves_the_pair(monkeypatch, capsys) -> None:
+    """Nothing is read, asked, entered or left: the console may hold the cell."""
+    from cite_interfaces.msg import TwinMode
+
+    plan = load(default_plan_path(ZONE))
+    _PairCell.console_asked = []
+    monkeypatch.setattr(_PairCell, "console", "an operator console serves this pair")
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True, answers=()) == 1
+    assert _PairCell.calls == []
+    assert _PairCell.console_asked == [plan.console.state]
+    assert "REFUSED: an operator console serves this pair" in capsys.readouterr().out
+
+
+def test_without_a_console_the_terminal_run_goes_on(monkeypatch) -> None:
+    from cite_interfaces.msg import TwinMode
+
+    _PairCell.console_asked = []
+    assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
+    assert len(_PairCell.console_asked) == 1
+
+
+def test_scripts_home_is_refused_where_a_console_serves_the_pair(monkeypatch, capsys) -> None:
+    """N-01 (b): `./scripts/home` runs `program.home`, which asks the same question."""
+    import builtins
+
+    import cite_bringup.program.cell as cell_module
+    import cite_bringup.program.home as home_module
+    from cite_interfaces.msg import TwinMode
+    import rclpy
+
+    monkeypatch.setattr(cell_module, "RosCell", _PairCell)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: None)
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr("cite_bringup.program.steps.install_interrupt_handlers", lambda: None)
+    monkeypatch.setattr(
+        home_module, "initialize", lambda *_args: pytest.fail("initialized under a console")
+    )
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": pytest.fail("asked"))
+    monkeypatch.setattr(_PairCell, "console", "an operator console serves this pair")
+    _PairCell.mode, _PairCell.left, _PairCell.carriage = TwinMode.MODE_SIM, True, None
+    assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
+    # Not even SIM is asked for: the console may be running a cycle in VALIDATED.
+    assert _PairCell.calls == []
+    assert "REFUSED:" in capsys.readouterr().out
+
+
+def test_the_scripts_home_command_reaches_the_same_refusal() -> None:
+    """`./scripts/home` execs `program.home`, which passes the console's topic."""
+    script = (Path(__file__).resolve().parents[4] / "scripts" / "home").read_text()
+    assert "exec python3 -u -m cite_bringup.program.home" in script
+
+
+def test_a_console_refusal_that_cannot_be_read_refuses_too(capsys) -> None:
+    """An unanswerable question is a refusal, never a pass (N-01)."""
+    from cite_bringup.program import cycle
+
+    class Unheard:
+        def console_refusal(self, _topic: str):
+            raise StepFailed("no TwinMode on /cite/twin/mode after 60 s")
+
+        def __getattr__(self, name: str):
+            raise AssertionError(f"{name} was called on a refused run")
+
+    ended = cycle.run_program(
+        Unheard(), [], physical=["counterpart"], scale=0.1, cycles=1,
+        say=print, await_operator=lambda _p: "", console="/cite/cell_b/console/state",
+    )
+    assert ended.status == 1 and ended.sim_confirmed is None
+    assert "REFUSED: could not tell whether an operator console" in capsys.readouterr().out
+
+
+# --- R2-02 (ADR-0071): no wait of a console's cell outlasts its shutdown -------
+
+
+def test_a_cancel_is_cut_at_the_consoles_shutdown_deadline(monkeypatch) -> None:
+    """The goal's end is not awaited for `CANCEL_CEILING_S` once the shutdown's cut passed."""
+    answer, end = _Later(0), _Later(10**9)
+    _spinning(monkeypatch, [("goal ended", end)])
+
+    class Handle:
+        def cancel_goal_async(self):
+            return answer
+
+    ros = object.__new__(RosCell)
+    ros.node = None
+    ros._track_target = None
+    ros._sent = None
+    ros._active = Handle()
+    ros._result = end
+    ros._stop_deadline = lambda: time.monotonic() - 1.0
+    started = time.monotonic()
+    with pytest.raises(StepFailed, match="cut short by the console's shutdown deadline"):
+        ros.cancel()
+    assert time.monotonic() - started < 1.0
+
+
+def test_a_return_to_sim_is_cut_at_the_consoles_shutdown_deadline(monkeypatch, capsys) -> None:
+    """A SetMode server never found is not waited for `SERVER_WAIT_S` past the cut."""
+    import cite_bringup.program.cell as cell_module
+
+    monkeypatch.setattr(cell_module.rclpy, "spin_once", lambda *_a, **_k: None)
+
+    class Client:
+        def service_is_ready(self):
+            return False
+
+    class Node:
+        def create_client(self, _type, _name):
+            return Client()
+
+    ros = object.__new__(RosCell)
+    ros.node = Node()
+    ros._stop_deadline = lambda: time.monotonic() - 1.0
+    started = time.monotonic()
+    assert not ros.leave_validated()
+    assert time.monotonic() - started < 1.0
+    assert "is not served, cut short" in capsys.readouterr().out
+
+
+def test_without_a_shutdown_a_cells_waits_keep_their_own_ceilings() -> None:
+    ros = object.__new__(RosCell)
+    assert ros._clamped(123.0) == 123.0
+    ros._stop_deadline = lambda: None
+    assert ros._clamped(123.0) == 123.0
+    ros._stop_deadline = lambda: 100.0
+    assert ros._clamped(123.0) == 100.0
+
+
+# S-02: `--via plant` only on the plant's own domain, and never beside a console.
+
+
+def _plant_main(
+    monkeypatch, environ: dict[str, str], simulated: str | None = None
+) -> tuple[int, list]:
+    """Run `--via plant` with ``environ``'s domain, recording what reached ROS.
+
+    ``simulated`` is what the graph says to `simulated_side_refusal`: None for
+    a simulated side heard, or the refusal.
+    """
+    import cite_bringup.program.__main__ as program_module
+    import cite_bringup.program.cell as cell_module
+    import rclpy
+
+    reached: list = []
+    for name in ("ROS_DOMAIN_ID", "CITE_DOMAIN_BASE"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: reached.append("init"))
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
+
+    class Cell:
+        def __init__(self, *args, **_kwargs) -> None:
+            self.args = args
+
+        def simulated_side_refusal(self) -> str | None:
+            reached.append("asked the graph")
+            return simulated
+
+    monkeypatch.setattr(cell_module, "RosCell", Cell)
+
+    class Ended:
+        status = 0
+
+    def run_program(cell, steps, **kwargs):
+        reached.append(("run_program", kwargs["console"], kwargs["via_twin"]))
+        return Ended()
+
+    monkeypatch.setattr(program_module, "run_program", run_program)
+    return program_main(["--zone", ZONE, "--via", "plant"]), reached
+
+
+def test_via_the_plant_is_refused_on_the_counterparts_domain(monkeypatch, capsys) -> None:
+    """S-02: on the counterpart's domain `--via plant` would drive the physical arm."""
+    plan = load(default_plan_path(ZONE))
+    counterpart = 40 + plan.side_named("counterpart").domain_offset
+    assert counterpart != 40
+    status, reached = _plant_main(
+        monkeypatch, {"CITE_DOMAIN_BASE": "40", "ROS_DOMAIN_ID": str(counterpart)}
+    )
+    assert status == 2
+    assert reached == [], "a ROS context was created before the refusal"
+    assert "--via plant refused" in capsys.readouterr().err
+
+
+def test_via_the_plant_is_refused_with_no_domain_to_check(monkeypatch, capsys) -> None:
+    status, reached = _plant_main(monkeypatch, {"ROS_DOMAIN_ID": "40"})
+    assert status == 2 and reached == []
+    assert "CITE_DOMAIN_BASE" in capsys.readouterr().err
+
+
+def test_via_the_plant_on_the_plants_domain_runs_and_asks_for_a_console(monkeypatch) -> None:
+    """S-02 lets the plant's own domain through; R-05: the console is asked for too."""
+    plan = load(default_plan_path(ZONE))
+    status, reached = _plant_main(
+        monkeypatch, {"CITE_DOMAIN_BASE": "40", "ROS_DOMAIN_ID": "40"}
+    )
+    assert status == 0
+    assert reached == ["init", "asked the graph", ("run_program", plan.console.state, False)]
+
+
+def test_via_the_plant_is_refused_where_the_graph_shows_no_simulated_side(
+    monkeypatch, capsys
+) -> None:
+    """S-02r: the plant's domain in the environment, and no simulated clock on the graph.
+
+    A shell that exported the counterpart's ROS_DOMAIN_ID derives the base from
+    it, so the environment check passes; the graph's answer refuses before any
+    goal or mode.
+    """
+    status, reached = _plant_main(
+        monkeypatch,
+        {"CITE_DOMAIN_BASE": "41", "ROS_DOMAIN_ID": "41"},
+        simulated="no /clock on this domain after 60 s",
+    )
+    assert status == 2
+    assert reached == ["init", "asked the graph"]
+    assert "--via plant refused: no /clock" in capsys.readouterr().err

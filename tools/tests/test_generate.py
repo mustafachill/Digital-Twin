@@ -1489,6 +1489,9 @@ class TestTwinSidesAndTheGazeboPartition:
                 "name": ids.PLANT_SIDE,
                 "gz_partition": ids.partition("cell_b", ids.PLANT_SIDE),
                 "domain_offset": 0,
+                "gui_config": (
+                    "package://cite_generated/" + gen.gui_config_path("cell_b", ids.PLANT_SIDE)
+                ),
             }
         ]
 
@@ -1576,17 +1579,28 @@ class TestTwinSidesAndTheGazeboPartition:
         self._pair(real_model, edit_yaml)
         after = artifacts(real_model)
 
-        # No file appears and none disappears: pairing generates no second tree.
-        assert sorted(after) == sorted(before)
-        # And of the files that exist, exactly two have different bytes. The plan
-        # is the substance - a second `sides:` entry and each asset's
-        # `counterpart_backend`. `MODEL_HASH` is the hash of the model that
-        # produced the tree, so it moves whenever the model does; that it moves
-        # is asserted deliberately by `test_pairing_a_zone_changes_the_model_hash`
-        # below, which is the tripwire on `twin.sides` describing the system
-        # rather than running it.
+        # One file appears and none disappears: pairing generates no second
+        # tree. The one is the counterpart's GUI configuration, and it is not a
+        # copy: the fact that makes the sides' windows differ is the operator
+        # console's panel, which only the plant's window carries, because the
+        # console serves on the plant's domain alone (ADR-0071 decision 5).
+        assert sorted(set(after) - set(before)) == [
+            gen.gui_config_path("cell_b", ids.COUNTERPART_SIDE)
+        ]
+        assert set(before) - set(after) == set()
+        # And of the files that exist, exactly three have different bytes. The
+        # plan is the substance - a second `sides:` entry and each asset's
+        # `counterpart_backend`. The plant's GUI configuration gains that panel.
+        # `MODEL_HASH` is the hash of the model that produced the tree, so it
+        # moves whenever the model does; that it moves is asserted deliberately
+        # by `test_pairing_a_zone_changes_the_model_hash` below, which is the
+        # tripwire on `twin.sides` describing the system rather than running it.
         differing = sorted(path for path in before if before[path] != after[path])
-        assert differing == ["MODEL_HASH", "bringup/cell_b_plan.yaml"]
+        assert differing == [
+            "MODEL_HASH",
+            "bringup/cell_b_plan.yaml",
+            gen.gui_config_path("cell_b", ids.PLANT_SIDE),
+        ]
 
     def test_a_differing_counterpart_adds_its_three_artifacts_and_moves_no_other(
         self, real_model: Path, edit_yaml: Callable
@@ -1792,7 +1806,7 @@ class TestTwinSidesAndTheGazeboPartition:
         # substring search would be answered by the prose instead of by the data.
         plan = yaml.safe_load(produced["bringup/cell_b_plan.yaml"])["plan"]
         for side in plan["sides"]:
-            assert set(side) == {"name", "gz_partition", "domain_offset"}
+            assert set(side) == {"name", "gz_partition", "domain_offset", "gui_config"}
             # An offset is a small index into the sides, not a domain: anything
             # large enough to be usable as one has stopped being an offset.
             assert side["domain_offset"] in range(len(ids.SIDES))
@@ -1841,3 +1855,45 @@ class TestTwinSidesAndTheGazeboPartition:
             if m["counterpart_backend"] != "sim"
         }
         assert physical == {"picker": "real"}
+
+
+class TestTheConsoleNames:
+    """ADR-0071: the operator console's names reach the plan, formed by `ids` alone."""
+
+    def test_a_paired_zone_states_the_console_names(self, real_model: Path) -> None:
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        leaves = {
+            "state": ids.CONSOLE_STATE,
+            "start_robot": ids.CONSOLE_START_ROBOT,
+            "confirm_operator": ids.CONSOLE_CONFIRM_OPERATOR,
+            "stop": ids.CONSOLE_STOP,
+            "home": ids.CONSOLE_HOME,
+            "run_program": ids.CONSOLE_RUN_PROGRAM,
+        }
+        assert plan["console"] == {
+            key: ids.zone_scope("cell_b", ids.CONSOLE_SCOPE, leaf) for key, leaf in leaves.items()
+        }
+
+    def test_an_unpaired_zone_states_none(self, real_model: Path, edit_yaml: Callable) -> None:
+        edit_yaml(
+            real_model / "facility/zones.yaml",
+            lambda d: d["zones"][0].__setitem__("twin", {"sides": "single"}),
+        )
+
+        def one_backend(document: dict) -> None:
+            for asset in document["assets"]:
+                asset["hardware"].pop("counterpart_backend", None)
+
+        for instances in sorted((real_model / "assets/instances").glob("*.yaml")):
+            edit_yaml(instances, one_backend)
+        plan = yaml.safe_load(artifacts(real_model)["bringup/cell_b_plan.yaml"])["plan"]
+        assert "console" not in plan
+
+    def test_an_asset_named_like_the_console_scope_is_refused(self, minimal_model: Path) -> None:
+        """The validator's resolve step refuses it: it would share `/cite/<zone>/console`."""
+        for path in minimal_model.rglob("*.yaml"):
+            text = path.read_text()
+            if "arm_1" in text:
+                path.write_text(text.replace("arm_1", ids.CONSOLE_SCOPE))
+        with pytest.raises(ids.InvalidIdentifierError, match="reserved inside every zone"):
+            resolve(load(minimal_model), "cell_a")

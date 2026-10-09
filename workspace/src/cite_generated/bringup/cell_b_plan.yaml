@@ -15,8 +15,6 @@
 plan:
   zone: cell_b
   world: package://cite_generated/worlds/cell_b.sdf
-  # Where a windowed run's camera starts. Read only when Gazebo opens a window.
-  gui_config: package://cite_generated/worlds/cell_b_gui.config
   scene: package://cite_generated/description/cell_b_scene.urdf.xacro
   static_frames: package://cite_generated/frames/cell_b_static_tf.yaml
   topology: package://cite_generated/topology/cell_b_flow.yaml
@@ -103,13 +101,20 @@ plan:
   #
   # Emitted rather than left implicit in this list's order, for the reason the
   # partition is: positional meaning is not reviewable.
+  #
+  # `gui_config` is what that side's window opens with, read only when Gazebo
+  # opens one: the camera framing, and on the plant of a paired zone the
+  # operator console's panel (ADR-0071 decision 5). Per side, because only one
+  # window of a pair may carry the panel.
   sides:
     - name: plant
       gz_partition: cite/cell_b/plant
       domain_offset: 0
+      gui_config: package://cite_generated/worlds/cell_b_gui.config
     - name: counterpart
       gz_partition: cite/cell_b/counterpart
       domain_offset: 1
+      gui_config: package://cite_generated/worlds/counterpart/cell_b_gui.config
 
   # The twin boundary's timing, from the zone's `twin:` block (ADR-0070 item 5).
   # `heartbeat_period_s` is how often the boundary tells each side it is alive;
@@ -120,6 +125,20 @@ plan:
   twin:
     heartbeat_period_s: 0.1
     state_max_age_s: 0.25
+
+  # The operator console's names (ADR-0071), formed once by `ids.zone_scope`:
+  # `cell_console` serves them on the plant's domain and its panel calls them.
+  # Only on a paired zone, because every request it serves goes through the
+  # twin boundary. `state` is its latched ConsoleState topic; `start_robot`,
+  # `confirm_operator` and `stop` its services; `home` and `run_program` its
+  # actions.
+  console:
+    state: /cite/cell_b/console/state
+    start_robot: /cite/cell_b/console/start_robot
+    confirm_operator: /cite/cell_b/console/confirm_operator
+    stop: /cite/cell_b/console/stop
+    home: /cite/cell_b/console/home
+    run_program: /cite/cell_b/console/run_program
 
   controller_managers:
     - asset: picker

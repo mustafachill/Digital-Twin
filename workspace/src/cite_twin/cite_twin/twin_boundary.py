@@ -91,7 +91,7 @@ from cite_bringup.plan import (
 # string literal here. The supervisor that reads it imports the same module
 # (ADR-0057), and two literals would be the P1 defect this whole join is built
 # out of avoiding.
-from cite_bringup.readiness import boundary_announcement
+from cite_bringup.readiness import boundary_announcement, GOALS_STILL_RUNNING
 from cite_bringup.track_command import hold as track_hold
 from cite_facility import model_info
 from cite_interfaces.msg import (
@@ -1383,7 +1383,7 @@ def _a_transition_may_not_outrun_the_cell(
         code=ResultCode.PRECONDITION_FAILED,
         detail=(
             f"{MODE_NAMES.get(requested, requested)} describes a cell in which "
-            f"{len(outstanding)} goal(s) L5 dispatched are still running "
+            f"{len(outstanding)} {GOALS_STILL_RUNNING} "
             f"({named}). Publishing the new mode now would describe a state the "
             "cell is not in - cancel those goals and ask again."
         ),

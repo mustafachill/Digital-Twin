@@ -242,5 +242,33 @@
     <property key="cardBackground" type="string">#777777</property>
   </gz-gui>
 </plugin>
+{% if console %}
 
+<!-- The operator console's panel (ADR-0071 decision 5): `CellConsole`, from
+     cite_console_gui, which puts its own library on GZ_GUI_PLUGIN_PATH. Only on
+     the plant's window of a paired zone (generate/gui.py). It holds no logic: it
+     shows the console's latched state and sends requests, and every refusal is
+     the console's. Each element below is one name the console serves, by the
+     key the plan's `console:` block states it under. Anchored over the scene's
+     top-right corner, and without a title bar, so that it carries no close
+     button that would take the Stop button away with it. -->
+<plugin filename="CellConsole" name="Cell console">
+  <gz-gui>
+    <title>Cell console</title>
+    <property type="bool" key="showTitleBar">false</property>
+    <property type="bool" key="resizable">false</property>
+    <property type="double" key="width">380</property>
+    <property type="double" key="height">640</property>
+    <property type="double" key="z">2</property>
+    <property type="string" key="state">floating</property>
+    <anchors target="3D View">
+      <line own="right" target="right"/>
+      <line own="top" target="top"/>
+    </anchors>
+  </gz-gui>
 
+{% for key, name in console %}
+  <{{ key }}>{{ name | xml }}</{{ key }}>
+{% endfor %}
+</plugin>
+{% endif %}

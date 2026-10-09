@@ -1,0 +1,22 @@
+# Stop: a SOFTWARE stop, not an E-stop (ADR-0071 decision 4).
+#
+# Cancels the request in flight - the goal sent through the twin, the track
+# held where each carriage stands (`RosCell.cancel`), every belt the console
+# started commanded to zero - over the same command path everything else uses,
+# and waits for each cancelled goal's end. A gripper motion already in progress
+# on a physical side is NOT stopped by the cancel (ADR-0070 item 4): it runs to
+# its end. It is no safety function: the physical E-stop is the only closure
+# (cross-cutting-safety.md). After it the console does NOT home on its own
+# (ADR-0037); it is READY once every end was read, or FAULT when the stop itself
+# could not be confirmed. A stop that arrives after the request's last point
+# that can be interrupted changes nothing: the request reports that it ended.
+#
+# In FAULT on a pair with a physical side, while the twin is not heard in SIM,
+# Stop means "ask the twin for SIM again": it is accepted, and answered once
+# the twin has answered. Refused with success false when nothing is in progress
+# otherwise.
+#
+# Served under the plan's `console.stop` (ConsoleState.msg).
+---
+bool success   # a request was in progress and was asked to stop, or SIM was asked again
+string detail  # or why there was nothing to stop

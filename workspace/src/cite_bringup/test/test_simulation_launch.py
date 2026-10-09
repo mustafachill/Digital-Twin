@@ -816,6 +816,10 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
     arguments, _ = module._bridge_topics(plan)
 
     assert module.CLOCK_BRIDGE in arguments
+    # S-02r: the name `--via plant` hears as a simulated side's is the one bridged.
+    from cite_bringup.program.cell import SIMULATED_CLOCK
+
+    assert module.CLOCK_BRIDGE.split("@", 1)[0] == SIMULATED_CLOCK
     for conveyor in plan.conveyors:
         assert (
             f"{conveyor.command_topic}@std_msgs/msg/Float64]gz.msgs.Double" in arguments
@@ -1192,6 +1196,7 @@ def _paired(module: ModuleType, tmp_path: Path, monkeypatch) -> None:
                 "name": "counterpart",
                 "gz_partition": _COUNTERPART_PARTITION,
                 "domain_offset": 1,
+                "gui_config": "package://cite_generated/worlds/counterpart/cell_b_gui.config",
             }
         )
     for manager in document["plan"]["controller_managers"]:
@@ -1242,6 +1247,30 @@ def test_the_counterpart_takes_the_other_partition_and_the_other_domain(
             _environment(context, process).get(GZ_PARTITION_ENV)
             == _counterpart_partition()
         )
+
+
+def test_a_counterparts_window_opens_its_own_gui_config(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """Each side's window opens the config its own side names (ADR-0071 decision 5).
+
+    Only the plant's carries the operator console's panel, so a counterpart
+    handed the plant's file would open a second panel on a domain where no
+    console serves.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _paired(module, tmp_path, monkeypatch)
+    context.launch_configurations["side"] = "counterpart"
+    context.launch_configurations["headless"] = "false"
+    monkeypatch.setenv(DOMAIN_ENV, "43")
+
+    actions = module._bring_up(context)
+    simulator = next(
+        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
+    )
+    command = _command(context, simulator)
+    path = command[command.index("--gui-config") + 1]
+    assert path.endswith("worlds/counterpart/cell_b_gui.config")
 
 
 def test_the_counterpart_started_on_the_plants_domain_refuses(

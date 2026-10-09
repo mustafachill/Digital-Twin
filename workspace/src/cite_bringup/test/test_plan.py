@@ -346,7 +346,6 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
         "plan": {
             "zone": "cell_b",
             "world": "package://cite_generated/worlds/cell_b.sdf",
-            "gui_config": "package://cite_generated/worlds/cell_b_gui.config",
             "scene": "package://cite_generated/description/cell_b_scene.urdf.xacro",
             "static_frames": "package://cite_generated/frames/cell_b_static_tf.yaml",
             "topology": "package://cite_generated/topology/cell_b_flow.yaml",
@@ -355,6 +354,7 @@ def test_a_manager_with_no_controllers_is_rejected(tmp_path: Path) -> None:
                     "name": "plant",
                     "gz_partition": "cite/cell_b/plant",
                     "domain_offset": 0,
+                    "gui_config": "package://cite_generated/worlds/cell_b_gui.config",
                 }
             ],
             "controller_managers": [
@@ -1136,7 +1136,12 @@ def test_two_sides_sharing_one_partition_are_refused(tmp_path: Path) -> None:
     document = _solo_document()
     shared = document["plan"]["sides"][0]["gz_partition"]
     document["plan"]["sides"].append(
-        {"name": "counterpart", "gz_partition": shared, "domain_offset": 1}
+        {
+            "name": "counterpart",
+            "gz_partition": shared,
+            "domain_offset": 1,
+            "gui_config": "package://cite_generated/worlds/counterpart/cell_b_gui.config",
+        }
     )
     with pytest.raises(GazeboPartitionMissingError, match="share the Gazebo partition"):
         load(_written(tmp_path, document))
@@ -1550,6 +1555,7 @@ def _counterpart(offset: int = 1) -> dict:
         "name": "counterpart",
         "gz_partition": "cite/cell_b/counterpart",
         "domain_offset": offset,
+        "gui_config": "package://cite_generated/worlds/counterpart/cell_b_gui.config",
     }
 
 

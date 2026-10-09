@@ -14,6 +14,7 @@ find_package(std_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  msg/ConsoleState.msg
   msg/DeadmanState.msg
   msg/DivergenceMetrics.msg
   msg/ModelVersion.msg
@@ -22,15 +23,20 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/SafetyState.msg
   msg/TwinHeartbeat.msg
   msg/TwinMode.msg
+  srv/ConfirmOperator.srv
   srv/GetModelVersion.srv
   srv/InitializeAsset.srv
   srv/JointsAt.srv
   srv/SetMode.srv
+  srv/StartRobot.srv
+  srv/StopCell.srv
   srv/TrackArrived.srv
   action/Grasp.action
+  action/HomeRobot.action
   action/MoveTo.action
   action/Pick.action
   action/Place.action
+  action/RunProgram.action
   action/Transfer.action
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )

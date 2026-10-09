@@ -6,8 +6,9 @@ upward dependency is an architectural defect and an `ESCALATE`, not a code-revie
 This directory documents **what the main tree builds**: the paired zone `cell_b`, one xArm 5
 on a linear track on each side, the real robot's own program driven through the twin boundary
 by one client — one signal, two arms, the same code. Layers the charter plans but the main tree
-does not build (L4, L6, L7) have no document here; they are described as target architecture in
-the charter (`what-we-are-doing.md` §5 and §8).
+does not build (L4, L6) have no document here; they are described as target architecture in
+the charter (`what-we-are-doing.md` §5 and §8). L7 has a first package, the operator panel
+(ADR-0071), and its document covers only that; the Phase 4 HMI is still target architecture.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -51,6 +52,7 @@ is the one that is wrong.
 | L2 | [Control and HAL](L2-control-and-hal.md) | `ros2_control`, controllers, MoveIt 2, hardware interfaces | `PARTIAL` |
 | L3 | [Capabilities](L3-capabilities.md) | Robot-agnostic skills as actions | `PARTIAL` |
 | L5 | [Twin synchronization](L5-twin-synchronization.md) | Modes, routing to both sides, divergence | `PARTIAL` |
+| L7 | [Presentation](L7-presentation.md) | Operator panel in the Gazebo window (ADR-0071); the Phase 4 web HMI is not built | `PARTIAL` |
 
 `DESIGNED` means the contract the code must satisfy, with nothing built. `PARTIAL` says
 which part is real; read the document's status block, which names it. `BUILT` means tested.

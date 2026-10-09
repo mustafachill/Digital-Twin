@@ -41,6 +41,14 @@ where the plan is — and gains no branch on modes, routing, skills or divergenc
 A change here that passes a mode, a side preference or a skill list has crossed
 that line and needs its own record.
 
+**It starts the operator console the same way, one step later, ONLY WHEN ASKED**
+(ADR-0071, `--console`; `./scripts/sim --pair --console`): `cell_console`, with
+the plant's domain as its own, once the boundary has announced, because every
+request the console serves goes through the boundary. It is handed the zone,
+the plan and the plant's domain, and starts no motion. Stopping the pair stops
+it first, the boundary next and the sides last. `./scripts/program` never asks
+for it: a pair that did not request a console has none to end it.
+
 **That dependency is one argument vector, and it is deliberately not declared in
 `package.xml`.** `cite_twin` build-depends on this package, so an `exec_depend`
 back would be a cycle colcon refuses to order. The program is resolved on the
@@ -90,9 +98,10 @@ from cite_bringup.plan import (
     load,
     Plan,
     PlanError,
+    PLANT_SIDE,
     resolve_domain_id,
 )
-from cite_bringup.readiness import announced_boundary, announced_side
+from cite_bringup.readiness import announced_boundary, announced_console, announced_side
 
 #: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
 #: both sides are stopped and the pair exits non-zero, saying which side never
@@ -166,15 +175,34 @@ BOUNDARY_CEILING_S = 120.0
 #: sides that both refuse to go cost `2 * (STOP_GRACE_S + STOP_KILL_S)` before
 #: the pair reports, which is a stated cost rather than a measured one: nothing
 #: has ever taken it. **The boundary is a third participant and extends it to
-#: `3 * (STOP_GRACE_S + STOP_KILL_S)` in the worst case** (ADR-0057), and that is
+#: `3 * (STOP_GRACE_S + STOP_KILL_S)` in the worst case** (ADR-0057), and the
+#: operator console a fourth to `4 *` (ADR-0071), and that is
 #: recorded here rather than hidden by lowering either number — a teardown
 #: ceiling shortened to keep a worst case tidy truncates the teardown it was
 #: measuring. Stopping them concurrently would divide it and is deliberately not
 #: done here, because ending a pair is the path along which evidence is most
 #: easily lost (ADR-0038) and a sequential stop keeps each participant's teardown
-#: readable in the console.
+#: readable in the console. `teardown_ceiling_s` states that worst case for a
+#: caller that has to wait it out (`./scripts/program`), from these numbers.
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
+
+
+def participants(plan: Plan, console: bool) -> int:
+    """Count the participants a pair of ``plan`` stops: each side, the boundary, any console."""
+    return len(plan.sides) + 1 + (1 if console else 0)
+
+
+def teardown_ceiling_s(count: int) -> float:
+    """How long a caller waits for a pair of ``count`` participants to stop after its SIGINT.
+
+    The supervisor's own worst case - each participant, one after another,
+    given `STOP_GRACE_S + STOP_KILL_S` - and one more `2 * STOP_KILL_S` above
+    it, so that a supervisor still escalating on its own is not cut short. A
+    ceiling on a failure, never a schedule.
+    """
+    return count * (STOP_GRACE_S + STOP_KILL_S) + 2 * STOP_KILL_S
+
 
 #: How often the sweep below asks whether a process group has emptied.
 #:
@@ -190,6 +218,9 @@ _SWEEP_POLL_S = 0.1
 #: of it that read `plant` or `counterpart` would send the reader to a cell that
 #: is up and working.
 BOUNDARY_NAME = "boundary"
+
+#: What the operator console is reported as (ADR-0071), for the same reason.
+CONSOLE_NAME = "console"
 
 #: Where a participant's first SIGINT is delivered: to its leader alone, or to
 #: its whole process group.
@@ -238,6 +269,15 @@ _THE_BOUNDARY_IN_NEITHER_STATE = (
     "reads the plan, opens one context per side and announces only once its own "
     "endpoints are being served; a boundary in neither state reached none of "
     "those and is holding a context on each side's domain while it does not."
+)
+
+#: And when the CONSOLE does not. The boundary had announced when it was
+#: started, so it is not waiting for anything to come up either.
+_THE_CONSOLE_IN_NEITHER_STATE = (
+    "That is the operator console, started once the twin boundary had announced "
+    "- so it is not waiting for a cell or for the boundary. It reads the plan, "
+    "configures and activates itself and announces only once its own endpoints "
+    "are being served; it commands nothing until an operator asks."
 )
 
 #: The exit status of a pair that ended because a side ended.
@@ -300,6 +340,10 @@ class SideSpec:
     #: to the program it started. See those two constants for why the answer is
     #: a property of the command rather than of what the participant is for.
     stop_reach: str = STOP_LEADER
+    #: What the console calls this participant when it starts it after the
+    #: join and when it announces. Empty for a side, which the join reports as
+    #: one of "both sides".
+    title: str = ""
 
 
 def side_specs(
@@ -414,6 +458,47 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
         # `STOP_GROUP`, and note that this is a fact about the first token of
         # `argv` and would change if that token did.
         stop_reach=STOP_GROUP,
+        title="the twin boundary",
+    )
+
+
+def console_spec(plan: Plan, path: Path | str, environ: Mapping[str, str]) -> SideSpec:
+    """Return the fourth participant, when asked for: the operator console (ADR-0071).
+
+    Started once the boundary has announced, because every request it serves
+    goes through the boundary's `/cite/twin/...` names on the plant's domain.
+    The same two facts the boundary is handed - the zone and the plan - and the
+    one environment value a side is handed, its domain: the plant's, resolved
+    through `resolve_domain_id` like a side's, where its node and its requests
+    live. It is nonetheless a CROSS-DOMAIN CLIENT, as `program.home` and
+    `program.belt` are: Start robot and Home call each physical side's
+    `InitializeAsset` (and that side's track stop) on that side's own domain,
+    and Start program commands each simulated side's belt on that side's
+    domain - each from the plan, in a context of its own. Starting it commands
+    nothing; it waits for an operator.
+    """
+    domain = resolve_domain_id(plan, PLANT_SIDE, domain_base(environ))
+    return SideSpec(
+        CONSOLE_NAME,
+        (
+            "ros2",
+            "run",
+            "cite_bringup",
+            # Installed under PROGRAMS, like the boundary's.
+            "cell_console.py",
+            "--zone",
+            plan.zone,
+            "--plan",
+            str(path),
+        ),
+        {DOMAIN_ENV: str(domain)},
+        announcement=announced_console,
+        announces=plan.zone,
+        argument="--zone",
+        silence=_THE_CONSOLE_IN_NEITHER_STATE,
+        # `ros2 run`, as the boundary: only the group signal reaches it.
+        stop_reach=STOP_GROUP,
+        title="the operator console",
     )
 
 
@@ -625,6 +710,7 @@ def supervise(
     specs: Sequence[SideSpec],
     *,
     boundary: SideSpec | None = None,
+    console: SideSpec | None = None,
     environ: Mapping[str, str] | None = None,
     ceiling_s: float = READY_CEILING_S,
     boundary_ceiling_s: float = BOUNDARY_CEILING_S,
@@ -656,6 +742,14 @@ def supervise(
                                           PAIR_ENDED - see :func:`_verdict`
     ==================================== =========================================
 
+    ``console`` (ADR-0071) is started the same way one step later, and only
+    when the caller asked for one (`--console`): once the boundary has
+    announced, on that event, under the boundary's ceiling. Asked for, it is a
+    participant like the others - its exit ends the pair, because a pair whose
+    operator surface died is a cell nobody can stop from where they stand, and
+    ending it stops everything the console started; not asked for, there is no
+    console to end anything. It needs a boundary, and is ignored without one.
+
     ``boundary`` is optional, and a supervisor given none joins two sides and
     stops there. That is not a mode: it is what keeps ADR-0047's membership test
     able to drive this function against two processes that are not ROS at all.
@@ -673,16 +767,23 @@ def supervise(
 
     events: queue.Queue = queue.Queue()
 
-    def start_the_boundary() -> _Side:
-        # The whole command, because what this supervisor is allowed to pass the
-        # boundary is two arguments and a reader should be able to see all of
-        # them in the console rather than take this file's word for it.
-        print(
-            "[pair] starting the twin boundary: " + " ".join(boundary.argv),
-            file=out,
-            flush=True,
-        )
-        return _launch(boundary, environ, events, out)
+    def starter(spec: SideSpec) -> Callable[[], _Side]:
+        def start() -> _Side:
+            # The whole command, because what this supervisor is allowed to
+            # pass the boundary is two arguments and a reader should be able to
+            # see all of them in the console rather than take this file's word
+            # for it.
+            print(
+                f"[pair] starting {spec.title}: " + " ".join(spec.argv),
+                file=out,
+                flush=True,
+            )
+            return _launch(spec, environ, events, out)
+
+        return start
+
+    # Started after the join, each on the announcement of the one before it.
+    followers = [spec for spec in (boundary, console if boundary else None) if spec]
 
     interrupted = False
     # The handlers go in BEFORE any side is started, and the order is the fix
@@ -706,7 +807,7 @@ def supervise(
             events,
             ceiling_s,
             out,
-            start_boundary=None if boundary is None else start_the_boundary,
+            start_next=[starter(spec) for spec in followers],
             boundary_ceiling_s=boundary_ceiling_s,
         )
     # Drained BEFORE anything is stopped, and that ordering is the point. When
@@ -720,7 +821,7 @@ def supervise(
     # started and does not if the join never completed. A boundary that was never
     # started is not a process to stop, and a list built here from the specs
     # rather than from what ran would try to stop one.
-    for participant in _stop_order(participants, boundary):
+    for participant in _stop_order(participants, followers):
         _stop(participant, out)
         if participant.status is None:
             participant.status = participant.process.poll()
@@ -732,7 +833,7 @@ def supervise(
 
 
 def _stop_order(
-    participants: Sequence[_Side], boundary: SideSpec | None
+    participants: Sequence[_Side], followers: Sequence[SideSpec]
 ) -> list[_Side]:
     """Return the participants in the order they are to be stopped: commander first.
 
@@ -758,10 +859,24 @@ def _stop_order(
     Identity against the spec this supervisor was handed, rather than a name or a
     kind: the caller knows which participant it asked for as the boundary, and
     `sorted` is stable, so the sides keep the plan's order between themselves.
+
+    **The console goes before the boundary** (ADR-0071), for the boundary's own
+    reason one level up: it is the client that sends the boundary its goals,
+    and stopped first it cancels what it has in flight while the boundary is
+    still there to carry the cancel. So the participants started after the
+    join are stopped in the reverse of the order they were started in, and the
+    sides after them.
     """
-    if boundary is None:
+    if not followers:
         return list(participants)
-    return sorted(participants, key=lambda started: started.spec is not boundary)
+
+    def rank(started: _Side) -> int:
+        for index, spec in enumerate(followers):
+            if started.spec is spec:
+                return -index
+        return 1
+
+    return sorted(participants, key=rank)
 
 
 def _drain(events: queue.Queue) -> None:
@@ -835,7 +950,7 @@ def _join(
     ceiling_s: float,
     out,
     *,
-    start_boundary: Callable[[], _Side] | None = None,
+    start_next: Sequence[Callable[[], _Side]] = (),
     boundary_ceiling_s: float = BOUNDARY_CEILING_S,
 ) -> tuple[bool, list[_Side]]:
     """Block until the pair is complete and then until it ends.
@@ -852,15 +967,18 @@ def _join(
     ADR-0044 records (ADR-0057's correction of 2026-09-18). After everything has
     announced there is nothing left to time — a pair that is up ends when a
     participant ends or when somebody asks it to, and neither is an interval.
+
+    ``start_next`` is every participant started after the join, in order: the
+    boundary, then the operator console (ADR-0071). Each is started on the
+    announcement of everything before it, under the boundary's ceiling.
     """
     participants = list(sides)
     ceiling = ceiling_s
     deadline = time.monotonic() + ceiling
-    pending_boundary = start_boundary
-    # Distinct from `pending_boundary is None`, which is also true when no
-    # boundary was asked for at all. What the second arrival of "everything is
-    # ready" means depends on which of those two it is.
-    boundary_started = False
+    pending = list(start_next)
+    # The participant started last after the join, None before the join. What
+    # an arrival of "everything is ready" means depends on it.
+    latest: _Side | None = None
     while True:
         joined = all(participant.ready for participant in participants)
         timeout = None if joined else max(0.0, deadline - time.monotonic())
@@ -891,28 +1009,28 @@ def _join(
             side.ready = True
             if not all(p.ready for p in participants):
                 continue
-            if boundary_started:
+            if latest is None:
                 print(
-                    "[pair] the twin boundary announced readiness; the pair is "
-                    "complete",
+                    "[pair] both sides announced readiness; the pair is up",
                     file=out,
                     flush=True,
                 )
-                continue
-            print(
-                "[pair] both sides announced readiness; the pair is up",
-                file=out,
-                flush=True,
-            )
-            if pending_boundary is None:
-                # No boundary was asked for, so this is the whole of the join.
+            else:
+                print(
+                    f"[pair] {latest.spec.title} announced readiness"
+                    + ("" if pending else "; the pair is complete"),
+                    file=out,
+                    flush=True,
+                )
+            if not pending:
+                # Nothing more was asked for, so this is the whole of the join.
                 continue
             # On this event and on nothing else (ADR-0057). This is the one
             # place in this system where "both sides are ready" is a fact rather
             # than a judgement, and the boundary has nothing to connect to
-            # before it.
-            participants.append(pending_boundary())
-            boundary_started = True
+            # before it - nor the console before the boundary (ADR-0071).
+            latest = pending.pop(0)()
+            participants.append(latest)
             ceiling = boundary_ceiling_s
             deadline = time.monotonic() + ceiling
         else:
@@ -1053,6 +1171,11 @@ def main(argv: list[str] | None = None) -> int:
     # ceiling in this file says never to do. A test that needs a shorter one
     # passes `boundary_ceiling_s` to `supervise` directly.
     parser.add_argument("--ceiling", type=float, default=READY_CEILING_S)
+    parser.add_argument(
+        "--console",
+        action="store_true",
+        help="Also start the operator console once the boundary is up (ADR-0071).",
+    )
     args = parser.parse_args(
         _flags(sys.argv[1:] if argv is None else argv, parser)
     )
@@ -1080,7 +1203,19 @@ def main(argv: list[str] | None = None) -> int:
     # time from the zone would be the same lookup written twice, and the two
     # copies disagree the first time one of them is pointed elsewhere - which is
     # exactly what a test does.
-    return supervise(specs, boundary=boundary_spec(plan, path), ceiling_s=args.ceiling)
+    console = None
+    if args.console:
+        try:
+            console = console_spec(plan, path, os.environ)
+        except PlanError as exc:
+            print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
+            return 1
+    return supervise(
+        specs,
+        boundary=boundary_spec(plan, path),
+        console=console,
+        ceiling_s=args.ceiling,
+    )
 
 
 if __name__ == "__main__":

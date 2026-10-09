@@ -73,7 +73,7 @@ from cite_bringup.program.from_plan import program, Target, target
 from cite_bringup.program.steps import (
     _interrupts_ignored,
     execute,
-    EXIT_INTERRUPTED,
+    Interrupted,
     Step,
     StepFailed,
 )
@@ -260,8 +260,23 @@ def initializer_stop(physical) -> tuple[str, float]:
     return service, ceiling_s
 
 
-def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ=os.environ):
-    """Call each physical arm's `InitializeAsset` on its side's domain, or raise StepFailed."""
+def initialize(
+    plan: Plan,
+    sides: list[str],
+    say: Callable[[str], None],
+    environ=os.environ,
+    interrupted: Callable[[], bool] | None = None,
+    stop_deadline: Callable[[], float | None] | None = None,
+):
+    """Call each physical arm's `InitializeAsset` on its side's domain, or raise StepFailed.
+
+    ``interrupted`` is the operator console's stop (ADR-0071), asked while an
+    answer is awaited; True there is handled as Ctrl-C is: the track is stopped
+    and `steps.Interrupted` raised. ``stop_deadline`` is the console's shutdown
+    deadline (monotonic, or None before its shutdown), past which the answer
+    is no longer awaited after an interrupt (R2-02). What an interrupt comes
+    to is said through ``say``, so the console shows it (R2-06).
+    """
     if not sides:
         return
     try:
@@ -281,22 +296,50 @@ def initialize(plan: Plan, sides: list[str], say: Callable[[str], None], environ
                 raise StepFailed(str(error)) from None
             say(f"==> {side}: initializing {manager.asset} ({physical.initialize_service})")
             response = _call_on_domain(
-                physical.initialize_service, resolve_domain_id(plan, side, base), ceiling_s, stop
+                physical.initialize_service,
+                resolve_domain_id(plan, side, base),
+                ceiling_s,
+                stop,
+                interrupted=interrupted,
+                say=say,
+                stop_deadline=stop_deadline,
             )
             if not response.success:
                 raise StepFailed(f"{side}: {manager.asset} not initialized: {response.detail}")
             say(f"  ok  {side}: {response.detail}")
 
 
-def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str, float]):
+def _call_on_domain(
+    service: str,
+    domain: int,
+    ceiling_s: float,
+    stop: tuple[str, float],
+    interrupted: Callable[[], bool] | None = None,
+    say: Callable[[str], None] | None = None,
+    stop_deadline: Callable[[], float | None] | None = None,
+):
     """Call `InitializeAsset` once on ``domain``, in a context of its own, once matched.
 
     The initialization may move the carriage, so once the request is sent, an
     interrupt (Ctrl-C, SIGTERM) or no answer within ``ceiling_s`` is followed
     by the vendor's track stop on that domain - ``stop`` is its name and how
     long to wait for its answer (`initializer_stop`) - before the failure is
-    re-raised (S-01).
+    re-raised (S-01). ``interrupted`` returning True while the answer is
+    awaited is such an interrupt (ADR-0071).
+
+    **An interrupt is not the initializer's end** (ADR-0071, S-02). The
+    initializer goes on with its sequence after the client stops listening,
+    and a later step of it may move the carriage again after the first track
+    stop. So after an interrupt the answer is still awaited, within the same
+    ``ceiling_s`` the call was given, and the track is stopped a second time
+    once it comes (or the ceiling passes); only then is the interrupt
+    re-raised, so nothing reports the stop done while the initializer may still
+    move. Neither stop nor the wait is itself interrupted; the wait ends early
+    only at ``stop_deadline`` - the console's shutdown deadline (R2-02) - and
+    the second stop is still sent then. Each outcome is said through ``say``
+    (standard output when None).
     """
+    say = say_now if say is None else say
     from cite_interfaces.srv import InitializeAsset
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
@@ -319,49 +362,84 @@ def _call_on_domain(service: str, domain: int, ceiling_s: float, stop: tuple[str
                     f"nothing serves {service} on domain {domain} after "
                     f"{MATCH_CEILING_S:.0f} s; is that side up?"
                 )
+            if interrupted is not None and interrupted():
+                # Nothing sent yet, so there is nothing to stop.
+                raise Interrupted(f"stopped from the operator console before {service}")
             executor.spin_once(timeout_sec=0.1)
         future = client.call_async(InitializeAsset.Request())
+        deadline = time.monotonic() + ceiling_s
         try:
-            deadline = time.monotonic() + ceiling_s
             while not future.done():
                 if time.monotonic() > deadline:
                     raise StepFailed(f"{service} did not answer within {ceiling_s:g} s")
+                if interrupted is not None and interrupted():
+                    raise Interrupted(f"stopped from the operator console during {service}")
                 executor.spin_once(timeout_sec=0.1)
-        except BaseException:
+        except KeyboardInterrupt:
             # A second Ctrl-C (the terminal's and the script's) must not
             # abandon the stop half-way, as in `steps.run`.
             with _interrupts_ignored():
-                _stop_track(executor, stopper, stop[1])
+                _stop_track(executor, stopper, stop[1], say)
+                limit = None if stop_deadline is None else stop_deadline()
+                if _await_answer(
+                    executor, future, deadline if limit is None else min(deadline, limit)
+                ):
+                    say(f"{service} answered after the interrupt")
+                elif limit is not None and limit < deadline:
+                    say(
+                        f"{service} did not answer before the console's shutdown deadline; "
+                        "the initializer may still be moving the carriage"
+                    )
+                else:
+                    say(f"{service} did not answer within {ceiling_s:g} s of its call")
+                _stop_track(executor, stopper, stop[1], say)
+            raise
+        except BaseException:
+            with _interrupts_ignored():
+                _stop_track(executor, stopper, stop[1], say)
             raise
         return future.result()
     finally:
         context.try_shutdown()
 
 
-def _stop_track(executor, stopper, ceiling_s: float) -> None:
+def _await_answer(executor, future, deadline: float) -> bool:
+    """Spin until ``future`` is done or ``deadline`` (monotonic) passes; return whether done."""
+    while not future.done():
+        if time.monotonic() > deadline:
+            return False
+        executor.spin_once(timeout_sec=0.1)
+    return True
+
+
+def _stop_track(
+    executor, stopper, ceiling_s: float, say: Callable[[str], None] | None = None
+) -> None:
     """Send the vendor's track stop once matched and wait for its answer, within ``ceiling_s``.
 
-    Reported, never raised: the failure that called for it is what is raised.
+    Reported through ``say`` (standard output when None), never raised: the
+    failure that called for it is what is raised.
     """
     from xarm_msgs.srv import Call
 
+    say = say_now if say is None else say
     deadline = time.monotonic() + ceiling_s
     while not stopper.service_is_ready():
         if time.monotonic() > deadline:
-            say_now(f"could not stop the track: nothing serves {stopper.srv_name}")
+            say(f"could not stop the track: nothing serves {stopper.srv_name}")
             return
         executor.spin_once(timeout_sec=0.05)
     answer = stopper.call_async(Call.Request())
     while not answer.done():
         if time.monotonic() > deadline:
-            say_now(f"{stopper.srv_name} did not answer within {ceiling_s:g} s")
+            say(f"{stopper.srv_name} did not answer within {ceiling_s:g} s")
             return
         executor.spin_once(timeout_sec=0.05)
     result = answer.result()
     if result is None or result.ret != 0:
-        say_now(f"the vendor refused {stopper.srv_name}: {result}")
+        say(f"the vendor refused {stopper.srv_name}: {result}")
     else:
-        say_now(f"interrupted during an initialization: {stopper.srv_name} sent")
+        say(f"interrupted during an initialization: {stopper.srv_name} sent")
 
 
 def say_now(text: str) -> None:
@@ -369,7 +447,8 @@ def say_now(text: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from cite_bringup.program.operator import confirm_operator
+    # Here, not at the top: `cycle` builds on this module.
+    from cite_bringup.program import cycle
     from cite_bringup.program.sides import physical_sides, required_speed_scale
     from cite_bringup.program.steps import install_interrupt_handlers
 
@@ -396,33 +475,23 @@ def main(argv: list[str] | None = None) -> int:
 
     install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-    status = 1
     try:
         ros = RosCell(cell.arm, "twin", track=cell.track, speed=scale)
-        try:
-            if physical:
-                confirm_operator(
-                    ros.twin_mode(),
-                    physical,
-                    scale,
-                    say_now,
-                    input,
-                    lambda: ros.carriage_refusal(homing=True),
-                    prompt=HOME_PROMPT,
-                )
-            bring_to_start(
-                steps, start, ros, lambda: initialize(plan, physical, say_now), say_now
-            )
-            say_now("done: both arms are at the program's start")
-            status = 0
-        except StepFailed as failure:
-            say_now(f"FAILED: {failure}")
-        except KeyboardInterrupt:
-            say_now("interrupted")
-            status = EXIT_INTERRUPTED
-        if physical and not ros.leave_validated():
-            return status or 1
-        return status
+        ended = cycle.home(
+            ros,
+            steps,
+            start,
+            physical=physical,
+            scale=scale,
+            say=say_now,
+            await_operator=input,
+            initialize_physical=lambda: initialize(plan, physical, say_now),
+            prompt=HOME_PROMPT,
+            # One operator surface per pair (N-01): `./scripts/home` is refused
+            # where an operator console serves the pair.
+            console=plan.console.state if plan.console is not None else None,
+        )
+        return ended.status
     finally:
         rclpy.try_shutdown()
 

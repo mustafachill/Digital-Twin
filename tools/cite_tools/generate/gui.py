@@ -6,6 +6,19 @@ never sees it. The file mirrors Harmonic's own default GUI plugin set, so passin
 it removes nothing the window had before; the one value it changes is the
 MinimalScene camera pose, derived here from where L0 puts the zone's assets.
 
+ONE FILE PER SIDE, and only the plant's carries the operator console's panel
+(ADR-0071 decision 5): `cite_console_gui`'s `CellConsole` plugin, given every name
+the console serves as a plugin parameter, from `bringup.console_names` — the same
+function the plan's `console:` block is emitted from, so the panel and the server
+cannot be handed two spellings of one name. The panel is on the plant because the
+console serves on the plant's domain, and that is the domain the plant's window
+runs on. A counterpart's window — an all-simulated pair opens one per side — gets
+the same file without the panel, so that one pair never shows two.
+
+The twin-mode topic the panel also reads is not a parameter: it is
+`cite_interfaces/msg/TwinMode.TOPIC`, a constant in the contract, which the plugin
+reads from the generated message header rather than from a second statement here.
+
 The camera stands on the CUSTOMER side of the line: across it from the arms,
 facing them. The line runs along world X in every zone L0 declares today, so the
 customer side is whichever Y side of the robots the rest of the cell sits on.
@@ -16,7 +29,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from cite_tools.generate import Artifact
+from cite_tools.generate import Artifact, gui_config_path
+from cite_tools.generate.bringup import console_names
+from cite_tools.model import ids
 from cite_tools.model.resolve import ResolvedCell
 from cite_tools.render import environment
 
@@ -89,6 +104,25 @@ def gui_camera_pose(cell: ResolvedCell) -> CameraPose:
     )
 
 
+def panel_names(cell: ResolvedCell, side: str) -> tuple[tuple[str, str], ...]:
+    """The console names ``side``'s window gives its panel; empty for no panel.
+
+    The generator's decision, made here once, so that the template only asks
+    whether there is anything to emit: the plant of a paired zone, and no other
+    window.
+    """
+    if cell.is_paired and side == ids.PLANT_SIDE:
+        return console_names(cell)
+    return ()
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
-    text = environment().get_template("world/gui.config.j2").render(camera=gui_camera_pose(cell))
-    return [Artifact(f"worlds/{cell.zone}_gui.config", text)]
+    template = environment().get_template("world/gui.config.j2")
+    camera = gui_camera_pose(cell)
+    return [
+        Artifact(
+            gui_config_path(cell.zone, side.name),
+            template.render(camera=camera, console=panel_names(cell, side.name)),
+        )
+        for side in cell.sides
+    ]

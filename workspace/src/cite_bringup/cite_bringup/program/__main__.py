@@ -37,6 +37,17 @@ opens the gripper before it closes it.
 Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in
 flight, holds the track where it stands and exits non-zero.
 
+VIA THE PLANT (S-02). `--via plant` speaks to whatever serves the skill names
+on this process's own domain, with no twin, no operator gate and, by default,
+the program's own speed. It is therefore refused unless this process is on the
+PLANT's domain (`plan.require_domain`, the check the plant's own launch makes):
+run on the counterpart's domain it would have driven the physical arm
+directly. A shell that exported the counterpart's domain passes that check, so
+once the context exists the graph is asked too: a simulated side's `/clock`
+must be heard there before any goal or mode (`RosCell.simulated_side_refusal`).
+Like the twin route, it is also refused where an operator console
+serves the pair (one operator surface per pair, ADR-0071).
+
 A PHYSICAL SIDE, through the twin (ADR-0070 item 7). Before each run the twin's
 mode is read and must be SIM, where nothing crosses to the physical side; only
 then is the operator asked, at this terminal, to place the part and clear the
@@ -48,19 +59,15 @@ caller asks a person into the cell beside an arm the twin may still command.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from cite_bringup.plan import default_plan_path, load
+from cite_bringup.plan import default_plan_path, load, PlanError, PLANT_SIDE, require_domain
+from cite_bringup.program.cycle import Homing, run_program
 from cite_bringup.program.from_plan import program, target
-from cite_bringup.program.home import bring_to_start, home_steps, initialize, start_pose
-from cite_bringup.program.operator import confirm_operator
+from cite_bringup.program.home import home_steps, initialize, start_pose
 from cite_bringup.program.sides import physical_sides, required_speed_scale
-from cite_bringup.program.steps import (
-    EXIT_INTERRUPTED,
-    install_interrupt_handlers,
-    run,
-    StepFailed,
-)
+from cite_bringup.program.steps import install_interrupt_handlers
 
 
 def say_now(text: str) -> None:
@@ -110,6 +117,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{number:2d}. {step}")
         return 0
 
+    if args.via == "plant":
+        # Before any ROS context exists (S-02): the plant's own servers, and
+        # never the counterpart's - which may be the physical arm.
+        try:
+            require_domain(plan, PLANT_SIDE, os.environ)
+        except PlanError as error:
+            print(f"--via plant refused: {error}", file=sys.stderr, flush=True)
+            return 2
+
     # Imported here so that --dry-run needs no ROS graph at all.
     from cite_bringup.program.cell import RosCell
     import rclpy
@@ -123,60 +139,42 @@ def main(argv: list[str] | None = None) -> int:
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
         ros = RosCell(cell.arm, args.via, track=cell.track, speed=scale)
-        entering = False
-        try:
-            if physical:
-                # Read, not assumed: the operator is asked in only while the
-                # twin forwards nothing to the physical side (SA-S-05).
-                # Before the first cycle a carriage apart is no refusal here:
-                # homing brings it to the start, and the start is measured.
-                confirm_operator(
-                    ros.twin_mode(),
-                    physical,
-                    scale,
-                    say_now,
-                    input,
-                    lambda: ros.carriage_refusal(homing=bool(homing)),
-                )
-            ros.refuse_if_holding()
-            entering = args.via == "twin"
-            if homing:
-                bring_to_start(
-                    homing,
-                    start,
-                    ros,
-                    # What the operator does in Studio before running the program.
-                    lambda: initialize(plan, physical, say_now),
-                    say_now,
-                    via_twin=entering,
-                )
-            elif entering:
-                ros.enter_validated()
-        except (StepFailed, KeyboardInterrupt) as failure:
-            interrupted = isinstance(failure, KeyboardInterrupt)
-            print(
-                "interrupted before the first step"
-                if interrupted
-                else f"FAILED before the first step: {failure}",
-                flush=True,
-            )
-            if physical and entering:
-                # VALIDATED may have been entered: the operator's next step is
-                # in the cell, so SIM is asked for whatever happened.
-                ros.leave_validated()
-            return EXIT_INTERRUPTED if interrupted else 1
+        if args.via == "plant":
+            # The environment's domain is only what the shell exported (S-02r):
+            # the graph must show a simulated side before anything is asked.
+            refusal = ros.simulated_side_refusal()
+            if refusal is not None:
+                print(f"--via plant refused: {refusal}", file=sys.stderr, flush=True)
+                return 2
         riding = f" on {cell.track.asset}" if cell.track is not None else ""
-        say_now(
-            f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
-            f"via {args.via} at {scale:g} of its speed"
+        # The order - SIM read, the operator asked, custody, VALIDATED (homing
+        # first before the first cycle), the program, SIM again - is the one
+        # sequencer's, shared with `./scripts/home` and the operator console.
+        ended = run_program(
+            ros,
+            steps,
+            physical=physical,
+            scale=scale,
+            cycles=args.cycles,
+            say=say_now,
+            await_operator=input,
+            via_twin=args.via == "twin",
+            homing=(
+                # What the operator does in Studio before running the program.
+                Homing(homing, start, lambda: initialize(plan, physical, say_now))
+                if homing
+                else None
+            ),
+            first_cycle=args.first_cycle,
+            # One operator surface per pair (N-01, R-05): by either route, a
+            # pair an operator console serves is refused before anything.
+            console=plan.console.state if plan.console is not None else None,
+            banner=(
+                f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
+                f"via {args.via} at {scale:g} of its speed"
+            ),
         )
-        status = run(steps, ros, args.cycles, say_now, first_cycle=args.first_cycle)
-        if physical and not ros.leave_validated():
-            # Operator safety at the next prompt: a person places the part by
-            # hand, so the twin must forward nothing to the physical side then;
-            # unconfirmed, the run fails and no caller asks anyone in (SA-S-05).
-            return status or 1
-        return status
+        return ended.status
     finally:
         rclpy.try_shutdown()
 

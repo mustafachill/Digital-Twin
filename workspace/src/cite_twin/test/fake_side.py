@@ -94,8 +94,13 @@ class FakeSide(Node):
         offset: float,
         belts: list[str],
         track: tuple[str, str] | None = None,
+        joints: tuple[str, ...] = JOINTS,
     ) -> None:
         super().__init__("fake_side")
+        #: The arm joints this side reports. The default is the boundary rigs';
+        #: the console's rig (ADR-0071) names the plan's own, so that the start
+        #: the program measures is heard rather than waited for.
+        self._joints = tuple(joints)
         self._side = side
         self._offset = offset
         self._group = ReentrantCallbackGroup()
@@ -111,7 +116,7 @@ class FakeSide(Node):
         self._states = [
             [
                 self.create_publisher(JointState, f"/cite/{zone}/{asset}/joint_states", STATE)
-                for _joint in JOINTS + (QUIET_JOINT,)
+                for _joint in self._joints + (QUIET_JOINT,)
             ]
             for asset in assets
         ]
@@ -234,7 +239,7 @@ class FakeSide(Node):
         stamp = self.get_clock().now().to_msg()
         quiet_now = False
         for publishers in self._states:
-            for joint, publisher in zip(JOINTS + (QUIET_JOINT,), publishers):
+            for joint, publisher in zip(self._joints + (QUIET_JOINT,), publishers):
                 if joint == QUIET_JOINT:
                     # Counted only once a subscriber matched, so the boundary
                     # has heard it before it goes quiet.
@@ -278,6 +283,9 @@ def main() -> int:
     parser.add_argument("--belts", default="", help="Belt command topics to listen on.")
     parser.add_argument("--track-topic", default="", help="A track command topic to listen on.")
     parser.add_argument("--track-joint", default="", help="The track joint to publish.")
+    parser.add_argument(
+        "--joints", default=",".join(JOINTS), help="The arm joints to publish."
+    )
     arguments, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -288,6 +296,7 @@ def main() -> int:
         arguments.offset,
         [topic for topic in arguments.belts.split(",") if topic],
         (arguments.track_topic, arguments.track_joint) if arguments.track_topic else None,
+        tuple(joint for joint in arguments.joints.split(",") if joint),
     )
     executor = MultiThreadedExecutor()
     executor.add_node(node)

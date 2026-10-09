@@ -1955,6 +1955,64 @@ moving yet; the initializer then homes and/or moves the carriage to the program'
 L0 initialize speed, bounded by `initialize_deadline_s`. Closing it means an abort the client
 can call (or `InitializeAsset` as an action with cancel).
 
+### #100 — One operator surface per pair is advisory, not enforced by the twin (2026-10-08)
+
+**What is in place.** ADR-0071 lets a console and a terminal client refuse each other:
+- the terminal clients refuse when they see the console's latched `ConsoleState` or its
+  publisher;
+- the console refuses while a terminal program node is on the graph.
+
+**Why that is only advisory.** Both checks rest on DDS discovery, and DDS cannot prove an
+absence. A client that starts before the other has been discovered can miss it, for example:
+- the console is just starting, or was just re-activated;
+- the console's endpoint is discovered after the twin's.
+
+In that window each surface can invite a person into the cell while the other enters VALIDATED.
+`SetMode` to the current mode is accepted by the boundary.
+
+**What closing it means.** A single owner, enforced by `cite_twin`: the console or client
+registers, and `SetMode(VALIDATED)` from anyone else is refused while it is held. Until then, the
+operating rule is one operator surface per pair.
+
+### #101 — The console's real-cell path has no headless runtime test (2026-10-08)
+
+**What the tests cover.** The launch test and the fake-side rig hold the console's refusals, Start
+robot, a Home cancelled mid-motion, and the hold on each side.
+
+**What they do not reach:**
+- a Home that completes;
+- a completed `RunProgram`;
+- a Stop in the middle of a cycle.
+
+The fake sides never arrive and serve no `Grasp`, and each cycle spawns its part through Gazebo.
+
+**Why the real pair cannot fill the gap in CI.** The repository has no way to start an
+all-simulated Gazebo pair: `pair.main` reads only the installed plan, whose counterpart is
+physical. So the first complete cycle through the panel is the supervised physical run.
+
+**What closing it means.** One of these:
+- a test model or plan override for an all-simulated pair, with a `console_cycle` scenario;
+- fake sides that arrive and grasp.
+
+**Related:** `worlds/counterpart/<zone>_gui.config` is generated, but no window opens it with the
+shipped model.
+
+### #102 — The `--via plant` simulated-side check rests on hearing `/clock` (2026-10-08)
+
+**What the check does.** `RosCell.simulated_side_refusal` refuses a `--via plant` run unless it
+hears `/clock` on its domain. No process on the physical side publishes `/clock`, so a shell that
+exports the counterpart's `ROS_DOMAIN_ID` is refused before any goal.
+
+**How it can be passed anyway.** Running a `/clock` source on that same domain passes the check,
+for example `ros2 topic pub /clock`, `ros2 bag play --clock`, or a Gazebo started from the same
+mis-exported shell. The program then runs straight against the physical side's skill server, with
+no twin and no operator gate. This needs two independent mistakes on the hardware host. Like
+#100, the check rests on DDS discovery.
+
+**What closing it means.** Also refuse when the physical side is visibly present, for example
+when `DeadmanState` or any `cite_hardware` node has a publisher on the domain. A stray `/clock`
+cannot hide that evidence.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:

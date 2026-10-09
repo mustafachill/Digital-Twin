@@ -1243,6 +1243,30 @@ source_overlay() {
 }
 
 # -----------------------------------------------------------------------------
+# gui_plugin_dir <plugin> <search path> — the first directory on a
+# colon-separated gz-gui plugin search path (GZ_GUI_PLUGIN_PATH) that holds
+# `lib<plugin>.so`, printed; fails when none does (A-03).
+#
+# gz-gui resolves `<plugin filename="X">` to `libX.so` on that path, and a plugin
+# it cannot find is logged and skipped while the window opens anyway: a console
+# window without its panel, where the operator looks for a Stop button that is
+# not there. `./scripts/sim --pair --console` asks this before bring-up and
+# refuses instead. The path is an argument so `scripts/_selftest.sh` can drive
+# it with synthetic directories.
+# -----------------------------------------------------------------------------
+gui_plugin_dir() {
+    local plugin="$1" search="$2" dir
+    local IFS=':'
+    for dir in $search; do
+        if [ -n "$dir" ] && [ -f "${dir}/lib${plugin}.so" ]; then
+            printf '%s\n' "$dir"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# -----------------------------------------------------------------------------
 # The hardware opt-in, CITE_ALLOW_HARDWARE (ADR-0054; ADR-0070 item 2 as amended
 # by the owner on 2026-10-06). Everything that hands it on, checks it or reads it
 # asks `hardware_opt_in`; nothing else spells the default.

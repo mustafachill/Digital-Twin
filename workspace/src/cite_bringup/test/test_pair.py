@@ -54,8 +54,10 @@ from cite_bringup.plan import (
 )
 from cite_bringup.readiness import (
     announced_boundary,
+    announced_console,
     announced_side,
     boundary_announcement,
+    console_announcement,
     ready_announcement,
     READY_TOKEN,
 )
@@ -670,6 +672,7 @@ def _paired_plan(tmp_path: Path) -> Plan:
                 "name": "counterpart",
                 "gz_partition": "cite/cell_b/counterpart",
                 "domain_offset": 1,
+                "gui_config": "package://cite_generated/worlds/counterpart/cell_b_gui.config",
             }
         )
     for manager in document["plan"]["controller_managers"]:
@@ -1345,3 +1348,203 @@ def test_a_side_hears_sigint_when_the_supervisor_inherited_it_ignored(
         signal.signal(signal.SIGINT, previous)
     assert text.count("sigint-ignored=False") == 2, text
     assert "sigint-ignored=True" not in text, text
+
+
+# --- The operator console (ADR-0071) -------------------------------------------
+#
+# A fourth participant, started the boundary's way one step later. As above,
+# every console here is a `python3` process wearing the REAL spec.
+
+
+def _fake_console(tmp_path: Path, script: str) -> pair.SideSpec:
+    """Return the REAL console spec with a `python3` process for its command."""
+    real = pair.console_spec(
+        _paired_plan(tmp_path), tmp_path / "plan.yaml", {DOMAIN_BASE_ENV: "41"}
+    )
+    return replace(real, argv=(sys.executable, "-c", script))
+
+
+def _console_announces(tmp_path: Path, *, then: str = "") -> pair.SideSpec:
+    announcement = console_announcement(ZONE)
+    return _fake_console(
+        tmp_path,
+        "import os, time\n"
+        "print('the console process is running', flush=True)\n"
+        f"print({announcement!r}, flush=True)\n" + then,
+    )
+
+
+def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
+    tmp_path: Path,
+) -> None:
+    """The boundary's two facts, and the one a side is given: its domain, the plant's."""
+    plan = _paired_plan(tmp_path)
+    path = tmp_path / "plan.yaml"
+    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"})
+    assert spec.argv == (
+        "ros2",
+        "run",
+        "cite_bringup",
+        "cell_console.py",
+        "--zone",
+        plan.zone,
+        "--plan",
+        str(path),
+    )
+    assert spec.env == {DOMAIN_ENV: str(resolve_domain_id(plan, PLANT_SIDE, 41))}
+    # `ros2 run`, so only the group signal reaches the program it starts.
+    assert spec.stop_reach == pair.STOP_GROUP
+    assert spec.announces == plan.zone
+
+
+def test_the_console_is_started_once_the_boundary_announced_and_stopped_first(
+    tmp_path: Path,
+) -> None:
+    """After the boundary, on its announcement; before it, when the pair ends.
+
+    The console is the client that sends the boundary its goals, so it is
+    started only once there is a boundary to send them to, and stopped while
+    the boundary is still there to carry its cancel.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the operator console announced", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        _joined_then_ended(tmp_path, release),
+        boundary=_boundary_announces(tmp_path, then="time.sleep(600)\n"),
+        console=_console_announces(tmp_path, then="time.sleep(600)\n"),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+        log=log,
+        if_it_hangs=(
+            "The sides are held open until the supervisor prints that the console "
+            "announced, so this is a console never started or never joined on."
+        ),
+    )
+    assert text.index("the twin boundary announced readiness") < text.index(
+        "starting the operator console"
+    ), text
+    assert text.index("starting the operator console") < text.index(
+        "[console] the console process is running"
+    )
+    assert "the operator console announced readiness; the pair is complete" in text
+    # The boundary's announcement no longer completes the pair: the console does.
+    assert "the twin boundary announced readiness; the pair is complete" not in text
+    assert text.index("stopping console") < text.index("stopping boundary")
+    assert text.index("stopping boundary") < text.index("stopping plant")
+    reported = [line.split(":")[0] for line in text.splitlines() if ": ready=" in line]
+    assert reported == [
+        "[pair] plant",
+        "[pair] counterpart",
+        "[pair] boundary",
+        "[pair] console",
+    ]
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_console_that_never_announces_fails_the_pair_naming_the_console(
+    tmp_path: Path,
+) -> None:
+    """Under the boundary's ceiling, and said as the console's silence."""
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        [
+            _announces("plant", then="time.sleep(600)\n"),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        boundary=_boundary_announces(tmp_path, then="time.sleep(600)\n"),
+        console=_fake_console(tmp_path, "import time\ntime.sleep(600)\n"),
+        ceiling_s=CEILING_S,
+        boundary_ceiling_s=BOUNDARY_S,
+    )
+    assert code == 1
+    assert "console never announced readiness and never exited" in text
+    assert f"within {BOUNDARY_S:g} s" in text
+    assert "operator console" in text
+    assert "boundary: ready=True" in text
+    assert "stopping boundary" in text and "stopping plant" in text
+
+
+def test_the_console_token_is_not_the_boundarys_or_a_sides() -> None:
+    console_line = console_announcement(ZONE)
+    assert announced_console(console_line) == ZONE
+    assert announced_boundary(console_line) is None
+    assert announced_side(console_line) is None
+    assert announced_console(boundary_announcement(ZONE)) is None
+    assert announced_console(ready_announcement("plant", ZONE)) is None
+
+
+# --- ADR-0071 remediation: the console only on request, and the teardown sums --
+
+
+def _main_against(tmp_path: Path, monkeypatch, argv: list[str]) -> dict:
+    """Run `pair.main` up to `supervise`, which is captured rather than run."""
+    plan = _paired_plan(tmp_path)
+    path = tmp_path / "plan.yaml"
+    assert load(path).zone == plan.zone
+    monkeypatch.setattr(pair, "default_plan_path", lambda zone: path)
+    monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
+    captured: dict = {}
+
+    def supervise(specs, **kwargs):
+        captured.update(kwargs, specs=specs)
+        return 0
+
+    monkeypatch.setattr(pair, "supervise", supervise)
+    assert pair.main(argv) == 0
+    return captured
+
+
+def test_a_pair_starts_no_console_unless_asked(tmp_path: Path, monkeypatch) -> None:
+    """D2: `./scripts/program` asks for no console, so its pair has none to end it."""
+    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE])
+    assert captured["console"] is None
+    assert captured["boundary"] is not None
+
+
+def test_a_pair_asked_for_a_console_starts_one(tmp_path: Path, monkeypatch) -> None:
+    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE, "--console"])
+    assert captured["console"].name == pair.CONSOLE_NAME
+    assert "cell_console.py" in captured["console"].argv
+
+
+def test_scripts_sim_passes_console_only_with_pair_and_program_never_asks() -> None:
+    root = Path(__file__).resolve().parents[4]
+    sim = (root / "scripts" / "sim").read_text()
+    assert "PAIR_ARGS=(--console" in sim
+    assert "--console needs --pair" in sim
+    program = (root / "scripts" / "program").read_text()
+    assert "--console" not in program
+
+
+def test_the_teardown_ceiling_is_the_supervisors_own_worst_case_and_more(
+    tmp_path: Path,
+) -> None:
+    """D8: `./scripts/program` derives its ceiling here rather than restating 420."""
+    plan = _paired_plan(tmp_path)
+    assert pair.participants(plan, console=False) == 3
+    assert pair.participants(plan, console=True) == 4
+    worst = 3 * (pair.STOP_GRACE_S + pair.STOP_KILL_S)
+    assert pair.teardown_ceiling_s(3) > worst
+    root = Path(__file__).resolve().parents[4]
+    program = (root / "scripts" / "program").read_text()
+    assert "teardown_ceiling_s(participants(" in program
+    assert "PAIR_STOP_CEILING_S=4" not in program
+
+
+def test_the_consoles_shutdown_ends_before_the_supervisor_escalates() -> None:
+    """D8: the console stops what it started before the pair's SIGINT grace runs out."""
+    from cite_bringup.program import console
+
+    assert console.SHUTDOWN_WORST_S < pair.STOP_GRACE_S
+    assert console.SHUTDOWN_WORST_S == console.SHUTDOWN_CEILING_S + 2 * (
+        console.SHUTDOWN_BELT_MATCH_S + console.ACK_CEILING_S
+    )
+    # R2-02: what the request in flight can still spend fits in that ceiling:
+    # its uncut waits before the cut, and the shipped plan's track stops in
+    # the tail after it.
+    assert console._UNCUT_S <= console.SHUTDOWN_CEILING_S - console.STOP_TAIL_S
+    plan = load(default_plan_path("cell_b"))
+    from cite_bringup.program.sides import physical_sides
+
+    console._require_track_stops_within_the_tail(plan, physical_sides(plan))

@@ -28,6 +28,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
+import time
 
 from cite_bringup import gz
 from cite_bringup.plan import (
@@ -84,6 +86,7 @@ def test_a_reordered_plan_still_yields_the_plants_partition(tmp_path: Path) -> N
         "name": "counterpart",
         "gz_partition": f"cite/{ZONE}/counterpart",
         "domain_offset": 1,
+        "gui_config": f"package://cite_generated/worlds/counterpart/{ZONE}_gui.config",
     }
     # The counterpart first, which is the ordering the generator does not emit
     # today and that no rule forbids a future one from emitting.
@@ -258,3 +261,162 @@ def test_the_module_does_not_read_the_partition_from_the_shell() -> None:
     assert f"environ[{GZ_PARTITION_ENV}]" not in source
     # The module merges os.environ; it never reads the partition out of it.
     assert os.environ is not None
+
+
+def test_a_command_run_with_a_stop_is_killed_when_the_stop_comes() -> None:
+    """ADR-0071: the console's stop reaches a spawn in flight rather than waiting it out."""
+    asked: list[int] = []
+
+    def interrupted() -> bool:
+        asked.append(1)
+        return len(asked) > 2
+
+    started = time.monotonic()
+    with pytest.raises(gz.CommandInterrupted):
+        gz.run(["sleep", "30"], zone=ZONE, timeout=60, interrupted=interrupted)
+    assert time.monotonic() - started < 10.0
+
+
+def test_a_command_run_with_a_stop_answers_as_without_one() -> None:
+    result = gz.run(
+        ["sh", "-c", "echo out; echo err >&2; exit 3"],
+        zone=ZONE,
+        timeout=30,
+        interrupted=lambda: False,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (3, "out\n", "err\n")
+
+
+def test_a_command_run_with_a_stop_still_has_its_ceiling() -> None:
+    with pytest.raises(subprocess.TimeoutExpired):
+        gz.run(["sleep", "30"], zone=ZONE, timeout=0.3, interrupted=lambda: False)
+
+
+#: A command that forks a child holding its output pipes, as `ros2 run` forks
+#: the executable it wraps; the child's pid is printed first.
+_FORKING = ["bash", "-c", "sleep 30 & echo $!; wait"]
+
+
+def _gone(pid: int) -> bool:
+    """Whether ``pid`` no longer runs: absent, or a zombie waiting for its reaper."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (FileNotFoundError, ProcessLookupError):
+        return True
+    return state == "Z"
+
+
+def _until_gone(pid: int, what: str) -> None:
+    """Wait, within a bound, for ``pid`` to be gone or a zombie; fail otherwise."""
+    deadline = time.monotonic() + 5.0
+    while not _gone(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert _gone(pid), what
+
+
+def test_a_stop_kills_a_forked_child_holding_the_pipes(tmp_path: Path) -> None:
+    """R2-01: a stop reaches the wrapper's child too, and never waits on its pipes.
+
+    The child's pid is written to a file rather than read off the output the
+    stop discards, and the stop comes only once it is there (R-02): the child
+    itself is then watched until it is gone, rather than its group asked once
+    while the kernel may still be tearing the group down.
+    """
+    pid_file = tmp_path / "child.pid"
+    forking = ["bash", "-c", f"sleep 30 & echo $! > {pid_file}; wait"]
+
+    def interrupted() -> bool:
+        return pid_file.exists() and pid_file.read_text().strip() != ""
+
+    started = time.monotonic()
+    with pytest.raises(gz.CommandInterrupted):
+        gz.run(forking, zone=ZONE, timeout=60, interrupted=interrupted)
+    assert time.monotonic() - started < 10.0
+    _until_gone(int(pid_file.read_text()), "the forked child outlived the stop")
+
+
+def test_a_command_dies_with_the_process_that_started_it(tmp_path: Path) -> None:
+    """R-01: its own session takes it out of the caller's group; its starter's end still kills it.
+
+    A starter killed with SIGKILL runs no cleanup at all, as a console the
+    supervisor had to kill: the command it started is killed by the kernel.
+    """
+    pid_file = tmp_path / "command.pid"
+    starter = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from cite_bringup import gz; "
+            "gz.run(['bash', '-c', 'echo $$ > ' + sys.argv[1] + '; exec sleep 30'], "
+            "zone=sys.argv[2], timeout=60, interrupted=lambda: False)",
+            str(pid_file),
+            ZONE,
+        ]
+    )
+    try:
+        deadline = time.monotonic() + 30.0
+        while not (pid_file.exists() and pid_file.read_text().strip()):
+            assert starter.poll() is None, "the starter ended before its command began"
+            assert time.monotonic() < deadline, "the command never began"
+            time.sleep(0.05)
+        command = int(pid_file.read_text())
+        # In a session of its own, so the starter's group does not hold it.
+        assert os.getsid(command) == command
+        starter.kill()
+        starter.wait(timeout=10)
+        _until_gone(command, "the command outlived the process that started it")
+    finally:
+        if starter.poll() is None:
+            starter.kill()
+            starter.wait(timeout=10)
+
+
+def test_the_death_signal_is_set_by_a_prefix_and_no_python_runs_in_the_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-02: `setpriv` sets it before the command; `Popen` is handed no `preexec_fn`."""
+    seen: dict = {}
+
+    class Recorded(Exception):
+        pass
+
+    def popen(args, **kwargs):
+        seen.update(kwargs, args=args)
+        raise Recorded
+
+    monkeypatch.setattr(gz.subprocess, "Popen", popen)
+    with pytest.raises(Recorded):
+        gz.run(["gz", "topic", "-l"], zone=ZONE, timeout=1, interrupted=lambda: False)
+    assert "preexec_fn" not in seen and seen["start_new_session"] is True
+    prefix = gz._die_with_the_caller(os.getpid())
+    assert seen["args"] == [*prefix, "gz", "topic", "-l"]
+    assert prefix[:4] == ["setpriv", "--pdeathsig", "KILL", "--"]
+
+
+def test_a_command_whose_starter_is_already_gone_never_runs() -> None:
+    """R-01's race, kept by the prefix: a parent that is not the starter exits at once."""
+    marker = "the command ran"
+    own = subprocess.run(
+        [*gz._die_with_the_caller(os.getpid()), "echo", marker],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert own.returncode == 0 and own.stdout.strip() == marker
+    # No starter can have pid 0, so this child's parent is never it.
+    gone = subprocess.run(
+        [*gz._die_with_the_caller(0), "echo", marker],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert gone.returncode == 1 and marker not in gone.stdout
+
+
+def test_the_ceiling_kills_a_forked_child_holding_the_pipes() -> None:
+    """R2-01: the deadline path kills the group too, and returns what was printed."""
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        gz.run(_FORKING, zone=ZONE, timeout=0.5, interrupted=lambda: False)
+    assert time.monotonic() - started < 10.0
+    child = int(raised.value.output.split()[0])
+    deadline = time.monotonic() + 5.0
+    while not _gone(child) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert _gone(child), "the forked child outlived the ceiling"

@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cite_tools.generate import Artifact, arm_description_path, controllers_path
+from cite_tools.generate import (
+    Artifact,
+    arm_description_path,
+    controllers_path,
+    gui_config_path,
+)
 from cite_tools.generate.adapters import (
     PhysicalSideView,
     controller_action,
@@ -550,6 +555,26 @@ def _workpiece_models(cell: ResolvedCell) -> tuple[_WorkpieceModelView, ...]:
     return tuple(views)
 
 
+def console_names(cell: ResolvedCell) -> tuple[tuple[str, str], ...]:
+    """Every name the zone's operator console serves, by its key (ADR-0071).
+
+    Formed here, by `ids.zone_scope`, and nowhere else: the console
+    (`cite_bringup.program.console`) reads them off the plan, and its panel off
+    the plant's GUI configuration, which `generate.gui` emits from this same
+    function. Only a paired zone runs a console, because every request it serves
+    goes through the twin boundary.
+    """
+    leaves = (
+        ("state", ids.CONSOLE_STATE),
+        ("start_robot", ids.CONSOLE_START_ROBOT),
+        ("confirm_operator", ids.CONSOLE_CONFIRM_OPERATOR),
+        ("stop", ids.CONSOLE_STOP),
+        ("home", ids.CONSOLE_HOME),
+        ("run_program", ids.CONSOLE_RUN_PROGRAM),
+    )
+    return tuple((key, ids.zone_scope(cell.zone, ids.CONSOLE_SCOPE, leaf)) for key, leaf in leaves)
+
+
 def generate(cell: ResolvedCell) -> list[Artifact]:
     managers = tuple(
         _ManagerView(
@@ -700,6 +725,8 @@ def generate(cell: ResolvedCell) -> list[Artifact]:
             programs=_programs(cell),
             workpiece_models=_workpiece_models(cell),
             twin=cell.twin if cell.is_paired else None,
+            console=console_names(cell) if cell.is_paired else (),
+            gui_configs={side.name: gui_config_path(cell.zone, side.name) for side in cell.sides},
             package_uri=_package_uri,
         )
     )

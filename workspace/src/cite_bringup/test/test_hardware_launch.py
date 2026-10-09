@@ -432,6 +432,24 @@ def test_every_node_runs_on_the_wall_clock(module, context) -> None:
                 assert parameters.get("use_sim_time", False) is False, _executable(node)
 
 
+def test_nothing_on_a_physical_side_publishes_a_simulated_clock(module, context) -> None:
+    """S-02r: `--via plant` takes a simulated clock heard as a simulated side's, so none is here.
+
+    The physical side starts no Gazebo and no bridge, the only things that put
+    `SIMULATED_CLOCK` on a side's domain (`simulation.launch.py`).
+    """
+    from cite_bringup.program.cell import SIMULATED_CLOCK
+
+    for action in _everything(_structure(module), context):
+        package = getattr(action, "node_package", None)
+        assert package not in ("ros_gz_bridge", "ros_gz_sim"), package
+        if isinstance(action, Node):
+            continue
+        if isinstance(action, ExecuteProcess):
+            command = " ".join(perform_substitutions(context, list(part)) for part in action.cmd)
+            assert SIMULATED_CLOCK not in command and "gz sim" not in command, command
+
+
 def test_the_physical_sides_skill_server_executes_its_outcomes_unjudged(module, context) -> None:
     """Owner decisions 2026-10-06 (ADR-0070): physical outcomes are executed, not judged.
 

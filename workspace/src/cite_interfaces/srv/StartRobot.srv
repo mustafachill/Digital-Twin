@@ -1,0 +1,16 @@
+# Start robot: the first button of the operator console (ADR-0071).
+#
+# Enables the robot. On a pair with a physical side the console first reads the
+# twin's mode as SIM and asks the operator to clear the cell (ConfirmOperator,
+# with ConsoleState.prompt), because the initializer may home the physical track
+# and bring the carriage to the program's start (InitializeAsset.srv); only then
+# does it initialize every physical side's arm (`InitializeAsset`, on that
+# side's own domain). On an all-simulated pair nothing is asked and nothing is
+# initialized. Then it reads the plant arm's custody and refuses an arm that
+# says it holds a part. Commands no arm motion of its own. Until it succeeds the
+# console refuses Home and Start program. Refused while another request runs.
+#
+# Served under the plan's `console.start_robot` (ConsoleState.msg).
+---
+bool success   # the arm is started; the console is READY
+string detail  # what was done, or why it was refused or failed

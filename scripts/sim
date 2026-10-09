@@ -4,6 +4,8 @@
 #   ./scripts/sim                    GUI (requires a display)
 #   ./scripts/sim --headless         no GUI — the form used by CI and by the tester agent
 #   ./scripts/sim --pair             both sides of a twin pair, under the pair supervisor
+#   ./scripts/sim --pair --console   the same, and the operator console once the
+#                                    twin boundary is up (ADR-0071)
 #   ./scripts/sim --zone cell_b      name the zone rather than letting the model choose
 #
 # A pair takes --headless like a single side does, and without it opens one
@@ -21,6 +23,9 @@
 # --pair requires the zone to declare `twin: {sides: pair}` in the L0 model; on an
 # untwinned zone it refuses rather than inventing a second side. The two sides run
 # the same launch in two environments and are joined, never sequenced (ADR-0047).
+# --console needs --pair: the operator console serves every request through the
+# twin boundary, and it is started only when asked for (`./scripts/program`
+# never asks).
 #
 # Any other `key:=value` argument is forwarded to the launch, on one side or on
 # both. A pair takes fewer of them than one side does: `side:=` is the
@@ -31,6 +36,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 HEADLESS=0
 PAIR=0
+CONSOLE=0
 ZONE=""
 PASSTHROUGH=()
 # THREE SPELLINGS SET ONE VALUE, so the last one may not silently win.
@@ -81,10 +87,11 @@ for arg in "$@"; do
     case "$arg" in
         --headless) HEADLESS=1 ;;
         --pair)     PAIR=1 ;;
+        --console)  CONSOLE=1 ;;
         --zone)     WANT_ZONE=1 ;;
         --zone=*)   set_zone "--zone=" "${arg#--zone=}" ;;
         zone:=*)    set_zone "zone:=" "${arg#zone:=}" ;;
-        -h|--help)  sed -n '2,25p' "$0"; exit 0 ;;
+        -h|--help)  sed -n '2,32p' "$0"; exit 0 ;;
         *)          PASSTHROUGH+=("$arg") ;;
     esac
 done
@@ -92,6 +99,11 @@ done
 if [ "$WANT_ZONE" -eq 1 ]; then
     die "--zone needs a zone name.
   ./scripts/sim --zone cell_b --headless"
+fi
+if [ "$CONSOLE" -eq 1 ] && [ "$PAIR" -eq 0 ]; then
+    die "--console needs --pair: the operator console serves its requests through the
+  twin boundary, which only a pair runs.
+  ./scripts/sim --pair --console"
 fi
 
 # Defaulted only when the model leaves one answer, and refused otherwise
@@ -209,6 +221,20 @@ if [ "$HEADLESS" -eq 0 ]; then
     fi
 fi
 
+# A WINDOWED CONSOLE NEEDS ITS PANEL (A-03). gz-gui skips a plugin it cannot
+# find and opens the window anyway, so a missing `CellConsole` would be a
+# console window with no panel and no Stop button in it. Asked here, after the
+# overlay put cite_console_gui's lib directory on GZ_GUI_PLUGIN_PATH and before
+# anything is brought up. Headless, there is no window to put it in.
+if [ "$CONSOLE" -eq 1 ] && [ "$HEADLESS" -eq 0 ]; then
+    gui_plugin_dir CellConsole "${GZ_GUI_PLUGIN_PATH:-}" >/dev/null \
+        || die "the operator console's panel, CellConsole, is not on GZ_GUI_PLUGIN_PATH
+  ('${GZ_GUI_PLUGIN_PATH:-}'), so the window would open without it and without its
+  Stop button. Build cite_console_gui (./scripts/build) - its environment hook puts
+  the plugin there - or run the console without a window:
+  ./scripts/sim --pair --console --headless"
+fi
+
 PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
 if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
     warn "cite_bringup is not built yet — there is nothing to launch."
@@ -228,6 +254,9 @@ if [ "$PAIR" -eq 1 ]; then
     PAIR_ARGS=("zone:=${ZONE}" "${PASSTHROUGH[@]}")
     if [ "$HEADLESS" -eq 1 ]; then
         PAIR_ARGS=(--headless "${PAIR_ARGS[@]}")
+    fi
+    if [ "$CONSOLE" -eq 1 ]; then
+        PAIR_ARGS=(--console "${PAIR_ARGS[@]}")
     fi
     exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
 fi
