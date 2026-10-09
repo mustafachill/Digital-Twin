@@ -71,6 +71,7 @@ PARAMETERS = {
     "speed_service": f"{VENDOR}/set_linear_motor_speed",
     "get_position_service": f"{VENDOR}/get_linear_motor_pos",
     "stop_service": f"{VENDOR}/set_linear_motor_stop",
+    "on_zero_service": f"{VENDOR}/get_linear_motor_on_zero",
     "deadman_state_topic": DEADMAN,
     "deadman_state_max_age_s": 0.5,
 }
@@ -102,7 +103,14 @@ SEGMENTED_PARAMETERS = dict(
     speed_service=f"{SEGMENTED_VENDOR}/set_linear_motor_speed",
     get_position_service=f"{SEGMENTED_VENDOR}/get_linear_motor_pos",
     stop_service=f"{SEGMENTED_VENDOR}/set_linear_motor_stop",
+    on_zero_service=f"{SEGMENTED_VENDOR}/get_linear_motor_on_zero",
     segment_s=0.5,
+)
+
+
+#: What the adapter calls: the four track services and the zero read (S-03).
+ADAPTER_SERVES = (
+    FakeTrack.SET, FakeTrack.SPEED, FakeTrack.GET, FakeTrack.STOP, FakeTrack.ON_ZERO
 )
 
 
@@ -164,7 +172,7 @@ class TestTrackAdapter(unittest.TestCase):
     def setUpClass(cls):
         cls.harness = Harness("track_adapter_test")
         node = cls.harness.node
-        cls.track = FakeTrack(cls.harness, VENDOR)
+        cls.track = FakeTrack(cls.harness, VENDOR, serve=ADAPTER_SERVES)
         cls.states: list[JointState] = []
         node.create_subscription(JointState, JOINT_STATES, cls.states.append, STATE)
         cls.commands = node.create_publisher(JointTrajectory, COMMAND_TOPIC, COMMAND)
@@ -179,7 +187,7 @@ class TestTrackAdapter(unittest.TestCase):
         cls.unserved_commands = node.create_publisher(
             JointTrajectory, UNSERVED_PARAMETERS["command_topic"], COMMAND
         )
-        cls.segmented_track = FakeTrack(cls.harness, SEGMENTED_VENDOR)
+        cls.segmented_track = FakeTrack(cls.harness, SEGMENTED_VENDOR, serve=ADAPTER_SERVES)
         cls.segmented_commands = node.create_publisher(
             JointTrajectory, SEGMENTED_PARAMETERS["command_topic"], COMMAND
         )
@@ -204,6 +212,7 @@ class TestTrackAdapter(unittest.TestCase):
         self.track.speed_ret = 0
         self.track.stop_failures = 0
         self.track.position_mm = 100
+        self.track.on_zero = 1
 
     def _deadman(self, proc_output, state: int, process=None) -> None:
         """Publish a deadman state and wait until the adapter has received it.
@@ -251,6 +260,36 @@ class TestTrackAdapter(unittest.TestCase):
         latest = self.states[-1]
         self.assertEqual(latest.name, [JOINT])
         self.assertEqual(len(latest.position), 1)
+
+    def test_a_track_not_on_its_zero_publishes_no_position_until_it_is(self, proc_output):
+        """S-03: a position measured from no zero is no place on the track.
+
+        The adapter re-reads the zero after a vendor error; a failing position
+        read is one. While the vendor says 0 nothing is published, and once it
+        says 1 the position is published again.
+        """
+        self._deadman(proc_output, DeadmanState.STATE_HEALTHY)
+        self._wait_for_position(0.1)
+        self.track.on_zero = 0
+        reads = self.track.zero_reads
+        self.track.position_ret = 1
+        self.harness.wait_for(
+            lambda: self.track.zero_reads > reads, "the zero read again after a vendor error"
+        )
+        self.track.position_ret = 0
+        self.track.position_mm = 300
+        proc_output.assertWaitFor(
+            expected_output="the track has not found its zero", process=self.adapter,
+            timeout=SETTLE_S,
+        )
+        seen = len(self.states)
+        self.harness.hold_for(
+            lambda: any(s.name == [JOINT] for s in self.states[seen:]),
+            "a track position published while the track is not on its zero",
+            1.0,
+        )
+        self.track.on_zero = 1
+        self._wait_for_position(0.3)
 
     def test_a_command_reaches_the_vendor_in_millimetres(self, proc_output):
         self._deadman(proc_output, DeadmanState.STATE_HEALTHY)

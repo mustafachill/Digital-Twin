@@ -32,8 +32,10 @@ commands, which is what every operator gate below keys on.
   with a prompt naming the target and its physical sides (R-12); the custody of
   every side the target commands read (R-09); the target's mode - through
   `home.bring_to_start` when the run homes first; then `steps.run`, every step
-  checked against that mode (R-05); then, for any target but the simulation,
-  SIM again, whatever happened, confirmed or the run fails (R-20).
+  checked against that mode (R-05), which the run HOLDS from entering it to its
+  end so no other client can move the twin under it (S-01, `HoldMode.srv`);
+  then, for any target but the simulation, SIM again, whatever happened,
+  confirmed or the run fails (R-20); then the hold is let go.
 * `home`: the same gate with the home prompt, `home.bring_to_start` on the
   target's sides, and SIM again for any target but the simulation.
 * `start_robot`: the gate without a carriage check - nothing has initialized the
@@ -74,6 +76,10 @@ class Ended:
     failure: str | None = None
     #: Whether the twin confirmed SIM afterwards; None where it was not asked.
     sim_confirmed: bool | None = None
+    #: Whether the run let go of its hold on the twin's mode (S-01); None where
+    #: it was not asked. False is said, never fatal: the hold lapses once the
+    #: run's node leaves the graph (`HoldMode.srv`).
+    hold_released: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -168,11 +174,13 @@ def home(
             status = EXIT_INTERRUPTED
     finally:
         # The operator's next step may be in the cell, so SIM is asked for
-        # whatever happened (SA-S-05, R-20).
+        # whatever happened (SA-S-05, R-20) - by this run, which holds the
+        # mode - and only then is the hold let go (S-01).
         sim = cell.return_to_sim() if target != targets.SIM else None
+        released = cell.release_hold()
     if sim is False:
         status = status or 1
-    return Ended(status, failure, sim)
+    return Ended(status, failure, sim, released)
 
 
 def run_program(
@@ -259,12 +267,15 @@ def run_program(
             outcome = (status, None)
     finally:
         # The target's mode may have been entered: the operator's next step is
-        # in the cell, so SIM is asked for whatever happened (SA-S-05, R-20).
+        # in the cell, so SIM is asked for whatever happened (SA-S-05, R-20) -
+        # by this run, which holds the mode - and only then is the hold let go
+        # (S-01). A SIM target holds SIM for the run and returns nowhere.
         sim = cell.return_to_sim() if entering and target != targets.SIM else None
+        released = cell.release_hold() if entering else None
     status, failure_text = outcome
     if sim is False:
         status = status or 1
-    return Ended(status, failure_text, sim)
+    return Ended(status, failure_text, sim, released)
 
 
 def _refused_for_a_console(

@@ -19,13 +19,13 @@ refusal message and nothing else.
 | Element | What it is |
 |---|---|
 | Status | `ConsoleState`: state, step, last error, physical sides (badged `PHYSICAL`) |
-| At start, per side | "Simulation at start" (`plant_at_start`) and "Real arm at start" (`counterpart_at_start`), the second only when the console serves a target that commands the real arm |
+| At start, per side | "Simulation at start" (`plant_at_start`) and "Real arm at start" (`counterpart_at_start`), the second only when the console says that side runs (`counterpart_running`) |
 | Twin mode | `TwinMode` on `TwinMode::TOPIC`, read directly from the twin boundary (ADR-0044) |
 | Start robot | `StartRobot` |
 | Target | Simulation, Real arm or Twin (`ConsoleState.TARGET_*`, [ADR-0072](../../../docs/adr/0072-the-operator-chooses-where-the-signal-goes.md)); a choice not in `available_targets` is disabled and labelled "not running". **Never preselected**, not even when only one is offered (see below) |
 | Home | `HomeRobot`, with the selected speed and target |
-| Start program | `RunProgram`, with the selected speed, target and a cycle count (at least 1); enabled only when every side of the target is at the start |
-| Speed | 1.0 ("Original speed") preselected, then 0.5, 0.25, 0.1; for a target that includes the real arm (Real arm, Twin) — and while no target is selected — choices below `minimum_speed_scale` are disabled |
+| Start program | `RunProgram`, with the selected speed, target and a cycle count (at least 1); enabled only when the console lists the target in `startable_targets` |
+| Speed | 1.0 ("Original speed") preselected, then 0.5, 0.25, 0.1; for a target the console lists in `floored_targets` — and while no target is selected — choices below `minimum_speed_scale` are disabled |
 | Confirm | `ConfirmOperator`, shown only in `AWAITING_OPERATOR`, with `prompt` verbatim; its cancel is Stop |
 | Stop | `StopCell` — a software stop, **not an E-stop**, and labelled so |
 | Progress, outcome | The goal's feedback and the last answer's detail |

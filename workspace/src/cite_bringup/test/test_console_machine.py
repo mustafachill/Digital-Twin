@@ -109,6 +109,15 @@ class FakeCell:
         self._call("return_to_sim")
         return self._rig.left.pop(0) if self._rig.left else True
 
+    def release_hold(self) -> bool:
+        # Not recorded in `calls`: every request that entered a mode lets its
+        # hold go last, and the order the tests below hold is the one before.
+        self._rig.released.append(len(self._rig.calls))
+        return True
+
+    def target_carriage_unknown(self) -> bool:
+        return False
+
     def away_from_start(self, start, sides=()):
         self._call("measure")
         self._rig.measured_sides.append(tuple(sides))
@@ -192,6 +201,8 @@ class Rig:
         #: What the node has heard on the twin's topic.
         self.heard = mode
         self.holding = holding
+        #: Each `release_hold`, as the number of calls recorded before it.
+        self.released: list[int] = []
         self.away: list[str | None] = []
         #: What each `leave_validated` answers, in order, then True.
         self.left: list[bool] = []
@@ -1050,6 +1061,7 @@ def test_the_node_never_publishes_an_older_snapshot_after_a_newer_one() -> None:
     node._last = None
     node._publisher = Publisher()
     node._machine = None
+    node._running = ("plant", "counterpart")
     node.get_clock = lambda: Clock()
     rig = Rig()
     older = rig.machine.snapshot()

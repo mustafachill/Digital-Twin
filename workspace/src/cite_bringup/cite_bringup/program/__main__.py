@@ -145,8 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     # Imported here so that --dry-run needs no ROS graph at all.
-    from cite_bringup.program.cell import RosCell, state_topic
-    from cite_bringup.program.custody import read_state_on_side
+    from cite_bringup.program.cell import RosCell
     import rclpy
     from rclpy.signals import SignalHandlerOptions
 
@@ -162,8 +161,6 @@ def main(argv: list[str] | None = None) -> int:
             args.via,
             track=cell.track,
             speed=scale,
-            # R-09: a side other than the plant is read on its own domain.
-            far_custody=lambda side: read_state_on_side(plan, side, state_topic(cell.arm)),
         )
         if args.via == "plant":
             # The environment's domain is only what the shell exported (S-02r):

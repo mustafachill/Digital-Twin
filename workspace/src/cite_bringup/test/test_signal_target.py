@@ -26,7 +26,13 @@ from __future__ import annotations
 
 from cite_bringup.plan import default_plan_path, load
 from cite_bringup.program import cycle, targets
-from cite_bringup.program.cell import mode_refusal, RosCell, single_side_start
+from cite_bringup.program.cell import (
+    holding_answer_refusal,
+    mode_refusal,
+    physical_sides_refusal,
+    RosCell,
+    single_side_start,
+)
 from cite_bringup.program.from_plan import target as cell_of
 from cite_bringup.program.home import StartPose
 from cite_bringup.program.sides import (
@@ -36,8 +42,8 @@ from cite_bringup.program.sides import (
     required_speed_scale,
 )
 from cite_bringup.program.steps import move, run, StepFailed
-from cite_interfaces.msg import ConsoleState, TwinMode
-from cite_interfaces.srv import TrackArrived
+from cite_interfaces.msg import ConsoleState, TwinMode, TwinSides
+from cite_interfaces.srv import Holding, TrackArrived
 import pytest
 
 from test_console_machine import _at_start, Rig
@@ -142,10 +148,16 @@ def test_without_the_opt_in_a_pair_starts_the_plant_alone() -> None:
 
 
 def test_the_sides_words_are_the_pair_supervisors() -> None:
+    """R-05: imported from the supervisor, never spelled a second time."""
+    from pathlib import Path
+
     from cite_bringup import pair
     from cite_bringup.program import sides
 
     assert (sides.PAIR_SIDES_PLANT, sides.PAIR_SIDES_ALL) == (pair.SIDES_PLANT, pair.SIDES_ALL)
+    text = Path(sides.__file__).read_text()
+    assert "from cite_bringup.pair import SIDES_ALL, SIDES_PLANT" in text
+    assert '= "plant"' not in text and '= "all"' not in text
 
 
 def test_the_scale_and_its_floor_are_the_targets() -> None:
@@ -223,6 +235,8 @@ def test_a_simulation_run_asks_no_one_and_never_returns_to_sim() -> None:
     assert "asked" not in names and "twin_mode" not in names
     assert "return_to_sim" not in names
     assert ("enter_target", SIM) in log
+    # S-01: a SIM run holds SIM for the run and lets it go at the end.
+    assert names[-1] == "release_hold"
     assert ("refuse_if_holding", ("plant",)) in log
     said = " ".join(text for name, text in [e for e in log if e[0] == "said"])
     assert "enter" not in said.lower() and "clear" not in said.lower()
@@ -251,7 +265,8 @@ def test_a_real_run_carries_every_gate_and_returns_to_sim() -> None:
     assert ("carriage_refusal", REAL, False) in log
     assert ("refuse_if_holding", ("counterpart",)) in log
     assert ("enter_target", REAL) in log
-    assert names[-1] == "return_to_sim"
+    # SIM again by the run that holds the mode, and only then the hold let go.
+    assert names[-2:] == ["return_to_sim", "release_hold"]
 
 
 def test_a_twin_run_reads_custody_on_both_sides() -> None:
@@ -277,7 +292,7 @@ def test_a_home_naming_a_side_that_does_not_run_asks_no_one_and_asks_for_sim() -
     assert ended.status == 1
     names = _names(log)
     assert "asked" not in names and "initialize" not in names
-    assert names[-1] == "return_to_sim"
+    assert names[-2:] == ["return_to_sim", "release_hold"]
 
 
 def test_a_real_home_initializes_after_the_go_ahead_and_asks_no_allowance() -> None:
@@ -481,3 +496,151 @@ def test_a_stop_forgets_every_sides_start() -> None:
     join()
     snapshot = rig.machine.snapshot()
     assert not snapshot.plant_at_start and not snapshot.counterpart_at_start
+
+
+# --- R-02: the console derives what the panel must not ------------------------
+
+
+def test_the_snapshot_publishes_the_startable_and_floored_targets() -> None:
+    """R-02: from the one target table, so the panel restates no target's sides."""
+    rig = Rig(physical=["counterpart"], available=[SIM, REAL, TWIN])
+    snapshot = rig.machine.snapshot()
+    assert snapshot.startable_targets == () and snapshot.floored_targets == (REAL, TWIN)
+    rig.started()
+    rig.away = [None]
+    assert rig.machine.home(0.5, SIM).success
+    assert rig.machine.snapshot().startable_targets == (SIM,)
+    # A plant-only deployment floors nothing and offers only the simulation.
+    alone = Rig(available=[SIM])
+    assert alone.machine.snapshot().floored_targets == ()
+
+
+def test_an_all_simulated_pair_floors_no_target() -> None:
+    rig = Rig(physical=[], available=[SIM, REAL, TWIN])
+    assert rig.machine.snapshot().floored_targets == ()
+
+
+# --- R-01: custody through the boundary --------------------------------------
+
+
+def _holding(*rows) -> Holding.Response:
+    return Holding.Response(
+        sides=[row[0] for row in rows],
+        heard=[row[1] for row in rows],
+        holding=[row[2] for row in rows],
+        detail=[row[3] for row in rows],
+    )
+
+
+def test_custody_refuses_a_side_that_holds_or_is_not_heard() -> None:
+    empty = ("plant", True, False, "")
+    assert holding_answer_refusal(_holding(empty), ("plant",)) is None
+    held = ("counterpart", True, True, "picker holds box_7")
+    refusal = holding_answer_refusal(_holding(empty, held), ("plant", "counterpart"))
+    assert refusal is not None and "counterpart: picker holds box_7" in refusal
+    unheard = ("counterpart", False, False, "no RobotState heard from picker")
+    refusal = holding_answer_refusal(_holding(empty, unheard), ("plant", "counterpart"))
+    assert refusal is not None and "custody not heard" in refusal
+    # A side asked about that the twin did not answer for is not heard either.
+    assert "not answered" in holding_answer_refusal(_holding(empty), ("plant", "counterpart"))
+
+
+def test_no_program_module_opens_another_sides_domain_for_custody() -> None:
+    """R-01: the cross-domain custody reader is gone; the boundary answers it."""
+    from pathlib import Path
+
+    import cite_bringup.program as program_package
+
+    folder = Path(program_package.__file__).parent
+    assert not (folder / "custody.py").exists()
+    for module in folder.glob("*.py"):
+        if not module.exists():
+            continue  # a link a symlinked install left behind for a removed module
+        text = module.read_text()
+        assert "read_state_on_side" not in text and "far_custody" not in text, module.name
+
+
+# --- S-02 / R-06: the physical sides before anyone is asked in ---------------
+
+
+def _sides(commandable=("plant", "counterpart"), stationary=("counterpart",), detail=""):
+    return TwinSides(
+        running=["plant", "counterpart"],
+        physical=["counterpart"],
+        commandable=list(commandable),
+        stationary=list(stationary),
+        detail=detail,
+    )
+
+
+@pytest.mark.parametrize("target", [REAL, TWIN])
+def test_the_operator_is_asked_only_once_the_physical_carriage_stands_still(target) -> None:
+    """S-02: REAL and the twin alike wait for the carriage to be reported stationary."""
+    assert physical_sides_refusal(_sides(), target) is None
+    moving = physical_sides_refusal(
+        _sides(stationary=(), detail="picker_track_joint is not reported stationary"), target
+    )
+    assert moving is not None and "not reported stationary" in moving
+
+
+@pytest.mark.parametrize("target", [REAL, TWIN])
+def test_a_physical_side_not_commandable_refuses_before_the_prompt(target) -> None:
+    """R-06: readiness and the travel, asked before a person is asked into the cell."""
+    refusal = physical_sides_refusal(
+        _sides(commandable=("plant",), detail="picker_track_joint stands at 800.0 mm, "
+               "outside its travel"),
+        target,
+    )
+    assert refusal is not None and "outside its travel" in refusal
+
+
+def test_the_simulation_waits_on_no_physical_side() -> None:
+    assert physical_sides_refusal(_sides(commandable=("plant",), stationary=()), SIM) is None
+    assert "no TwinSides heard" in physical_sides_refusal(None, REAL)
+
+
+def test_a_real_run_asks_the_carriage_question_before_the_prompt() -> None:
+    """R-06: `carriage_refusal` is asked of REAL too, before the operator is."""
+    log: list = []
+    _run(REAL, ["counterpart"], log)
+    names = _names(log)
+    assert names.index("carriage_refusal") < names.index("asked")
+
+
+# --- R-10: a real home whose carriage the twin confirmed nowhere -------------
+
+
+def test_a_real_home_with_the_carriage_away_after_initializing_says_what_to_do() -> None:
+    """R-10: refused before any mode is asked and before anything moves."""
+    from cite_bringup.program.home import bring_to_start
+
+    start = StartPose(
+        pose="zero",
+        joints=("joint1",),
+        positions=(0.0,),
+        tolerance_rad=0.01,
+        track_m=0.0,
+        track_tolerance_m=0.001,
+    )
+    calls: list = []
+
+    class Ros:
+        def away_from_start(self, start, sides=()):
+            calls.append(("measure", tuple(sides)))
+            return "the track at 0 mm: counterpart: stands at 120.0 mm"
+
+        def target_carriage_unknown(self) -> bool:
+            return True
+
+        def enter_target(self, target, homing=False):
+            calls.append(("enter", target))
+
+    with pytest.raises(StepFailed) as refused:
+        bring_to_start(
+            [move("zero")], start, Ros(), lambda: calls.append(("initialize",)),
+            lambda text: None, target=REAL,
+        )
+    text = str(refused.value)
+    assert "initialized, and its carriage is still not at the program's start" in text
+    assert "Run Start robot again" in text and "Nothing was moved" in text
+    assert [call[0] for call in calls] == ["initialize", "measure"]

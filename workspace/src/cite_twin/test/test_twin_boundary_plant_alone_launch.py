@@ -43,8 +43,8 @@ from cite_bringup.plan import default_plan_path
 from cite_bringup.readiness import boundary_announcement
 from cite_bringup.track_command import move as track_move
 from cite_interfaces.action import MoveTo
-from cite_interfaces.msg import ResultCode, TwinMode
-from cite_interfaces.qos import COMMAND
+from cite_interfaces.msg import ResultCode, TwinMode, TwinSides
+from cite_interfaces.qos import COMMAND, LATCHED
 from cite_interfaces.srv import SetMode, TrackArrived
 import launch
 from launch.actions import ExecuteProcess
@@ -173,6 +173,26 @@ class TestThePlantAlone(unittest.TestCase):
         )
         self.assertNotIn("counterpart: heartbeat", text)
         self.assertNotIn("counterpart: accepted", text)
+
+    def test_the_latched_sides_say_the_plant_alone_runs(self):
+        """R-07: a late joiner reads at once that only the plant runs, and is commandable.
+
+        Read by a subscription of its own, created here: what is asserted is
+        the LATCHED message a client starting after the boundary receives.
+        """
+        heard: list[TwinSides] = []
+        subscription = self.node.create_subscription(
+            TwinSides, TwinSides.TOPIC, heard.append, LATCHED
+        )
+        try:
+            self._spin_until(lambda: bool(heard), "a latched TwinSides")
+        finally:
+            self.node.destroy_subscription(subscription)
+        latest = heard[-1]
+        self.assertEqual(list(latest.running), ["plant"])
+        self.assertEqual(list(latest.physical), [])
+        self.assertEqual(list(latest.commandable), ["plant"])
+        self.assertEqual(list(latest.stationary), [])
 
     def test_every_mode_needing_a_far_side_is_refused_as_having_none(self):
         for mode in (TwinMode.MODE_REAL, TwinMode.MODE_VALIDATED, TwinMode.MODE_SHADOW):

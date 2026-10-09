@@ -1484,7 +1484,15 @@ expect_ok   "after the opt-in is resolved, and before the supervisor is started"
       -a "$(sim_line_of 'cite_bringup.program.sides --zone "$ZONE" --pair-sides')" -lt "$(sim_line_of 'exec python3 -m cite_bringup.pair')"
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "and says why when it starts the plant alone" \
-    grep -qF 'warn "$(head -n -1 <<<"$PAIR_SIDES_SAID")"' "${REPO_ROOT}/scripts/sim"
+    grep -qF 'warn "$PAIR_SIDES_WHY"' "${REPO_ROOT}/scripts/sim"
+# R-09: the choice is the helper's standard output alone; its standard error,
+# the why, is captured apart and never read as the choice.
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "with the helper's standard error captured apart from its choice" \
+    grep -qF -- '--pair-sides 2>"$PAIR_SIDES_WHY_FILE")"' "${REPO_ROOT}/scripts/sim"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_fail "and never merged into it" \
+    grep -qF -- '--pair-sides 2>&1' "${REPO_ROOT}/scripts/sim"
 
 # ./scripts/program checks a named zone the same way, before it stops this
 # checkout's containers or starts any.

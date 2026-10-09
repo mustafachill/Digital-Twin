@@ -6,9 +6,10 @@
 # plant's; the counterpart's are on a domain it never opens (ADR-0044 clause 3).
 # So it asks the boundary, which already reads every side's joint states.
 #
-# Every side the zone declares is judged, in every mode: this is a measurement
-# before anything is commanded, not a question about the sides a mode commands
-# (contrast TrackArrived). The boundary answers a verdict and not the positions:
+# The sides named in `sides` are judged - a target's own (ADR-0072) - or, with
+# none named, every side the deployment runs, in every mode: this is a
+# measurement before anything is commanded, not a question about the sides a
+# mode commands (contrast TrackArrived). The boundary answers a verdict and not the positions:
 # the reverse state flow is consumed by L5 and republished nowhere (ADR-0050
 # decision 1b). A physical side's position counts only while it is fresh (the
 # plan's `state_max_age_s`, on the boundary's steady clock); one not heard, or

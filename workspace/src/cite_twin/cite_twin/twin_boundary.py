@@ -34,7 +34,11 @@ Three things, and they are the three ADR-0050 decides:
 
 Beside those, one thing ADR-0070 item 5 adds: a `TwinHeartbeat` on each side's
 own domain, from that side's own executor, which a physical side's deadman
-stops on when it ceases (`_Heartbeat`).
+stops on when it ceases (`_Heartbeat`). And three ADR-0072 adds: a run's hold on
+the mode (`HoldMode`, `cite_twin.hold`), so that no other client moves the twin
+between a run's mode check and its dispatch; each side's custody answered as a
+verdict (`Holding`), so no client opens a side's domain to read it; and whether
+a physical carriage stands still (`TwinSides.stationary`).
 
 **NOTHING HERE IS A FIDELITY MEASUREMENT.** Both sides of a Phase 2.A pair run
 the same L0 model, the same generated description, the same controllers and the
@@ -99,12 +103,13 @@ from cite_interfaces.msg import (
     DivergenceMetrics,
     ModelVersion,
     ResultCode,
+    RobotState,
     TwinHeartbeat,
     TwinMode,
     TwinSides,
 )
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
+from cite_interfaces.srv import Holding, HoldMode, JointsAt, SetMode, TrackArrived
 from cite_runtime.runtime import caused_by_shutdown, SHUTDOWN_EXCEPTIONS
 from cite_twin.boundary import (
     address,
@@ -117,7 +122,9 @@ from cite_twin.boundary import (
     SideContext,
     SKILL_ACTION_TYPES,
 )
+from cite_twin.custody import holding as custody_verdicts
 from cite_twin.divergence import assess, compare, JointMerge, Operand, UNMEASURED
+from cite_twin.hold import ModeHold, node_names
 from cite_twin.joints_at import joints_at
 from cite_twin.mode import (
     deployment_from_plan,
@@ -138,6 +145,8 @@ from cite_twin.routing import (
 from cite_twin.track_arrival import (
     apart as tracks_apart,
     arrival as track_arrival,
+    moving as track_moving,
+    recent as track_recent,
     unheard as track_unheard,
 )
 from control_msgs.msg import JointTrajectoryControllerState
@@ -361,7 +370,7 @@ class TwinBoundary:
         plan: Plan,
         base: int,
         environ: Mapping[str, str],
-        running: tuple[str, ...] = (PLANT_SIDE, COUNTERPART_SIDE),
+        running: tuple[str, ...],
     ) -> None:
         self._plan = plan
         self._lock = threading.Lock()
@@ -451,6 +460,14 @@ class TwinBoundary:
         #: arrival, heard in every mode, because a stop, an arrival check and
         #: the precondition above are owed whatever the mode is.
         self._track_positions: dict[tuple[str, str], tuple[float, float]] = {}
+        #: Per physical track joint: its recent positions and steady-clock
+        #: arrivals, oldest first, for whether the carriage stands still (S-02).
+        self._track_history: dict[str, list[tuple[float, float]]] = {
+            joint: [] for joint, _tolerance_m in self._physical_tracks
+        }
+        #: Per (side, asset): the custody its skill server last latched, as
+        #: (holding, held work-piece id), for `Holding` (R-01).
+        self._custody: dict[tuple[str, str], tuple[bool, str]] = {}
         #: Per (side, joint): the same for every joint a side publishes, heard
         #: in every mode, for `JointsAt` - the program's start measured before
         #: anything is commanded (ADR-0070). Answered as a verdict only.
@@ -508,6 +525,16 @@ class TwinBoundary:
             # `SetMode::Request::SERVICE`.
             SetMode.Request.SERVICE,
             self._on_set_mode,
+            callback_group=self._group,
+        )
+        #: The one hold on the mode (`HoldMode.srv`, S-01): while a run holds
+        #: it, no other client moves the twin out of the mode that run checked.
+        #: Read and changed under `self._lock`, with the mode it guards.
+        self._hold = ModeHold()
+        self._hold_mode = self._plant.node.create_service(
+            HoldMode,
+            HoldMode.Request.SERVICE,
+            self._on_hold_mode,
             callback_group=self._group,
         )
 
@@ -671,6 +698,35 @@ class TwinBoundary:
             callback_group=self._group,
         )
 
+        # 7. Custody, per side (R-01, ADR-0072): each arm's latched `RobotState`
+        # read on its own side's domain and answered as a verdict by `Holding`,
+        # so no client opens a side's domain to learn whether its arm holds a
+        # part. The topic is the plan's skill server's (`SkillActions.state`).
+        self._custody_assets = tuple(
+            manager.asset for manager in plan.controller_managers if manager.skills is not None
+        )
+        for side_name, side in self._sides.items():
+            for manager in plan.controller_managers:
+                if manager.skills is None:
+                    continue
+                self._subscriptions.append(
+                    side.node.create_subscription(
+                        RobotState,
+                        manager.skills.state,
+                        partial(self._on_robot_state, side_name, manager.asset),
+                        # The skill server latches it: the current custody
+                        # arrives at once.
+                        LATCHED,
+                        callback_group=self._group,
+                    )
+                )
+        self._holding = self._plant.node.create_service(
+            Holding,
+            Holding.Request.SERVICE,
+            self._on_holding,
+            callback_group=self._group,
+        )
+
         self._timer = self._plant.node.create_timer(
             period, self._publish_divergence, callback_group=self._group
         )
@@ -684,6 +740,12 @@ class TwinBoundary:
             _Heartbeat(side, plan.zone, boundary_id, beat_period, self._group, self._lock)
             for side in self._sides.values()
         ]
+        # 8. The hold's liveness (S-01) and the sides' sets (S-02), at the
+        # heartbeat period - the plan's own rate, and a rate rather than a
+        # schedule: nothing waits on it.
+        self._liveness = self._plant.node.create_timer(
+            beat_period, self._on_liveness_tick, callback_group=self._group
+        )
 
     # ------------------------------------------------------------------ #
     # Lifetime
@@ -770,7 +832,19 @@ class TwinBoundary:
         with self._lock:
             before = self._authority.mode
             outstanding = sorted(self._in_flight.values())
-            if outstanding and request.mode != before:
+            # The hold first (S-01): who may move the mode at all. Like the
+            # in-flight refusal it is evaluated before `ModeAuthority`, so no
+            # value of `force` reaches it.
+            held = self._hold.refusal(request.mode, request.holder, before)
+            if held is not None:
+                verdict = Verdict(
+                    accepted=False,
+                    mode=before,
+                    code=ResultCode.PRECONDITION_FAILED,
+                    detail=held,
+                    commands_hardware=False,
+                )
+            elif outstanding and request.mode != before:
                 verdict = _a_transition_may_not_outrun_the_cell(
                     before, request.mode, outstanding
                 )
@@ -778,6 +852,9 @@ class TwinBoundary:
                 verdict = self._authority.request(
                     request.mode, "", request.reason, request.force, request.homing
                 )
+            if verdict.accepted:
+                # A transition the holder made carries its hold along.
+                self._hold.followed(request.holder, verdict.mode)
             changed = verdict.accepted and verdict.mode != before
             if changed:
                 # A far-side operand recorded under the old mode is not an
@@ -808,6 +885,47 @@ class TwinBoundary:
         else:
             self._log.warning(line)
         return response
+
+    def _on_hold_mode(
+        self, request: HoldMode.Request, response: HoldMode.Response
+    ) -> HoldMode.Response:
+        """Take, re-assert or release a run's hold on the mode in force (S-01).
+
+        Decided by `cite_twin.hold.ModeHold` under the lock that also guards
+        the mode, so a hold is taken on exactly the mode in force when it is
+        taken, and no transition slips between.
+        """
+        with self._lock:
+            answer = self._hold.request(
+                request.action,
+                request.holder,
+                request.node,
+                request.mode,
+                self._authority.mode,
+                time.monotonic(),
+            )
+            response.holder = self._hold.holder
+            response.mode = self._authority.mode
+        response.accepted = answer.accepted
+        response.result = ResultCode(code=answer.code, detail=answer.detail)
+        line = f"HoldMode({request.action}, {request.holder or '-'}): {answer.detail}"
+        if answer.accepted:
+            self._log.info(line)
+        else:
+            self._log.warning(line)
+        return response
+
+    def _on_liveness_tick(self) -> None:
+        """Lapse a hold whose node left the graph (S-01); say any change of the sides' sets.
+
+        The graph is read here, off the lock, and judged under it.
+        """
+        nodes = node_names(self._plant.node.get_node_names_and_namespaces())
+        with self._lock:
+            lapsed = self._hold.lapse_if_gone(nodes, time.monotonic())
+        if lapsed is not None:
+            self._log.warning(lapsed)
+        self._publish_sides(sets_only=True)
 
     def _publish_mode(self) -> None:
         message = TwinMode()
@@ -1193,6 +1311,32 @@ class TwinBoundary:
         )
         return response
 
+    def _on_holding(
+        self, request: Holding.Request, response: Holding.Response
+    ) -> Holding.Response:
+        """Answer whether each side's arm says it holds a part (R-01, ADR-0072).
+
+        Every side asked about, or every running side when none is named; a
+        side that does not run, or whose arm never latched a state, is
+        unheard. A verdict per side, never the message (ADR-0050 decision 1b).
+        """
+        with self._lock:
+            sides = tuple(dict.fromkeys(request.sides)) if request.sides else tuple(self._sides)
+            custody = dict(self._custody)
+        answers = custody_verdicts(sides, self._custody_assets, custody)
+        response.sides = [answer.side for answer in answers]
+        response.heard = [answer.heard for answer in answers]
+        response.holding = [answer.holding for answer in answers]
+        response.detail = [answer.detail for answer in answers]
+        return response
+
+    def _on_robot_state(self, side_name: str, asset: str, message: RobotState) -> None:
+        with self._lock:
+            self._custody[(side_name, asset)] = (
+                bool(message.gripper_holding),
+                message.held_workpiece_id,
+            )
+
     def _stop_belts_the_mode_does_not_command(self, mode: int) -> None:
         """Command to zero every belt on a side ``mode`` no longer routes to.
 
@@ -1314,6 +1458,12 @@ class TwinBoundary:
                         positions[joint],
                         time.monotonic(),
                     )
+                    history = self._track_history.get(joint)
+                    if history is not None and side_name == COUNTERPART_SIDE:
+                        history.append((positions[joint], arrived))
+                        self._track_history[joint] = track_recent(
+                            history, self._state_max_age_s
+                        )
             if side_name != PLANT_SIDE and side_name not in reverse_state_flow(
                 self._authority.mode
             ):
@@ -1371,8 +1521,8 @@ class TwinBoundary:
 
         R-10 (ADR-0072): within `[0, stroke_m]` widened by the goal tolerance.
         A position not heard fresh is the readiness question's, not this one.
-        Whether the carriage has found its zero (homed) is NOT observable here:
-        nothing on the physical side publishes it, so it is not asked.
+        Whether the carriage has found its zero is the readiness question's
+        too: the track adapter publishes no position until it has (S-03).
         """
         now = time.monotonic()
         found = []
@@ -1389,27 +1539,75 @@ class TwinBoundary:
                 )
         return "; ".join(found) if found else None
 
-    def _sides_now(self) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], str]:
-        """Return what `TwinSides` says now: running, physical, commandable, why not; locked."""
-        physical = tuple(side for side in self._sides if self._is_physical(side))
-        unready = self._physical_side_unready() if physical else None
-        commandable = tuple(
-            side for side in self._sides if side not in physical or unready is None
-        )
-        return tuple(self._sides), physical, commandable, unready or ""
+    def _sides_now(
+        self,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str]:
+        """Return what `TwinSides` says now; under the lock.
 
-    def _publish_sides(self) -> None:
-        """Publish `TwinSides` if it changed since it was last published (ADR-0072)."""
+        Running, physical, commandable, stationary, and why a side is not
+        commandable or not stationary. A physical carriage heard outside its
+        travel makes its side not commandable (R-06): a REAL or VALIDATED
+        transition would refuse it for good, so no target commanding it is
+        offered.
+        """
+        physical = tuple(side for side in self._sides if self._is_physical(side))
+        reasons = []
+        if physical:
+            reasons = [
+                reason
+                for reason in (
+                    self._physical_side_unready(),
+                    self._physical_carriage_outside_travel(),
+                )
+                if reason is not None
+            ]
+        commandable = tuple(
+            side for side in self._sides if side not in physical or not reasons
+        )
+        still = self._physical_carriages_moving() if physical else None
+        stationary = tuple(side for side in physical if still is None)
+        detail = "; ".join(reasons + ([still] if still is not None else []))
+        return tuple(self._sides), physical, commandable, stationary, detail
+
+    def _physical_carriages_moving(self) -> str | None:
+        """Why a physical carriage is not reported stationary (S-02), or None; under the lock.
+
+        Judged from the plan's values alone: `state_max_age_s` and each
+        track's `goal_tolerance_m` (`track_arrival.moving`). Said without its
+        numbers, so `TwinSides` changes when the verdict does, not with every
+        sample.
+        """
+        now = time.monotonic()
+        found = [
+            f"{joint} is not reported stationary"
+            for joint, tolerance_m in self._physical_tracks
+            if track_moving(
+                joint, self._track_history.get(joint, []), now, self._state_max_age_s, tolerance_m
+            )
+            is not None
+        ]
+        return "; ".join(found) if found else None
+
+    def _publish_sides(self, sets_only: bool = False) -> None:
+        """Publish `TwinSides` if it changed since it was last published (ADR-0072).
+
+        ``sets_only`` compares the sets and not the detail: the liveness tick
+        runs at the heartbeat period and says a change of WHICH sides at once,
+        while a detail that only re-words itself (an age) is said at the
+        divergence period.
+        """
         with self._lock:
             now = self._sides_now()
-            if now == self._sides_published:
+            last = self._sides_published
+            if last is not None and (now[:4] == last[:4] if sets_only else now == last):
                 return
             self._sides_published = now
-        running, physical, commandable, detail = now
+        running, physical, commandable, stationary, detail = now
         message = TwinSides(
             running=list(running),
             physical=list(physical),
             commandable=list(commandable),
+            stationary=list(stationary),
             detail=detail,
         )
         message.stamp = self._plant.node.get_clock().now().to_msg()
@@ -1818,6 +2016,7 @@ def _physical_watches(plan: Plan) -> dict[str, PhysicalSideWatch]:
             asset=manager.asset,
             joints=physical.joints,
             max_age_s=plan.twin.state_max_age_s,
+            track_joint=None if manager.track is None else manager.track.joint,
         )
     return watches
 
@@ -1856,6 +2055,8 @@ def _refuse_sim_time(side: SideContext) -> None:
 
 def running_sides(choice: str) -> tuple[str, ...]:
     """Return the sides a `--sides` choice starts: the plant alone, or both (ADR-0072)."""
+    if choice not in SIDES_CHOICES:
+        raise BoundaryError(f"--sides is {choice!r}, not one of {', '.join(SIDES_CHOICES)}")
     return (PLANT_SIDE,) if choice == SIDES_PLANT else (PLANT_SIDE, COUNTERPART_SIDE)
 
 
@@ -1878,7 +2079,10 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     # `all`, or `plant` for a pair started with the plant alone. Handed in by
     # the supervisor, which was handed it by `./scripts/sim`; never inferred
     # here from what happens to be on a domain.
-    parser.add_argument("--sides", choices=SIDES_CHOICES, default=SIDES_ALL)
+    # REQUIRED, with no default (S-04): which sides run is a fact the
+    # supervisor states, and a default here would decide it for a caller that
+    # forgot - toward opening a context on a side nobody started.
+    parser.add_argument("--sides", choices=SIDES_CHOICES, required=True)
     # ROS strips its own arguments before a node sees them; anything left that
     # this parser does not know about is ignored rather than fatal, because
     # `launch_ros` appends `--ros-args` unconditionally.

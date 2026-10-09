@@ -35,6 +35,7 @@ from collections.abc import Sequence
 import os
 import sys
 
+from cite_bringup.pair import SIDES_ALL, SIDES_PLANT
 from cite_bringup.plan import (
     default_plan_path,
     HARDWARE_OPT_IN_ENV,
@@ -162,10 +163,10 @@ def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
     return None
 
 
-#: What `pair_sides` answers, spelled as the pair supervisor's `--sides` takes it
-#: (`cite_bringup.pair.SIDES_CHOICES`; held equal by a test).
-PAIR_SIDES_ALL = "all"
-PAIR_SIDES_PLANT = "plant"
+#: What `pair_sides` answers: the pair supervisor's own `--sides` words, imported
+#: from the one module that states them rather than spelled again (R-05).
+PAIR_SIDES_ALL = SIDES_ALL
+PAIR_SIDES_PLANT = SIDES_PLANT
 
 #: Said when a pair starts the plant alone (ADR-0072): the operator reads WHY
 #: the real arm is absent, so a plant-only pair is never mistaken for a failure.

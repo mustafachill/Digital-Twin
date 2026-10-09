@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from cite_bringup.program import cycle
 from cite_bringup.program.home import StartPose
-from cite_bringup.program.steps import EXIT_INTERRUPTED, move
+from cite_bringup.program.steps import EXIT_INTERRUPTED, move, StepFailed
 from cite_bringup.program.targets import TWIN
 from cite_interfaces.msg import TwinMode
 import pytest
@@ -49,6 +49,8 @@ class Cell:
         self.log = log
         self.raises = raises or {}
         self.left = left
+        #: Each `release_hold`, as the length of ``log`` when it came.
+        self.released: list[int] = []
 
     def _call(self, name: str) -> None:
         self.log.append(f"call {name}")
@@ -75,6 +77,12 @@ class Cell:
     def return_to_sim(self) -> bool:
         self._call("return_to_sim")
         return self.left
+
+    def release_hold(self) -> bool:
+        # Kept out of `log`, whose tails the tests below hold exactly; the
+        # order against the return to SIM is held by its own test.
+        self.released.append(len(self.log))
+        return True
 
     def away_from_start(self, start, sides=()) -> None:
         self._call("measure")
@@ -228,3 +236,41 @@ def test_a_home_whose_return_to_sim_is_unconfirmed_exits_1(homed: bool) -> None:
     ended = _home(Cell(log, raises, left=False), log, _reader(log))
     assert ended.sim_confirmed is False
     assert ended.status == (1 if homed else 130)
+
+
+# --- S-01: the run's hold on the twin's mode is let go last, whatever happened ---
+
+
+@pytest.mark.parametrize(
+    "raises",
+    [
+        {},  # completed
+        {"move pick": StepFailed("refused")},  # a step failed
+        {"move pick": KeyboardInterrupt()},  # stopped in a step
+        {"enter_target": KeyboardInterrupt()},  # stopped while entering
+    ],
+)
+def test_a_run_lets_its_hold_go_after_the_return_to_sim(raises) -> None:
+    log: list[str] = []
+    cell = Cell(log, raises)
+    ended = _run(cell, log, _reader(log))
+    assert ended.hold_released is True
+    (released,) = cell.released
+    assert log[released - 1] == "call return_to_sim", "released after SIM, never before"
+
+
+def test_a_run_that_never_entered_a_mode_has_no_hold_to_release() -> None:
+    log: list[str] = []
+    cell = Cell(log)
+    ended = _run(cell, log, _reader(log, EOFError()))
+    assert ended.hold_released is None and cell.released == []
+
+
+@pytest.mark.parametrize("raises", [{}, {"measure": KeyboardInterrupt()}])
+def test_a_home_lets_its_hold_go_after_the_return_to_sim(raises) -> None:
+    log: list[str] = []
+    cell = Cell(log, raises)
+    ended = _home(cell, log, _reader(log))
+    assert ended.hold_released is True
+    (released,) = cell.released
+    assert log[released - 1] == "call return_to_sim"

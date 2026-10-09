@@ -13,9 +13,10 @@
 # A physical side's position counts only while it is fresh (the plan's
 # `state_max_age_s`, on the boundary's steady clock); a side the boundary has
 # no position for, or one too old, has not arrived and is UNHEARD. Before a
-# person is asked into the cell the fixed program asks this in SIM with the
-# plant's own track position: it waits while the answer is UNHEARD, and a
-# physical carriage AWAY refuses the run there, before the prompt (S-08).
+# person is asked into the cell for a target that commands the plant and a
+# physical side (the twin), the fixed program asks this in SIM with the plant's
+# own track position: it waits while the answer is UNHEARD, and a physical
+# carriage AWAY refuses the run there, before the prompt (S-08).
 #
 # SERVICE is the one place this name is written, as SetMode's is.
 

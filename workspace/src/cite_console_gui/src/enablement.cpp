@@ -17,16 +17,6 @@
 namespace cite_console_gui
 {
 
-bool includes_plant(Target target)
-{
-  return target == Target::SIM || target == Target::TWIN;
-}
-
-bool includes_counterpart(Target target)
-{
-  return target == Target::REAL || target == Target::TWIN;
-}
-
 namespace
 {
 
@@ -35,11 +25,10 @@ bool served(const ConsoleView & view, Target target)
   return target != Target::NONE && view.available_targets.count(target) == 1;
 }
 
-/// Every side the target commands is at the program's start.
-bool target_at_start(const ConsoleView & view, Target target)
+/// The console says every side of `target` is at the program's start.
+bool startable(const ConsoleView & view, Target target)
 {
-  return (!includes_plant(target) || view.plant_at_start) &&
-         (!includes_counterpart(target) || view.counterpart_at_start);
+  return target != Target::NONE && view.startable_targets.count(target) == 1;
 }
 
 }  // namespace
@@ -56,7 +45,7 @@ ButtonStates enabled_for(const ConsoleView & view, Target selected)
   states.start_robot = idle &&
     (view.phase == Phase::NOT_STARTED || ready || view.phase == Phase::FAULT);
   states.home = idle && view.robot_started && ready && served(view, selected);
-  states.start_program = states.home && target_at_start(view, selected);
+  states.start_program = states.home && startable(view, selected);
   states.stop = view.busy ||
     (view.phase == Phase::FAULT && !view.twin_in_sim && view.has_physical_side);
   states.confirm = view.phase == Phase::AWAITING_OPERATOR;
@@ -79,12 +68,7 @@ Target settled_selection(const ConsoleView & before, const ConsoleView & now, Ta
 
 bool counterpart_running(const ConsoleView & view)
 {
-  for (const Target target : view.available_targets) {
-    if (includes_counterpart(target)) {
-      return true;
-    }
-  }
-  return false;
+  return view.heard && view.counterpart_running;
 }
 
 bool speed_choice_enabled(double scale, const ConsoleView & view, Target target)
@@ -92,7 +76,8 @@ bool speed_choice_enabled(double scale, const ConsoleView & view, Target target)
   if (!view.heard || scale <= 0.0 || scale > 1.0) {
     return false;
   }
-  const bool floor_applies = target == Target::NONE || includes_counterpart(target);
+  const bool floor_applies =
+    target == Target::NONE || view.floored_targets.count(target) == 1;
   return !floor_applies || scale >= view.minimum_speed_scale;
 }
 

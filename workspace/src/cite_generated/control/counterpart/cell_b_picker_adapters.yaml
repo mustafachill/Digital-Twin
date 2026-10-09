@@ -45,6 +45,7 @@
     speed_service: /cite/cell_b/picker/picker_picker/set_linear_motor_speed
     get_position_service: /cite/cell_b/picker/picker_picker/get_linear_motor_pos
     stop_service: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
+    on_zero_service: /cite/cell_b/picker/picker_picker/get_linear_motor_on_zero
     deadman_state_topic: /cite/cell_b/picker/deadman/state
     deadman_state_max_age_s: 0.25
 /cite/cell_b/picker/gripper_relay:

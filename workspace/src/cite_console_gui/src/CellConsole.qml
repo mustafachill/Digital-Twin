@@ -102,7 +102,7 @@ Rectangle {
 
       // At the program's start, per side (ADR-0072 decision 3), and only for a
       // side that runs: the plant whenever a console is heard, the real arm
-      // only where the console serves a target that commands it.
+      // only where the console says its side runs (counterpart_running).
       Label { text: "Simulation at start"; color: "#546e7a" }
       Label { text: CellConsole.heard ? (CellConsole.plantAtStart ? "yes" : "no") : "-" }
 

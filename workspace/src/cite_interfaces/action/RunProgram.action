@@ -1,19 +1,22 @@
 # Start program: run the real robot's program through the twin on the target's
 # sides (ADR-0071, ADR-0072). Parts and belts are placed and run only on the
-# simulated sides of the target; the at-start requirement is per side of the target.
+# simulated sides of the target.
 #
-# Per cycle: a work-piece on every simulated side's pick table and that side's
+# Per cycle: a work-piece on every simulated side of the target and that side's
 # belt running (`program.part`, `program.belt`); then the per-cycle order of
 # `cite_bringup.program.cycle.run_program` - the one `python3 -m
-# cite_bringup.program` runs - on a pair with a physical side the twin's mode
-# READ as SIM, the physical carriage checked and the operator's ConfirmOperator
-# awaited; the arm's custody read; VALIDATED; one cycle of the program; and,
-# with a physical side, SIM again. Unlike `./scripts/program` it does not
-# initialize or home before its first cycle: it is rejected unless
-# ConsoleState.at_start says both arms are at the program's start (Home first),
-# and unless Start robot has succeeded and the console is READY. A failed step
-# ends the run and leaves the console in FAULT; nothing is retried and nothing
-# homes. Cancelling the goal is the same software stop as StopCell.
+# cite_bringup.program` runs: where the target commands a physical side, the
+# twin's mode READ as SIM, the physical carriage waited for until reported
+# stationary and checked, and the operator's ConfirmOperator awaited; the custody
+# of every side of the target read (Holding.srv); the target's twin mode (SIM,
+# REAL or VALIDATED), held for the run (HoldMode.srv); one cycle of the program;
+# and, for any target but the simulation, SIM again. Unlike `./scripts/program` it
+# does not initialize or home before its first cycle: it is rejected unless the
+# target is in ConsoleState.startable_targets - every side of it at the program's
+# start (Home first) - and unless Start robot has succeeded and the console is
+# READY. A failed step ends the run and leaves the console in FAULT; nothing is
+# retried and nothing homes. Cancelling the goal is the same software stop as
+# StopCell.
 #
 # Served under the plan's `console.run_program` (ConsoleState.msg).
 
@@ -21,8 +24,8 @@ float64 speed_scale     # (0, 1] of the program's own speed, sent explicitly by
                         # the operator's panel. Never defaulted: a goal with 0, or
                         # any value outside (0, 1] or below
                         # ConsoleState.minimum_speed_scale, is rejected (ADR-0071
-                        # decision 2). The floor applies only to a target that
-                        # includes the real arm
+                        # decision 2). The floor applies only to a target in
+                        # ConsoleState.floored_targets
 uint8 target            # ConsoleState.TARGET_SIM, TARGET_REAL or TARGET_TWIN, sent
                         # explicitly by the operator's panel (ADR-0072). Never
                         # defaulted: 0, an unknown value, or a target not in

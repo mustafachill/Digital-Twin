@@ -89,11 +89,24 @@ ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publ
   view.busy = state.busy;
   view.plant_at_start = state.plant_at_start;
   view.counterpart_at_start = state.counterpart_at_start;
+  view.counterpart_running = state.counterpart_running;
   for (const std::uint8_t value : state.available_targets) {
     view.served_values.insert(value);
     const Target target = target_from(value);
     if (target != Target::NONE) {
       view.available_targets.insert(target);
+    }
+  }
+  for (const std::uint8_t value : state.startable_targets) {
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.startable_targets.insert(target);
+    }
+  }
+  for (const std::uint8_t value : state.floored_targets) {
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.floored_targets.insert(target);
     }
   }
   view.minimum_speed_scale = state.minimum_speed_scale;

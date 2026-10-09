@@ -24,5 +24,14 @@ string[] running      # the sides this deployment started, by the plan's side na
 string[] physical     # those of `running` whose hardware is physical, from the plan
 string[] commandable  # those of `running` a mode may command now: a simulated side
                       # always; a physical side only while the boundary judges it
-                      # ready, measured and fresh
-string detail         # why a running side is not commandable, empty when every one is
+                      # ready, measured and fresh, and its carriage, heard fresh,
+                      # stands inside its track's travel. A physical track publishes
+                      # no position until it has found its zero (`cite_hardware`'s
+                      # track adapter), so such a side is not commandable either
+string[] stationary   # those of `physical` whose every carriage the boundary reports
+                      # standing still: its latest position fresh (the plan's
+                      # `state_max_age_s`), and every position since one at least
+                      # `state_max_age_s` older within the track's `goal_tolerance_m`
+                      # of it. Read before a person is asked into the cell (S-02)
+string detail         # why a running side is not commandable, or a physical one not
+                      # stationary; empty when neither

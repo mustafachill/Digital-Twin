@@ -144,7 +144,13 @@ class Harness:
 class FakeTrack:
     """`set_linear_motor_pos`, `_speed`, `get_linear_motor_pos`, `set_linear_motor_stop`.
 
-    ``serve`` names which of the four to advertise. A fake is never withdrawn
+    And, when ``serve`` names it, `get_linear_motor_on_zero`, which the track
+    adapter reads before it publishes a position (S-03): ``on_zero`` is what it
+    reports, 1 - a track that has found its zero - unless a test says
+    otherwise. Not served by default: the initializer's rig serves its own
+    (`FakeTrackInit`) under the same name.
+
+    ``serve`` names which of the five to advertise. A fake is never withdrawn
     mid-test: measured in this image, a service whose callback has run once
     under a `MultiThreadedExecutor` stays advertised after
     `Node.destroy_service`, so "the service went away" is tested as a service
@@ -155,12 +161,19 @@ class FakeTrack:
     SPEED = "set_linear_motor_speed"
     GET = "get_linear_motor_pos"
     STOP = "set_linear_motor_stop"
+    ON_ZERO = "get_linear_motor_on_zero"
 
     def __init__(
-        self, harness: Harness, namespace: str, serve: tuple[str, ...] = (SET, SPEED, GET, STOP)
+        self,
+        harness: Harness,
+        namespace: str,
+        serve: tuple[str, ...] = (SET, SPEED, GET, STOP),
     ) -> None:
         self.namespace = namespace
         self.position_mm = 100
+        #: What `get_linear_motor_on_zero` reports, and how many reads arrived.
+        self.on_zero = 1
+        self.zero_reads = 0
         #: Whether an answered `set_linear_motor_pos` puts the carriage at its
         #: target at once; when false the carriage never moves.
         self.arrives = False
@@ -193,6 +206,7 @@ class FakeTrack:
             self.SPEED: (SetInt16, self._on_speed),
             self.GET: (GetInt16, self._on_get),
             self.STOP: (Call, self._on_stop),
+            self.ON_ZERO: (GetInt16, self._on_zero),
         }
         self._services = [
             harness.node.create_service(
@@ -224,6 +238,12 @@ class FakeTrack:
         self.answer_get.wait(timeout=SETTLE_S)
         response.ret = self.position_ret
         response.data = self.position_mm
+        return response
+
+    def _on_zero(self, _request, response):
+        self.zero_reads += 1
+        response.ret = 0
+        response.data = self.on_zero
         return response
 
     def _on_stop(self, _request, response):

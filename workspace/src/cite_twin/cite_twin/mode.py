@@ -292,9 +292,7 @@ class Deployment:
         )
 
 
-def deployment_from_plan(
-    plan: Plan, running: tuple[str, ...] = (PLANT_SIDE, COUNTERPART_SIDE)
-) -> Deployment:
+def deployment_from_plan(plan: Plan, running: tuple[str, ...]) -> Deployment:
     """Read what L5 knows about both sides out of the generated bring-up plan.
 
     **A free function, and its being one is a requirement rather than a style
@@ -319,6 +317,7 @@ def deployment_from_plan(
     every mode but `SIM` is refused there as having no far side, by the check
     that already refuses it on a single-sided zone. Handed to the boundary by
     the pair supervisor at start-up and never re-read (ADR-0050 decision 4).
+    It has NO default (S-04): every caller states which sides run.
     """
     return Deployment(
         {

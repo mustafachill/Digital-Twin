@@ -32,7 +32,9 @@ plan's `state_max_age_s` on the boundary's steady clock:
 2. the arm trajectory controller is running: its `controller_state`, which it
    publishes only while active;
 3. every joint the side publishes - the arm's, the track's, the gripper's - has
-   arrived recently, whichever node publishes it.
+   arrived recently, whichever node publishes it. A physical track's adapter
+   publishes no position until the track has found its zero (S-03), so a track
+   not on its zero is a side that is not ready, and is said so.
 
 Pure logic with no node, so it is tested without a graph; the boundary feeds it
 arrivals under its own lock.
@@ -65,6 +67,9 @@ class PhysicalSideWatch:
     asset: str
     joints: tuple[str, ...]
     max_age_s: float
+    #: The joint of the track this arm rides, if it rides one: named in the
+    #: reason when its position is what is missing (S-03).
+    track_joint: str | None = None
     deadman: DeadmanState | None = None
     deadman_at: float | None = None
     controller_at: float | None = None
@@ -102,7 +107,13 @@ class PhysicalSideWatch:
             if name not in self.joint_at or now - self.joint_at[name] > self.max_age_s
         )
         if stale:
-            return f"{self.asset}: no fresh state for {', '.join(stale)}"
+            why = f"{self.asset}: no fresh state for {', '.join(stale)}"
+            if self.track_joint in stale:
+                why += (
+                    f" ({self.track_joint}: a physical track publishes no position until it "
+                    "has found its zero - initialize it with Start robot)"
+                )
+            return why
         return None
 
 

@@ -170,7 +170,7 @@ def generate_test_description():
                 package="cite_twin",
                 executable="twin_boundary.py",
                 name="twin_boundary",
-                arguments=["--plan", str(PLAN_PATH)],
+                arguments=["--plan", str(PLAN_PATH), "--sides", "all"],
                 output="screen",
             ),
             launch_testing.actions.ReadyToTest(),

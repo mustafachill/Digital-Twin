@@ -426,18 +426,43 @@ def test_twin_sides_offers_a_physical_side_only_when_ready() -> None:
     """R-19: commandable by measurement - a stale physical side is running, not commandable."""
     boundary = _boundary_with_carriages(0.0, 0.0)
     boundary._sides = {"plant": None, "counterpart": None}
-    running, physical, commandable, detail = boundary._sides_now()
+    running, physical, commandable, stationary, detail = boundary._sides_now()
     assert running == ("plant", "counterpart") and physical == ("counterpart",)
     assert commandable == ("plant", "counterpart") and detail == ""
+    assert stationary == ("counterpart",)
     stale = _boundary_with_carriages(0.0, 0.0, counterpart_age_s=2 * AGE)
     stale._sides = {"plant": None, "counterpart": None}
-    _, _, commandable, detail = stale._sides_now()
+    _, _, commandable, stationary, detail = stale._sides_now()
     assert commandable == ("plant",) and "old" in detail
+    assert stationary == (), "a carriage not heard fresh is not reported stationary"
     alone = _boundary_with_carriages(0.0, 0.0)
     alone._physical_watches = {}
     alone._physical_tracks = []
     alone._sides = {"plant": None}
-    assert alone._sides_now() == (("plant",), (), ("plant",), "")
+    assert alone._sides_now() == (("plant",), (), ("plant",), (), "")
+
+
+def test_twin_sides_reports_a_moving_physical_carriage_as_not_stationary() -> None:
+    """S-02: from the plan's freshness bound and the track's goal tolerance alone."""
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    boundary._sides = {"plant": None, "counterpart": None}
+    now = time.monotonic()
+    boundary._track_history["picker_track_joint"] = [(0.20, now - AGE), (0.30, now)]
+    _, _, commandable, stationary, detail = boundary._sides_now()
+    assert stationary == () and "picker_track_joint is not reported stationary" in detail
+    # Moving is no readiness question: the side stays commandable.
+    assert commandable == ("plant", "counterpart")
+    # Still to within the goal tolerance over the bound: stationary again.
+    boundary._track_history["picker_track_joint"] = [(0.3005, now - AGE), (0.30, now)]
+    assert boundary._sides_now()[3] == ("counterpart",)
+
+
+def test_twin_sides_does_not_offer_a_physical_side_whose_carriage_is_outside_its_travel() -> None:
+    """R-06: what a REAL transition would refuse for good is not offered at all."""
+    boundary = _boundary_with_carriages(0.0, 0.80)
+    boundary._sides = {"plant": None, "counterpart": None}
+    _, _, commandable, _, detail = boundary._sides_now()
+    assert commandable == ("plant",) and "outside its travel" in detail
 
 
 def test_a_plant_alone_deployment_refuses_every_mode_but_sim_even_forced_and_opted_in() -> None:

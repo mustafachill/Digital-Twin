@@ -266,12 +266,22 @@ if [ "$PAIR" -eq 1 ]; then
     # starts alone with the boundary and any console - simulation target only.
     # The rule is `program.sides.pair_sides`; the real arm is never started by
     # default, and a plant-only pair is a supported deployment, not a failure.
-    # Standard output's last line is the choice; anything before it is why.
-    PAIR_SIDES_SAID="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --pair-sides 2>&1)" \
-        || die "could not read which sides of ${ZONE} a pair starts"
-    PAIR_SIDES="$(tail -n 1 <<<"$PAIR_SIDES_SAID")"
+    # Standard output is the choice and nothing else; why is on standard error,
+    # captured apart so that a warning the helper prints can never be read as
+    # the choice (R-09).
+    PAIR_SIDES_WHY_FILE="$(mktemp)"
+    PAIR_SIDES="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --pair-sides 2>"$PAIR_SIDES_WHY_FILE")" \
+        || { cat "$PAIR_SIDES_WHY_FILE" >&2; rm -f "$PAIR_SIDES_WHY_FILE"; die "could not read which sides of ${ZONE} a pair starts"; }
+    PAIR_SIDES_WHY="$(cat "$PAIR_SIDES_WHY_FILE")"
+    rm -f "$PAIR_SIDES_WHY_FILE"
+    case "$PAIR_SIDES" in
+        all | plant) ;;
+        *) die "cite_bringup.program.sides --pair-sides answered '${PAIR_SIDES}', not all or plant" ;;
+    esac
     if [ "$PAIR_SIDES" = "plant" ]; then
-        warn "$(head -n -1 <<<"$PAIR_SIDES_SAID")"
+        if [ -n "$PAIR_SIDES_WHY" ]; then
+            warn "$PAIR_SIDES_WHY"
+        fi
         info "Starting the plant alone: the twin boundary supports SIM only (ADR-0072)"
     fi
     PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")

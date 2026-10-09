@@ -99,6 +99,30 @@ TEST(ConsoleView, TheViewCarriesTheFlagsAndReadsSimFromTheMode)
   EXPECT_FALSE(view_from(state).twin_in_sim);
 }
 
+TEST(ConsoleView, TheViewCarriesTheConsolesTargetVerdicts)
+{
+  // R-02: startable and floored targets, and whether the counterpart runs, are
+  // the console's published facts; the view carries them and derives nothing.
+  ConsoleState state;
+  state.state = ConsoleState::READY;
+  state.available_targets = {
+    ConsoleState::TARGET_SIM, ConsoleState::TARGET_REAL, ConsoleState::TARGET_TWIN};
+  state.startable_targets = {ConsoleState::TARGET_REAL};
+  state.floored_targets = {ConsoleState::TARGET_SIM};
+  state.counterpart_running = true;
+  const auto view = view_from(state);
+  EXPECT_EQ(view.startable_targets, std::set<Target>{Target::REAL});
+  EXPECT_EQ(view.floored_targets, std::set<Target>{Target::SIM});
+  EXPECT_TRUE(view.counterpart_running);
+  state.counterpart_running = false;
+  state.startable_targets = {};
+  state.floored_targets = {};
+  const auto none = view_from(state);
+  EXPECT_TRUE(none.startable_targets.empty());
+  EXPECT_TRUE(none.floored_targets.empty());
+  EXPECT_FALSE(none.counterpart_running);
+}
+
 TEST(ConsoleView, TheViewKeepsTheServedSetAsReceivedAndThePublisher)
 {
   std::uint8_t unknown = 0xFE;

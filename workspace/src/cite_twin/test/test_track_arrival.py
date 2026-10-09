@@ -111,3 +111,53 @@ def test_a_carriage_elsewhere_is_only_one_heard_fresh_and_away() -> None:
     assert elsewhere("counterpart", (0.30, 9.9), 0.30, 0.001, 10.0, AGE) is None
     assert elsewhere("counterpart", None, 0.30, 0.001, 10.0, AGE) is None
     assert elsewhere("counterpart", (0.0, 9.0), 0.30, 0.001, 10.0, AGE) is None
+
+
+# --- S-02: whether a physical carriage stands still, from the plan's values ----
+
+MAX_AGE_S = 0.25
+TOLERANCE_M = 0.001
+
+
+def test_two_fresh_samples_far_enough_apart_and_still_are_stationary() -> None:
+    from cite_twin.track_arrival import moving
+
+    samples = [(0.1, 0.0), (0.1005, 0.1), (0.1, 0.2), (0.1002, 0.3)]
+    assert moving("j", samples, 0.35, MAX_AGE_S, TOLERANCE_M) is None
+
+
+def test_a_carriage_that_moved_within_the_window_is_not_stationary() -> None:
+    from cite_twin.track_arrival import moving
+
+    samples = [(0.1, 0.0), (0.12, 0.1), (0.13, 0.3)]
+    reason = moving("j", samples, 0.35, MAX_AGE_S, TOLERANCE_M)
+    assert reason is not None and "moved" in reason
+
+
+def test_a_movement_before_the_window_does_not_count() -> None:
+    from cite_twin.track_arrival import moving
+
+    # Moved until 0.1 s, then still from 0.2 s to 0.6 s: the sample at 0.2 s is
+    # the newest at least MAX_AGE_S before the latest, and nothing since moved.
+    samples = [(0.0, 0.0), (0.2, 0.1), (0.3, 0.2), (0.3, 0.4), (0.3, 0.6)]
+    assert moving("j", samples, 0.6, MAX_AGE_S, TOLERANCE_M) is None
+
+
+def test_a_stale_or_too_short_history_is_not_stationary() -> None:
+    from cite_twin.track_arrival import moving
+
+    assert "no position" in moving("j", [], 1.0, MAX_AGE_S, TOLERANCE_M)
+    # The latest is older than MAX_AGE_S: not fresh.
+    assert "old" in moving("j", [(0.1, 0.0), (0.1, 0.3)], 0.6, MAX_AGE_S, TOLERANCE_M)
+    # Fresh, but no sample MAX_AGE_S before it yet.
+    assert "not heard for" in moving("j", [(0.1, 0.0), (0.1, 0.1)], 0.15, MAX_AGE_S, TOLERANCE_M)
+    assert "state_max_age_s" in moving("j", [(0.1, 0.0)], 0.0, None, TOLERANCE_M)
+
+
+def test_the_history_keeps_only_what_the_judgement_needs() -> None:
+    from cite_twin.track_arrival import recent
+
+    samples = [(0.0, 0.0), (0.0, 0.1), (0.0, 0.2), (0.0, 0.5), (0.0, 0.6)]
+    # The newest at least MAX_AGE_S before 0.6 s is the one at 0.2 s.
+    assert recent(samples, MAX_AGE_S) == samples[2:]
+    assert recent([], MAX_AGE_S) == []

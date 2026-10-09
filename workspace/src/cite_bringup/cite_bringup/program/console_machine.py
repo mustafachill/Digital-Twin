@@ -131,6 +131,13 @@ class Snapshot:
     counterpart_at_start: bool
     #: The targets the running deployment can serve now (`targets.available`).
     available_targets: tuple[int, ...]
+    #: Those of them every side of which is at the program's start (R-02):
+    #: the targets Start program is accepted for, so no panel restates which
+    #: sides a target commands.
+    startable_targets: tuple[int, ...]
+    #: Those of them that command a running physical side: the targets the
+    #: speed floor applies to (R-02).
+    floored_targets: tuple[int, ...]
     step: str
     prompt: str
     last_error: str
@@ -1029,6 +1036,7 @@ class ConsoleMachine:
 
     def _snapshot(self) -> Snapshot:
         self._sequence += 1
+        available = tuple(self._available())
         return Snapshot(
             sequence=self._sequence,
             state=self._state,
@@ -1036,7 +1044,14 @@ class ConsoleMachine:
             busy=self._busy,
             plant_at_start=self._at_start[PLANT_SIDE],
             counterpart_at_start=self._at_start[COUNTERPART_SIDE],
-            available_targets=tuple(self._available()),
+            available_targets=available,
+            # Derived here, from the one target table, and published (R-02).
+            startable_targets=tuple(
+                target
+                for target in available
+                if all(self._at_start[side] for side in targets.SIDES[target])
+            ),
+            floored_targets=tuple(target for target in available if self._physical_in(target)),
             step=self._step,
             prompt=self._prompt,
             last_error=self._error,

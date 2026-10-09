@@ -66,6 +66,7 @@ from cite_bringup.plan import (
     load,
     Plan,
     PlanError,
+    PLANT_SIDE,
     resolve_domain_id,
     resolve_uri,
 )
@@ -206,6 +207,23 @@ def bring_to_start(
             ros.enter_target(target)
         return False
     say(f"not at the program's start: {away}")
+    if (
+        via_twin
+        and PLANT_SIDE not in sides
+        and start.track_m is not None
+        and ros.target_carriage_unknown()
+    ):
+        # R-10: before any mode is asked and before anything moves. A track
+        # step of a target without the plant starts from where the twin
+        # confirmed that carriage stands, and the twin confirmed it nowhere.
+        raise StepFailed(
+            f"{targets.ARMS[target]} initialized, and its carriage is still not at the "
+            f"program's start ({start.track_m * 1000:.0f} mm): {away}. This program cannot "
+            "read where that carriage stands - the twin answers verdicts, not positions "
+            "(ADR-0050 decision 1b) - so it cannot command a track move from it. Run Start "
+            "robot again, whose initializer brings the carriage to the start, or Home with "
+            "the twin as the target. Nothing was moved"
+        )
     if via_twin:
         ros.enter_target(target, homing=targets.homing_allowance(target))
     run_home(steps, ros, say)

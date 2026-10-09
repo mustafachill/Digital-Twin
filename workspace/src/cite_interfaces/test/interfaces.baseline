@@ -18,6 +18,9 @@ msg/ConsoleState.msg
   bool plant_at_start
   bool counterpart_at_start
   uint8[] available_targets
+  uint8[] startable_targets
+  uint8[] floored_targets
+  bool counterpart_running
   string step
   string prompt
   string last_error
@@ -133,6 +136,7 @@ msg/TwinSides.msg
   string[] running
   string[] physical
   string[] commandable
+  string[] stationary
   string detail
 srv/ConfirmOperator.srv
   ---
@@ -141,6 +145,27 @@ srv/ConfirmOperator.srv
 srv/GetModelVersion.srv
   ---
   ModelVersion version
+srv/HoldMode.srv
+  string SERVICE="/cite/twin/hold_mode"
+  uint8 ACQUIRE=1
+  uint8 RELEASE=2
+  uint8 action
+  string holder
+  string node
+  uint8 mode
+  ---
+  bool accepted
+  ResultCode result
+  string holder
+  uint8 mode
+srv/Holding.srv
+  string SERVICE="/cite/twin/holding"
+  string[] sides
+  ---
+  string[] sides
+  bool[] heard
+  bool[] holding
+  string[] detail
 srv/InitializeAsset.srv
   ---
   bool success
@@ -165,6 +190,7 @@ srv/SetMode.srv
   string reason
   bool force
   bool homing
+  string holder
   ---
   bool accepted
   ResultCode result

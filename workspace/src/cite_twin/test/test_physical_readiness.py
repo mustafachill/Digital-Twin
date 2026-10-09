@@ -199,6 +199,15 @@ def _boundary_with_carriages(
         ("plant", "picker_track_joint"): (plant_m, now),
         ("counterpart", "picker_track_joint"): (counterpart_m, now - counterpart_age_s),
     }
+    boundary._physical_strokes = {"picker_track_joint": 0.70}
+    # Two readings a freshness bound apart, both where the carriage stands:
+    # standing still (S-02).
+    boundary._track_history = {
+        "picker_track_joint": [
+            (counterpart_m, now - counterpart_age_s - AGE),
+            (counterpart_m, now - counterpart_age_s),
+        ]
+    }
     return boundary
 
 
@@ -347,3 +356,20 @@ def test_a_carriage_apart_is_refused_without_a_readiness_question() -> None:
     )
     verdict = machine.request(TwinMode.MODE_VALIDATED, "", "go", False)
     assert not verdict.accepted and "home it" in verdict.detail
+
+
+def test_a_track_not_on_its_zero_is_a_reason_the_side_is_not_ready() -> None:
+    """S-03: the track adapter publishes no position until the track has found its zero.
+
+    The side is then not ready - so `TwinSides` offers no target commanding it -
+    and the reason says why the track's position is missing.
+    """
+    track = "picker_track_joint"
+    watch = PhysicalSideWatch(asset="picker", joints=JOINTS, max_age_s=AGE, track_joint=track)
+    watch.heard_deadman(_state(DeadmanState.STATE_HEALTHY), 10.0)
+    watch.heard_controller(10.0)
+    watch.heard_joints([joint for joint in JOINTS if joint != track], 10.0)
+    reason = watch.unready(10.0)
+    assert reason is not None and track in reason and "found its zero" in reason
+    watch.heard_joints([track], 10.0)
+    assert watch.unready(10.0) is None

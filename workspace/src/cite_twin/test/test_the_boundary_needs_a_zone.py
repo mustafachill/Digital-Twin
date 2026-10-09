@@ -36,7 +36,7 @@ import pytest
 def test_naming_neither_a_zone_nor_a_plan_is_refused(capsys) -> None:
     """The refusing branch. Nothing reads a plan, because parsing exits first."""
     with pytest.raises(SystemExit) as exit_code:
-        _arguments([])
+        _arguments(["--sides", "all"])
     assert exit_code.value.code == 2
     message = capsys.readouterr().err
     assert "--zone" in message, message
@@ -46,7 +46,7 @@ def test_naming_neither_a_zone_nor_a_plan_is_refused(capsys) -> None:
 
 
 def test_a_named_zone_is_accepted() -> None:
-    arguments = _arguments(["--zone", "cell_b"])
+    arguments = _arguments(["--zone", "cell_b", "--sides", "all"])
     assert arguments.zone == "cell_b"
     assert arguments.plan == ""
 
@@ -58,7 +58,7 @@ def test_a_plan_alone_is_accepted() -> None:
     and they name no zone because the plan carries one. If this ever starts
     refusing, those tests stop testing the boundary and start testing argparse.
     """
-    arguments = _arguments(["--plan", "/tmp/whatever_plan.yaml"])
+    arguments = _arguments(["--plan", "/tmp/whatever_plan.yaml", "--sides", "all"])
     assert arguments.plan == "/tmp/whatever_plan.yaml"
     assert arguments.zone == ""
 
@@ -70,8 +70,23 @@ def test_arguments_this_parser_does_not_own_are_still_ignored() -> None:
     call: a refusal implemented with `parse_args` would satisfy every test above
     and make every launched boundary die on an argument ROS itself added.
     """
-    arguments = _arguments(["--zone", "cell_b", "--ros-args", "-r", "__ns:=/cite/twin"])
+    arguments = _arguments(
+        ["--zone", "cell_b", "--sides", "all", "--ros-args", "-r", "__ns:=/cite/twin"]
+    )
     assert arguments.zone == "cell_b"
+
+
+def test_naming_no_sides_is_refused(capsys) -> None:
+    """S-04: `--sides` has no default; which sides run is the supervisor's to say."""
+    with pytest.raises(SystemExit) as exit_code:
+        _arguments(["--zone", "cell_b"])
+    assert exit_code.value.code == 2
+    assert "--sides" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("choice", ["all", "plant"])
+def test_each_sides_choice_is_accepted(choice: str) -> None:
+    assert _arguments(["--zone", "cell_b", "--sides", choice]).sides == choice
 
 
 # --- and they may not disagree ------------------------------------------------
@@ -92,7 +107,8 @@ def test_a_zone_that_contradicts_the_plan_is_refused(capsys) -> None:
     from cite_twin.twin_boundary import main
 
     other = "zone_x"
-    assert main(["--zone", other, "--plan", str(default_plan_path("cell_b"))]) == 2
+    plan = str(default_plan_path("cell_b"))
+    assert main(["--zone", other, "--plan", plan, "--sides", "all"]) == 2
     message = capsys.readouterr().err
     assert other in message and "cell_b" in message, message
 
@@ -121,5 +137,5 @@ def test_a_zone_that_agrees_with_the_plan_is_not_refused(capsys, tmp_path) -> No
     single = tmp_path / "cell_b_plan.yaml"
     single.write_text(yaml.safe_dump(document))
 
-    assert main(["--zone", "cell_b", "--plan", str(single)]) == 2
+    assert main(["--zone", "cell_b", "--plan", str(single), "--sides", "all"]) == 2
     assert "cannot both be honoured" not in capsys.readouterr().err

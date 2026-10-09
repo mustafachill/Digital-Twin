@@ -1,14 +1,17 @@
 # Home: bring the target's arms to the program's start, through the twin (ADR-0071,
 # ADR-0072: the target names which sides - the simulation, the real arm, or both).
 #
-# `cite_bringup.program.cycle.home`, the sequence `./scripts/home` runs:
-# initialize every physical arm, measure the start on every side, and only where
-# a side is not there move both arms there with one signal; then measure again.
-# Nothing is retried. On a pair with a physical side the console first reads the
-# twin's mode as SIM and asks the operator to clear the cell (ConfirmOperator),
-# and puts the twin back in SIM afterwards. Rejected unless Start robot has
-# succeeded and the console is READY. Cancelling the goal is the same software
-# stop as StopCell. A success sets ConsoleState.at_start.
+# `cite_bringup.program.cycle.home`, the sequence `./scripts/home` runs: initialize
+# every physical arm the target commands, measure the start on every side of the
+# target, and only where one is not there move the target's arms there with one
+# signal, in the target's twin mode; then measure again. Nothing is retried. Where
+# the target commands a physical side the console first reads the twin's mode as
+# SIM, waits for the physical carriage to be reported stationary and asks the
+# operator to clear the cell (ConfirmOperator), and puts the twin back in SIM
+# afterwards. The run holds the twin's mode for its whole length (HoldMode.srv).
+# Rejected unless Start robot has succeeded and the console is READY. Cancelling
+# the goal is the same software stop as StopCell. A success marks every side of the
+# target at the start (ConsoleState.plant_at_start / counterpart_at_start).
 #
 # Served under the plan's `console.home` (ConsoleState.msg).
 
@@ -16,8 +19,8 @@ float64 speed_scale     # (0, 1] of the program's own speed, sent explicitly by
                         # the operator's panel. Never defaulted: a goal with 0, or
                         # any value outside (0, 1] or below
                         # ConsoleState.minimum_speed_scale, is rejected (ADR-0071
-                        # decision 2). The floor applies only to a target that
-                        # includes the real arm
+                        # decision 2). The floor applies only to a target in
+                        # ConsoleState.floored_targets
 uint8 target            # ConsoleState.TARGET_SIM, TARGET_REAL or TARGET_TWIN, sent
                         # explicitly by the operator's panel (ADR-0072). Never
                         # defaulted: 0, an unknown value, or a target not in

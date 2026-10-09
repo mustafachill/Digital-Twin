@@ -15,7 +15,7 @@
 // The panel's enablement table, over every phase, every flag and every target
 // (ADR-0071, ADR-0072).
 //
-// Two halves. The exhaustive half walks all 9 phases x 2^10 flags x 4
+// Two halves. The exhaustive half walks all 9 phases x 2^11 flags x 4
 // selections and holds each button to an INDEPENDENT statement of the rule: a
 // table of named rows, each one situation in which one button is offered
 // (P-R03). A button is expected enabled exactly when some row for it matches,
@@ -23,6 +23,11 @@
 // never off a restated formula; a failure names the view, and the rows say
 // what should have been offered. The named half pins the rows an operator
 // meets, so that a failure reads as a situation.
+//
+// The panel knows NOTHING about which sides a target commands (review R-02):
+// whether a target may be started, and whether the speed floor applies to it,
+// are the console's published verdicts (`startable_targets`,
+// `floored_targets`), and the rows below are stated in those terms only.
 
 #include <gtest/gtest.h>
 
@@ -39,8 +44,6 @@ using cite_console_gui::ButtonStates;
 using cite_console_gui::ConsoleView;
 using cite_console_gui::counterpart_running;
 using cite_console_gui::enabled_for;
-using cite_console_gui::includes_counterpart;
-using cite_console_gui::includes_plant;
 using cite_console_gui::Phase;
 using cite_console_gui::phase_name;
 using cite_console_gui::settled_selection;
@@ -62,8 +65,8 @@ const std::set<Target> BOTH_SIDES = {Target::SIM, Target::REAL, Target::TWIN};
 
 ConsoleView view(
   Phase phase, bool robot_started = false, bool busy = false,
-  std::set<Target> available = BOTH_SIDES, bool plant_at_start = false,
-  bool counterpart_at_start = false, bool twin_in_sim = true, bool has_physical_side = false)
+  std::set<Target> available = BOTH_SIDES, std::set<Target> startable = {},
+  bool twin_in_sim = true, bool has_physical_side = false)
 {
   ConsoleView v;
   v.heard = true;
@@ -71,17 +74,16 @@ ConsoleView view(
   v.robot_started = robot_started;
   v.busy = busy;
   v.available_targets = std::move(available);
-  v.plant_at_start = plant_at_start;
-  v.counterpart_at_start = counterpart_at_start;
+  v.startable_targets = std::move(startable);
   v.twin_in_sim = twin_in_sim;
   v.has_physical_side = has_physical_side;
   return v;
 }
 
-/// A READY, started, idle console serving both sides.
-ConsoleView ready(bool plant_at_start = false, bool counterpart_at_start = false)
+/// A READY, started, idle console serving both sides, `startable` startable.
+ConsoleView ready(std::set<Target> startable = {})
 {
-  return view(Phase::READY, true, false, BOTH_SIDES, plant_at_start, counterpart_at_start);
+  return view(Phase::READY, true, false, BOTH_SIDES, std::move(startable));
 }
 
 /// A view serving exactly the targets `bits` names, one bit per ALL_TARGETS.
@@ -96,18 +98,23 @@ std::set<Target> targets_of(int bits)
   return targets;
 }
 
+std::string names_of(const std::set<Target> & targets)
+{
+  std::string names;
+  for (const Target target : targets) {
+    names += std::string(target_name(target)) + ",";
+  }
+  return names;
+}
+
 std::string describe(const ConsoleView & v, Target selected)
 {
-  std::string available;
-  for (const Target target : v.available_targets) {
-    available += std::string(target_name(target)) + ",";
-  }
   return std::string(phase_name(v.phase)) + " heard=" + std::to_string(v.heard) +
          " started=" + std::to_string(v.robot_started) + " busy=" + std::to_string(v.busy) +
-         " plant_at_start=" + std::to_string(v.plant_at_start) +
-         " counterpart_at_start=" + std::to_string(v.counterpart_at_start) +
          " sim=" + std::to_string(v.twin_in_sim) +
-         " physical=" + std::to_string(v.has_physical_side) + " available=[" + available +
+         " physical=" + std::to_string(v.has_physical_side) +
+         " available=[" + names_of(v.available_targets) +
+         "] startable=[" + names_of(v.startable_targets) +
          "] selected=" + target_name(selected);
 }
 
@@ -133,8 +140,7 @@ struct Row
   Need physical;
   std::set<Target> selected;  // empty: any selection, none included
   Need selected_served;       // the selection is one of available_targets
-  Need plant_at_start;
-  Need counterpart_at_start;
+  Need selected_startable;    // the selection is one of startable_targets
 };
 
 constexpr Need ANY = Need::ANY;
@@ -147,26 +153,22 @@ const std::vector<Row> & rows()
 {
   static const std::vector<Row> table = {
     {"a console not started, idle, offers Start robot", Button::START_ROBOT,
-      {Phase::NOT_STARTED}, ANY, NO, ANY, ANY, {}, ANY, ANY, ANY},
+      {Phase::NOT_STARTED}, ANY, NO, ANY, ANY, {}, ANY, ANY},
     {"a READY console, idle, may be started again", Button::START_ROBOT,
-      {Phase::READY}, ANY, NO, ANY, ANY, {}, ANY, ANY, ANY},
+      {Phase::READY}, ANY, NO, ANY, ANY, {}, ANY, ANY},
     {"a FAULT, idle, is left by Start robot", Button::START_ROBOT,
-      {Phase::FAULT}, ANY, NO, ANY, ANY, {}, ANY, ANY, ANY},
+      {Phase::FAULT}, ANY, NO, ANY, ANY, {}, ANY, ANY},
     {"a started robot, READY and idle, with a served target selected, may Home", Button::HOME,
-      {Phase::READY}, YES, NO, ANY, ANY, {}, YES, ANY, ANY},
-    {"... and with the simulation selected and at the start, may run", Button::START_PROGRAM,
-      {Phase::READY}, YES, NO, ANY, ANY, {Target::SIM}, YES, YES, ANY},
-    {"... and with the real arm selected and at the start, may run", Button::START_PROGRAM,
-      {Phase::READY}, YES, NO, ANY, ANY, {Target::REAL}, YES, ANY, YES},
-    {"... and with the twin selected and both arms at the start, may run",
+      {Phase::READY}, YES, NO, ANY, ANY, {}, YES, ANY},
+    {"... and with a target the console says is startable selected, may run",
       Button::START_PROGRAM,
-      {Phase::READY}, YES, NO, ANY, ANY, {Target::TWIN}, YES, YES, YES},
+      {Phase::READY}, YES, NO, ANY, ANY, {}, YES, YES},
     {"a request in progress, in any phase, may be stopped", Button::STOP,
-      {}, ANY, YES, ANY, ANY, {}, ANY, ANY, ANY},
+      {}, ANY, YES, ANY, ANY, {}, ANY, ANY},
     {"a FAULT out of SIM with a physical side: Stop asks for SIM again", Button::STOP,
-      {Phase::FAULT}, ANY, ANY, NO, YES, {}, ANY, ANY, ANY},
+      {Phase::FAULT}, ANY, ANY, NO, YES, {}, ANY, ANY},
     {"the console asks the operator: Confirm", Button::CONFIRM,
-      {Phase::AWAITING_OPERATOR}, ANY, ANY, ANY, ANY, {}, ANY, ANY, ANY},
+      {Phase::AWAITING_OPERATOR}, ANY, ANY, ANY, ANY, {}, ANY, ANY},
   };
   return table;
 }
@@ -174,14 +176,15 @@ const std::vector<Row> & rows()
 bool matches(const Row & row, const ConsoleView & v, Target selected)
 {
   const bool served = selected != Target::NONE && v.available_targets.count(selected) == 1;
+  const bool startable =
+    selected != Target::NONE && v.startable_targets.count(selected) == 1;
   return (row.phases.empty() || row.phases.count(v.phase) == 1) &&
          satisfies(row.started, v.robot_started) && satisfies(row.busy, v.busy) &&
          satisfies(row.twin_in_sim, v.twin_in_sim) &&
          satisfies(row.physical, v.has_physical_side) &&
          (row.selected.empty() || row.selected.count(selected) == 1) &&
          satisfies(row.selected_served, served) &&
-         satisfies(row.plant_at_start, v.plant_at_start) &&
-         satisfies(row.counterpart_at_start, v.counterpart_at_start);
+         satisfies(row.selected_startable, startable);
 }
 
 bool expected(Button button, const ConsoleView & v, Target selected)
@@ -197,7 +200,7 @@ bool expected(Button button, const ConsoleView & v, Target selected)
   return false;
 }
 
-constexpr int FLAG_BITS = 10;
+constexpr int FLAG_BITS = 11;
 
 /// The view for one combination of the flags `bits` encodes.
 ConsoleView walked(Phase phase, int bits)
@@ -207,11 +210,10 @@ ConsoleView walked(Phase phase, int bits)
   v.heard = bits & 1;
   v.robot_started = bits & 2;
   v.busy = bits & 4;
-  v.plant_at_start = bits & 8;
-  v.counterpart_at_start = bits & 16;
-  v.twin_in_sim = bits & 32;
-  v.has_physical_side = bits & 64;
-  v.available_targets = targets_of(bits >> 7);
+  v.twin_in_sim = bits & 8;
+  v.has_physical_side = bits & 16;
+  v.available_targets = targets_of((bits >> 5) & 7);
+  v.startable_targets = targets_of((bits >> 8) & 7);
   return v;
 }
 
@@ -257,7 +259,7 @@ TEST(Enablement, EveryRowOfTheTableIsReachable)
 
 TEST(Enablement, NothingBeforeTheConsoleIsHeard)
 {
-  ConsoleView v = ready(true, true);
+  ConsoleView v = ready(BOTH_SIDES);
   v.heard = false;
   EXPECT_EQ(enabled_for(v, Target::TWIN), ButtonStates{});
   EXPECT_EQ(enabled_for(ConsoleView{}, Target::NONE), ButtonStates{});
@@ -283,7 +285,7 @@ TEST(Enablement, HomeAndStartProgramNeedASelectedTarget)
   // even where the plant is the only target served (R-18).
   for (const auto & available : {BOTH_SIDES, PLANT_ONLY}) {
     const ButtonStates got =
-      enabled_for(view(Phase::READY, true, false, available, true, true), Target::NONE);
+      enabled_for(view(Phase::READY, true, false, available, available), Target::NONE);
     EXPECT_FALSE(got.home);
     EXPECT_FALSE(got.start_program);
     EXPECT_TRUE(got.start_robot);
@@ -293,27 +295,33 @@ TEST(Enablement, HomeAndStartProgramNeedASelectedTarget)
 TEST(Enablement, ATargetTheConsoleDoesNotServeIsNotSent)
 {
   // Plant-only: the real arm and the twin are not running.
-  const ConsoleView v = view(Phase::READY, true, false, PLANT_ONLY, true, true);
+  const ConsoleView v = view(Phase::READY, true, false, PLANT_ONLY, PLANT_ONLY);
   EXPECT_TRUE(enabled_for(v, Target::SIM).home);
   EXPECT_FALSE(enabled_for(v, Target::REAL).home);
   EXPECT_FALSE(enabled_for(v, Target::TWIN).home);
   EXPECT_FALSE(enabled_for(v, Target::TWIN).start_program);
 }
 
-TEST(Enablement, StartProgramNeedsEverySideOfTheTargetAtTheStart)
+TEST(Enablement, StartProgramFollowsTheConsolesStartableTargets)
 {
-  // Simulation only: the real arm's position is not its business.
-  EXPECT_TRUE(enabled_for(ready(true, false), Target::SIM).start_program);
-  EXPECT_FALSE(enabled_for(ready(false, true), Target::SIM).start_program);
-  // Real arm only: the simulation's position is not its business.
-  EXPECT_TRUE(enabled_for(ready(false, true), Target::REAL).start_program);
-  EXPECT_FALSE(enabled_for(ready(true, false), Target::REAL).start_program);
-  // Twin: both, so a single-side run that left them apart needs a Home first.
-  EXPECT_FALSE(enabled_for(ready(true, false), Target::TWIN).start_program);
-  EXPECT_FALSE(enabled_for(ready(false, true), Target::TWIN).start_program);
-  EXPECT_TRUE(enabled_for(ready(true, true), Target::TWIN).start_program);
+  // R-02: the console says which targets have every side at the start; the
+  // panel follows it and computes nothing about sides itself.
+  for (const Target target : ALL_TARGETS) {
+    EXPECT_TRUE(enabled_for(ready({target}), target).start_program) << target_name(target);
+    EXPECT_FALSE(enabled_for(ready(), target).start_program) << target_name(target);
+    for (const Target other : ALL_TARGETS) {
+      if (other != target) {
+        EXPECT_FALSE(enabled_for(ready({other}), target).start_program)
+          << target_name(target) << " with only " << target_name(other) << " startable";
+      }
+    }
+  }
+  // Startable but not served (a stale list): not sent.
+  EXPECT_FALSE(
+    enabled_for(view(Phase::READY, true, false, PLANT_ONLY, {Target::TWIN}), Target::TWIN)
+    .start_program);
   // Home never waits for the start: it is what brings the arms there.
-  EXPECT_TRUE(enabled_for(ready(false, false), Target::TWIN).home);
+  EXPECT_TRUE(enabled_for(ready(), Target::TWIN).home);
 }
 
 TEST(Enablement, WhileRunningOnlyStopIsOffered)
@@ -337,7 +345,7 @@ TEST(Enablement, FaultOutOfSimOffersStopToAskForSimAgain)
   // StopCell.srv: in FAULT while the twin is not in SIM, on a pair with a
   // physical side, Stop asks for SIM.
   const auto fault = [](bool twin_in_sim, bool physical) {
-      return view(Phase::FAULT, false, false, BOTH_SIDES, false, false, twin_in_sim, physical);
+      return view(Phase::FAULT, false, false, BOTH_SIDES, {}, twin_in_sim, physical);
     };
   EXPECT_TRUE(enabled_for(fault(false, true), Target::NONE).stop);
   EXPECT_FALSE(enabled_for(fault(true, true), Target::NONE).stop);
@@ -351,25 +359,12 @@ TEST(Enablement, AnUnrecognisedStateOffersNothingButStopWhileBusy)
 {
   ButtonStates expected;
   EXPECT_EQ(
-    enabled_for(view(Phase::UNKNOWN, true, false, BOTH_SIDES, true, true), Target::SIM),
+    enabled_for(view(Phase::UNKNOWN, true, false, BOTH_SIDES, BOTH_SIDES), Target::SIM),
     expected);
   expected.stop = true;
   EXPECT_EQ(
-    enabled_for(view(Phase::UNKNOWN, true, true, BOTH_SIDES, true, true), Target::SIM),
+    enabled_for(view(Phase::UNKNOWN, true, true, BOTH_SIDES, BOTH_SIDES), Target::SIM),
     expected);
-}
-
-TEST(Targets, EachTargetCommandsTheSidesItNames)
-{
-  // ADR-0072: SIM -> the plant, REAL -> the counterpart, TWIN -> both.
-  EXPECT_TRUE(includes_plant(Target::SIM));
-  EXPECT_FALSE(includes_counterpart(Target::SIM));
-  EXPECT_FALSE(includes_plant(Target::REAL));
-  EXPECT_TRUE(includes_counterpart(Target::REAL));
-  EXPECT_TRUE(includes_plant(Target::TWIN));
-  EXPECT_TRUE(includes_counterpart(Target::TWIN));
-  EXPECT_FALSE(includes_plant(Target::NONE));
-  EXPECT_FALSE(includes_counterpart(Target::NONE));
 }
 
 TEST(Targets, OnlyAServedTargetMayBeChosen)
@@ -484,11 +479,19 @@ TEST(Selection, OverEveryTransitionTheSelectionIsTheOperatorsOrNone)
   }
 }
 
-TEST(Targets, TheRealArmsSideRunsOnlyWhereATargetCommandsIt)
+TEST(Targets, TheRealArmsSideRunsWhereTheConsoleSaysItDoes)
 {
-  EXPECT_FALSE(counterpart_running(view(Phase::READY, true, false, PLANT_ONLY)));
-  EXPECT_TRUE(counterpart_running(ready()));
-  EXPECT_TRUE(counterpart_running(view(Phase::READY, true, false, {Target::TWIN})));
+  // R-02: read off ConsoleState.counterpart_running, never off the targets.
+  ConsoleView v = ready();
+  EXPECT_FALSE(counterpart_running(v));
+  v.counterpart_running = true;
+  EXPECT_TRUE(counterpart_running(v));
+  // Served targets say nothing about it.
+  ConsoleView plant_only = view(Phase::READY, true, false, PLANT_ONLY);
+  plant_only.counterpart_running = true;
+  EXPECT_TRUE(counterpart_running(plant_only));
+  v.heard = false;
+  EXPECT_FALSE(counterpart_running(v));
   EXPECT_FALSE(counterpart_running(ConsoleView{}));
 }
 
@@ -510,16 +513,23 @@ TEST(SpeedChoices, TheProgramsOwnSpeedComesFirst)
   }
 }
 
-TEST(SpeedChoices, TheFloorAppliesOnlyToATargetWithTheRealArm)
+TEST(SpeedChoices, TheFloorAppliesOnlyToATargetTheConsoleFloors)
 {
+  // R-02: which targets command a physical side is the console's to say
+  // (`floored_targets`); the panel assumes nothing about which side is real.
   ConsoleView v = ready();
   v.minimum_speed_scale = 0.25;
-  // ADR-0072 decision 2: the physical speed floor is the real arm's.
+  v.floored_targets = {Target::REAL, Target::TWIN};
   EXPECT_TRUE(speed_choice_enabled(0.1, v, Target::SIM));
   EXPECT_FALSE(speed_choice_enabled(0.1, v, Target::REAL));
   EXPECT_FALSE(speed_choice_enabled(0.1, v, Target::TWIN));
   EXPECT_TRUE(speed_choice_enabled(0.25, v, Target::REAL));
   EXPECT_TRUE(speed_choice_enabled(1.0, v, Target::TWIN));
+  // An all-simulated pair floors nothing.
+  v.floored_targets = {};
+  for (const Target target : ALL_TARGETS) {
+    EXPECT_TRUE(speed_choice_enabled(0.1, v, target)) << target_name(target);
+  }
   // No target yet: the floor holds, so nothing offered is taken back.
   EXPECT_FALSE(speed_choice_enabled(0.1, v, Target::NONE));
   EXPECT_TRUE(speed_choice_enabled(0.5, v, Target::NONE));

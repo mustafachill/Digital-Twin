@@ -68,6 +68,7 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import uuid
 
 from cite_bringup.gz import KILL_WAIT_S
 from cite_bringup.pair import SIDES_CHOICES, started_sides, STOP_GRACE_S
@@ -81,9 +82,8 @@ from cite_bringup.plan import (
 )
 from cite_bringup.program import targets
 from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
-from cite_bringup.program.cell import RosCell, state_topic, TERMINAL_NODE
+from cite_bringup.program.cell import RosCell, TERMINAL_NODE
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
-from cite_bringup.program.custody import read_state_on_side
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, initializer_stop, start_pose
 from cite_bringup.program.part import place_on_simulated_sides
@@ -161,7 +161,7 @@ if not SHUTDOWN_WORST_S < STOP_GRACE_S:
 #: a schedule: it fires once, on the executor's first turn.
 _ANNOUNCE_PERIOD_S = 0.01
 
-#: The name of the node each request's cell creates.
+#: The name each request's cell's node starts with; a suffix makes it its own.
 _CELL_NODE = "cell_console_program"
 
 
@@ -243,10 +243,14 @@ class CellConsole(LifecycleNode):
             place_parts=lambda sides, may_hold, say, interrupted: place_on_simulated_sides(
                 plan.zone, may_hold, say, interrupted, only=sides
             ),
+            # The RUNNING sides' belts, and said of the running sides alone
+            # (T-01): a side the pair did not start is neither commanded nor
+            # mentioned.
             set_belts=lambda running, say, interrupted, ceiling: set_belts(
                 plan,
                 not running,
                 say,
+                list(self._running),
                 interrupted=interrupted,
                 match_ceiling_s=MATCH_CEILING_S if ceiling is None else ceiling,
             ),
@@ -384,18 +388,16 @@ class CellConsole(LifecycleNode):
         """
         cell = target(self._plan)
         scale = {} if speed is None else {"speed": speed}
-        topic = state_topic(cell.arm)
         return RosCell(
             cell.arm,
             "twin",
             track=cell.track,
             interrupted=interrupted,
-            node_name=_CELL_NODE,
+            # One name per cell: the twin's hold on the mode lapses when its
+            # holder's node leaves the graph (HoldMode.srv), and a later cell
+            # under the same name would keep a lost hold alive.
+            node_name=f"{_CELL_NODE}_{uuid.uuid4().hex[:8]}",
             stop_deadline=self._stop_deadline,
-            # R-09: a side other than the plant is read on its own domain.
-            far_custody=lambda side: read_state_on_side(
-                self._plan, side, topic, interrupted=interrupted
-            ),
             **scale,
         )
 
@@ -557,6 +559,9 @@ class CellConsole(LifecycleNode):
                 plant_at_start=snapshot.plant_at_start,
                 counterpart_at_start=snapshot.counterpart_at_start,
                 available_targets=list(snapshot.available_targets),
+                startable_targets=list(snapshot.startable_targets),
+                floored_targets=list(snapshot.floored_targets),
+                counterpart_running=COUNTERPART_SIDE in self._running,
                 step=snapshot.step,
                 prompt=snapshot.prompt,
                 last_error=snapshot.last_error,

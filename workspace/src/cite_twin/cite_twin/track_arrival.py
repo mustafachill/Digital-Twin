@@ -24,7 +24,7 @@ without a graph; the boundary feeds it what it has heard, under its own lock.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
 from cite_interfaces.srv import TrackArrived
 
@@ -161,3 +161,66 @@ def apart(
         f"{joint} is not where the plant's stands ({plant[0] * 1000:.1f} mm) - {reason}; "
         "bring the physical carriage there (home it) first"
     )
+
+
+def moving(
+    joint: str,
+    samples: Sequence[tuple[float, float]],
+    now: float,
+    max_age_s: float | None,
+    tolerance_m: float,
+) -> str | None:
+    """Return why a physical carriage is not reported stationary, or `None` when it is.
+
+    S-02 (ADR-0072): before a person is asked into the cell, the physical
+    carriage has to be standing still, and that is judged from the plan's own
+    values and nothing chosen here. ``samples`` is the carriage's recent
+    positions with their steady-clock arrivals, oldest first. It is stationary
+    when the latest is fresh (no older than ``max_age_s``, the plan's
+    `state_max_age_s`) and a sample at least ``max_age_s`` before it exists,
+    with every sample from that one to the latest within ``tolerance_m`` (the
+    track's `goal_tolerance_m`) of the latest: two fresh readings that far
+    apart, and nothing between them that moved.
+    """
+    if max_age_s is None:
+        return f"{joint}: physical, and the plan states no state_max_age_s"
+    if not samples:
+        return f"{joint}: no position heard"
+    latest, latest_at = samples[-1]
+    if now - latest_at > max_age_s:
+        return f"{joint}: its position is {now - latest_at:.2f} s old, above {max_age_s:g} s"
+    since = None
+    for index in range(len(samples) - 1, -1, -1):
+        if latest_at - samples[index][1] >= max_age_s:
+            since = index
+            break
+    if since is None:
+        return f"{joint}: not heard for {max_age_s:g} s yet, so whether it moves is not known"
+    spread = max(abs(position - latest) for position, _at in samples[since:])
+    if spread > tolerance_m:
+        window_s = latest_at - samples[since][1]
+        return (
+            f"{joint}: moved {spread * 1000:.1f} mm in the last {window_s:.2f} s, more than "
+            f"{tolerance_m * 1000:g} mm"
+        )
+    return None
+
+
+def recent(
+    samples: list[tuple[float, float]], max_age_s: float | None
+) -> list[tuple[float, float]]:
+    """Return ``samples`` without those `moving` can no longer need, oldest first.
+
+    Kept: the newest sample at least ``max_age_s`` before the latest, and every
+    one after it. Anything older says nothing about whether the carriage moves
+    now.
+    """
+    if max_age_s is None or not samples:
+        return samples
+    latest_at = samples[-1][1]
+    keep_from = 0
+    for index in range(len(samples) - 1, -1, -1):
+        if latest_at - samples[index][1] >= max_age_s:
+            keep_from = index
+            break
+    return samples[keep_from:]

@@ -312,6 +312,9 @@ def _tracking(cell, plant_m: float, answers: list):
     ros._track_position = plant_m
     ros._track_arrived = object()
     ros._until_true = lambda predicate, what: None
+    # The physical sides are ready and their carriages still (S-02): the
+    # carriage-agreement question is the one these tests ask.
+    ros._await_physical_sides = lambda target: None
     asked: list[float] = []
 
     def ask_arrival(position_m: float, what: str, sides=()):
@@ -747,6 +750,9 @@ class _PairCell:
     def return_to_sim(self) -> bool:
         _PairCell.calls.append("return_to_sim")
         return _PairCell.left
+
+    def release_hold(self) -> bool:
+        return True
 
 
 def _main_on_a_pair(
@@ -1705,3 +1711,13 @@ def test_via_the_plant_is_refused_where_the_graph_shows_no_simulated_side(
     assert status == 2
     assert reached == ["init", "asked the graph"]
     assert "--via plant refused: no /clock" in capsys.readouterr().err
+
+
+def test_a_physical_side_not_ready_or_moving_refuses_before_the_carriages_are_compared(
+    cell,
+) -> None:
+    """S-02, R-06: asked first, and its refusal is the answer; nothing else is asked."""
+    ros, asked = _tracking(cell, 0.65, [])
+    ros._await_physical_sides = lambda target: "counterpart is not ready to be commanded"
+    assert ros.carriage_refusal(TWIN) == "counterpart is not ready to be commanded"
+    assert asked == []

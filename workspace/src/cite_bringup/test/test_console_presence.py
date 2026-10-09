@@ -32,8 +32,9 @@ from cite_bringup.plan import default_plan_path, load
 import cite_bringup.program.cell as cell_module
 from cite_bringup.program.cell import RosCell, TERMINAL_NODE
 from cite_bringup.program.steps import StepFailed
-from cite_interfaces.msg import ConsoleState, RobotState, TwinMode
+from cite_interfaces.msg import ConsoleState, RobotState, TwinMode, TwinSides
 from cite_interfaces.qos import LATCHED, SENSOR
+from cite_interfaces.srv import Holding, HoldMode
 import pytest
 import rclpy
 from rosgraph_msgs.msg import Clock
@@ -216,3 +217,138 @@ def test_no_simulated_clock_on_the_domain_refuses(graph, monkeypatch) -> None:
     assert "/test_s02r/clock_absent" in refusal and "simulated side" in refusal
     # The probe's subscription does not outlive the question.
     assert reader.node.count_subscribers("/test_s02r/clock_absent") == 0
+
+
+# --- T-01: the console's belts are the RUNNING sides', said of them alone ------
+
+
+def test_a_plant_alone_console_commands_and_names_the_plants_belt_alone(
+    graph, monkeypatch
+) -> None:
+    """T-01: a side the pair did not start is neither commanded nor mentioned."""
+    import cite_bringup.program.console as console_module
+
+    asked: list = []
+
+    def set_belts(plan, stop, say, sides=None, **kwargs):
+        asked.append(sides)
+        return True
+
+    monkeypatch.setattr(console_module, "set_belts", set_belts)
+    console = console_module.CellConsole(load(default_plan_path("cell_b")), ("plant",))
+    try:
+        assert console.on_configure(None) == console_module.TransitionCallbackReturn.SUCCESS
+        assert console.machine._set_belts(True, lambda text: None, None, None)
+        assert asked == [["plant"]]
+    finally:
+        console.destroy_node()
+
+
+# --- R-01, S-01, S-02: the cell asks the twin, on its own domain only ---------
+
+
+class _Twin:
+    """A twin boundary's Holding, HoldMode and TwinSides, served on this domain."""
+
+    def __init__(self, holding: Holding.Response) -> None:
+        from rclpy.executors import SingleThreadedExecutor
+
+        self.node = rclpy.create_node("fake_twin_services")
+        self.holding = holding
+        self.holds: list = []
+        self.hold_answer = True
+        self.node.create_service(Holding, Holding.Request.SERVICE, self._on_holding)
+        self.node.create_service(HoldMode, HoldMode.Request.SERVICE, self._on_hold)
+        self.sides = self.node.create_publisher(TwinSides, TwinSides.TOPIC, LATCHED)
+        self.executor = SingleThreadedExecutor()
+        self.executor.add_node(self.node)
+        self._thread = threading.Thread(target=self.executor.spin, daemon=True)
+        self._thread.start()
+
+    def _on_holding(self, request, response):
+        return self.holding
+
+    def _on_hold(self, request, response):
+        self.holds.append((request.action, request.holder, request.node, request.mode))
+        response.accepted = self.hold_answer
+        response.result.detail = "fake"
+        return response
+
+    def close(self) -> None:
+        self.executor.shutdown()
+        self.node.destroy_node()
+
+
+def _cell(graph) -> RosCell:
+    _, reader = graph
+    reader._holder = "run-under-test"
+    reader._holds = False
+    return reader
+
+
+def test_custody_of_every_side_is_asked_of_the_twin_on_this_domain(graph) -> None:
+    """R-01: one call to the boundary; the counterpart's domain is never opened."""
+    twin = _Twin(
+        Holding.Response(
+            sides=["plant", "counterpart"],
+            heard=[True, True],
+            holding=[False, True],
+            detail=["", "picker holds box_7"],
+        )
+    )
+    try:
+        cell = _cell(graph)
+        with pytest.raises(StepFailed, match="counterpart: picker holds box_7"):
+            cell.refuse_if_holding(("plant", "counterpart"))
+        twin.holding = Holding.Response(
+            sides=["plant", "counterpart"],
+            heard=[True, True],
+            holding=[False, False],
+            detail=["", ""],
+        )
+        cell.refuse_if_holding(("plant", "counterpart"))
+    finally:
+        twin.close()
+
+
+def test_the_cell_holds_and_releases_the_mode_by_its_own_node(graph) -> None:
+    """S-01: the hold names this run and this cell's node, and is let go once."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        cell._hold(TwinMode.MODE_SIM, "SIM")
+        assert cell.release_hold()
+        assert cell.release_hold(), "nothing held: nothing asked"
+        (acquire, release) = twin.holds
+        assert acquire == (
+            HoldMode.Request.ACQUIRE, "run-under-test", "/terminal_client", TwinMode.MODE_SIM
+        )
+        assert release[:2] == (HoldMode.Request.RELEASE, "run-under-test")
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold"):
+            cell._hold(TwinMode.MODE_REAL, "REAL")
+    finally:
+        twin.close()
+
+
+def test_the_operator_waits_for_a_stationary_physical_carriage(graph, monkeypatch) -> None:
+    """S-02: a moving carriage holds the prompt back, bounded, and refuses at the bound."""
+    from cite_bringup.program import targets
+
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        sides = {"running": ["plant", "counterpart"], "physical": ["counterpart"]}
+        twin.sides.publish(TwinSides(**sides, commandable=["plant", "counterpart"],
+                                     stationary=[], detail="picker_track_joint is not "
+                                     "reported stationary"))
+        monkeypatch.setattr(cell_module, "PHYSICAL_SIDE_READY_CEILING_S", 1.0)
+        refusal = cell._await_physical_sides(targets.REAL)
+        assert refusal is not None and "not reported stationary" in refusal
+        assert "no one is asked into the cell" in refusal
+        twin.sides.publish(TwinSides(**sides, commandable=["plant", "counterpart"],
+                                     stationary=["counterpart"]))
+        monkeypatch.setattr(cell_module, "PHYSICAL_SIDE_READY_CEILING_S", GRAPH_S)
+        assert cell._await_physical_sides(targets.REAL) is None
+    finally:
+        twin.close()

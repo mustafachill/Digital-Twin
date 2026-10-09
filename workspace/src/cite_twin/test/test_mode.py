@@ -368,7 +368,7 @@ class TestAPairStartedWithThePlantAlone:
         return self._Plan([self._Manager("picker", True)])
 
     def test_both_sides_running_is_the_plan_as_declared(self) -> None:
-        deployment = deployment_from_plan(self._plan())
+        deployment = deployment_from_plan(self._plan(), ("plant", "counterpart"))
         assert deployment.declares_physical_hardware("picker", "counterpart") is True
 
     def test_a_counterpart_that_does_not_run_reads_as_none(self) -> None:
@@ -388,6 +388,11 @@ class TestAPairStartedWithThePlantAlone:
         assert verdict.code == ResultCode.PRECONDITION_FAILED
         assert "far side" in verdict.detail and "plant alone" in verdict.detail
         assert machine.mode == TwinMode.MODE_SIM
+
+    def test_the_running_sides_have_no_default(self) -> None:
+        """S-04: a caller that does not say which sides run is a TypeError, not both."""
+        with pytest.raises(TypeError):
+            deployment_from_plan(self._plan())  # type: ignore[call-arg]
 
     def test_sim_is_accepted(self) -> None:
         machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
