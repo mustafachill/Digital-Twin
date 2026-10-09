@@ -41,6 +41,14 @@ where the plan is — and gains no branch on modes, routing, skills or divergenc
 A change here that passes a mode, a side preference or a skill list has crossed
 that line and needs its own record.
 
+**It may start the plant alone** (ADR-0072, amending ADR-0057), when it is
+told to: `--sides plant`. Which sides start is decided by the hardware opt-in,
+in `./scripts/sim` (`program.sides.pair_sides`), and handed here explicitly; it
+is never inferred in this module. The boundary and the console are handed the
+same choice, as an argument, so that every participant knows the deployment it
+is part of rather than discovering it from a domain that is silent. A pair of
+both sides still ends when either side exits.
+
 **It starts the operator console the same way, one step later, ONLY WHEN ASKED**
 (ADR-0071, `--console`; `./scripts/sim --pair --console`): `cell_console`, with
 the plant's domain as its own, once the boundary has announced, because every
@@ -188,9 +196,25 @@ STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
 
 
-def participants(plan: Plan, console: bool) -> int:
-    """Count the participants a pair of ``plan`` stops: each side, the boundary, any console."""
-    return len(plan.sides) + 1 + (1 if console else 0)
+#: `--sides`: the plant alone, or every side the plan declares (ADR-0072). The
+#: boundary takes the same two words (`cite_twin.twin_boundary.SIDES_CHOICES`),
+#: and `test_pair.py` holds the two equal; neither package imports the other's.
+SIDES_PLANT = "plant"
+SIDES_ALL = "all"
+SIDES_CHOICES = (SIDES_PLANT, SIDES_ALL)
+
+
+def started_sides(plan: Plan, sides: str) -> list[str]:
+    """Return the side names a pair of ``plan`` starts for a ``--sides`` choice, in plan order."""
+    if sides not in SIDES_CHOICES:
+        raise ValueError(f"--sides is {sides!r}, not one of {', '.join(SIDES_CHOICES)}")
+    names = [side.name for side in plan.sides]
+    return [PLANT_SIDE] if sides == SIDES_PLANT else names
+
+
+def participants(plan: Plan, console: bool, sides: str) -> int:
+    """Count the participants a pair of ``plan`` stops: each side started, the boundary, any console."""
+    return len(started_sides(plan, sides)) + 1 + (1 if console else 0)
 
 
 def teardown_ceiling_s(count: int) -> float:
@@ -347,9 +371,13 @@ class SideSpec:
 
 
 def side_specs(
-    plan: Plan, environ: Mapping[str, str], *, headless: bool = True
+    plan: Plan,
+    environ: Mapping[str, str],
+    *,
+    headless: bool = True,
+    sides: str = SIDES_ALL,
 ) -> list[SideSpec]:
-    """One spec per side the plan declares, in the plan's order.
+    """One spec per side started, in the plan's order: every side, or the plant alone.
 
     The domain is resolved through `plan.resolve_domain_id` and nowhere else: a
     second copy of `base + offset` is a value in two places, and the two copies
@@ -363,7 +391,10 @@ def side_specs(
     """
     base = domain_base(environ)
     specs = []
+    chosen = started_sides(plan, sides)
     for side in plan.sides:
+        if side.name not in chosen:
+            continue
         domain = resolve_domain_id(plan, side.name, base)
         argv = side_launch(plan, side.name, headless)
         specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
@@ -412,7 +443,7 @@ def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
     )
 
 
-def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
+def boundary_spec(plan: Plan, path: Path | str, sides: str = SIDES_ALL) -> SideSpec:
     """Return the third participant: the boundary spanning the two sides above.
 
     **Two arguments and nothing else, and that is ADR-0057's load-bearing
@@ -433,6 +464,11 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
     Both `--zone` and `--plan`, though the boundary reads the zone off the plan:
     the two are checked against each other there, and a supervisor that passed
     only the path would be handing over a cell name it never stated.
+
+    **And `--sides`** (ADR-0072): which sides were started, so a pair started
+    with the plant alone has a boundary that opens no context on the
+    counterpart's domain and refuses every mode but SIM. That is a fact about
+    the deployment this supervisor started, not a decision about what crosses.
     """
     return SideSpec(
         BOUNDARY_NAME,
@@ -448,6 +484,8 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
             plan.zone,
             "--plan",
             str(path),
+            "--sides",
+            sides,
         ),
         announcement=announced_boundary,
         announces=plan.zone,
@@ -462,7 +500,9 @@ def boundary_spec(plan: Plan, path: Path | str) -> SideSpec:
     )
 
 
-def console_spec(plan: Plan, path: Path | str, environ: Mapping[str, str]) -> SideSpec:
+def console_spec(
+    plan: Plan, path: Path | str, environ: Mapping[str, str], sides: str = SIDES_ALL
+) -> SideSpec:
     """Return the fourth participant, when asked for: the operator console (ADR-0071).
 
     Started once the boundary has announced, because every request it serves
@@ -490,6 +530,8 @@ def console_spec(plan: Plan, path: Path | str, environ: Mapping[str, str]) -> Si
             plan.zone,
             "--plan",
             str(path),
+            "--sides",
+            sides,
         ),
         {DOMAIN_ENV: str(domain)},
         announcement=announced_console,
@@ -1011,7 +1053,7 @@ def _join(
                 continue
             if latest is None:
                 print(
-                    "[pair] both sides announced readiness; the pair is up",
+                    "[pair] every side started announced readiness; the pair is up",
                     file=out,
                     flush=True,
                 )
@@ -1176,6 +1218,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also start the operator console once the boundary is up (ADR-0071).",
     )
+    # REQUIRED, with no default (ADR-0072): which sides start is decided by the
+    # hardware opt-in in `./scripts/sim` and handed here, never inferred.
+    parser.add_argument(
+        "--sides",
+        required=True,
+        choices=SIDES_CHOICES,
+        help="Start every side the plan declares, or the plant alone (ADR-0072).",
+    )
     args = parser.parse_args(
         _flags(sys.argv[1:] if argv is None else argv, parser)
     )
@@ -1183,21 +1233,27 @@ def main(argv: list[str] | None = None) -> int:
     try:
         path = default_plan_path(args.zone)
         plan = load(path)
-        specs = side_specs(plan, os.environ, headless=args.headless)
+        specs = side_specs(plan, os.environ, headless=args.headless, sides=args.sides)
     except PlanError as exc:
         print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
         return 1
-    if len(specs) < 2:
+    if len(plan.sides) < 2:
         # Not an error to be repaired here. Whether a zone runs as a pair is an
         # L0 fact, and inventing a second side would be bring-up deciding what
         # the facility is (P5).
         print(
             f"PAIR BRING-UP FAILED: zone {plan.zone!r} declares "
-            f"{len(specs)} side(s). A pair needs two; set `twin: {{sides: pair}}` "
+            f"{len(plan.sides)} side(s). A pair needs two; set `twin: {{sides: pair}}` "
             "on the zone in the L0 model and regenerate.",
             file=sys.stderr,
         )
         return 1
+    if args.sides == SIDES_PLANT:
+        print(
+            "[pair] starting the plant alone (--sides plant): no counterpart runs, and the "
+            "twin boundary supports SIM only (ADR-0072)",
+            flush=True,
+        )
     # The path rather than the zone, so that the boundary reads the same
     # document this supervisor resolved the sides from. Resolving it a second
     # time from the zone would be the same lookup written twice, and the two
@@ -1206,13 +1262,13 @@ def main(argv: list[str] | None = None) -> int:
     console = None
     if args.console:
         try:
-            console = console_spec(plan, path, os.environ)
+            console = console_spec(plan, path, os.environ, args.sides)
         except PlanError as exc:
             print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
             return 1
     return supervise(
         specs,
-        boundary=boundary_spec(plan, path),
+        boundary=boundary_spec(plan, path, args.sides),
         console=console,
         ceiling_s=args.ceiling,
     )

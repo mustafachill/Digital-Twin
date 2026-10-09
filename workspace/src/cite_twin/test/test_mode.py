@@ -26,7 +26,7 @@ answers are driven here without touching the process environment.
 from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
-from cite_twin.mode import Deployment, MODE_NAMES, ModeAuthority
+from cite_twin.mode import deployment_from_plan, Deployment, MODE_NAMES, ModeAuthority
 from cite_twin.routing import commanded_sides, route
 import pytest
 
@@ -345,3 +345,46 @@ class TestAcceptedTransitions:
                 mode, "", "because", force=False
             )
             assert verdict.accepted, f"mode {mode} was refused: {verdict.detail}"
+
+
+class TestAPairStartedWithThePlantAlone:
+    """ADR-0072, amending ADR-0057: a side that does not run is no far side at all."""
+
+    class _Manager:
+        def __init__(self, asset: str, physical: bool) -> None:
+            self.asset = asset
+            self._physical = physical
+
+        def commands_physical_hardware_on_or_none(self, side: str) -> bool | None:
+            return self._physical if side == "counterpart" else False
+
+    class _Plan:
+        def __init__(self, managers) -> None:
+            self.controller_managers = managers
+
+    def _plan(self):
+        return self._Plan([self._Manager("picker", True)])
+
+    def test_both_sides_running_is_the_plan_as_declared(self) -> None:
+        deployment = deployment_from_plan(self._plan())
+        assert deployment.declares_physical_hardware("picker", "counterpart") is True
+
+    def test_a_counterpart_that_does_not_run_reads_as_none(self) -> None:
+        deployment = deployment_from_plan(self._plan(), ("plant",))
+        assert deployment.declares_physical_hardware("picker", "counterpart") is None
+        assert deployment.declares_physical_hardware("picker", "plant") is False
+
+    @pytest.mark.parametrize("mode", [TwinMode.MODE_REAL, TwinMode.MODE_VALIDATED])
+    def test_real_and_validated_are_refused_as_having_no_far_side(self, mode: int) -> None:
+        """Refused before the hardware gate is reached: with no counterpart there is
+        no physical side to gate, and the refusal says why."""
+        machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
+        verdict = machine.request(mode, "", "because", force=False)
+        assert not verdict.accepted
+        assert verdict.code == ResultCode.PRECONDITION_FAILED
+        assert "far side" in verdict.detail and "plant alone" in verdict.detail
+        assert machine.mode == TwinMode.MODE_SIM
+
+    def test_sim_is_accepted(self) -> None:
+        machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
+        assert machine.request(TwinMode.MODE_SIM, "", "because", force=False).accepted

@@ -94,6 +94,10 @@ if(BUILD_TESTING)
   # automated could show, which was overstated. It brings no cell up either, so
   # nothing here is evidence about motion.
   add_launch_test(test/test_twin_boundary_paired_launch.py TIMEOUT 300)
+  # ADR-0072: the boundary of a pair started with the plant alone - no
+  # counterpart process, no counterpart context - routing SIM to the plant and
+  # refusing every mode that needs a far side.
+  add_launch_test(test/test_twin_boundary_plant_alone_launch.py TIMEOUT 300)
   # ADR-0071: the operator console server from cite_bringup over the real
   # boundary and two fake sides - its refusals, Start robot, and a Home
   # cancelled at its track slide. Here rather than in cite_bringup because it

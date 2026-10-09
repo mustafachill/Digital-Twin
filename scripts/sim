@@ -3,7 +3,9 @@
 #
 #   ./scripts/sim                    GUI (requires a display)
 #   ./scripts/sim --headless         no GUI — the form used by CI and by the tester agent
-#   ./scripts/sim --pair             both sides of a twin pair, under the pair supervisor
+#   ./scripts/sim --pair             a twin pair, under the pair supervisor: both sides
+#                                    with CITE_ALLOW_HARDWARE=1 when a side is physical,
+#                                    the plant alone without it (ADR-0072)
 #   ./scripts/sim --pair --console   the same, and the operator console once the
 #                                    twin boundary is up (ADR-0071)
 #   ./scripts/sim --zone cell_b      name the zone rather than letting the model choose
@@ -258,6 +260,21 @@ if [ "$PAIR" -eq 1 ]; then
     if [ "$CONSOLE" -eq 1 ]; then
         PAIR_ARGS=(--console "${PAIR_ARGS[@]}")
     fi
+    # WHICH SIDES START is decided here, by the hardware opt-in resolved above,
+    # and handed to the supervisor explicitly (ADR-0072): a plan with a physical
+    # side starts it only with CITE_ALLOW_HARDWARE=1, and without it the plant
+    # starts alone with the boundary and any console - simulation target only.
+    # The rule is `program.sides.pair_sides`; the real arm is never started by
+    # default, and a plant-only pair is a supported deployment, not a failure.
+    # Standard output's last line is the choice; anything before it is why.
+    PAIR_SIDES_SAID="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --pair-sides 2>&1)" \
+        || die "could not read which sides of ${ZONE} a pair starts"
+    PAIR_SIDES="$(tail -n 1 <<<"$PAIR_SIDES_SAID")"
+    if [ "$PAIR_SIDES" = "plant" ]; then
+        warn "$(head -n -1 <<<"$PAIR_SIDES_SAID")"
+        info "Starting the plant alone: the twin boundary supports SIM only (ADR-0072)"
+    fi
+    PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")
     exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
 fi
 

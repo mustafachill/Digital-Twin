@@ -186,6 +186,12 @@ class Deployment:
     """
 
     sides: Mapping[str, Mapping[str, bool | None]]
+    #: The sides the zone declares that this deployment did NOT start (ADR-0072):
+    #: the counterpart of a pair started with the plant alone. Their entries in
+    #: ``sides`` read `None`, and beyond that a mode commanding one is refused
+    #: whatever `force` says - a forced mode toward a side with no process
+    #: behind it describes a cell that does not exist (R-15).
+    absent: frozenset[str] = frozenset()
 
     @staticmethod
     def paired(far_side_physical: Mapping[str, bool | None]) -> Deployment:
@@ -286,7 +292,9 @@ class Deployment:
         )
 
 
-def deployment_from_plan(plan: Plan) -> Deployment:
+def deployment_from_plan(
+    plan: Plan, running: tuple[str, ...] = (PLANT_SIDE, COUNTERPART_SIDE)
+) -> Deployment:
     """Read what L5 knows about both sides out of the generated bring-up plan.
 
     **A free function, and its being one is a requirement rather than a style
@@ -304,15 +312,35 @@ def deployment_from_plan(plan: Plan) -> Deployment:
     the `None` `Deployment` needs, with the same meaning `Deployment` gives it,
     so the distinction survives the crossing instead of being rebuilt from an
     exception at this end.
+
+    ``running`` is the sides this deployment started (ADR-0072, amending
+    ADR-0057): a pair started with the plant alone runs no counterpart, and a
+    side that does not run is `None` here exactly as an undeclared one is - so
+    every mode but `SIM` is refused there as having no far side, by the check
+    that already refuses it on a single-sided zone. Handed to the boundary by
+    the pair supervisor at start-up and never re-read (ADR-0050 decision 4).
     """
     return Deployment(
         {
             manager.asset: {
-                side: manager.commands_physical_hardware_on_or_none(side)
+                side: (
+                    manager.commands_physical_hardware_on_or_none(side)
+                    if side in running
+                    else None
+                )
                 for side in (PLANT_SIDE, COUNTERPART_SIDE)
             }
             for manager in plan.controller_managers
-        }
+        },
+        absent=frozenset(
+            side
+            for side in (PLANT_SIDE, COUNTERPART_SIDE)
+            if side not in running
+            and any(
+                manager.commands_physical_hardware_on_or_none(side) is not None
+                for manager in plan.controller_managers
+            )
+        ),
     )
 
 
@@ -370,6 +398,7 @@ class ModeAuthority:
         initial_mode: int = INITIAL_MODE,
         physical_side_unready: Callable[[], str | None] | None = None,
         physical_carriage_apart: Callable[[], str | None] | None = None,
+        physical_carriage_outside_travel: Callable[[], str | None] | None = None,
     ) -> None:
         self._deployment = deployment
         self._hardware_opt_in = hardware_opt_in
@@ -384,6 +413,11 @@ class ModeAuthority:
         #: waited on it would wait beside an operator who has confirmed the
         #: cell clear (S-08).
         self._physical_carriage_apart = physical_carriage_apart
+        #: Why a physical carriage, heard fresh, stands outside its track's
+        #: travel, or `None` (R-10, ADR-0072). Asked of every mode commanding a
+        #: physical side, `homing` or not, and refused for good: a carriage
+        #: outside its travel is not one a program may be sent to move.
+        self._physical_carriage_outside_travel = physical_carriage_outside_travel
         self._mode = initial_mode
         self._reason = "the mode a deployment starts in; never reached by a default"
 
@@ -469,6 +503,22 @@ class ModeAuthority:
                 commands_hardware=False,
             )
 
+        missing = [
+            side for side in commanded_sides(mode) if side in self._deployment.absent
+        ]
+        if missing:
+            # NEVER behind `force` (R-15, ADR-0072): `force` may skip a judgement
+            # about what the zone declares, and this is no judgement - the side
+            # has no process behind it, so the mode would publish a cell that
+            # does not exist and route to nothing.
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES[mode]} needs a far side and this deployment has no far side "
+                f"running: the pair was started with the plant alone, so "
+                f"{', '.join(missing)} does not run (ADR-0072). Only SIM is supported; "
+                "start the pair with both sides to command the other.",
+            )
+
         if mode != TwinMode.MODE_SIM and not self._deployment.has_a_far_side(asset_id):
             # A non-safety precondition, so `force` may skip it: every mode but
             # SIM is a statement about two sides, and a deployment with one side
@@ -483,10 +533,11 @@ class ModeAuthority:
                 )
                 raise ModeError(
                     ResultCode.PRECONDITION_FAILED,
-                    f"{MODE_NAMES[mode]} is a statement about two sides and this "
-                    f"deployment declares no far side for {without}. Whether a zone "
-                    "runs as a pair is an L0 fact - set `twin: {sides: pair}` on the "
-                    "zone and regenerate (ADR-0041).",
+                    f"{MODE_NAMES[mode]} needs a far side and this deployment has no "
+                    f"far side for {without}: either the zone declares none - whether a "
+                    "zone runs as a pair is an L0 fact, set `twin: {sides: pair}` on the "
+                    "zone and regenerate (ADR-0041) - or the pair was started with the "
+                    "plant alone, which runs no counterpart (ADR-0072).",
                 )
 
         if commands_hardware:
@@ -515,6 +566,14 @@ class ModeAuthority:
 
         ``homing`` skips the carriage-agreement question and only it: the
         readiness question below is asked whatever it says.
+
+        **The carriages are compared only where the mode commands the plant
+        too** (ADR-0072). Agreement exists so that one signal moves both
+        carriages from one place; in a mode that commands the physical side
+        alone - `REAL` - the plant is idle, its carriage stands wherever the
+        last target left it, and nothing is sent to it, so comparing the two
+        would refuse a run for a fact about an idle side. Every physical-side
+        readiness question below is still asked.
         """
         if not self._deployment.physical_sides_commanded(mode, asset_id):
             return
@@ -522,7 +581,9 @@ class ModeAuthority:
         # a readiness question was given (R-07).
         apart = (
             None
-            if homing or self._physical_carriage_apart is None
+            if homing
+            or self._physical_carriage_apart is None
+            or PLANT_SIDE not in commanded_sides(mode)
             else self._physical_carriage_apart()
         )
         if apart is not None:
@@ -531,6 +592,17 @@ class ModeAuthority:
                 f"{MODE_NAMES[mode]} would command a physical carriage that does not stand "
                 f"where the plant's does - {apart}. Refused for good: it does not clear "
                 "by itself",
+            )
+        outside = (
+            None
+            if self._physical_carriage_outside_travel is None
+            else self._physical_carriage_outside_travel()
+        )
+        if outside is not None:
+            raise ModeError(
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES[mode]} would command a physical carriage that stands outside "
+                f"its track's travel - {outside}. Refused for good: it does not clear by itself",
             )
         unready = None if self._physical_side_unready is None else self._physical_side_unready()
         if unready is not None:

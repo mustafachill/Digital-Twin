@@ -154,7 +154,7 @@ PAIR_STOP_CEILING_S="$(python3 - "$ZONE" <<'PY'
 import sys
 from cite_bringup.pair import participants, teardown_ceiling_s
 from cite_bringup.plan import default_plan_path, load
-print(int(teardown_ceiling_s(participants(load(default_plan_path(sys.argv[1])), console=False))))
+print(int(teardown_ceiling_s(participants(load(default_plan_path(sys.argv[1])), console=False, sides="all"))))
 PY
 )" || die "could not read the pair's teardown ceiling from cite_bringup.pair"
 BELT_STARTED=0

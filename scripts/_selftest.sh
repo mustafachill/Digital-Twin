@@ -1472,6 +1472,18 @@ sim_line_of() { awk -v text="$1" 'index($0, text) { print NR; exit }' "${REPO_RO
 expect_ok   "after the overlay is sourced, and before anything is launched" \
     test "$(sim_line_of 'source_overlay')" -lt "$(sim_line_of 'gui_plugin_dir CellConsole')" \
       -a "$(sim_line_of 'gui_plugin_dir CellConsole')" -lt "$(sim_line_of 'exec python3 -m cite_bringup.pair')"
+# ADR-0072: the hardware opt-in decides which sides a pair starts, in sim and
+# nowhere else, by the one rule (`program.sides.pair_sides`), and the choice is
+# handed to the supervisor explicitly - never inferred inside pair.py.
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/sim hands the supervisor --sides, read from sides --pair-sides" \
+    grep -qF 'PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")' "${REPO_ROOT}/scripts/sim"
+expect_ok   "after the opt-in is resolved, and before the supervisor is started" \
+    test "$(sim_line_of '    resolve_hardware_opt_in')" -lt "$(sim_line_of 'cite_bringup.program.sides --zone "$ZONE" --pair-sides')" \
+      -a "$(sim_line_of 'cite_bringup.program.sides --zone "$ZONE" --pair-sides')" -lt "$(sim_line_of 'exec python3 -m cite_bringup.pair')"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "and says why when it starts the plant alone" \
+    grep -qF 'warn "$(head -n -1 <<<"$PAIR_SIDES_SAID")"' "${REPO_ROOT}/scripts/sim"
 
 # ./scripts/program checks a named zone the same way, before it stops this
 # checkout's containers or starts any.

@@ -101,6 +101,7 @@ from cite_interfaces.msg import (
     ResultCode,
     TwinHeartbeat,
     TwinMode,
+    TwinSides,
 )
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
@@ -131,6 +132,7 @@ from cite_twin.routing import (
     COUNTERPART_SIDE,
     PLANT_SIDE,
     reverse_state_flow,
+    Route,
     route,
 )
 from cite_twin.track_arrival import (
@@ -163,6 +165,13 @@ from trajectory_msgs.msg import JointTrajectory
 #: been sent is sent — but a comment claiming an event where the upstream code
 #: sleeps is the kind of claim this project has been wrong about before.
 SERVER_WAIT_S = 30.0
+
+#: `--sides`, as the pair supervisor spells it (`cite_bringup.pair`, which
+#: imports nothing from this package; `pair.SIDES_CHOICES` is the same pair of
+#: words and a test holds the two equal).
+SIDES_PLANT = "plant"
+SIDES_ALL = "all"
+SIDES_CHOICES = (SIDES_PLANT, SIDES_ALL)
 
 #: **How one operator result is ranked out of one result per side, worst first.**
 #:
@@ -347,9 +356,29 @@ class TwinBoundary:
     a context of its own.
     """
 
-    def __init__(self, plan: Plan, base: int, environ: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        plan: Plan,
+        base: int,
+        environ: Mapping[str, str],
+        running: tuple[str, ...] = (PLANT_SIDE, COUNTERPART_SIDE),
+    ) -> None:
         self._plan = plan
         self._lock = threading.Lock()
+        #: The sides this deployment started (ADR-0072, amending ADR-0057): both,
+        #: or the plant alone. Read once, from the pair supervisor's argument,
+        #: and never re-read (ADR-0050 decision 4). A side that does not run has
+        #: no context here, no heartbeat, no client and no subscription, and
+        #: every mode but SIM is refused as having no far side.
+        if PLANT_SIDE not in running or not set(running) <= {PLANT_SIDE, COUNTERPART_SIDE}:
+            raise BoundaryError(
+                f"the running sides {list(running)} are not the plant alone or the plant "
+                "and the counterpart; a deployment without the plant is not supported "
+                "(ADR-0072)"
+            )
+        self._running = tuple(
+            side for side in (PLANT_SIDE, COUNTERPART_SIDE) if side in running
+        )
 
         # Both sides resolved by NAME through ADR-0044 clause 4's single
         # resolver. A zone that declares no counterpart refuses here, with the
@@ -364,14 +393,15 @@ class TwinBoundary:
         # constructing — and the process then exited with a live context.
         self._sides: dict[str, SideContext] = {}
         try:
-            for name in (PLANT_SIDE, COUNTERPART_SIDE):
+            for name in self._running:
                 self._sides[name] = SideContext(address(plan, name, base))
                 _refuse_sim_time(self._sides[name])
         except BaseException:  # noqa: B036
             self.stop()
             raise
         self._plant = self._sides[PLANT_SIDE]
-        self._counterpart = self._sides[COUNTERPART_SIDE]
+        #: None in a deployment started with the plant alone (ADR-0072).
+        self._counterpart = self._sides.get(COUNTERPART_SIDE)
 
         self._group = ReentrantCallbackGroup()
         self._log = self._plant.node.get_logger()
@@ -395,7 +425,10 @@ class TwinBoundary:
             # What a physical counterpart has said, per arm, before a mode may
             # command it (ADR-0070 item 6): its deadman, its arm controller and
             # its joints. Read on the counterpart's own domain; nothing crosses.
-            self._physical_watches = _physical_watches(plan)
+            # None run where the counterpart does not (ADR-0072).
+            self._physical_watches = (
+                _physical_watches(plan) if self._counterpart is not None else {}
+            )
         except BoundaryError:
             self.stop()
             raise
@@ -407,6 +440,13 @@ class TwinBoundary:
             for manager in plan.controller_managers
             if manager.track is not None and manager.asset in self._physical_watches
         ]
+        #: Each such track's travel, metres from its zero, by joint (R-10): a
+        #: physical carriage heard outside it is refused for good.
+        self._physical_strokes = {
+            manager.track.joint: manager.track.stroke_m
+            for manager in plan.controller_managers
+            if manager.track is not None and manager.asset in self._physical_watches
+        }
         #: Per (side, track joint): the last position and its steady-clock
         #: arrival, heard in every mode, because a stop, an arrival check and
         #: the precondition above are owed whatever the mode is.
@@ -431,7 +471,7 @@ class TwinBoundary:
         #
         # ADR-0050 decision 4: a runtime knob may not decide whether a side
         # exists, so this is read once and never re-read.
-        deployment = deployment_from_plan(plan)
+        deployment = deployment_from_plan(plan, self._running)
         # What L5 read about the far side at start-up, kept as the DECLARATION
         # rather than as a backend id, so `_sample` cannot fall back to deciding
         # on a name.
@@ -446,6 +486,7 @@ class TwinBoundary:
             partial(require_hardware_opt_in, plan, environ),
             physical_side_unready=self._physical_side_unready,
             physical_carriage_apart=self._physical_carriage_apart,
+            physical_carriage_outside_travel=self._physical_carriage_outside_travel,
         )
 
         self._mode_publisher = self._plant.node.create_publisher(
@@ -454,6 +495,12 @@ class TwinBoundary:
         self._divergence_publisher = self._plant.node.create_publisher(
             DivergenceMetrics, DivergenceMetrics.TOPIC, STATE
         )
+        # Which sides run and which may be commanded now (ADR-0072), latched,
+        # republished whenever it changes: the one place a client reads them.
+        self._sides_publisher = self._plant.node.create_publisher(
+            TwinSides, TwinSides.TOPIC, LATCHED
+        )
+        self._sides_published: tuple | None = None
         self._set_mode = self._plant.node.create_service(
             SetMode,
             # rosidl puts a service's constants on the section they were
@@ -549,9 +596,10 @@ class TwinBoundary:
 
         # 4. The belt command (ADR-0066). One operator endpoint per conveyor,
         # on the plant's domain beside the skills, forwarded in memory to each
-        # side's own command topic under the same routing table: refused in
-        # SIM, sent to both in VALIDATED and VIRTUAL_LEAD — except a stop, which
-        # crosses in every mode. Nothing crosses in the other direction; the
+        # side's own command topic under the same routing table: the plant in
+        # SIM, the counterpart in REAL, both in VALIDATED and VIRTUAL_LEAD
+        # (ADR-0072) — except a stop, which crosses to every running side in
+        # every mode. Nothing crosses in the other direction; the
         # belt's own state stays on its own side.
         self._belt_publishers = {
             (side_name, conveyor.command_topic): side.node.create_publisher(
@@ -573,8 +621,9 @@ class TwinBoundary:
 
         # 5. The linear track command (ADR-0067). One operator endpoint per track,
         # beside the belt's, forwarded in memory to each side's own trajectory
-        # controller topic under the same routing table: refused in SIM, sent to
-        # both in VALIDATED and VIRTUAL_LEAD; a refused command is dropped and
+        # controller topic under the same routing table: the plant in SIM, the
+        # counterpart in REAL, both in VALIDATED and VIRTUAL_LEAD (ADR-0072); a
+        # refused command is dropped and
         # said in the log. A trajectory with NO points at the operator endpoint
         # is a stop, and like a belt's zero it crosses in every mode: each side
         # is sent a hold at ITS OWN carriage position, which a simulated
@@ -648,16 +697,22 @@ class TwinBoundary:
         counterpart's executor is a thread of its own because two contexts
         cannot share one executor — an executor is built against a context.
         """
-        self._counterpart.spin_in_a_thread()
+        if self._counterpart is not None:
+            self._counterpart.spin_in_a_thread()
         # Published once the publisher exists and from here rather than from the
         # constructor: a subscriber match is an event, and the LATCHED profile
         # is what makes a late joiner receive it. Publishing from inside the
         # callback that created the publisher is the defect that cost this
         # project a belt setpoint (CLAUDE.md §10).
         self._publish_mode()
+        self._publish_sides()
+        far = (
+            "no counterpart: the pair was started with the plant alone (ADR-0072)"
+            if self._counterpart is None
+            else f"counterpart on domain {self._counterpart.side.domain_id}"
+        )
         self._log.info(
-            f"twin boundary up: plant on domain {self._plant.side.domain_id}, "
-            f"counterpart on domain {self._counterpart.side.domain_id}, "
+            f"twin boundary up: plant on domain {self._plant.side.domain_id}, {far}, "
             f"{len(self._skills)} routable skill(s), "
             f"mode {MODE_NAMES[self._authority.mode]}"
         )
@@ -821,7 +876,7 @@ class TwinBoundary:
         key = (skill.endpoint, bytes(goal_handle.goal_id.uuid))
         with self._lock:
             mode = self._authority.mode
-            chosen = route(mode)
+            chosen = self._route(mode)
             if chosen.accepted:
                 self._in_flight[key] = skill.endpoint
         try:
@@ -882,6 +937,25 @@ class TwinBoundary:
             goal_handle.abort()
         return result
 
+    def _route(self, mode: int) -> Route:
+        """`route`, refused where a side it names does not run (ADR-0072).
+
+        Reachable only by a mode `force` let past the no-far-side check: a
+        goal for a side with no context here would have nowhere to go, and
+        reporting that is better than a lookup that raises.
+        """
+        chosen = route(mode)
+        absent = [side for side in chosen.sides if side not in self._sides]
+        if chosen.accepted and absent:
+            return Route(
+                (),
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES.get(mode, mode)} routes to {', '.join(absent)}, which this "
+                "deployment does not run (the pair was started with the plant alone, "
+                "ADR-0072)",
+            )
+        return chosen
+
     def _dispatch(
         self, skill: _SkillEndpoint, goal_handle, sides: tuple[str, ...]
     ) -> dict[str, Future] | ResultCode:
@@ -933,7 +1007,7 @@ class TwinBoundary:
             return
         with self._lock:
             mode = self._authority.mode
-        chosen = route(mode)
+        chosen = self._route(mode)
         if not chosen.accepted:
             self._log.warning(
                 f"{operator_endpoint(topic)} = {message.data:g} dropped in "
@@ -941,7 +1015,19 @@ class TwinBoundary:
                 throttle_duration_sec=5.0,
             )
             return
-        for side_name in chosen.sides:
+        # Never a non-zero setpoint to a physical side (R-24, ADR-0072): no
+        # physical belt exists, and a setpoint persists on a drive. In REAL
+        # that leaves nothing, and the command is dropped and said.
+        sides = [side for side in chosen.sides if not self._is_physical(side)]
+        if not sides:
+            self._log.warning(
+                f"{operator_endpoint(topic)} = {message.data:g} dropped in "
+                f"{MODE_NAMES.get(mode, mode)}: it routes only to a physical side, which "
+                "has no belt (ADR-0072)",
+                throttle_duration_sec=5.0,
+            )
+            return
+        for side_name in sides:
             self._belt_publishers[(side_name, topic)].publish(message)
 
     def _on_track_command(self, topic: str, message: JointTrajectory) -> None:
@@ -967,6 +1053,21 @@ class TwinBoundary:
                 }
             for side_name, position in heard.items():
                 if position is None:
+                    if self._is_physical(side_name):
+                        # R-02: a stop reaches a physical carriage whether or not
+                        # its position was heard. Its adapter stops where the
+                        # carriage stands whatever position a hold names
+                        # (`cite_bringup.track_command`), so the zero below
+                        # moves nothing; a simulated controller would go there,
+                        # which is why only a physical side is sent one blind.
+                        self._log.warning(
+                            f"{operator_endpoint(topic)} stop: no {joint} position heard on "
+                            f"the {side_name} side; sent its physical adapter a stop anyway"
+                        )
+                        self._track_publishers[(side_name, topic)].publish(
+                            track_hold(joint, 0.0)
+                        )
+                        continue
                     self._log.error(
                         f"{operator_endpoint(topic)} stop: no {joint} position heard on the "
                         f"{side_name} side, so no hold was sent there"
@@ -978,7 +1079,7 @@ class TwinBoundary:
             return
         with self._lock:
             mode = self._authority.mode
-        chosen = route(mode)
+        chosen = self._route(mode)
         if not chosen.accepted:
             self._log.warning(
                 f"{operator_endpoint(topic)} dropped in {MODE_NAMES.get(mode, mode)}: "
@@ -994,8 +1095,10 @@ class TwinBoundary:
     ) -> TrackArrived.Response:
         """Answer whether every commanded side, and every physical one, stands at the target.
 
-        SA2c-S-02 c. The sides are `commanded_sides(mode)`, not the sides a
-        goal is routed to, so REAL and SHADOW judge the physical side; a
+        SA2c-S-02 c. With ``request.sides`` empty the sides are
+        `commanded_sides(mode)`, not the sides a goal is routed to, so REAL
+        and SHADOW judge the physical side; with it given, exactly those sides
+        are judged (ADR-0072: a single-side target asks after its own); a
         physical side is judged in every mode, so the program's ask in SIM,
         before a person is asked into the cell, is answered UNHEARD until its
         carriage is heard fresh and AWAY once it is heard elsewhere (S-08).
@@ -1017,8 +1120,18 @@ class TwinBoundary:
                 is not None
             }
         physical = [COUNTERPART_SIDE] if asset in self._physical_watches else []
-        commanded = commanded_sides(mode)
-        sides = (*commanded, *(side for side in physical if side not in commanded))
+        if request.sides:
+            # Exactly the sides asked about, whatever the mode (ADR-0072): a
+            # single-side target asks after its own side's carriage, and the
+            # idle side's stands wherever the last target left it. A side named
+            # that does not run is never heard, and answers UNHEARD.
+            sides = tuple(dict.fromkeys(request.sides))
+            physical = [side for side in physical if side in sides]
+        else:
+            commanded = tuple(
+                side for side in commanded_sides(mode) if side in self._sides
+            )
+            sides = (*commanded, *(side for side in physical if side not in commanded))
         reason, detail = track_arrival(
             sides,
             heard,
@@ -1030,7 +1143,7 @@ class TwinBoundary:
         )
         response.reason = reason
         response.arrived = reason == TrackArrived.Response.ARRIVED
-        response.routed = route(mode).accepted
+        response.routed = self._route(mode).accepted
         response.detail = detail or (
             f"in {MODE_NAMES.get(mode, mode)} every side asked about ({', '.join(sides)}) "
             "is at the target"
@@ -1043,19 +1156,24 @@ class TwinBoundary:
         """Answer whether every side the zone declares stands at the requested positions.
 
         ADR-0070: the program's start, measured before anything is commanded,
-        so every side is judged in every mode. A physical side counts only with
+        so every running side is judged in every mode - or, given
+        ``request.sides``, exactly those (ADR-0072: per side, for a target). A physical side counts only with
         fresh positions; which sides are physical is the plan's, read at
         start-up (`_physical_watches`), conservatively for every joint asked.
         """
         with self._lock:
-            sides = tuple(self._sides)
+            # The sides asked about, or every side this deployment runs
+            # (ADR-0072): a target is measured on its own sides.
+            sides = tuple(dict.fromkeys(request.sides)) if request.sides else tuple(self._sides)
             heard = {
                 (side_name, joint): position
                 for side_name in sides
                 for joint in request.joints
                 if (position := self._joint_positions.get((side_name, joint))) is not None
             }
-        physical = [COUNTERPART_SIDE] if self._physical_watches else []
+        physical = (
+            [COUNTERPART_SIDE] if self._physical_watches and COUNTERPART_SIDE in sides else []
+        )
         reason, detail = joints_at(
             sides,
             heard,
@@ -1081,7 +1199,7 @@ class TwinBoundary:
         no operator command can reach that side except a stop; so the transition
         itself sends the stop rather than leaving a belt nobody may command.
         """
-        chosen = route(mode)
+        chosen = self._route(mode)
         commanded = set(chosen.sides) if chosen.accepted else set()
         for (side_name, _topic), publisher in self._belt_publishers.items():
             if side_name not in commanded:
@@ -1243,6 +1361,59 @@ class TwinBoundary:
         found = [reason for reason in reasons if reason is not None]
         return "; ".join(found) if found else None
 
+    def _is_physical(self, side_name: str) -> bool:
+        """Whether ``side_name`` is a running physical side (the plan's declaration)."""
+        return side_name == COUNTERPART_SIDE and bool(self._physical_watches)
+
+    def _physical_carriage_outside_travel(self) -> str | None:
+        """Why a physical carriage, heard fresh, stands outside its travel; under the lock.
+
+        R-10 (ADR-0072): within `[0, stroke_m]` widened by the goal tolerance.
+        A position not heard fresh is the readiness question's, not this one.
+        Whether the carriage has found its zero (homed) is NOT observable here:
+        nothing on the physical side publishes it, so it is not asked.
+        """
+        now = time.monotonic()
+        found = []
+        for joint, tolerance_m in self._physical_tracks:
+            heard = self._track_positions.get((COUNTERPART_SIDE, joint))
+            stroke = self._physical_strokes.get(joint)
+            if heard is None or stroke is None or now - heard[1] > self._state_max_age_s:
+                continue
+            position = heard[0]
+            if position < -tolerance_m or position > stroke + tolerance_m:
+                found.append(
+                    f"{joint} stands at {position * 1000:.1f} mm, outside its travel "
+                    f"0 to {stroke * 1000:.0f} mm"
+                )
+        return "; ".join(found) if found else None
+
+    def _sides_now(self) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], str]:
+        """What `TwinSides` says now: running, physical, commandable, and why not; under the lock."""
+        physical = tuple(side for side in self._sides if self._is_physical(side))
+        unready = self._physical_side_unready() if physical else None
+        commandable = tuple(
+            side for side in self._sides if side not in physical or unready is None
+        )
+        return tuple(self._sides), physical, commandable, unready or ""
+
+    def _publish_sides(self) -> None:
+        """Publish `TwinSides` if it changed since it was last published (ADR-0072)."""
+        with self._lock:
+            now = self._sides_now()
+            if now == self._sides_published:
+                return
+            self._sides_published = now
+        running, physical, commandable, detail = now
+        message = TwinSides(
+            running=list(running),
+            physical=list(physical),
+            commandable=list(commandable),
+            detail=detail,
+        )
+        message.stamp = self._plant.node.get_clock().now().to_msg()
+        self._sides_publisher.publish(message)
+
     def _physical_carriage_apart(self) -> str | None:
         """Why a physical carriage, heard fresh, stands away from the plant's; under the lock.
 
@@ -1280,6 +1451,9 @@ class TwinBoundary:
         monitor that had died, and the fields that say WHICH term failed are the
         product of this mode as much as the comparison is.
         """
+        # The sides first: a physical side that became ready, or stopped being
+        # so, is said within one period (ADR-0072). A rate, not a sequence.
+        self._publish_sides()
         with self._lock:
             mode = self._authority.mode
             operands = dict(self._operands)
@@ -1349,7 +1523,9 @@ class TwinBoundary:
         # Whether L5 is still watching the far side at all, which the ages
         # above cannot say: an operand that never arrives and an observer that
         # died look identical in a timestamp.
-        message.counterpart_observed = self._counterpart.observing
+        message.counterpart_observed = (
+            self._counterpart is not None and self._counterpart.observing
+        )
         # The plant's, because that is the side this sample is published on. The
         # two disagreeing is exactly what term 4 reports, so the field carries
         # one of them rather than a merged string.
@@ -1677,6 +1853,11 @@ def _refuse_sim_time(side: SideContext) -> None:
         )
 
 
+def running_sides(choice: str) -> tuple[str, ...]:
+    """The sides a `--sides` choice starts: the plant alone, or both (ADR-0072)."""
+    return (PLANT_SIDE,) if choice == SIDES_PLANT else (PLANT_SIDE, COUNTERPART_SIDE)
+
+
 def _arguments(argv: list[str] | None) -> argparse.Namespace:
     """Which zone, and which plan.
 
@@ -1692,6 +1873,11 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     # which decided which cell a boundary spanned without anyone naming it.
     parser.add_argument("--zone", default="")
     parser.add_argument("--plan", default="")
+    # Which sides the pair supervisor started (ADR-0072, amending ADR-0057):
+    # `all`, or `plant` for a pair started with the plant alone. Handed in by
+    # the supervisor, which was handed it by `./scripts/sim`; never inferred
+    # here from what happens to be on a domain.
+    parser.add_argument("--sides", choices=SIDES_CHOICES, default=SIDES_ALL)
     # ROS strips its own arguments before a node sees them; anything left that
     # this parser does not know about is ignored rather than fatal, because
     # `launch_ros` appends `--ros-args` unconditionally.
@@ -1749,7 +1935,7 @@ def main(argv: list[str] | None = None) -> int:
 
     boundary: TwinBoundary | None = None
     try:
-        boundary = TwinBoundary(plan, base, environ)
+        boundary = TwinBoundary(plan, base, environ, running_sides(arguments.sides))
         boundary.spin()
     except (PlanError, BoundaryError) as error:
         print(f"cite_twin: {error}", file=sys.stderr)

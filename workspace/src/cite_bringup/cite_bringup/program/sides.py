@@ -18,6 +18,8 @@
     --zone cell_b --simulated     the others
     --zone cell_b --speed-scale S the speed scale to run at, or a refusal
     --zone cell_b --hardware-opt-in  refuse unless the opt-in permits a physical side
+    --zone cell_b --pair-sides    which sides a pair started now starts: `all`, or
+                                  `plant` (ADR-0072), and why, on standard error
 
 `./scripts/program` asks this before every Gazebo-only step (ADR-0070 item 7):
 it spawns a box, removes one, reads a model's pose and runs a belt only on a
@@ -150,6 +152,31 @@ def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
     return None
 
 
+#: What `pair_sides` answers, spelled as the pair supervisor's `--sides` takes it
+#: (`cite_bringup.pair.SIDES_CHOICES`; held equal by a test).
+PAIR_SIDES_ALL = "all"
+PAIR_SIDES_PLANT = "plant"
+
+#: Said when a pair starts the plant alone (ADR-0072): the operator reads WHY
+#: the real arm is absent, so a plant-only pair is never mistaken for a failure.
+REAL_ARM_NOT_STARTED = (
+    f"real arm not started: {HARDWARE_OPT_IN_ENV} is not {HARDWARE_OPT_IN_VALUE}; "
+    "simulation target only"
+)
+
+
+def pair_sides(plan: Plan, environ) -> str:
+    """Return which sides a pair of ``plan`` starts now: every side, or the plant alone.
+
+    ADR-0072 decision 4: the hardware opt-in decides. A plan with a physical side
+    starts it only with the opt-in (`hardware_opt_in_refusal`, the one rule);
+    without it the plant starts alone, with the boundary and any console. A plan
+    with no physical side starts every side. The real arm is never started by
+    default.
+    """
+    return PAIR_SIDES_ALL if hardware_opt_in_refusal(plan, environ) is None else PAIR_SIDES_PLANT
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m cite_bringup.program.sides", description="List a zone's sides by kind."
@@ -168,8 +195,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=f"Refuse unless {HARDWARE_OPT_IN_ENV} permits bringing up every physical side.",
     )
+    kind.add_argument(
+        "--pair-sides",
+        action="store_true",
+        help="Print which sides a pair starts now (all, or plant), by the hardware opt-in.",
+    )
     args = parser.parse_args(argv)
     plan = load(default_plan_path(args.zone))
+    if args.pair_sides:
+        chosen = pair_sides(plan, os.environ)
+        if chosen == PAIR_SIDES_PLANT and physical_sides(plan):
+            print(REAL_ARM_NOT_STARTED, file=sys.stderr)
+        print(chosen)
+        return 0
     if args.hardware_opt_in:
         refusal = hardware_opt_in_refusal(plan, os.environ)
         if refusal is not None:

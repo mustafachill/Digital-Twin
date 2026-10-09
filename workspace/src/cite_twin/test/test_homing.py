@@ -193,3 +193,97 @@ def test_the_boundary_answers_for_every_side_in_every_mode() -> None:
     boundary._joint_positions[("counterpart", "picker_joint1")] = (0.001, now)
     answer = boundary._on_joints_at(request, JointsAt.Response())
     assert answer.at and answer.reason == JointsAt.Response.AT
+
+
+def test_real_does_not_compare_the_carriages_because_the_plant_is_idle() -> None:
+    """ADR-0072: in REAL only the physical side is commanded, so agreement is not asked.
+
+    The plant's carriage stands wherever the last target left it and nothing is
+    sent to it. Every physical-side readiness question is still asked, and
+    VALIDATED still refuses the same carriages apart.
+    """
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    machine = _authority(boundary)
+    verdict = machine.request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert verdict.accepted, verdict.detail
+    assert verdict.mode == TwinMode.MODE_REAL
+    assert verdict.commands_hardware
+    back = machine.request(TwinMode.MODE_SIM, "", "done", False)
+    assert back.accepted
+    refused = machine.request(TwinMode.MODE_VALIDATED, "", "twin", False)
+    assert not refused.accepted and "home it" in refused.detail
+
+
+def test_real_still_waits_for_a_physical_side_that_is_not_ready() -> None:
+    boundary = _boundary_with_carriages(0.0, 0.30, counterpart_age_s=2 * AGE)
+    verdict = _authority(boundary).request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert not verdict.accepted
+    assert verdict.code == ResultCode.PRECONDITION_FAILED
+    assert "old" in verdict.detail
+
+
+def test_real_still_needs_the_hardware_opt_in() -> None:
+    def refused() -> None:
+        raise RuntimeError("CITE_ALLOW_HARDWARE is not set to 1")
+
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    verdict = _authority(boundary, refused).request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert not verdict.accepted
+    assert verdict.code == ResultCode.SAFETY_BLOCKED
+
+
+def test_homing_is_refused_with_real() -> None:
+    """The allowance is VALIDATED's alone; REAL needs none."""
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    verdict = _authority(boundary).request(TwinMode.MODE_REAL, "", "x", False, homing=True)
+    assert not verdict.accepted
+
+
+def _boundary_for_joints(now: float, sides=("plant", "counterpart")) -> TwinBoundary:
+    boundary = object.__new__(TwinBoundary)
+    boundary._lock = threading.Lock()
+    boundary._sides = {side: None for side in sides}
+    boundary._physical_watches = {"picker": _ready_watch(now)} if "counterpart" in sides else {}
+    boundary._state_max_age_s = AGE
+    boundary._joint_positions = {
+        ("plant", "picker_joint1"): (0.0, now),
+        ("counterpart", "picker_joint1"): (0.5, now),
+    }
+    return boundary
+
+
+def test_named_sides_are_judged_alone() -> None:
+    """ADR-0072: a target is measured on its own sides; the other's place is not its business."""
+    now = time.monotonic()
+    boundary = _boundary_for_joints(now)
+
+    def ask(sides):
+        request = JointsAt.Request(
+            joints=["picker_joint1"], positions=[0.0], tolerance=0.01, sides=list(sides)
+        )
+        return boundary._on_joints_at(request, JointsAt.Response())
+
+    assert ask(["plant"]).at
+    away = ask(["counterpart"])
+    assert not away.at and away.reason == JointsAt.Response.AWAY
+    assert not ask([]).at
+
+
+def test_a_plant_alone_deployment_judges_the_plant_alone() -> None:
+    now = time.monotonic()
+    boundary = _boundary_for_joints(now, sides=("plant",))
+    request = JointsAt.Request(joints=["picker_joint1"], positions=[0.0], tolerance=0.01)
+    assert boundary._on_joints_at(request, JointsAt.Response()).at
+
+
+def test_a_forced_mode_whose_side_does_not_run_routes_nowhere() -> None:
+    """ADR-0072: `force` past the no-far-side check cannot send a goal to a side with no context."""
+    from cite_interfaces.msg import ResultCode as Code
+
+    boundary = object.__new__(TwinBoundary)
+    boundary._sides = {"plant": None}
+    chosen = boundary._route(TwinMode.MODE_REAL)
+    assert not chosen.accepted and chosen.code == Code.PRECONDITION_FAILED
+    assert "counterpart" in chosen.detail and "plant alone" in chosen.detail
+    sim = boundary._route(TwinMode.MODE_SIM)
+    assert sim.accepted and sim.sides == ("plant",)
