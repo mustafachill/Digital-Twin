@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "cite_console_gui/console_view.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
@@ -96,6 +97,25 @@ TEST(ConsoleView, TheViewCarriesTheFlagsAndReadsSimFromTheMode)
   // Not heard yet is not SIM.
   state.twin_mode = ConsoleState::TWIN_MODE_UNKNOWN;
   EXPECT_FALSE(view_from(state).twin_in_sim);
+}
+
+TEST(ConsoleView, TheViewKeepsTheServedSetAsReceivedAndThePublisher)
+{
+  std::uint8_t unknown = 0xFE;
+  while (target_from(unknown) != Target::NONE) {
+    --unknown;
+  }
+  ConsoleState state;
+  state.state = ConsoleState::READY;
+  state.available_targets = {ConsoleState::TARGET_SIM, unknown};
+  const std::vector<std::uint8_t> publisher = {9, 8, 7};
+  const auto view = view_from(state, publisher);
+  // Offered: only what this panel recognises.
+  EXPECT_EQ(view.available_targets, std::set<Target>{Target::SIM});
+  // Settled against: everything received (R-03).
+  EXPECT_EQ(view.served_values, (std::set<std::uint8_t>{ConsoleState::TARGET_SIM, unknown}));
+  EXPECT_EQ(view.publisher, publisher);
+  EXPECT_TRUE(view_from(state).publisher.empty());
 }
 
 TEST(ConsoleView, EveryTwinModeHasADistinctName)

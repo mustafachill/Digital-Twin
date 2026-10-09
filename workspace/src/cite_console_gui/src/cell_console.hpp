@@ -18,8 +18,8 @@
 // requests. It holds no logic: what the buttons enable is `enabled_for`
 // (enablement.hpp), which target stays selected is `settled_selection`, and
 // every refusal is the console's own. The operator's selected target (ADR-0072)
-// is held here, not in QML, so that the rule that keeps or clears it is the
-// tested one. Everything ROS is
+// is held in `PanelSelection` (selection.hpp), not here and not in QML, so that
+// the sequences that keep or clear it are the tested ones. Everything ROS is
 // in `ConsoleClient`, on a thread of its own; each thing it hears is queued onto
 // this object's (the Qt) thread, so no property is touched from two threads and
 // nothing on the Qt thread ever waits for the graph.
@@ -37,12 +37,15 @@
 #include <QVariantList>
 
 #include <memory>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include <gz/gui/Plugin.hh>
 
 #include "cite_console_gui/console_client.hpp"
 #include "cite_console_gui/enablement.hpp"
+#include "cite_console_gui/selection.hpp"
 
 namespace cite_console_gui
 {
@@ -94,25 +97,25 @@ public:
 
   void LoadConfig(const tinyxml2::XMLElement * plugin_element) override;
 
-  bool heard() const {return view_.heard;}
+  bool heard() const {return selection_.view().heard;}
   QString configError() const {return config_error_;}
   QString stateName() const {return state_name_;}
   QString step() const {return step_;}
   QString prompt() const {return prompt_;}
   QString lastError() const {return last_error_;}
-  bool robotStarted() const {return view_.robot_started;}
-  bool plantAtStart() const {return view_.plant_at_start;}
-  bool counterpartAtStart() const {return view_.counterpart_at_start;}
-  bool counterpartRunning() const {return counterpart_running(view_);}
+  bool robotStarted() const {return selection_.view().robot_started;}
+  bool plantAtStart() const {return selection_.view().plant_at_start;}
+  bool counterpartAtStart() const {return selection_.view().counterpart_at_start;}
+  bool counterpartRunning() const {return counterpart_running(selection_.view());}
   QStringList physicalSides() const {return physical_sides_;}
-  double minimumSpeedScale() const {return view_.minimum_speed_scale;}
+  double minimumSpeedScale() const {return selection_.view().minimum_speed_scale;}
   double speedScale() const {return speed_scale_;}
   QString twinMode() const {return twin_mode_;}
-  bool startRobotEnabled() const {return buttons_.start_robot;}
-  bool homeEnabled() const {return buttons_.home;}
-  bool startProgramEnabled() const {return buttons_.start_program;}
-  bool stopEnabled() const {return buttons_.stop;}
-  bool confirmEnabled() const {return buttons_.confirm;}
+  bool startRobotEnabled() const {return selection_.buttons().start_robot;}
+  bool homeEnabled() const {return selection_.buttons().home;}
+  bool startProgramEnabled() const {return selection_.buttons().start_program;}
+  bool stopEnabled() const {return selection_.buttons().stop;}
+  bool confirmEnabled() const {return selection_.buttons().confirm;}
   QVariantList speedChoices() const;
   QVariantList speedChoicesEnabled() const;
   QStringList targetChoices() const;
@@ -136,18 +139,14 @@ signals:
   void outcomeChanged();
 
 private:
-  void apply_state(const cite_interfaces::msg::ConsoleState & state);
+  void apply_state(
+    const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher);
   void forget_state();
-  /// Re-settle the selection against `view_`, which replaced `before`, and the
-  /// buttons with it.
-  void settle(const ConsoleView & before);
   void set_progress(const QString & text);
   void set_outcome(const QString & text);
 
   std::unique_ptr<ConsoleClient> client_;
-  ConsoleView view_;
-  Target selected_target_{Target::NONE};
-  ButtonStates buttons_;
+  PanelSelection selection_;
   QString config_error_;
   QString state_name_;
   QString step_;

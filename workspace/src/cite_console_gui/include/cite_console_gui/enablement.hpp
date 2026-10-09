@@ -28,7 +28,9 @@
 #define CITE_CONSOLE_GUI__ENABLEMENT_HPP_
 
 #include <array>
+#include <cstdint>
 #include <set>
+#include <vector>
 
 namespace cite_console_gui
 {
@@ -92,6 +94,15 @@ struct ConsoleView
   /// ConsoleState.available_targets, as targets this panel recognises. Only
   /// these may be chosen, and a goal naming any other is refused.
   std::set<Target> available_targets;
+  /// ConsoleState.available_targets exactly as received, values this panel
+  /// does not recognise included. Only `available_targets` is offered, but the
+  /// selection is settled against this: a change to the served set the panel
+  /// cannot read is still a change (R-18).
+  std::set<std::uint8_t> served_values;
+  /// An opaque identity of the publisher that said it (its rmw GID); empty
+  /// when unknown. A different publisher is a console that came back, even if
+  /// its predecessor's unmatch was never seen.
+  std::vector<std::uint8_t> publisher;
   /// ConsoleState.minimum_speed_scale: the floor of a target with the real arm.
   double minimum_speed_scale{0.0};
   /// ConsoleState.twin_mode is MODE_SIM. Unknown counts as not SIM.
@@ -143,11 +154,13 @@ bool target_choice_enabled(const ConsoleView & view, Target target);
 ///
 /// The panel NEVER selects a target itself, not even the only one offered
 /// (ADR-0072 decision 3; safety audit R-18): the operator always picks. A
-/// selection stays only while a console is heard, the set of targets it
-/// serves is unchanged from `before`, and it serves the selection. Anything
-/// else - no console, a console that came back, a set of targets that changed
-/// in any way - clears it, and Home and Start program stay disabled until the
-/// operator picks again. Selecting is `settled_selection(view, view, target)`.
+/// selection stays only while a console is heard, the same publisher said
+/// both views, the set of targets it serves (as received, unrecognised values
+/// included) is unchanged from `before`, and it serves the selection. Anything
+/// else - no console, a console that came back (a different publisher), a set
+/// of targets that changed in any way - clears it, and Home and Start program
+/// stay disabled until the operator picks again. Selecting is
+/// `settled_selection(view, view, target)`.
 Target settled_selection(const ConsoleView & before, const ConsoleView & now, Target selected);
 
 /// Whether the console runs the counterpart's side: it serves a target that

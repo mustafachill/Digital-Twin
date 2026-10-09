@@ -15,6 +15,8 @@
 #include "cite_console_gui/console_view.hpp"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "cite_interfaces/msg/twin_mode.hpp"
 
@@ -77,16 +79,18 @@ std::uint8_t target_value(Target target)
   return 0;
 }
 
-ConsoleView view_from(const ConsoleState & state)
+ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publisher)
 {
   ConsoleView view;
   view.heard = true;
+  view.publisher = std::move(publisher);
   view.phase = phase_from(state.state);
   view.robot_started = state.robot_started;
   view.busy = state.busy;
   view.plant_at_start = state.plant_at_start;
   view.counterpart_at_start = state.counterpart_at_start;
   for (const std::uint8_t value : state.available_targets) {
+    view.served_values.insert(value);
     const Target target = target_from(value);
     if (target != Target::NONE) {
       view.available_targets.insert(target);

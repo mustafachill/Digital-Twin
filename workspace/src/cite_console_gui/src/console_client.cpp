@@ -69,10 +69,12 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
     };
   state_sub_ = node_->create_subscription<ConsoleState>(
     names.state, cite::qos::latched(),
-    [this](const ConsoleState & state) {
+    [this](const ConsoleState & state, const rclcpp::MessageInfo & info) {
       heard_ = true;
       if (callbacks_.on_state) {
-        callbacks_.on_state(state);
+        const rmw_gid_t & gid = info.get_rmw_message_info().publisher_gid;
+        callbacks_.on_state(
+          state, std::vector<std::uint8_t>(gid.data, gid.data + RMW_GID_STORAGE_SIZE));
       }
     },
     state_options);

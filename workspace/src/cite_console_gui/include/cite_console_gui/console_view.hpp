@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "cite_console_gui/enablement.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
@@ -43,8 +44,10 @@ Target target_from(std::uint8_t value);
 /// console rejects) for `NONE`.
 std::uint8_t target_value(Target target);
 
-/// What the buttons depend on, from a ConsoleState that was just heard.
-ConsoleView view_from(const cite_interfaces::msg::ConsoleState & state);
+/// What the buttons depend on, from a ConsoleState that was just heard from
+/// the publisher identified by `publisher` (its rmw GID; empty if unknown).
+ConsoleView view_from(
+  const cite_interfaces::msg::ConsoleState & state, std::vector<std::uint8_t> publisher = {});
 
 /// A TwinMode.MODE_* value (or ConsoleState.TWIN_MODE_UNKNOWN) by its name.
 std::string twin_mode_name(std::uint8_t mode);

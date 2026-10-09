@@ -442,6 +442,22 @@ TEST(Selection, AConsoleThatLeftOrCameBackClearsIt)
   EXPECT_EQ(settled_selection(gone, ready(), Target::TWIN), Target::NONE);
 }
 
+TEST(Selection, AnotherPublisherOrAnUnreadableChangeClearsIt)
+{
+  // R-02: the same set from another publisher is a console that came back.
+  ConsoleView first = ready();
+  first.publisher = {1};
+  ConsoleView second = ready();
+  second.publisher = {2};
+  EXPECT_EQ(settled_selection(first, first, Target::SIM), Target::SIM);
+  EXPECT_EQ(settled_selection(first, second, Target::SIM), Target::NONE);
+  // R-03: a served value this panel does not recognise appeared.
+  ConsoleView with_unknown = first;
+  with_unknown.served_values = {254};
+  EXPECT_EQ(settled_selection(first, with_unknown, Target::SIM), Target::NONE);
+  EXPECT_EQ(settled_selection(with_unknown, first, Target::SIM), Target::NONE);
+}
+
 TEST(Selection, OverEveryTransitionTheSelectionIsTheOperatorsOrNone)
 {
   // Every served set before and after, heard or not, every prior selection:

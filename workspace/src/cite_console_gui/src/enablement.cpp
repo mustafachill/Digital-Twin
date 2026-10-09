@@ -71,6 +71,8 @@ bool target_choice_enabled(const ConsoleView & view, Target target)
 Target settled_selection(const ConsoleView & before, const ConsoleView & now, Target selected)
 {
   const bool unchanged = before.heard && now.heard &&
+    before.publisher == now.publisher &&
+    before.served_values == now.served_values &&
     before.available_targets == now.available_targets;
   return unchanged && served(now, selected) ? selected : Target::NONE;
 }
