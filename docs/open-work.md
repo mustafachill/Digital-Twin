@@ -1997,6 +1997,22 @@ physical. So the first complete cycle through the panel is the supervised physic
 **Related:** `worlds/counterpart/<zone>_gui.config` is generated, but no window opens it with the
 shipped model.
 
+### #102 — The `--via plant` simulated-side check rests on hearing `/clock` (2026-10-08)
+
+**What the check does.** `RosCell.simulated_side_refusal` refuses a `--via plant` run unless it
+hears `/clock` on its domain. No process on the physical side publishes `/clock`, so a shell that
+exports the counterpart's `ROS_DOMAIN_ID` is refused before any goal.
+
+**How it can be passed anyway.** Running a `/clock` source on that same domain passes the check,
+for example `ros2 topic pub /clock`, `ros2 bag play --clock`, or a Gazebo started from the same
+mis-exported shell. The program then runs straight against the physical side's skill server, with
+no twin and no operator gate. This needs two independent mistakes on the hardware host. Like
+#100, the check rests on DDS discovery.
+
+**What closing it means.** Also refuse when the physical side is visibly present, for example
+when `DeadmanState` or any `cite_hardware` node has a publisher on the domain. A stray `/clock`
+cannot hide that evidence.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
