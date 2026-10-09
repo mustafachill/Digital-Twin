@@ -51,7 +51,7 @@ target_link_libraries(cite_console_gui_client cite_console_gui_enablement tinyxm
 ament_target_dependencies(cite_console_gui_client rclcpp rclcpp_action cite_interfaces)
 set_target_properties(cite_console_gui_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# "Reset view": the window's camera moved over gz transport, on a worker thread
+# The view buttons: the window's camera moved over gz transport, on a worker thread
 # of its own. No Qt and no ROS.
 add_library(cite_console_gui_camera STATIC src/camera_client.cpp)
 target_include_directories(cite_console_gui_camera PUBLIC include)
@@ -122,7 +122,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_console_config cite_console_gui_client)
   ament_target_dependencies(test_console_config ament_index_cpp)
 
-  # "Reset view" against a fake CameraTracking on a partition of its own: the
+  # The view buttons against a fake CameraTracking on a partition of its own: the
   # request carries the home pose, and an absent service is reported.
   ament_add_gtest(test_camera_client test/test_camera_client.cpp TIMEOUT 60)
   target_link_libraries(test_camera_client cite_console_gui_camera)

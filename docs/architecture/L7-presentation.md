@@ -8,8 +8,13 @@
     mode directly from `TwinMode`.
   - **Not built:** the browser-based HMI the charter places in Phase 4, remote access, and any
     telemetry view. ADR-0018 still makes no commitment to that stack.
-  - **Tests:** the button-enablement table, the ROS client and the generated plugin parameters
-    are tested headlessly. Nothing in CI
+  - **Also built:** the validate-then-run button
+    ([ADR-0073](../adr/0073-validate-in-simulation-then-run-the-twin.md)), a connection display
+    (live, stale or absent for the twin boundary and each side, from `TwinHeartbeat` and
+    `TwinSides` on the plant's domain; monitoring only), Top / Side / Front view presets and
+    Follow robot beside Reset view, and the speed floor shown beside the speed choices.
+  - **Tests:** the button-enablement table, the connection display's rule, the ROS client, the
+    camera client and the generated plugin parameters are tested headlessly. Nothing in CI
     renders the panel.
 
 ## What L7 may depend on
@@ -37,10 +42,15 @@ L2→L7 dependency.
   carries the `CellConsole` plugin block (`tools/cite_tools/generate/gui.py`).
 - **Names.** The plugin block passes the console's names as plugin parameters, taken from the
   same function that writes the plan's `console:` block (`bringup.console_names`). The panel forms
-  no name, and it takes the twin-mode topic from `TwinMode::TOPIC`.
+  no name, and it takes the twin boundary's topics from the contract: `TwinMode::TOPIC`,
+  `TwinSides::TOPIC` and `TwinHeartbeat::TOPIC`.
 - **Home view.** The plugin block also carries `home_camera_pose`, rendered from the same text as
   the 3D view's `camera_pose`. **Reset view** sends it to gz-gui's `/gui/move_to/pose`
   (served by the `CameraTracking` plugin) from a worker thread. It moves only the GUI camera.
+- **Other views and the connection display.** The plugin block also carries the Top, Side and
+  Front poses (`camera_presets`), the model Follow robot asks `/gui/follow` to follow
+  (`follow_model`), the pair's side names and the heartbeat's stale threshold (the physical
+  side's deadman timeout), each derived from L0 in `tools/cite_tools/generate/gui.py`.
 - **ROS domain.** The panel runs inside `gz sim`, so it inherits the plant side's `ROS_DOMAIN_ID`.
   It holds one ROS context, on that domain only (ADR-0044's L7 clause).
 
@@ -50,8 +60,12 @@ L2→L7 dependency.
   is one function with no Qt and no ROS (`enablement.hpp`, `enabled_for`). It mirrors the server's
   gating so that a button the server would refuse is greyed out. It does not replace that gating.
 - **When the console is silent.** If the panel hears no `ConsoleState`, or the console's publisher
-  leaves the graph, it shows "No console" and disables every console button. Reset view is the
-  one control that does not depend on the console: it moves no robot.
+  leaves the graph, it shows "No console" and disables every console button. The view buttons
+  are the controls that do not depend on the console: they move no robot.
+- **The connection display is monitoring, not safety.** It shows what the panel hears on its
+  own domain and gates nothing. The counterpart's own heartbeat is on the counterpart's domain,
+  so that side's freshness is the boundary's `TwinSides.commandable` verdict, which carries no
+  age.
 - **Stop.** Stop is labelled a software stop, not an E-stop
   ([`cross-cutting-safety.md`](cross-cutting-safety.md)).
 
@@ -64,4 +78,6 @@ L2→L7 dependency.
 | A request is refused | The refusal reason in the panel's last-error line |
 | A console name is missing, or a parameter is unknown | The panel says which one and its console buttons stay disabled |
 | `home_camera_pose` is missing or malformed | Reset view is disabled and the panel says why |
-| gz-gui does not answer `/gui/move_to/pose` | The panel reports it; the camera does not move |
+| gz-gui does not answer `/gui/move_to/pose` or `/gui/follow` | The panel reports it on its view line, not the console's outcome line; the camera does not move |
+| A preset, the follow model, the sides or the stale threshold is missing | The panel says which; the presets, Follow robot and the connection display are not shown |
+| No twin boundary heartbeat on the plant's domain | The connection display shows the boundary and every side as absent |
