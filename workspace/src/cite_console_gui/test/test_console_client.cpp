@@ -57,9 +57,12 @@ constexpr std::chrono::seconds SETTLE{20};
 
 /// A domain of this process's own, set before any context exists (each
 /// context reads ROS_DOMAIN_ID when it initializes), so parallel suites do
-/// not hear each other.
+/// not hear each other. Drawn from the private band 215 to 232 that
+/// `cite_runtime`'s signal test established: valid on Linux, and disjoint
+/// from every cell's domain (1 to 100, `scripts/_lib.sh`) and every launch
+/// test's.
 const bool DOMAIN_SET = []() {
-    const std::string domain = std::to_string(100 + getpid() % 100);
+    const std::string domain = std::to_string(215 + getpid() % 18);
     return setenv("ROS_DOMAIN_ID", domain.c_str(), 1) == 0;
   }();
 

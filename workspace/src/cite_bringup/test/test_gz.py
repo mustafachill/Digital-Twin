@@ -371,6 +371,44 @@ def test_a_command_dies_with_the_process_that_started_it(tmp_path: Path) -> None
             starter.wait(timeout=10)
 
 
+def test_the_death_signal_is_set_by_a_prefix_and_no_python_runs_in_the_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R-02: `setpriv` sets it before the command; `Popen` is handed no `preexec_fn`."""
+    seen: dict = {}
+
+    class Recorded(Exception):
+        pass
+
+    def popen(args, **kwargs):
+        seen.update(kwargs, args=args)
+        raise Recorded
+
+    monkeypatch.setattr(gz.subprocess, "Popen", popen)
+    with pytest.raises(Recorded):
+        gz.run(["gz", "topic", "-l"], zone=ZONE, timeout=1, interrupted=lambda: False)
+    assert "preexec_fn" not in seen and seen["start_new_session"] is True
+    prefix = gz._die_with_the_caller(os.getpid())
+    assert seen["args"] == [*prefix, "gz", "topic", "-l"]
+    assert prefix[:4] == ["setpriv", "--pdeathsig", "KILL", "--"]
+
+
+def test_a_command_whose_starter_is_already_gone_never_runs() -> None:
+    """R-01's race, kept by the prefix: a parent that is not the starter exits at once."""
+    marker = "the command ran"
+    own = subprocess.run(
+        [*gz._die_with_the_caller(os.getpid()), "echo", marker],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert own.returncode == 0 and own.stdout.strip() == marker
+    # No starter can have pid 0, so this child's parent is never it.
+    gone = subprocess.run(
+        [*gz._die_with_the_caller(0), "echo", marker],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert gone.returncode == 1 and marker not in gone.stdout
+
+
 def test_the_ceiling_kills_a_forked_child_holding_the_pipes() -> None:
     """R2-01: the deadline path kills the group too, and returns what was printed."""
     started = time.monotonic()

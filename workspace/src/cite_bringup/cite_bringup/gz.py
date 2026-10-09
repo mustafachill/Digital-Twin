@@ -43,8 +43,6 @@ does — see this package's README.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-import ctypes
-import ctypes.util
 import os
 import signal
 import subprocess
@@ -178,30 +176,35 @@ KILL_WAIT_S = 2.0
 #   these from the executor's worker threads, which live as long as the
 #   executor, and a thread that ends while its own command still runs has
 #   abandoned that command anyway.
-# - Linux only, and set between fork and exec (`preexec_fn`), where only the
-#   prepared libc call below runs: no import, no allocation by this module.
+# - Linux only, and set by `setpriv(1)` (util-linux, in every Ubuntu image)
+#   as a prefix to the command rather than by a `preexec_fn` (R-02): no Python
+#   runs in the forked child, which `subprocess` warns is unsafe in a process
+#   with threads, as the console is. The setting survives the exec into the
+#   command, since `setpriv` and the command are one process.
+# - A starter that ended before the setting took effect would never deliver the
+#   signal, so a POSIX shell between `setpriv` and the command checks that its
+#   parent is still the starter and exits at once if not, then execs the
+#   command: the command keeps the pid `run` started, its session and its
+#   setting.
 
-#: `prctl(2)`'s option that asks for a signal when the parent thread ends.
-_PR_SET_PDEATHSIG = 1
 
-#: libc's `prctl`, resolved once at import so the child only calls it.
-_PRCTL = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True).prctl
+def _die_with_the_caller(parent: int) -> list[str]:
+    """Return the command prefix that has the child killed when its starter ends (R-01).
 
-
-def _die_with_the_caller(parent: int) -> Callable[[], None]:
-    """Return a `preexec_fn` that has the child killed when its starter ends (R-01).
-
-    ``parent`` is the starter's pid, read before the fork: a starter that ended
-    before the setting took effect would never deliver the signal, so the child
-    checks it is still its parent's and exits at once if not.
+    ``parent`` is the starter's pid, read before the fork. The prefix ends in
+    a shell whose positional parameters are the command, so the command is
+    appended to it as it is.
     """
-
-    def preexec() -> None:
-        _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
-        if os.getppid() != parent:
-            os._exit(1)
-
-    return preexec
+    return [
+        "setpriv",
+        "--pdeathsig",
+        "KILL",
+        "--",
+        "sh",
+        "-c",
+        f'[ "$PPID" = {int(parent)} ] || exit 1; exec "$@"',
+        "sh",
+    ]
 
 
 class CommandInterrupted(RuntimeError):
@@ -261,13 +264,12 @@ def run(
         )
     deadline = time.monotonic() + timeout
     with subprocess.Popen(
-        list(argv),
+        [*_die_with_the_caller(os.getpid()), *argv],
         env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
-        preexec_fn=_die_with_the_caller(os.getpid()),
         **kwargs,
     ) as process:
         while True:
