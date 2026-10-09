@@ -4,8 +4,8 @@
 # Phase 1, ConsoleState.PHASE_VALIDATING: the plant measured at the program's
 # start, then ONE cycle of `cite_bringup.program.cycle.run_program` on the
 # simulation target (the twin in SIM, the plant alone), at `speed_scale`. If it
-# fails or is stopped the request ends there, and nothing is sent to the
-# physical side.
+# fails or is stopped the request ends there, and no motion is commanded on the
+# real arm (a stop holds every carriage where it stands).
 #
 # Phase 2, ConsoleState.PHASE_RUNNING, only once phase 1 completed in this
 # request: both sides MEASURED at the program's start - a side away is a refusal
@@ -42,7 +42,10 @@ bool success            # both phases completed every cycle
 string detail           # what was done, or which phase and step failed and why
 uint8 ended_in          # ConsoleState.PHASE_VALIDATING or PHASE_RUNNING: the phase
                         # the request ended in; PHASE_NONE if it was refused
-                        # before either began
+                        # before either began - at the goal's checks, or because
+                        # phase 1 measured the plant away from the program's
+                        # start before its cycle. Phase 2's measurement follows
+                        # phase 1's cycle: a side away there ends in PHASE_RUNNING
 uint32 cycles_completed # phase 2's cycles that ran every step to the end; the
                         # phase 1 cycle is not counted here
 ---

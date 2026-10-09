@@ -41,11 +41,12 @@ closing - and it runs the program's ONE sequencer, `program.cycle`, the same
   `steps.run`; SIM again on a physical side.
 * **Validate then run** (ADR-0073): Start program's cycles, twice, in one
   request and one cell. Phase 1 is one cycle on the simulation target alone;
-  if it fails or is stopped the request ends, and nothing is sent to the
-  physical side. Phase 2 runs only once phase 1 completed: both sides MEASURED
-  at the start (away is a refusal; nothing homes between the phases,
-  ADR-0037), then the twin target's cycles with every twin gate unchanged. The
-  twin's mode is held from phase 1 to the end of phase 2 and let go once.
+  if it fails or is stopped the request ends, and no motion is commanded on
+  the real arm (a stop holds every carriage where it stands). Phase 2 runs
+  only once phase 1 completed: both sides MEASURED at the start (away is a
+  refusal; nothing homes between the phases, ADR-0037), then the twin
+  target's cycles with every twin gate unchanged. The twin's mode is held from
+  phase 1 to the end of phase 2 and let go once.
 
 The terminal's Enter becomes `confirm_operator`, and the terminal's Ctrl-C
 becomes `stop`: the predicate a `RosCell` is built with, so the thread waiting
@@ -322,8 +323,6 @@ class ConsoleMachine:
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
-        #: The target of the request in progress, None when none or Start robot.
-        self._target: int | None = None
         #: The validate-then-run phase in progress (ADR-0073), PHASE_NONE else.
         self._phase = ConsoleState.PHASE_NONE
         self._step = ""
@@ -479,7 +478,6 @@ class ConsoleMachine:
             scale,
             owner=owner,
             cancelled=cancelled,
-            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
@@ -561,7 +559,6 @@ class ConsoleMachine:
             scale,
             owner=owner,
             cancelled=cancelled,
-            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
@@ -660,7 +657,6 @@ class ConsoleMachine:
             scale,
             owner=owner,
             cancelled=cancelled,
-            target=targets.TWIN,
             phase=ConsoleState.PHASE_VALIDATING,
         )
         if refusal is not None:
@@ -689,8 +685,8 @@ class ConsoleMachine:
             observed = _Observed(cell, self._set_entered)
             try:
                 opening(
-                    "validating: one cycle on the simulation alone; nothing is sent to the "
-                    "real arm"
+                    "validating: one cycle on the simulation alone; no motion is commanded "
+                    "on the real arm"
                 )
                 # The plant alone: phase 1 reads nothing of the physical side.
                 self._refuse_unless_at_start(
@@ -762,7 +758,11 @@ class ConsoleMachine:
             # The sides measured: the plant alone in phase 1, both in phase 2.
             measured = targets.TWIN if phase == ConsoleState.PHASE_RUNNING else targets.SIM
             refused = self._refused_at_start(what, refusal, targets.SIDES[measured])
-            return Outcome(False, refused.detail, 0, phase)
+            # Refused at phase 1's measurement, before any cycle: neither phase
+            # began (ValidateThenRun.action, `ended_in`). Phase 2's measurement
+            # follows phase 1's cycle, so that refusal ends in PHASE_RUNNING.
+            ended_in = phase if phase == ConsoleState.PHASE_RUNNING else ConsoleState.PHASE_NONE
+            return Outcome(False, refused.detail, 0, ended_in)
         current = run if phase == ConsoleState.PHASE_RUNNING else validation
         problems = [*validation.problems, *run.problems]
         if observed is not None and observed.cancel_failure is not None:
@@ -777,7 +777,10 @@ class ConsoleMachine:
         )
         detail = outcome.detail
         if phase == ConsoleState.PHASE_VALIDATING and not outcome.success:
-            detail = f"{detail}; nothing was sent to the real arm"
+            detail = (
+                f"{detail}; no motion was commanded on the real arm (a stop holds every "
+                "carriage where it stands)"
+            )
         return Outcome(outcome.success, detail, run.completed, phase)
 
     def confirm_operator(self) -> Outcome:
@@ -1093,7 +1096,6 @@ class ConsoleMachine:
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
         foreign_mode_refuses: bool = True,
-        target: int | None = None,
         phase: int = ConsoleState.PHASE_NONE,
     ) -> str | None:
         with self._lock:
@@ -1101,7 +1103,6 @@ class ConsoleMachine:
             if reason is not None:
                 return reason
             self._busy = True
-            self._target = target
             self._phase = phase
             self._state = state
             self._owner = owner
@@ -1134,7 +1135,6 @@ class ConsoleMachine:
                 self._at_start[side] = True
             self._state = state
             self._busy = False
-            self._target = None
             self._phase = ConsoleState.PHASE_NONE
             self._owner = None
             self._cancelled = None

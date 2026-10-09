@@ -1474,7 +1474,10 @@ def test_a_phase_1_failure_sends_nothing_to_the_physical_side() -> None:
     assert not outcome.success
     assert outcome.ended_in == ConsoleState.PHASE_VALIDATING
     assert outcome.cycles_completed == 0
-    assert "nothing was sent to the real arm" in outcome.detail
+    # S-01: a stop holds every carriage, so "nothing was sent" would be untrue.
+    assert "no motion was commanded on the real arm" in outcome.detail
+    assert "a stop holds every carriage where it stands" in outcome.detail
+    assert "nothing was sent" not in outcome.detail
     assert _physical_calls(rig) == []
     assert all(state.phase != ConsoleState.PHASE_RUNNING for state in rig.snapshots)
     assert {report[0] for report in feedback} == {ConsoleState.PHASE_VALIDATING}
@@ -1498,6 +1501,107 @@ def test_a_phase_1_stop_sends_nothing_to_the_physical_side() -> None:
     assert ("cancel",) in rig.calls
     assert len(rig.released[released:]) == 1
     assert rig.machine.snapshot().state == ConsoleState.READY
+
+
+def test_a_stop_on_phase_1s_last_step_ends_in_validating_and_reaches_nothing() -> None:
+    """R-02: a stop that lands on phase 1's last step is still phase 1's: no phase 2."""
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    # Phase 1's last step is the program's second release.
+    rig.on_call = ("grip", False)
+
+    def stop_during_phase_1s_last_step() -> None:
+        if rig.calls.count(("grip", False)) == 2:
+            assert rig.machine.stop().success
+
+    rig.on_call_hook = stop_during_phase_1s_last_step
+    join, feedback = _validate(rig)
+    outcome = join()
+    assert not outcome.success and "stopped" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_VALIDATING
+    assert outcome.cycles_completed == 0
+    assert _physical_calls(rig) == []
+    assert rig.measured_sides == [("plant",)]
+    assert rig.moves() == ["pick", "place"]
+    assert all(state.phase != ConsoleState.PHASE_RUNNING for state in rig.snapshots)
+    assert {report[0] for report in feedback} == {ConsoleState.PHASE_VALIDATING}
+    assert len(rig.released[released:]) == 1
+    assert rig.machine.snapshot().state == ConsoleState.READY
+
+
+def test_a_stop_between_phase_2s_cycles_is_not_a_success() -> None:
+    """R-02: a stop after phase 2's first cycle is charged to phase 2, never a pass."""
+    rig = Rig().homed()
+    # The 4th release ends phase 2's first cycle (phase 1's cycle has two).
+    rig.on_call = ("grip", False)
+
+    def stop_after_phase_2s_first_cycle() -> None:
+        if rig.calls.count(("grip", False)) == 4:
+            assert rig.machine.stop().success
+
+    rig.on_call_hook = stop_after_phase_2s_first_cycle
+    outcome = rig.machine.validate_then_run(1.0, 2)
+    assert not outcome.success, outcome.detail
+    assert "stopped" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert outcome.cycles_completed == 1
+    # The second twin cycle never began.
+    assert rig.moves() == ["pick", "place"] * 2
+    assert rig.machine.snapshot().state == ConsoleState.READY
+
+
+def test_a_part_spawn_failing_in_phase_2_is_not_a_success() -> None:
+    """R-02: phase 2's StepFailed outside a cycle (the part placement) fails the request."""
+    rig = Rig().homed()
+    # Phase 1 places on the plant alone; phase 2 also on the counterpart.
+    rig.spawn_fails_on = "counterpart"
+    outcome = rig.machine.validate_then_run(1.0, 1)
+    assert not outcome.success, outcome.detail
+    assert "counterpart: the create failed" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert outcome.cycles_completed == 0
+    assert rig.placed_on == [("plant",), ("plant", "counterpart")]
+    # Phase 1's cycle alone moved.
+    assert rig.moves() == ["pick", "place"]
+    assert rig.machine.snapshot().state == ConsoleState.FAULT
+
+
+def test_an_unexpected_error_in_phase_2_is_not_a_success() -> None:
+    """R-02: a non-StepFailed error in phase 2's part placement fails the request."""
+    rig = Rig().homed()
+    place = rig.machine._place_parts
+
+    def place_failing_on_the_counterpart(sides, may_hold, say, interrupted) -> None:
+        if "counterpart" in sides:
+            raise RuntimeError("the world went away")
+        place(sides, may_hold, say, interrupted)
+
+    rig.machine._place_parts = place_failing_on_the_counterpart
+    outcome = rig.machine.validate_then_run(1.0, 1)
+    assert not outcome.success, outcome.detail
+    assert "unexpected" in outcome.detail and "the world went away" in outcome.detail
+    assert outcome.ended_in == ConsoleState.PHASE_RUNNING
+    assert outcome.cycles_completed == 0
+    assert rig.moves() == ["pick", "place"]
+    assert rig.machine.snapshot().state == ConsoleState.FAULT
+
+
+def test_a_plant_away_at_phase_1s_measurement_is_refused_before_either_phase() -> None:
+    """S-02: refused at phase 1's measurement, before any cycle: ended_in is PHASE_NONE."""
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    rig.away = ["plant: joint1 away"]
+    join, _ = _validate(rig)
+    outcome = join()
+    assert not outcome.success
+    assert outcome.ended_in == ConsoleState.PHASE_NONE
+    assert outcome.cycles_completed == 0
+    assert "plant: joint1 away" in outcome.detail and "Home first" in outcome.detail
+    assert rig.moves() == [] and rig.placed_on == []
+    assert _physical_calls(rig) == []
+    assert len(rig.released[released:]) == 1
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and not snapshot.plant_at_start
 
 
 def test_a_side_away_after_phase_1_is_refused_and_nothing_homes() -> None:
