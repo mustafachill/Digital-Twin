@@ -197,8 +197,10 @@ tears down around it.
 `python3 -m cite_bringup.program` puts no part on the table and runs no belt; supplying one
 part per cycle is the caller's job, which is why `./scripts/program` runs it one cycle at a
 time. It refuses to start on an arm whose `RobotState` says it holds a part, because the program
-opens the gripper before it closes it. `--via twin` (the default) first asks for `VALIDATED`; in
-`SIM` the boundary refuses every goal. Any step that does not succeed stops the program, and so
+opens the gripper before it closes it. `--via twin` (the default) takes `--target twin|real|sim`
+(default `twin`) and asks for the target's mode: `VALIDATED` for twin, `REAL` for the real arm,
+none for the simulation. Since ADR-0072, `SIM` routes every goal to the plant alone and `REAL` to
+the counterpart alone. Any step that does not succeed stops the program, and so
 does Ctrl-C: the goal in flight is cancelled, the track is held where it stands, and the exit
 status is non-zero. `./scripts/scenario program_cycle` checks one cycle on the plant.
 
@@ -218,26 +220,42 @@ example `projects/01-three-arm-event-driven-line/run` — see
 operator panel to the plant side's Gazebo window.
 
 ```bash
-./scripts/console                          # the same as ./scripts/sim --pair --console, windowed
-CITE_ALLOW_HARDWARE=1 ./scripts/console    # with the physical counterpart
+./scripts/console                          # the simulation alone: plant, boundary, console
+CITE_ALLOW_HARDWARE=1 ./scripts/console    # both sides: the simulation and the physical arm
 ```
 
-The pair comes up with the console server `cell_console`, and the panel shows in the top-right
-corner of the 3D view. **Nothing moves until a button is pressed.**
+**The hardware opt-in decides which sides start**
+([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)). Without it the plant
+starts alone and prints `real arm not started: CITE_ALLOW_HARDWARE is not 1; simulation target
+only`; the boundary opens nothing on the counterpart's domain and refuses every mode but `SIM`,
+even with `force`. With it both sides start, as before. The panel shows in the top-right corner of
+the plant's 3D view. **Nothing moves until a button is pressed.**
+
+**The target selector** chooses where the signal goes: **Simulation** (`SIM`, the plant alone),
+**Real arm** (`REAL`, the physical counterpart alone) or **Twin** (`VALIDATED`, both). Only the
+targets the running deployment can serve are offered, and nothing is preselected: Home and Start
+program stay disabled until a target is chosen, and the choice is cleared whenever the offered set
+or the console changes. The target is sent with every Home and Start program. Each side's "at the
+program's start" is shown and measured separately; switching target leaves each side where the
+last run left it, and a Twin run needs a Twin Home first after any single-side run that moved one
+side.
 
 | Button | What it does | Enabled when |
 |---|---|---|
 | **Start robot** | On a physical side: reads the twin as SIM, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running (the server also refuses while a terminal program client is on the graph) |
-| **Home** | Measures both arms against the program's start. If a side is away, it asks the operator to confirm and brings both arms there, then measures again. | The robot is started and the console is READY |
-| **Start program** | Measures the start again, then runs N cycles of the real program through the twin. On a physical side, each cycle first asks the operator to place the part by hand. | The robot is started, READY, and the arms are known to be at the start |
+| **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm) and brings them there, then measures again. | The robot is started, the console is READY and a target is chosen |
+| **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
 
 **The speed selector** preselects 1.0, the program's own speed, and also offers 0.5, 0.25 and 0.1.
-A choice below the physical side's floor is disabled. The scale is sent with every Home and every
+A choice below the physical side's floor is disabled when the target includes the real arm. The scale is sent with every Home and every
 Start program, and the server never assumes one.
 
-**The confirmation panel** shows the server's exact prompt. The server asks only after reading the
-twin as SIM, so nothing is forwarded to the physical side while a person is in the cell. Confirm
+**The confirmation panel** shows the server's exact prompt, which names the target and the physical
+sides it will move. The server asks only after reading the twin as SIM and the physical carriage as
+stationary, so nothing is forwarded to the physical side while a person is in the cell. While a run
+is in progress the console holds the twin's mode (`/cite/twin/hold_mode`): another client's mode
+change is refused until the run returns to SIM and releases it. Confirm
 answers the prompt; Stop withdraws the request.
 
 **Stop is a software stop on the command path, not an E-stop.** The xArm controller's hardware
@@ -253,10 +271,10 @@ client (`fixed_program`) is on the graph; Stop and the return to SIM are never r
 depend on DDS discovery, so they are advisory and not an interlock (open-work #100). A refused
 request's reason appears in the panel's last-error line.
 
-**Not yet run through the panel:** a full cycle on the physical arm. The console's refusals,
-Start robot and a cancelled Home are tested headlessly against fake sides; open-work #101 lists
-what is not. The repository cannot start an all-simulated Gazebo pair, so the first complete Home
-and program cycle through the panel is the supervised physical run. **The panel has no
+**Run through the console so far:** on the simulation alone (`./scripts/sim --pair --console`
+without the opt-in, 2026-10-09), Home and one full cycle of the real program, all 22 steps, then a
+Stop mid-cycle that held the arm and required a new Home. **Not yet run:** the Real arm and Twin
+targets on the physical arm; the first is the supervised physical run. **The panel has no
 `--speed-scale` argument and preselects 1.0:** before the first Home, select **0.1×** in the speed
 selector, with the owner at the hardware E-stop, as in "First motion, always: two stages".
 
