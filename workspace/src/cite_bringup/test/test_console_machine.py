@@ -1196,6 +1196,29 @@ def test_every_refused_request_publishes_its_reason() -> None:
     assert rig.machine.snapshot().last_error == f"refused: {outcome.detail}"
 
 
+def test_a_refusal_in_fault_keeps_the_fault_cause() -> None:
+    """R-01: a refused request in FAULT publishes its reason beside the fault's, not over it."""
+    rig = Rig().homed()
+    rig.fail_on = ("move", "place")
+    assert not rig.machine.run_program(1.0, 1).success
+    cause = rig.machine.snapshot().last_error
+    assert rig.machine.snapshot().state == ConsoleState.FAULT and "move place" in cause
+    rig.terminal = "/fixed_program"
+    outcome = rig.machine.start_robot()
+    assert not outcome.success
+    published = rig.snapshots[-1]
+    assert published.state == ConsoleState.FAULT
+    assert published.last_error == f"refused: {outcome.detail} (fault: {cause})"
+    # A second refusal still carries the cause, once.
+    rig.machine.record_refusal("again")
+    assert rig.snapshots[-1].last_error == f"refused: again (fault: {cause})"
+    # Leaving FAULT drops it: a refusal in READY carries none.
+    rig.terminal = None
+    assert rig.machine.start_robot().success
+    assert not rig.machine.confirm_operator().success
+    assert "fault:" not in rig.machine.snapshot().last_error
+
+
 # --- A terminal program client on the graph (S-01) ---------------------------
 
 

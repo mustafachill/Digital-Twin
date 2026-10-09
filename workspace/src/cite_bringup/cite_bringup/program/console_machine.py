@@ -259,6 +259,9 @@ class ConsoleMachine:
         self._step = ""
         self._prompt = ""
         self._error = ""
+        #: Why the console is in FAULT, kept apart from ``_error`` so that a
+        #: refusal published while in FAULT does not hide it (R-01).
+        self._fault_cause = ""
         self._speed = 0.0
         self._confirmed = False
         self._sequence = 0
@@ -325,10 +328,15 @@ class ConsoleMachine:
 
         A rejected goal answers its client with nothing but the rejection, so
         the reason reaches the panel only through the published state. The
-        next request that begins clears it, as it clears any error.
+        next request that begins clears it, as it clears any error. In FAULT
+        the fault's cause stays in it beside the refusal (R-01): the cause is
+        what the operator must act on, and a refused request does not end it.
         """
         with self._lock:
-            self._error = f"refused: {reason}"
+            error = f"refused: {reason}"
+            if self._state == ConsoleState.FAULT and self._fault_cause:
+                error = f"{error} (fault: {self._fault_cause})"
+            self._error = error
             snapshot = self._snapshot()
         self._on_change(snapshot)
 
@@ -768,6 +776,7 @@ class ConsoleMachine:
             self._cancelled = None
             self._prompt = ""
             self._error = error
+            self._fault_cause = error if state == ConsoleState.FAULT else ""
             if started is not None:
                 self._started = started
             self._changed.notify_all()
