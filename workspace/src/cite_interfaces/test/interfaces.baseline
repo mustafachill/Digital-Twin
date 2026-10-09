@@ -127,6 +127,13 @@ msg/TwinMode.msg
   uint8 requested_mode
   bool transition_in_progress
   string reason
+msg/TwinSides.msg
+  string TOPIC="/cite/twin/sides"
+  builtin_interfaces/Time stamp
+  string[] running
+  string[] physical
+  string[] commandable
+  string detail
 srv/ConfirmOperator.srv
   ---
   bool success
