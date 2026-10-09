@@ -15,6 +15,11 @@ console serves on the plant's domain, and that is the domain the plant's window
 runs on. A counterpart's window — an all-simulated pair opens one per side — gets
 the same file without the panel, so that one pair never shows two.
 
+The panel is also handed the 3D view's starting pose, as `<home_camera_pose>`, so
+that its "Reset view" can return the camera there (ADR-0071). It is the pose
+`gui_camera_pose` derives, rendered once by the template into the one text both
+MinimalScene's `<camera_pose>` and the panel's parameter carry.
+
 The twin-mode topic the panel also reads is not a parameter: it is
 `cite_interfaces/msg/TwinMode.TOPIC`, a constant in the contract, which the plugin
 reads from the generated message header rather than from a second statement here.

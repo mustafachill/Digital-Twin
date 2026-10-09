@@ -470,9 +470,28 @@ class TestOnlyThePlantsWindowCarriesTheConsole:
     def test_the_panel_is_handed_exactly_the_plans_console_names(self, zone_cell) -> None:
         plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
         (panel,) = (p for p in _plugins(plant) if p.get("filename") == "CellConsole")
-        handed = {child.tag: child.text for child in panel if child.tag != "gz-gui"}
+        handed = {
+            child.tag: child.text
+            for child in panel
+            if child.tag not in {"gz-gui", "home_camera_pose"}
+        }
         (plan,) = bringup.generate(zone_cell)
         assert handed == yaml.safe_load(plan.content)["plan"]["console"]
+
+    def test_the_panels_home_view_is_the_3d_views_starting_pose(self, zone_cell) -> None:
+        # "Reset view" returns the camera to where the window opened it: the
+        # same text as MinimalScene's camera_pose, never a second statement.
+        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
+        plugins = _plugins(plant)
+        (scene,) = (p for p in plugins if p.get("filename") == "MinimalScene")
+        (panel,) = (p for p in plugins if p.get("filename") == "CellConsole")
+        home = panel.findtext("home_camera_pose")
+        assert home is not None
+        assert home == scene.findtext("camera_pose")
+        pose = gui.gui_camera_pose(zone_cell)
+        assert [float(v) for v in home.split()] == pytest.approx(
+            [pose.x, pose.y, pose.z, pose.roll, pose.pitch, pose.yaw]
+        )
 
     def test_the_twin_mode_topic_is_not_restated(self, zone_cell) -> None:
         # The panel reads `TwinMode.TOPIC` from the contract; a parameter here
