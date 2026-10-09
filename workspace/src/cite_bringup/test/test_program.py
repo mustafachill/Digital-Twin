@@ -1608,3 +1608,62 @@ def test_without_a_shutdown_a_cells_waits_keep_their_own_ceilings() -> None:
     assert ros._clamped(123.0) == 123.0
     ros._stop_deadline = lambda: 100.0
     assert ros._clamped(123.0) == 100.0
+
+
+# S-02: `--via plant` only on the plant's own domain, and never beside a console.
+
+
+def _plant_main(monkeypatch, environ: dict[str, str]) -> tuple[int, list]:
+    """Run `--via plant` with ``environ``'s domain, recording what reached ROS."""
+    import cite_bringup.program.__main__ as program_module
+    import cite_bringup.program.cell as cell_module
+    import rclpy
+
+    reached: list = []
+    for name in ("ROS_DOMAIN_ID", "CITE_DOMAIN_BASE"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(rclpy, "init", lambda **_kwargs: reached.append("init"))
+    monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
+    monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
+    monkeypatch.setattr(cell_module, "RosCell", lambda *args, **kwargs: ("cell", args))
+
+    class Ended:
+        status = 0
+
+    def run_program(cell, steps, **kwargs):
+        reached.append(("run_program", kwargs["console"], kwargs["via_twin"]))
+        return Ended()
+
+    monkeypatch.setattr(program_module, "run_program", run_program)
+    return program_main(["--zone", ZONE, "--via", "plant"]), reached
+
+
+def test_via_the_plant_is_refused_on_the_counterparts_domain(monkeypatch, capsys) -> None:
+    """S-02: on the counterpart's domain `--via plant` would drive the physical arm."""
+    plan = load(default_plan_path(ZONE))
+    counterpart = 40 + plan.side_named("counterpart").domain_offset
+    assert counterpart != 40
+    status, reached = _plant_main(
+        monkeypatch, {"CITE_DOMAIN_BASE": "40", "ROS_DOMAIN_ID": str(counterpart)}
+    )
+    assert status == 2
+    assert reached == [], "a ROS context was created before the refusal"
+    assert "--via plant refused" in capsys.readouterr().err
+
+
+def test_via_the_plant_is_refused_with_no_domain_to_check(monkeypatch, capsys) -> None:
+    status, reached = _plant_main(monkeypatch, {"ROS_DOMAIN_ID": "40"})
+    assert status == 2 and reached == []
+    assert "CITE_DOMAIN_BASE" in capsys.readouterr().err
+
+
+def test_via_the_plant_on_the_plants_domain_runs_and_asks_for_a_console(monkeypatch) -> None:
+    """S-02 lets the plant's own domain through; R-05: the console is asked for too."""
+    plan = load(default_plan_path(ZONE))
+    status, reached = _plant_main(
+        monkeypatch, {"CITE_DOMAIN_BASE": "40", "ROS_DOMAIN_ID": "40"}
+    )
+    assert status == 0
+    assert reached == ["init", ("run_program", plan.console.state, False)]

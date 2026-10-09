@@ -135,6 +135,10 @@ if(BUILD_TESTING)
   # it refuses, the order it calls the program's library in, and what a stop
   # and a failure leave it in. No graph.
   ament_add_pytest_test(console_machine test/test_console_machine.py)
+  # N-01, S-01, R-05: a terminal client sees an operator console on its graph -
+  # by the twin's mode or, via the plant, the arm's state - and the console sees
+  # a terminal client by its one node name. A live graph on a domain of its own.
+  ament_add_pytest_test(console_presence test/test_console_presence.py)
   # S-01 (ADR-0070): an initialization interrupted or unanswered once sent is
   # followed by the vendor's track stop; against fakes, on a domain of its own.
   ament_add_pytest_test(initialize_interrupted test/test_initialize_interrupted.py)

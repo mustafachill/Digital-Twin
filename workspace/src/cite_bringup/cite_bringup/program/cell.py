@@ -270,6 +270,14 @@ def ask_until_accepted(
         pause()
 
 
+#: The name of the node a TERMINAL client's cell creates: `python3 -m
+#: cite_bringup.program` and `./scripts/home`, by either route. Written once:
+#: the operator console reads it off the graph to refuse a motion request while
+#: such a client runs (S-01), so a second spelling would be a console that never
+#: sees one. The console's own cells are named otherwise (`console._CELL_NODE`).
+TERMINAL_NODE = "fixed_program"
+
+
 def console_holds(topic: str, state: ConsoleState | None) -> str:
     """Say that an operator console serves the pair, and so a terminal client may not."""
     from cite_bringup.program.console_machine import STATE_NAMES
@@ -322,7 +330,7 @@ class RosCell:
         track: Track | None = None,
         speed: float = 1.0,
         interrupted: Callable[[], bool] | None = None,
-        node_name: str = "fixed_program",
+        node_name: str = TERMINAL_NODE,
         stop_deadline: Callable[[], float | None] | None = None,
     ) -> None:
         skills = arm.skills
@@ -496,20 +504,28 @@ class RosCell:
         console is known by its latched `ConsoleState` on ``topic``: a message
         heard there, or a publisher of it on the graph.
 
-        Read once the twin's own latched mode has been heard on this domain:
-        that message is the event that discovery has reached the pair's
-        participants, so an absence read before it is never taken as no
-        console. DDS cannot prove an absence; this is the graph as known after
-        that event. Raises `StepFailed` when the twin is not heard at all.
+        Read once a latched message of the pair's own has been heard on this
+        domain - through the twin, the twin's mode; via the plant alone (R-05),
+        where no twin runs, the arm's `RobotState`: that message is the event
+        that discovery has reached the pair's participants, so an absence read
+        before it is never taken as no console. DDS cannot prove an absence;
+        this is the graph as known after that event. Raises `StepFailed` when
+        that message is not heard at all.
         """
         heard: list[ConsoleState] = []
-        modes: list[TwinMode] = []
+        witnessed: list = []
+        if self._via == "twin":
+            witness, witness_topic = TwinMode, TwinMode.TOPIC
+        else:
+            witness, witness_topic = RobotState, self._state_topic
         subscriptions = [
             self.node.create_subscription(ConsoleState, topic, heard.append, LATCHED),
-            self.node.create_subscription(TwinMode, TwinMode.TOPIC, modes.append, LATCHED),
+            self.node.create_subscription(witness, witness_topic, witnessed.append, LATCHED),
         ]
         try:
-            self._until_true(lambda: bool(heard or modes), f"TwinMode on {TwinMode.TOPIC}")
+            self._until_true(
+                lambda: bool(heard or witnessed), f"{witness.__name__} on {witness_topic}"
+            )
             present = bool(heard) or self.node.count_publishers(topic) > 0
         finally:
             for subscription in subscriptions:

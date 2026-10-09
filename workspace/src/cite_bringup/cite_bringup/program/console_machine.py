@@ -204,8 +204,10 @@ class ConsoleMachine:
     scale or raises `ValueError` (`sides.required_speed_scale`), and
     ``minimum_speed_scale`` is the floor it applies, 0 for none.
     ``heard_twin_mode`` is the twin's mode as last heard on its topic, None
-    before any. ``on_change`` is told every new `Snapshot`; ``log`` every line
-    said.
+    before any. ``terminal_client`` says which terminal program client is on
+    the graph, None for none: while one is, every request but the return to
+    SIM is refused (S-01). ``on_change`` is told every new `Snapshot`; ``log``
+    every line said.
     """
 
     def __init__(
@@ -225,6 +227,7 @@ class ConsoleMachine:
             [bool, Callable[[str], None], Callable[[], bool] | None, float | None], bool
         ],
         heard_twin_mode: Callable[[], int | None] = lambda: None,
+        terminal_client: Callable[[], str | None] = lambda: None,
         check_scale: Callable[[float], float] = speed_scale,
         minimum_speed_scale: float = 0.0,
         on_change: Callable[[Snapshot], None] = lambda snapshot: None,
@@ -240,6 +243,7 @@ class ConsoleMachine:
         self._place_parts = place_parts
         self._set_belts = set_belts
         self._heard_twin_mode = heard_twin_mode
+        self._terminal_client = terminal_client
         self._check_scale = check_scale
         self._minimum_speed_scale = float(minimum_speed_scale)
         self._on_change = on_change
@@ -316,12 +320,25 @@ class ConsoleMachine:
         with self._lock:
             return self._motion_refusal(scale, cycles)
 
+    def record_refusal(self, reason: str) -> None:
+        """Publish why a request was refused, as `last_error`, changing no state (P-R01).
+
+        A rejected goal answers its client with nothing but the rejection, so
+        the reason reaches the panel only through the published state. The
+        next request that begins clears it, as it clears any error.
+        """
+        with self._lock:
+            self._error = f"refused: {reason}"
+            snapshot = self._snapshot()
+        self._on_change(snapshot)
+
     # ------------------------------------------------------------ requests
 
     def start_robot(self) -> Outcome:
         """Enable the robot: SIM and the cell cleared on a physical side, initialize, custody."""
         refusal = self._begin(ConsoleState.STARTING, self._refusal, 0.0)
         if refusal is not None:
+            self.record_refusal(refusal)
             return Outcome(False, refusal)
         with self._lock:
             # Nothing this console placed is known any more, and nothing it
@@ -373,6 +390,7 @@ class ConsoleMachine:
             cancelled=cancelled,
         )
         if refusal is not None:
+            self.record_refusal(refusal)
             return Outcome(False, refusal)
         say = self._sayer(feedback)
         with self._lock:
@@ -442,6 +460,7 @@ class ConsoleMachine:
             cancelled=cancelled,
         )
         if refusal is not None:
+            self.record_refusal(refusal)
             return Outcome(False, refusal)
         say = self._sayer()
 
@@ -532,25 +551,28 @@ class ConsoleMachine:
 
     def confirm_operator(self) -> Outcome:
         """Answer the go-ahead the console is asking for, while the twin is heard in SIM."""
+        refusal: str | None = None
         with self._lock:
+            mode = self._heard_twin_mode()
             if self._closing:
                 return Outcome(False, "the console is closing")
             if self._state != ConsoleState.AWAITING_OPERATOR:
-                return Outcome(
-                    False,
+                refusal = (
                     f"nothing is awaiting the operator: the console is "
-                    f"{STATE_NAMES[self._state]}, not AWAITING_OPERATOR",
+                    f"{STATE_NAMES[self._state]}, not AWAITING_OPERATOR"
                 )
-            mode = self._heard_twin_mode()
-            if self._physical and mode != TwinMode.MODE_SIM:
-                return Outcome(
-                    False,
+            elif self._physical and mode != TwinMode.MODE_SIM:
+                refusal = (
                     f"the twin is heard in mode {mode}, not SIM ({TwinMode.MODE_SIM}), so no "
                     "one is let into the cell; the question stands until it is in SIM or "
-                    "the request is stopped",
+                    "the request is stopped"
                 )
-            self._confirmed = True
-            self._changed.notify_all()
+            else:
+                self._confirmed = True
+                self._changed.notify_all()
+        if refusal is not None:
+            self.record_refusal(refusal)
+            return Outcome(False, refusal)
         return Outcome(True, "the operator confirmed")
 
     def stop(self, owner: object = None) -> Outcome:
@@ -651,6 +673,16 @@ class ConsoleMachine:
             return "the console is closing"
         if self._busy:
             return f"another request is in progress ({STATE_NAMES[self._state]})"
+        if foreign_mode_refuses:
+            # S-01: a terminal program client drives this pair already. Not
+            # asked of the return to SIM, which stops rather than moves.
+            client = self._terminal_client()
+            if client is not None:
+                return (
+                    f"a terminal program client ({client}) is on the graph and may be "
+                    "driving this pair: one operator surface per pair. Stop it first "
+                    "(ADR-0071)"
+                )
         if foreign_mode_refuses and self._physical and not self._entered:
             mode = self._heard_twin_mode()
             if mode is not None and mode != TwinMode.MODE_SIM:

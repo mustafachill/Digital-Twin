@@ -183,6 +183,8 @@ class Rig:
         self.speeds: list = []
         self.snapshots = []
         self.state_during_cancel: list[int] = []
+        #: The terminal program client on the graph, None for none (S-01).
+        self.terminal: str | None = None
         self._changed = threading.Condition()
         self.machine = ConsoleMachine(
             physical=list(physical),
@@ -196,6 +198,7 @@ class Rig:
             place_parts=self._place_parts,
             set_belts=self._set_belts,
             heard_twin_mode=lambda: self.heard,
+            terminal_client=lambda: self.terminal,
             check_scale=check_scale,
             minimum_speed_scale=minimum,
             on_change=self._on_change,
@@ -1154,3 +1157,78 @@ def test_the_mode_this_console_entered_is_not_foreign() -> None:
     rig.machine._set_entered(True)
     rig.heard = TwinMode.MODE_VALIDATED
     assert rig.machine.motion_refusal(0.1, 1) is None
+
+
+# --- A refusal reaches the published state (P-R01) ---------------------------
+
+
+def test_a_refused_goal_is_published_as_last_error_and_changes_no_state() -> None:
+    """P-R01: a rejected goal says nothing to its client; the state carries the reason."""
+    rig = Rig()
+    before = len(rig.snapshots)
+    refusal = rig.machine.motion_refusal(1.0)
+    assert refusal is not None
+    rig.machine.record_refusal(refusal)
+    published = rig.snapshots[-1]
+    assert len(rig.snapshots) == before + 1
+    assert published.last_error == f"refused: {refusal}"
+    assert published.state == ConsoleState.NOT_STARTED and not published.busy
+    # The next request that begins clears it, as any error.
+    assert rig.machine.start_robot().success
+    assert rig.machine.snapshot().last_error == ""
+
+
+def test_every_refused_request_publishes_its_reason() -> None:
+    rig = Rig()
+    for request in (
+        lambda: rig.machine.home(1.0),
+        lambda: rig.machine.run_program(1.0, 1),
+        rig.machine.confirm_operator,
+    ):
+        outcome = request()
+        assert not outcome.success
+        snapshot = rig.machine.snapshot()
+        assert snapshot.last_error == f"refused: {outcome.detail}"
+        assert snapshot.state == ConsoleState.NOT_STARTED
+    rig.terminal = "/fixed_program"
+    outcome = rig.machine.start_robot()
+    assert not outcome.success
+    assert rig.machine.snapshot().last_error == f"refused: {outcome.detail}"
+
+
+# --- A terminal program client on the graph (S-01) ---------------------------
+
+
+def test_a_terminal_client_on_the_graph_refuses_every_motion_request() -> None:
+    """S-01: the console does not start motion beside a terminal run of the program."""
+    rig = Rig().homed()
+    rig.terminal = "/fixed_program"
+    refusal = rig.machine.motion_refusal(1.0, 1)
+    assert refusal is not None and "/fixed_program" in refusal
+    for outcome in (
+        rig.machine.home(1.0),
+        rig.machine.run_program(1.0, 1),
+        rig.machine.start_robot(),
+    ):
+        assert not outcome.success and "terminal program client" in outcome.detail
+    # Refused before anything was touched.
+    assert rig.calls == [] and rig.speeds == []
+    rig.terminal = None
+    assert rig.machine.motion_refusal(1.0, 1) is None
+
+
+def test_a_terminal_client_does_not_hold_back_the_return_to_sim() -> None:
+    """The one request that only asks for SIM stops, it does not move: not refused."""
+    rig = Rig(physical=["counterpart"]).started()
+    rig.away = [None]
+    rig.left = [False]
+    join = rig.in_thread(lambda: rig.machine.home(0.1))
+    rig.answer()
+    join()
+    assert rig.machine.snapshot().state == ConsoleState.FAULT
+    rig.heard = TwinMode.MODE_VALIDATED
+    rig.terminal = "/fixed_program"
+    rig.calls.clear()
+    outcome = rig.machine.stop()
+    assert outcome.success, outcome.detail
+    assert rig.calls == [("leave_validated",), ("close",)]

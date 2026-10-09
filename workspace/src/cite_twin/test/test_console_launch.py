@@ -227,6 +227,16 @@ class TestTheConsole(unittest.TestCase):
         # Nothing but Start robot before it has succeeded.
         handle = self._send(self.home, HomeRobot.Goal(speed_scale=1.0))
         self.assertFalse(handle.accepted, "Home was accepted before Start robot")
+        # P-R01: the rejection carries no reason to its client; the state does,
+        # and the state itself is unchanged.
+        refused = self._spin_until(
+            lambda: self.states
+            and self.states[-1].last_error.startswith("refused: ")
+            and self.states[-1],
+            "the rejected goal's reason in the console's state",
+        )
+        self.assertIn("Start robot", refused.last_error)
+        self.assertEqual(refused.state, ConsoleState.NOT_STARTED)
         handle = self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1))
         self.assertFalse(handle.accepted, "Start program was accepted before Start robot")
         self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)

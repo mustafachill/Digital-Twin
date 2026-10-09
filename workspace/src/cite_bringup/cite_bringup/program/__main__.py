@@ -37,6 +37,14 @@ opens the gripper before it closes it.
 Ctrl-C (or SIGTERM), or any step that does not succeed, cancels the goal in
 flight, holds the track where it stands and exits non-zero.
 
+VIA THE PLANT (S-02). `--via plant` speaks to whatever serves the skill names
+on this process's own domain, with no twin, no operator gate and, by default,
+the program's own speed. It is therefore refused unless this process is on the
+PLANT's domain (`plan.require_domain`, the check the plant's own launch makes):
+run on the counterpart's domain it would have driven the physical arm
+directly. Like the twin route, it is also refused where an operator console
+serves the pair (one operator surface per pair, ADR-0071).
+
 A PHYSICAL SIDE, through the twin (ADR-0070 item 7). Before each run the twin's
 mode is read and must be SIM, where nothing crosses to the physical side; only
 then is the operator asked, at this terminal, to place the part and clear the
@@ -48,9 +56,10 @@ caller asks a person into the cell beside an arm the twin may still command.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from cite_bringup.plan import default_plan_path, load
+from cite_bringup.plan import default_plan_path, load, PlanError, PLANT_SIDE, require_domain
 from cite_bringup.program.cycle import Homing, run_program
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, start_pose
@@ -105,6 +114,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{number:2d}. {step}")
         return 0
 
+    if args.via == "plant":
+        # Before any ROS context exists (S-02): the plant's own servers, and
+        # never the counterpart's - which may be the physical arm.
+        try:
+            require_domain(plan, PLANT_SIDE, os.environ)
+        except PlanError as error:
+            print(f"--via plant refused: {error}", file=sys.stderr, flush=True)
+            return 2
+
     # Imported here so that --dry-run needs no ROS graph at all.
     from cite_bringup.program.cell import RosCell
     import rclpy
@@ -138,13 +156,9 @@ def main(argv: list[str] | None = None) -> int:
                 else None
             ),
             first_cycle=args.first_cycle,
-            # One operator surface per pair (N-01): through the twin, a pair
-            # an operator console serves is refused before anything.
-            console=(
-                plan.console.state
-                if args.via == "twin" and plan.console is not None
-                else None
-            ),
+            # One operator surface per pair (N-01, R-05): by either route, a
+            # pair an operator console serves is refused before anything.
+            console=plan.console.state if plan.console is not None else None,
             banner=(
                 f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
                 f"via {args.via} at {scale:g} of its speed"

@@ -80,7 +80,7 @@ from cite_bringup.plan import (
     PLANT_SIDE,
 )
 from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
-from cite_bringup.program.cell import RosCell
+from cite_bringup.program.cell import RosCell, TERMINAL_NODE
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, initializer_stop, start_pose
@@ -237,6 +237,7 @@ class CellConsole(LifecycleNode):
                 match_ceiling_s=MATCH_CEILING_S if ceiling is None else ceiling,
             ),
             heard_twin_mode=self._heard_twin_mode,
+            terminal_client=self._terminal_client,
             # The command line's own rule, floor included (SA-S-07), on the
             # value exactly as the goal carries it.
             check_scale=lambda scale: required_speed_scale(plan, repr(float(scale))),
@@ -396,6 +397,8 @@ class CellConsole(LifecycleNode):
         refusal = self._machine.motion_refusal(scale, cycles)
         if refusal is not None:
             self.get_logger().warning(f"goal rejected: {refusal}")
+            # The rejection carries no reason to its client: the state does.
+            self._machine.record_refusal(refusal)
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
@@ -464,6 +467,20 @@ class CellConsole(LifecycleNode):
         machine = self._machine
         if machine is not None:
             self._publish(machine.snapshot())
+
+    def _terminal_client(self) -> str | None:
+        """Name the terminal program client on this domain's graph, or None (S-01).
+
+        A terminal run's cell is the node `cell.TERMINAL_NODE`, on the plant's
+        domain by either route, which is this node's. Read off the graph as it
+        is known now: DDS cannot prove an absence, so this narrows the race
+        with a terminal client that is still starting and does not close it -
+        that client refuses itself when it sees this console (N-01).
+        """
+        for name, namespace in self.get_node_names_and_namespaces():
+            if name == TERMINAL_NODE:
+                return f"{namespace.rstrip('/')}/{name}"
+        return None
 
     def _heard_twin_mode(self) -> int | None:
         """Return the twin's mode as last heard, or None before any."""
