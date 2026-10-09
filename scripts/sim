@@ -221,6 +221,20 @@ if [ "$HEADLESS" -eq 0 ]; then
     fi
 fi
 
+# A WINDOWED CONSOLE NEEDS ITS PANEL (A-03). gz-gui skips a plugin it cannot
+# find and opens the window anyway, so a missing `CellConsole` would be a
+# console window with no panel and no Stop button in it. Asked here, after the
+# overlay put cite_console_gui's lib directory on GZ_GUI_PLUGIN_PATH and before
+# anything is brought up. Headless, there is no window to put it in.
+if [ "$CONSOLE" -eq 1 ] && [ "$HEADLESS" -eq 0 ]; then
+    gui_plugin_dir CellConsole "${GZ_GUI_PLUGIN_PATH:-}" >/dev/null \
+        || die "the operator console's panel, CellConsole, is not on GZ_GUI_PLUGIN_PATH
+  ('${GZ_GUI_PLUGIN_PATH:-}'), so the window would open without it and without its
+  Stop button. Build cite_console_gui (./scripts/build) - its environment hook puts
+  the plugin there - or run the console without a window:
+  ./scripts/sim --pair --console --headless"
+fi
+
 PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
 if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
     warn "cite_bringup is not built yet — there is nothing to launch."

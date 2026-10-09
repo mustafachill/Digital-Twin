@@ -1445,6 +1445,34 @@ expect_ok   "./scripts/console execs sim with --pair --console and the caller's 
 expect_eq   "and resolves no hardware opt-in of its own: sim's is the one" \
     "0" "$(grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/console" | grep -c 'hardware_opt_in' || true)"
 
+# A-03: a windowed console refuses when its panel's plugin is not on the gz-gui
+# search path, rather than opening a window without its Stop button.
+PLUGIN_FIXTURE="$(mktemp -d)"
+mkdir -p "${PLUGIN_FIXTURE}/a" "${PLUGIN_FIXTURE}/b" "${PLUGIN_FIXTURE}/c"
+touch "${PLUGIN_FIXTURE}/b/libCellConsole.so" "${PLUGIN_FIXTURE}/c/libCellConsole.so"
+touch "${PLUGIN_FIXTURE}/a/CellConsole.so"
+expect_eq   "gui_plugin_dir finds lib<plugin>.so, first match on the path wins" \
+    "${PLUGIN_FIXTURE}/b" \
+    "$(gui_plugin_dir CellConsole "${PLUGIN_FIXTURE}/a::${PLUGIN_FIXTURE}/b:${PLUGIN_FIXTURE}/c")"
+expect_fail "gui_plugin_dir fails when no directory holds it (a bare name is not lib<name>.so)" \
+    gui_plugin_dir CellConsole "${PLUGIN_FIXTURE}/a"
+expect_fail "gui_plugin_dir fails on an empty search path" \
+    gui_plugin_dir CellConsole ""
+rm -rf "$PLUGIN_FIXTURE"
+sim_console_check() { # the sim lines that guard a windowed console on the plugin
+    awk '/^if \[ "\$CONSOLE" -eq 1 \] && \[ "\$HEADLESS" -eq 0 \]; then$/ { f = 1 }
+         f { print } f && /^fi$/ { exit }' "${REPO_ROOT}/scripts/sim"
+}
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
+expect_ok   "./scripts/sim asks gui_plugin_dir for CellConsole when the console is windowed" \
+    grep -qF 'gui_plugin_dir CellConsole "${GZ_GUI_PLUGIN_PATH:-}"' <(sim_console_check)
+expect_ok   "and dies, naming the headless spelling, when it does not resolve" \
+    grep -qF './scripts/sim --pair --console --headless' <(sim_console_check)
+sim_line_of() { awk -v text="$1" 'index($0, text) { print NR; exit }' "${REPO_ROOT}/scripts/sim"; }
+expect_ok   "after the overlay is sourced, and before anything is launched" \
+    test "$(sim_line_of 'source_overlay')" -lt "$(sim_line_of 'gui_plugin_dir CellConsole')" \
+      -a "$(sim_line_of 'gui_plugin_dir CellConsole')" -lt "$(sim_line_of 'exec python3 -m cite_bringup.pair')"
+
 # ./scripts/program checks a named zone the same way, before it stops this
 # checkout's containers or starts any.
 program_says() { # program_says <expected substring> <args...>
