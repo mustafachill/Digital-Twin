@@ -100,8 +100,21 @@ Rectangle {
       Label { text: "Twin mode"; color: "#546e7a" }
       Label { text: CellConsole.twinMode; textFormat: Text.PlainText }
 
-      Label { text: "At start"; color: "#546e7a" }
-      Label { text: CellConsole.heard ? (CellConsole.atStart ? "yes" : "no") : "-" }
+      // At the program's start, per side (ADR-0072 decision 3), and only for a
+      // side that runs: the plant whenever a console is heard, the real arm
+      // only where the console serves a target that commands it.
+      Label { text: "Simulation at start"; color: "#546e7a" }
+      Label { text: CellConsole.heard ? (CellConsole.plantAtStart ? "yes" : "no") : "-" }
+
+      Label {
+        visible: CellConsole.counterpartRunning
+        text: "Real arm at start"
+        color: "#546e7a"
+      }
+      Label {
+        visible: CellConsole.counterpartRunning
+        text: CellConsole.counterpartAtStart ? "yes" : "no"
+      }
 
       Label { text: "Sides"; color: "#546e7a" }
       Flow {
@@ -190,9 +203,40 @@ Rectangle {
       onClicked: CellConsole.startRobot()
     }
 
+    // Where the signal goes (ADR-0072 decision 3). The selection is the
+    // plugin's (`settled_selection`): never preselected, not even when one
+    // target alone is served, and cleared whenever the served set changes or
+    // the console leaves (R-18). Each
+    // button re-binds its `checked` after a click, so the plugin's selection,
+    // not the click, is what it shows.
+    Label { text: "Target"; color: "#546e7a" }
+    Flow {
+      Layout.fillWidth: true
+      spacing: 2
+      Repeater {
+        model: CellConsole.targetChoices
+        RadioButton {
+          readonly property bool served: CellConsole.targetChoicesEnabled[index] === true
+          autoExclusive: false
+          text: modelData + (served || !CellConsole.heard ? "" : " (not running)")
+          checked: CellConsole.selectedTarget === index
+          enabled: served
+          onClicked: {
+            CellConsole.selectTarget(index);
+            checked = Qt.binding(function() { return CellConsole.selectedTarget === index; });
+          }
+        }
+      }
+    }
+    Label {
+      visible: CellConsole.heard && CellConsole.selectedTarget < 0
+      text: "Choose a target to Home or Start program."
+      color: "#546e7a"
+    }
+
     Label {
       text: "Speed" + (CellConsole.minimumSpeedScale > 0 ?
-        "  (slowest allowed " + CellConsole.minimumSpeedScale + "×)" : "")
+        "  (slowest allowed with the real arm " + CellConsole.minimumSpeedScale + "×)" : "")
       color: "#546e7a"
     }
     Flow {

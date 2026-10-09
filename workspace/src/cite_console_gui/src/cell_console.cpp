@@ -17,10 +17,13 @@
 #include <QMetaObject>
 #include <QtGlobal>
 
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <gz/plugin/Register.hh>
 
@@ -63,8 +66,10 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   // queues its work onto this object's thread; `this` as the context object
   // means a queued call is dropped if the panel is gone by then.
   ConsoleCallbacks callbacks;
-  callbacks.on_state = [this](const cite_interfaces::msg::ConsoleState & state) {
-      QMetaObject::invokeMethod(this, [this, state]() {apply_state(state);}, Qt::QueuedConnection);
+  callbacks.on_state = [this](
+    const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher) {
+      QMetaObject::invokeMethod(
+        this, [this, state, publisher]() {apply_state(state, publisher);}, Qt::QueuedConnection);
     };
   callbacks.on_state_lost = [this]() {
       QMetaObject::invokeMethod(this, [this]() {forget_state();}, Qt::QueuedConnection);
@@ -98,11 +103,11 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   }
 }
 
-void CellConsole::apply_state(const cite_interfaces::msg::ConsoleState & state)
+void CellConsole::apply_state(
+  const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher)
 {
-  view_ = view_from(state);
-  buttons_ = enabled_for(view_);
-  state_name_ = QString::fromUtf8(phase_name(view_.phase));
+  selection_.apply(view_from(state, publisher));
+  state_name_ = QString::fromUtf8(phase_name(selection_.view().phase));
   step_ = QString::fromStdString(state.step);
   prompt_ = QString::fromStdString(state.prompt);
   last_error_ = QString::fromStdString(state.last_error);
@@ -110,21 +115,18 @@ void CellConsole::apply_state(const cite_interfaces::msg::ConsoleState & state)
   for (const auto & side : state.physical_sides) {
     physical_sides_ << QString::fromStdString(side);
   }
-  minimum_speed_scale_ = state.minimum_speed_scale;
   speed_scale_ = state.speed_scale;
   emit viewChanged();
 }
 
 void CellConsole::forget_state()
 {
-  view_ = ConsoleView{};
-  buttons_ = enabled_for(view_);
+  selection_.forget();
   state_name_ = "No console";
   step_.clear();
   prompt_.clear();
   last_error_.clear();
   physical_sides_.clear();
-  minimum_speed_scale_ = 0.0;
   speed_scale_ = 0.0;
   emit viewChanged();
   // Nothing said while the console was there stands for one that is gone.
@@ -159,29 +161,68 @@ QVariantList CellConsole::speedChoicesEnabled() const
 {
   QVariantList enabled;
   for (const double scale : SPEED_CHOICES) {
-    enabled << (view_.heard && speed_choice_enabled(scale, minimum_speed_scale_));
+    enabled << speed_choice_enabled(scale, selection_.view(), selection_.selected());
   }
   return enabled;
 }
 
+QStringList CellConsole::targetChoices() const
+{
+  QStringList choices;
+  for (const Target target : ALL_TARGETS) {
+    choices << QString::fromUtf8(target_name(target));
+  }
+  return choices;
+}
+
+QVariantList CellConsole::targetChoicesEnabled() const
+{
+  QVariantList enabled;
+  for (const Target target : ALL_TARGETS) {
+    enabled << target_choice_enabled(selection_.view(), target);
+  }
+  return enabled;
+}
+
+int CellConsole::selectedTarget() const
+{
+  for (std::size_t index = 0; index < ALL_TARGETS.size(); ++index) {
+    if (ALL_TARGETS[index] == selection_.selected()) {
+      return static_cast<int>(index);
+    }
+  }
+  return -1;
+}
+
+void CellConsole::selectTarget(int index)
+{
+  if (index < 0 || static_cast<std::size_t>(index) >= ALL_TARGETS.size()) {
+    return;
+  }
+  if (selection_.select(ALL_TARGETS[static_cast<std::size_t>(index)])) {
+    emit viewChanged();
+  }
+}
+
 void CellConsole::startRobot()
 {
-  if (client_ && buttons_.start_robot) {
+  if (client_ && selection_.buttons().start_robot) {
     client_->start_robot();
   }
 }
 
 void CellConsole::home(double speed_scale)
 {
-  if (client_ && buttons_.home) {
-    client_->home(speed_scale);
+  if (client_ && selection_.may_home(speed_scale)) {
+    client_->home(speed_scale, target_value(selection_.selected()));
   }
 }
 
 void CellConsole::startProgram(double speed_scale, int cycles)
 {
-  if (client_ && buttons_.start_program && cycles >= 1) {
-    client_->run_program(speed_scale, static_cast<std::uint32_t>(cycles));
+  if (client_ && selection_.may_run(speed_scale, cycles)) {
+    client_->run_program(
+      speed_scale, target_value(selection_.selected()), static_cast<std::uint32_t>(cycles));
   }
 }
 
@@ -196,7 +237,7 @@ void CellConsole::stop()
 
 void CellConsole::confirm()
 {
-  if (client_ && buttons_.confirm) {
+  if (client_ && selection_.buttons().confirm) {
     client_->confirm_operator();
   }
 }

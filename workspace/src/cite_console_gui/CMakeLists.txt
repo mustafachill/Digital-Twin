@@ -23,7 +23,7 @@ find_package(tinyxml2 REQUIRED)
 
 # What the buttons may do, as a pure function of what the console last said.
 # No Qt and no ROS, so the whole table is tested without a window or a graph.
-add_library(cite_console_gui_enablement STATIC src/enablement.cpp)
+add_library(cite_console_gui_enablement STATIC src/enablement.cpp src/selection.cpp)
 target_include_directories(cite_console_gui_enablement PUBLIC include)
 set_target_properties(cite_console_gui_enablement PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -94,6 +94,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_console_config test/test_console_config.cpp)
   target_link_libraries(test_console_config cite_console_gui_client)
   ament_target_dependencies(test_console_config ament_index_cpp)
+
+  # The sequences that keep or clear the operator's selected target, on the
+  # holder the plugin delegates to, with views built by `view_from` (R-01).
+  ament_add_gtest(test_selection test/test_selection.cpp)
+  target_link_libraries(test_selection cite_console_gui_client)
 
   # The ROS half against a fake console on a graph of its own (P-R02).
   ament_add_gtest(test_console_client test/test_console_client.cpp TIMEOUT 120)

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "cite_console_gui/console_view.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
@@ -28,6 +29,9 @@
 
 using cite_console_gui::Phase;
 using cite_console_gui::phase_from;
+using cite_console_gui::Target;
+using cite_console_gui::target_from;
+using cite_console_gui::target_value;
 using cite_console_gui::twin_mode_name;
 using cite_console_gui::view_from;
 using cite_interfaces::msg::ConsoleState;
@@ -68,21 +72,50 @@ TEST(ConsoleView, TheViewCarriesTheFlagsAndReadsSimFromTheMode)
   state.state = ConsoleState::READY;
   state.robot_started = true;
   state.busy = false;
-  state.at_start = true;
+  state.plant_at_start = true;
+  state.counterpart_at_start = false;
+  state.minimum_speed_scale = 0.25;
   state.twin_mode = TwinMode::MODE_SIM;
   auto view = view_from(state);
   EXPECT_TRUE(view.heard);
   EXPECT_EQ(view.phase, Phase::READY);
   EXPECT_TRUE(view.robot_started);
   EXPECT_FALSE(view.busy);
-  EXPECT_TRUE(view.at_start);
+  EXPECT_TRUE(view.plant_at_start);
+  EXPECT_FALSE(view.counterpart_at_start);
+  EXPECT_DOUBLE_EQ(view.minimum_speed_scale, 0.25);
   EXPECT_TRUE(view.twin_in_sim);
+
+  // Each side is its own flag, not one read for the other.
+  state.plant_at_start = false;
+  state.counterpart_at_start = true;
+  EXPECT_FALSE(view_from(state).plant_at_start);
+  EXPECT_TRUE(view_from(state).counterpart_at_start);
 
   state.twin_mode = TwinMode::MODE_VALIDATED;
   EXPECT_FALSE(view_from(state).twin_in_sim);
   // Not heard yet is not SIM.
   state.twin_mode = ConsoleState::TWIN_MODE_UNKNOWN;
   EXPECT_FALSE(view_from(state).twin_in_sim);
+}
+
+TEST(ConsoleView, TheViewKeepsTheServedSetAsReceivedAndThePublisher)
+{
+  std::uint8_t unknown = 0xFE;
+  while (target_from(unknown) != Target::NONE) {
+    --unknown;
+  }
+  ConsoleState state;
+  state.state = ConsoleState::READY;
+  state.available_targets = {ConsoleState::TARGET_SIM, unknown};
+  const std::vector<std::uint8_t> publisher = {9, 8, 7};
+  const auto view = view_from(state, publisher);
+  // Offered: only what this panel recognises.
+  EXPECT_EQ(view.available_targets, std::set<Target>{Target::SIM});
+  // Settled against: everything received (R-03).
+  EXPECT_EQ(view.served_values, (std::set<std::uint8_t>{ConsoleState::TARGET_SIM, unknown}));
+  EXPECT_EQ(view.publisher, publisher);
+  EXPECT_TRUE(view_from(state).publisher.empty());
 }
 
 TEST(ConsoleView, EveryTwinModeHasADistinctName)
@@ -97,6 +130,47 @@ TEST(ConsoleView, EveryTwinModeHasADistinctName)
   }
   EXPECT_EQ(names.size(), modes.size());
   EXPECT_EQ(twin_mode_name(TwinMode::MODE_SIM), "SIM");
+}
+
+TEST(ConsoleView, EveryContractTargetIsAKnownTargetAndBack)
+{
+  const std::set<std::uint8_t> values = {
+    ConsoleState::TARGET_SIM, ConsoleState::TARGET_REAL, ConsoleState::TARGET_TWIN,
+  };
+  std::set<Target> targets;
+  for (const auto value : values) {
+    const Target target = target_from(value);
+    EXPECT_NE(target, Target::NONE) << static_cast<int>(value);
+    EXPECT_EQ(target_value(target), value);
+    targets.insert(target);
+  }
+  EXPECT_EQ(targets.size(), values.size()) << "two targets read as one";
+  EXPECT_EQ(target_from(ConsoleState::TARGET_SIM), Target::SIM);
+  EXPECT_EQ(target_from(ConsoleState::TARGET_REAL), Target::REAL);
+  EXPECT_EQ(target_from(ConsoleState::TARGET_TWIN), Target::TWIN);
+}
+
+TEST(ConsoleView, UnsetOrUnknownTargetsAreNone)
+{
+  EXPECT_EQ(target_from(0), Target::NONE);
+  EXPECT_EQ(target_from(200), Target::NONE);
+  // NONE is sent as the unset value, which the console rejects.
+  EXPECT_EQ(target_value(Target::NONE), 0);
+}
+
+TEST(ConsoleView, TheServedTargetsAreReadAndAnUnknownOneIsNotOffered)
+{
+  ConsoleState state;
+  state.state = ConsoleState::READY;
+  EXPECT_TRUE(view_from(state).available_targets.empty());
+
+  state.available_targets = {ConsoleState::TARGET_SIM};
+  EXPECT_EQ(view_from(state).available_targets, std::set<Target>{Target::SIM});
+
+  state.available_targets = {
+    ConsoleState::TARGET_SIM, ConsoleState::TARGET_REAL, ConsoleState::TARGET_TWIN, 0, 200};
+  const std::set<Target> all = {Target::SIM, Target::REAL, Target::TWIN};
+  EXPECT_EQ(view_from(state).available_targets, all);
 }
 
 TEST(ConsoleView, APhysicalSideIsReadFromTheListOfThem)
