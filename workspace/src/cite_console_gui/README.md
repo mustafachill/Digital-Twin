@@ -1,7 +1,8 @@
 # cite_console_gui
 
-**Status: `PARTIAL`.** The panel builds, and its enablement table and its reading of the
-contract are unit-tested. Nothing in CI renders it; the panel in a window has not been
+**Status: `PARTIAL`.** The panel builds; its enablement table, its reading of the contract
+and of its configuration, and its ROS client (`ConsoleClient`, against a fake console on a
+graph of its own) are unit-tested. Nothing in CI renders it; the panel in a window has not been
 verified by a test.
 
 The operator console's panel in the Gazebo window
@@ -30,8 +31,9 @@ refusal message and nothing else.
 Which buttons are enabled is `enabled_for` in
 [`include/cite_console_gui/enablement.hpp`](include/cite_console_gui/enablement.hpp), a pure
 function with no Qt and no ROS in it, and nothing else. Before any `ConsoleState` is heard,
-or once its publisher has left the graph, every button is disabled and the panel says
-"No console".
+or once its publisher has unmatched (the subscription's matched event, not a poll), every
+button is disabled, the twin mode, progress and outcome said for the console that left are
+cleared, and the panel says "No console".
 
 ## Where its names come from
 
@@ -57,8 +59,14 @@ asynchronous; a server that is not there is reported in the panel, never waited 
 ## How it fails
 
 - **No console running:** "No console", everything disabled.
-- **A configuration missing a name:** the panel says which and stays disabled.
-- **A request the console refuses:** the outcome line shows the console's detail; a
-  rejected goal points at `last_error`.
+- **A configuration missing a name, or giving the panel one it does not read:** the panel
+  says which and stays disabled. The keys it reads are `CONSOLE_KEYS` in
+  [`include/cite_console_gui/console_config.hpp`](include/cite_console_gui/console_config.hpp),
+  and a test holds the installed plant configuration to them.
+- **A request the console refuses:** the outcome line shows the console's detail. A
+  rejected goal carries no reason to its client, so the console publishes it in its state
+  as `last_error` ("refused: <reason>", the state itself unchanged), and the panel shows it
+  under "Last error".
+- **Every string the console sends is shown as plain text**, never as markup.
 - **The panel is not a safety function.** The physical E-stop is the only closure
   (`docs/architecture/cross-cutting-safety.md`).

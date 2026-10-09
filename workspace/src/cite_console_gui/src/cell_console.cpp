@@ -21,32 +21,14 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <gz/plugin/Register.hh>
 
+#include "cite_console_gui/console_config.hpp"
 #include "cite_console_gui/console_view.hpp"
 
 namespace cite_console_gui
 {
-
-namespace
-{
-
-/// The plugin element's text under `key`, or empty when it has none.
-std::string parameter(const tinyxml2::XMLElement * plugin_element, const char * key)
-{
-  if (plugin_element == nullptr) {
-    return "";
-  }
-  const auto * element = plugin_element->FirstChildElement(key);
-  if (element == nullptr || element->GetText() == nullptr) {
-    return "";
-  }
-  return element->GetText();
-}
-
-}  // namespace
 
 CellConsole::CellConsole()
 : state_name_("No console"), twin_mode_("unknown")
@@ -66,25 +48,12 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
     this->title = "Cell console";
   }
 
+  // The keys, and the refusal of a child the panel does not read, are
+  // `read_console_names`' (console_config.hpp), tested without a window.
   ConsoleNames names;
-  const std::vector<std::pair<const char *, std::string *>> keys = {
-    {"state", &names.state},
-    {"start_robot", &names.start_robot},
-    {"confirm_operator", &names.confirm_operator},
-    {"stop", &names.stop},
-    {"home", &names.home},
-    {"run_program", &names.run_program},
-  };
-  QStringList missing;
-  for (const auto & [key, target] : keys) {
-    *target = parameter(plugin_element, key);
-    if (target->empty()) {
-      missing << QString::fromUtf8(key);
-    }
-  }
-  if (!missing.isEmpty()) {
-    config_error_ = "The GUI configuration names no " + missing.join(", ") +
-      " for this panel. Regenerate it: ./scripts/validate-model --write";
+  const std::string problem = read_console_names(plugin_element, names);
+  if (!problem.empty()) {
+    config_error_ = QString::fromStdString(problem);
     qWarning("CellConsole: %s", qUtf8Printable(config_error_));
     emit viewChanged();
     return;
@@ -158,6 +127,11 @@ void CellConsole::forget_state()
   minimum_speed_scale_ = 0.0;
   speed_scale_ = 0.0;
   emit viewChanged();
+  // Nothing said while the console was there stands for one that is gone.
+  twin_mode_ = "unknown";
+  emit twinModeChanged();
+  set_progress(QString());
+  set_outcome(QString());
 }
 
 void CellConsole::set_progress(const QString & text)

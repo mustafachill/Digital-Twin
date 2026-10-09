@@ -14,15 +14,20 @@
 
 // The panel's enablement table, over every phase and every flag (ADR-0071).
 //
-// Two halves. The exhaustive half walks all 9 phases x 2^5 flags and holds each
-// button to the rule as ADR-0071 and the task state it, written here as sets of
-// phases rather than by calling the function under test. The named half pins
-// the rows an operator meets, so that a failure reads as a situation.
+// Two halves. The exhaustive half walks all 9 phases x 2^6 flags and holds each
+// button to an INDEPENDENT statement of the rule: a table of named rows, each
+// one situation in which one button is offered (P-R03). A button is expected
+// enabled exactly when some row for it matches, so the expectation is read off
+// data written as an operator would say it, never off a restated formula; a
+// failure names the view, and the rows say what should have been offered. The
+// named half pins the rows an operator meets, so that a failure reads as a
+// situation.
 
 #include <gtest/gtest.h>
 
 #include <set>
 #include <string>
+#include <vector>
 
 #include "cite_console_gui/enablement.hpp"
 
@@ -40,7 +45,7 @@ namespace
 
 ConsoleView view(
   Phase phase, bool robot_started = false, bool busy = false, bool at_start = false,
-  bool twin_in_sim = true)
+  bool twin_in_sim = true, bool has_physical_side = false)
 {
   ConsoleView v;
   v.heard = true;
@@ -49,6 +54,7 @@ ConsoleView view(
   v.busy = busy;
   v.at_start = at_start;
   v.twin_in_sim = twin_in_sim;
+  v.has_physical_side = has_physical_side;
   return v;
 }
 
@@ -56,17 +62,85 @@ std::string describe(const ConsoleView & v)
 {
   return std::string(phase_name(v.phase)) + " heard=" + std::to_string(v.heard) +
          " started=" + std::to_string(v.robot_started) + " busy=" + std::to_string(v.busy) +
-         " at_start=" + std::to_string(v.at_start) + " sim=" + std::to_string(v.twin_in_sim);
+         " at_start=" + std::to_string(v.at_start) + " sim=" + std::to_string(v.twin_in_sim) +
+         " physical=" + std::to_string(v.has_physical_side);
+}
+
+enum class Button { START_ROBOT, HOME, START_PROGRAM, STOP, CONFIRM };
+
+/// A flag a row requires: either way, set, or clear.
+enum class Need { ANY, YES, NO };
+
+bool satisfies(Need need, bool value)
+{
+  return need == Need::ANY || (need == Need::YES) == value;
+}
+
+/// One situation in which one button is offered.
+struct Row
+{
+  const char * situation;
+  Button button;
+  std::set<Phase> phases;  // empty: every phase
+  Need started;
+  Need busy;
+  Need at_start;
+  Need twin_in_sim;
+  Need physical;
+};
+
+constexpr Need ANY = Need::ANY;
+constexpr Need YES = Need::YES;
+constexpr Need NO = Need::NO;
+
+/// The rule, as ADR-0071 and StopCell.srv state it, one situation per row.
+const std::vector<Row> & rows()
+{
+  static const std::vector<Row> table = {
+    {"a console not started, idle, offers Start robot", Button::START_ROBOT,
+      {Phase::NOT_STARTED}, ANY, NO, ANY, ANY, ANY},
+    {"a READY console, idle, may be started again", Button::START_ROBOT,
+      {Phase::READY}, ANY, NO, ANY, ANY, ANY},
+    {"a FAULT, idle, is left by Start robot", Button::START_ROBOT,
+      {Phase::FAULT}, ANY, NO, ANY, ANY, ANY},
+    {"a started robot, READY and idle, may Home", Button::HOME,
+      {Phase::READY}, YES, NO, ANY, ANY, ANY},
+    {"a started robot, READY, idle and at the start, may run", Button::START_PROGRAM,
+      {Phase::READY}, YES, NO, YES, ANY, ANY},
+    {"a request in progress, in any phase, may be stopped", Button::STOP,
+      {}, ANY, YES, ANY, ANY, ANY},
+    {"a FAULT out of SIM with a physical side: Stop asks for SIM again", Button::STOP,
+      {Phase::FAULT}, ANY, ANY, ANY, NO, YES},
+    {"the console asks the operator: Confirm", Button::CONFIRM,
+      {Phase::AWAITING_OPERATOR}, ANY, ANY, ANY, ANY, ANY},
+  };
+  return table;
+}
+
+bool expected(Button button, const ConsoleView & v)
+{
+  if (!v.heard) {
+    return false;
+  }
+  for (const Row & row : rows()) {
+    if (row.button == button && (row.phases.empty() || row.phases.count(v.phase) == 1) &&
+      satisfies(row.started, v.robot_started) && satisfies(row.busy, v.busy) &&
+      satisfies(row.at_start, v.at_start) && satisfies(row.twin_in_sim, v.twin_in_sim) &&
+      satisfies(row.physical, v.has_physical_side))
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
 
-TEST(Enablement, EveryPhaseAndEveryFlagFollowsTheRule)
+TEST(Enablement, EveryPhaseAndEveryFlagFollowsTheTableOfSituations)
 {
-  const std::set<Phase> start_robot_phases = {Phase::NOT_STARTED, Phase::READY, Phase::FAULT};
-  int rows = 0;
+  int rows_walked = 0;
   for (const Phase phase : ALL_PHASES) {
-    for (int bits = 0; bits < 32; ++bits) {
+    for (int bits = 0; bits < 64; ++bits) {
       ConsoleView v;
       v.phase = phase;
       v.heard = bits & 1;
@@ -74,24 +148,36 @@ TEST(Enablement, EveryPhaseAndEveryFlagFollowsTheRule)
       v.busy = bits & 4;
       v.at_start = bits & 8;
       v.twin_in_sim = bits & 16;
+      v.has_physical_side = bits & 32;
       const ButtonStates got = enabled_for(v);
-      ++rows;
-
-      if (!v.heard) {
-        EXPECT_EQ(got, ButtonStates{}) << describe(v);
-        continue;
-      }
-      const bool idle = !v.busy;
-      EXPECT_EQ(got.start_robot, idle && start_robot_phases.count(phase) == 1) << describe(v);
-      EXPECT_EQ(got.home, idle && v.robot_started && phase == Phase::READY) << describe(v);
-      EXPECT_EQ(
-        got.start_program, idle && v.robot_started && phase == Phase::READY && v.at_start) <<
-        describe(v);
-      EXPECT_EQ(got.stop, v.busy || (phase == Phase::FAULT && !v.twin_in_sim)) << describe(v);
-      EXPECT_EQ(got.confirm, phase == Phase::AWAITING_OPERATOR) << describe(v);
+      ++rows_walked;
+      EXPECT_EQ(got.start_robot, expected(Button::START_ROBOT, v)) << describe(v);
+      EXPECT_EQ(got.home, expected(Button::HOME, v)) << describe(v);
+      EXPECT_EQ(got.start_program, expected(Button::START_PROGRAM, v)) << describe(v);
+      EXPECT_EQ(got.stop, expected(Button::STOP, v)) << describe(v);
+      EXPECT_EQ(got.confirm, expected(Button::CONFIRM, v)) << describe(v);
     }
   }
-  EXPECT_EQ(rows, 9 * 32);
+  EXPECT_EQ(rows_walked, 9 * 64);
+}
+
+TEST(Enablement, EveryRowOfTheTableIsReachable)
+{
+  // A row no view matches would be a situation the walk never checks.
+  for (const Row & row : rows()) {
+    bool reached = false;
+    for (const Phase phase : ALL_PHASES) {
+      for (int bits = 0; bits < 32 && !reached; ++bits) {
+        const ConsoleView v = view(
+          phase, bits & 1, bits & 2, bits & 4, bits & 8, bits & 16);
+        reached = (row.phases.empty() || row.phases.count(phase) == 1) &&
+          satisfies(row.started, v.robot_started) && satisfies(row.busy, v.busy) &&
+          satisfies(row.at_start, v.at_start) && satisfies(row.twin_in_sim, v.twin_in_sim) &&
+          satisfies(row.physical, v.has_physical_side);
+      }
+    }
+    EXPECT_TRUE(reached) << row.situation;
+  }
 }
 
 TEST(Enablement, NothingBeforeTheConsoleIsHeard)
@@ -140,9 +226,12 @@ TEST(Enablement, AwaitingTheOperatorOffersConfirmAndStop)
 
 TEST(Enablement, FaultOutOfSimOffersStopToAskForSimAgain)
 {
-  // StopCell.srv: in FAULT while the twin is not in SIM, Stop asks for SIM.
-  EXPECT_TRUE(enabled_for(view(Phase::FAULT, false, false, false, false)).stop);
-  EXPECT_FALSE(enabled_for(view(Phase::FAULT, false, false, false, true)).stop);
+  // StopCell.srv: in FAULT while the twin is not in SIM, on a pair with a
+  // physical side, Stop asks for SIM.
+  EXPECT_TRUE(enabled_for(view(Phase::FAULT, false, false, false, false, true)).stop);
+  EXPECT_FALSE(enabled_for(view(Phase::FAULT, false, false, false, true, true)).stop);
+  // P-R03: on an all-simulated pair the console refuses that Stop; not offered.
+  EXPECT_FALSE(enabled_for(view(Phase::FAULT, false, false, false, false, false)).stop);
   // And Start robot is the way back to READY either way.
   EXPECT_TRUE(enabled_for(view(Phase::FAULT, false, false, false, false)).start_robot);
 }

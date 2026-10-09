@@ -57,6 +57,7 @@ ConsoleView view_from(const ConsoleState & state)
   view.busy = state.busy;
   view.at_start = state.at_start;
   view.twin_in_sim = state.twin_mode == TwinMode::MODE_SIM;
+  view.has_physical_side = !state.physical_sides.empty();
   return view;
 }
 

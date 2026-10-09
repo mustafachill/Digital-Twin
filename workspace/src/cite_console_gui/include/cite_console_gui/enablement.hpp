@@ -66,6 +66,10 @@ struct ConsoleView
   bool at_start{false};
   /// ConsoleState.twin_mode is MODE_SIM. Unknown counts as not SIM.
   bool twin_in_sim{false};
+  /// ConsoleState.physical_sides is not empty. Only then does Stop in FAULT
+  /// ask the twin for SIM again; on an all-simulated pair the console refuses
+  /// that Stop (StopCell.srv), so the panel does not offer it.
+  bool has_physical_side{false};
 };
 
 struct ButtonStates
@@ -90,8 +94,9 @@ struct ButtonStates
 /// - Start robot: NOT_STARTED, READY or FAULT, and nothing in progress.
 /// - Home: started, READY, nothing in progress.
 /// - Start program: started, READY, at the program's start, nothing in progress.
-/// - Stop: a request is in progress; or FAULT while the twin is not in SIM,
-///   where Stop asks the twin for SIM again (StopCell.srv).
+/// - Stop: a request is in progress; or FAULT while the twin is not in SIM on
+///   a pair with a physical side, where Stop asks the twin for SIM again
+///   (StopCell.srv).
 /// - Confirm: AWAITING_OPERATOR.
 ///
 /// Nothing at all before a ConsoleState is heard.

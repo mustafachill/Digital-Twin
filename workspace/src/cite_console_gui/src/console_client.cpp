@@ -14,7 +14,6 @@
 
 #include "cite_console_gui/console_client.hpp"
 
-#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -32,10 +31,6 @@ using cite_interfaces::srv::StopCell;
 
 namespace
 {
-
-/// How often the panel asks whether the console's state publisher is still
-/// in the graph. A display refresh, not a sequencing step: nothing waits on it.
-constexpr std::chrono::milliseconds LIVENESS_PERIOD{500};
 
 std::string answered(const std::string & request, bool success, const std::string & detail)
 {
@@ -64,6 +59,14 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
   // Both latched, matching their publishers: `cell_console` publishes its
   // state LATCHED, and the twin boundary its mode (cite_interfaces/qos.hpp).
   // A panel started late hears the current value at once.
+  //
+  // The console's going away is an EVENT, not a poll (P-R04): the
+  // subscription's matched status says when its last publisher unmatched,
+  // and that is when the panel says "No console".
+  rclcpp::SubscriptionOptions state_options;
+  state_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      on_state_matched(info.current_count);
+    };
   state_sub_ = node_->create_subscription<ConsoleState>(
     names.state, cite::qos::latched(),
     [this](const ConsoleState & state) {
@@ -71,7 +74,8 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
       if (callbacks_.on_state) {
         callbacks_.on_state(state);
       }
-    });
+    },
+    state_options);
   twin_mode_sub_ = node_->create_subscription<TwinMode>(
     TwinMode::TOPIC, cite::qos::latched(),
     [this](const TwinMode & mode) {
@@ -85,8 +89,6 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
   stop_ = node_->create_client<StopCell>(names.stop);
   home_ = rclcpp_action::create_client<Home>(node_, names.home);
   run_program_ = rclcpp_action::create_client<Run>(node_, names.run_program);
-
-  liveness_ = node_->create_wall_timer(LIVENESS_PERIOD, [this]() {check_liveness();});
 
   rclcpp::ExecutorOptions executor_options;
   executor_options.context = context_;
@@ -109,9 +111,9 @@ ConsoleClient::~ConsoleClient()
   executor_->remove_node(node_, false);
 }
 
-void ConsoleClient::check_liveness()
+void ConsoleClient::on_state_matched(std::size_t publishers)
 {
-  if (heard_ && state_sub_->get_publisher_count() == 0) {
+  if (heard_ && publishers == 0) {
     heard_ = false;
     if (callbacks_.on_state_lost) {
       callbacks_.on_state_lost();

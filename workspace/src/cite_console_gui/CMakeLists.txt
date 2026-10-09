@@ -19,6 +19,7 @@ find_package(gz-gui REQUIRED)
 find_package(gz_plugin_vendor REQUIRED)
 find_package(gz-plugin REQUIRED COMPONENTS register)
 find_package(Qt5 REQUIRED COMPONENTS Core Qml Quick)
+find_package(tinyxml2 REQUIRED)
 
 # What the buttons may do, as a pure function of what the console last said.
 # No Qt and no ROS, so the whole table is tested without a window or a graph.
@@ -27,10 +28,15 @@ target_include_directories(cite_console_gui_enablement PUBLIC include)
 set_target_properties(cite_console_gui_enablement PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # The ROS half: one context of its own on the domain the window runs on, its own
-# spin thread, and the console's names handed in. No Qt.
-add_library(cite_console_gui_client STATIC src/console_view.cpp src/console_client.cpp)
+# spin thread, and the console's names handed in - read off the plugin's
+# configuration element by `read_console_names`. No Qt.
+add_library(cite_console_gui_client STATIC
+  src/console_view.cpp
+  src/console_client.cpp
+  src/console_config.cpp
+)
 target_include_directories(cite_console_gui_client PUBLIC include)
-target_link_libraries(cite_console_gui_client cite_console_gui_enablement)
+target_link_libraries(cite_console_gui_client cite_console_gui_enablement tinyxml2::tinyxml2)
 ament_target_dependencies(cite_console_gui_client rclcpp rclcpp_action cite_interfaces)
 set_target_properties(cite_console_gui_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -82,6 +88,16 @@ if(BUILD_TESTING)
   # ConsoleState and TwinMode constant, read from the generated headers.
   ament_add_gtest(test_console_view test/test_console_view.cpp)
   target_link_libraries(test_console_view cite_console_gui_client)
+
+  # The configuration's keys against the one the generator installs (A-02).
+  find_package(ament_index_cpp REQUIRED)
+  ament_add_gtest(test_console_config test/test_console_config.cpp)
+  target_link_libraries(test_console_config cite_console_gui_client)
+  ament_target_dependencies(test_console_config ament_index_cpp)
+
+  # The ROS half against a fake console on a graph of its own (P-R02).
+  ament_add_gtest(test_console_client test/test_console_client.cpp TIMEOUT 120)
+  target_link_libraries(test_console_client cite_console_gui_client)
 endif()
 
 ament_package()

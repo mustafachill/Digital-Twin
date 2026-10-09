@@ -32,13 +32,14 @@
 // configuration (generate/gui.py) and the twin mode's from the contract's own
 // `TwinMode::TOPIC`. This file builds no name.
 //
-// No clock is read. Nothing here depends on time but the liveness check, which
-// runs on a wall timer because it asks the graph, not the simulation, whether
-// the console is still there; `use_sim_time` therefore has nothing to change.
+// No clock is read and nothing runs on a timer: the console's going away is the
+// state subscription's matched event (its last publisher unmatched), so
+// `use_sim_time` has nothing to change.
 
 #ifndef CITE_CONSOLE_GUI__CONSOLE_CLIENT_HPP_
 #define CITE_CONSOLE_GUI__CONSOLE_CLIENT_HPP_
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -101,7 +102,9 @@ private:
   using Home = cite_interfaces::action::HomeRobot;
   using Run = cite_interfaces::action::RunProgram;
 
-  void check_liveness();
+  /// The state subscription's matched status changed; ``publishers`` is how
+  /// many publishers it is matched with now.
+  void on_state_matched(std::size_t publishers);
   void outcome(const std::string & text) const;
   void progress(const std::string & text) const;
 
@@ -116,7 +119,6 @@ private:
   rclcpp::Client<cite_interfaces::srv::StopCell>::SharedPtr stop_;
   rclcpp_action::Client<Home>::SharedPtr home_;
   rclcpp_action::Client<Run>::SharedPtr run_program_;
-  rclcpp::TimerBase::SharedPtr liveness_;
   /// Touched only on the spin thread.
   bool heard_{false};
   std::thread spinner_;

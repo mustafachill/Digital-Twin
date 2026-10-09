@@ -15,6 +15,8 @@
 // The operator console's panel (ADR-0071 decision 5). Layout only: every
 // "enabled" below is a property the plugin computes with `enabled_for`, and
 // every button calls the plugin, which asks the console. Nothing here decides.
+// Every label that shows a string the console or the configuration sent is
+// `Text.PlainText` (P-R05): it is shown, never interpreted as markup.
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -65,6 +67,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 8
         wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
         text: CellConsole.configError !== "" ? CellConsole.configError :
           "No console. Nothing can be sent until the console publishes its state " +
           "(./scripts/sim --pair --console)."
@@ -81,6 +84,7 @@ Rectangle {
       Label { text: "State"; color: "#546e7a" }
       Label {
         text: CellConsole.stateName
+        textFormat: Text.PlainText
         font.bold: true
         color: CellConsole.stateName === "FAULT" ? "#c62828" : "#212121"
       }
@@ -89,11 +93,12 @@ Rectangle {
       Label {
         Layout.fillWidth: true
         text: CellConsole.step !== "" ? CellConsole.step : "-"
+        textFormat: Text.PlainText
         wrapMode: Text.WordWrap
       }
 
       Label { text: "Twin mode"; color: "#546e7a" }
-      Label { text: CellConsole.twinMode }
+      Label { text: CellConsole.twinMode; textFormat: Text.PlainText }
 
       Label { text: "At start"; color: "#546e7a" }
       Label { text: CellConsole.heard ? (CellConsole.atStart ? "yes" : "no") : "-" }
@@ -118,6 +123,7 @@ Rectangle {
               anchors.centerIn: parent
               color: "white"
               font.bold: true
+              textFormat: Text.PlainText
               text: modelData + " PHYSICAL"
             }
           }
@@ -128,6 +134,7 @@ Rectangle {
       Label {
         Layout.fillWidth: true
         text: CellConsole.lastError !== "" ? CellConsole.lastError : "-"
+        textFormat: Text.PlainText
         color: CellConsole.lastError !== "" ? "#c62828" : "#212121"
         wrapMode: Text.WordWrap
       }
@@ -154,6 +161,7 @@ Rectangle {
           Layout.fillWidth: true
           // Verbatim: the operator confirms exactly this text.
           text: CellConsole.prompt
+          textFormat: Text.PlainText
           wrapMode: Text.WordWrap
         }
         RowLayout {
@@ -234,12 +242,14 @@ Rectangle {
       Layout.fillWidth: true
       visible: CellConsole.progress !== ""
       text: CellConsole.progress
+      textFormat: Text.PlainText
       wrapMode: Text.WordWrap
     }
     Label {
       Layout.fillWidth: true
       visible: CellConsole.outcome !== ""
       text: CellConsole.outcome
+      textFormat: Text.PlainText
       wrapMode: Text.WordWrap
       color: "#37474f"
     }

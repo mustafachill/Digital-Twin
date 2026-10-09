@@ -30,7 +30,8 @@ ButtonStates enabled_for(const ConsoleView & view)
     (view.phase == Phase::NOT_STARTED || ready || view.phase == Phase::FAULT);
   states.home = idle && view.robot_started && ready;
   states.start_program = idle && view.robot_started && ready && view.at_start;
-  states.stop = view.busy || (view.phase == Phase::FAULT && !view.twin_in_sim);
+  states.stop = view.busy ||
+    (view.phase == Phase::FAULT && !view.twin_in_sim && view.has_physical_side);
   states.confirm = view.phase == Phase::AWAITING_OPERATOR;
   return states;
 }

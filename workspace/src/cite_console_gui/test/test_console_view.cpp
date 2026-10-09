@@ -98,3 +98,12 @@ TEST(ConsoleView, EveryTwinModeHasADistinctName)
   EXPECT_EQ(names.size(), modes.size());
   EXPECT_EQ(twin_mode_name(TwinMode::MODE_SIM), "SIM");
 }
+
+TEST(ConsoleView, APhysicalSideIsReadFromTheListOfThem)
+{
+  ConsoleState state;
+  state.state = ConsoleState::FAULT;
+  EXPECT_FALSE(view_from(state).has_physical_side);
+  state.physical_sides.push_back("counterpart");
+  EXPECT_TRUE(view_from(state).has_physical_side);
+}
