@@ -1,4 +1,6 @@
-# Start program: run the real robot's program through the twin (ADR-0071).
+# Start program: run the real robot's program through the twin on the target's
+# sides (ADR-0071, ADR-0072). Parts and belts are placed and run only on the
+# simulated sides of the target; the at-start requirement is per side of the target.
 #
 # Per cycle: a work-piece on every simulated side's pick table and that side's
 # belt running (`program.part`, `program.belt`); then the per-cycle order of
@@ -19,7 +21,12 @@ float64 speed_scale     # (0, 1] of the program's own speed, sent explicitly by
                         # the operator's panel. Never defaulted: a goal with 0, or
                         # any value outside (0, 1] or below
                         # ConsoleState.minimum_speed_scale, is rejected (ADR-0071
-                        # decision 2)
+                        # decision 2). The floor applies only to a target that
+                        # includes the real arm
+uint8 target            # ConsoleState.TARGET_SIM, TARGET_REAL or TARGET_TWIN, sent
+                        # explicitly by the operator's panel (ADR-0072). Never
+                        # defaulted: 0, an unknown value, or a target not in
+                        # ConsoleState.available_targets is rejected
 uint32 cycles           # how many cycles, at least 1. 0 is REJECTED rather than
                         # read as "until stopped": a run with no end is asked for
                         # by number, never by leaving a field unset

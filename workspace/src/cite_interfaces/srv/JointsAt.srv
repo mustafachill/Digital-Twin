@@ -21,6 +21,9 @@ string SERVICE="/cite/twin/joints_at"
 string[] joints     # joint names, as the plan names them
 float64[] positions # the target of each joint, in the joint's own unit, same order
 float64 tolerance   # one tolerance for every joint, in the joints' own unit
+string[] sides      # the sides to judge, by the plan's side names (ADR-0072); empty
+                    # judges every side the deployment runs, as before. A side named
+                    # that does not run is UNHEARD
 ---
 # Why `at` is what it is. AWAY outranks UNHEARD, as in TrackArrived.
 uint8 AT=0          # every side stands within tolerance of every target

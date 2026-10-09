@@ -33,20 +33,33 @@ uint8 FAULT=7             # the last request failed, or a stop could not be conf
 
 uint8 TWIN_MODE_UNKNOWN=255  # no TwinMode heard on its topic yet
 
+# WHERE THE SIGNAL GOES (ADR-0072). Sent by the operator with every HomeRobot and
+# RunProgram goal (`target`), never defaulted: 0 is unset and REJECTED. Stated
+# here once; the goals refer to these values. The console maps each to a twin
+# mode in one place (`cite_bringup.program.targets`).
+uint8 TARGET_SIM=1   # the simulation (the plant) only: the twin in SIM
+uint8 TARGET_REAL=2  # the real arm (the counterpart) only: the twin in REAL
+uint8 TARGET_TWIN=3  # both sides with one signal: the twin in VALIDATED
+
 builtin_interfaces/Time stamp
 
 uint8 state                 # one of the constants above
 bool robot_started          # Start robot succeeded and nothing since has undone it
 bool busy                   # a request is in progress
-bool at_start               # both arms were brought to, or ended a full cycle at, the
-                            # program's start, and nothing has moved them since as far
-                            # as the console knows. Start program is refused without it
+bool plant_at_start         # the plant's arm was brought to, or ended a full cycle at,
+                            # the program's start, and nothing has moved it since as far
+                            # as the console knows
+bool counterpart_at_start   # the same, for the counterpart's arm. Start program is
+                            # refused unless every side of its target is at the start
+uint8[] available_targets   # the TARGET_* the running deployment can serve: [TARGET_SIM]
+                            # when only the plant runs, all three when both sides run.
+                            # A goal naming any other target is rejected
 string step                 # what is being done now
 string prompt               # in AWAITING_OPERATOR, exactly what the operator confirms;
                             # empty otherwise
 string last_error           # why the last request failed, empty if it did not
 uint8 twin_mode             # TwinMode.MODE_* as last heard, or TWIN_MODE_UNKNOWN
-string[] physical_sides     # the sides whose hardware is physical, from the plan
+string[] physical_sides     # the RUNNING sides whose hardware is physical, from the plan
 float64 speed_scale         # the scale of the goal in flight or last run, 0 if none yet
 float64 minimum_speed_scale # the lowest scale a goal is accepted at: where a side is
                             # physical, the slowest the physical track carries the
