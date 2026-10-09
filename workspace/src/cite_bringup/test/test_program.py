@@ -1613,8 +1613,14 @@ def test_without_a_shutdown_a_cells_waits_keep_their_own_ceilings() -> None:
 # S-02: `--via plant` only on the plant's own domain, and never beside a console.
 
 
-def _plant_main(monkeypatch, environ: dict[str, str]) -> tuple[int, list]:
-    """Run `--via plant` with ``environ``'s domain, recording what reached ROS."""
+def _plant_main(
+    monkeypatch, environ: dict[str, str], simulated: str | None = None
+) -> tuple[int, list]:
+    """Run `--via plant` with ``environ``'s domain, recording what reached ROS.
+
+    ``simulated`` is what the graph says to `simulated_side_refusal`: None for
+    a simulated side heard, or the refusal.
+    """
     import cite_bringup.program.__main__ as program_module
     import cite_bringup.program.cell as cell_module
     import rclpy
@@ -1627,7 +1633,16 @@ def _plant_main(monkeypatch, environ: dict[str, str]) -> tuple[int, list]:
     monkeypatch.setattr(rclpy, "init", lambda **_kwargs: reached.append("init"))
     monkeypatch.setattr(rclpy, "try_shutdown", lambda: None)
     monkeypatch.setattr(program_module, "install_interrupt_handlers", lambda: None)
-    monkeypatch.setattr(cell_module, "RosCell", lambda *args, **kwargs: ("cell", args))
+
+    class Cell:
+        def __init__(self, *args, **_kwargs) -> None:
+            self.args = args
+
+        def simulated_side_refusal(self) -> str | None:
+            reached.append("asked the graph")
+            return simulated
+
+    monkeypatch.setattr(cell_module, "RosCell", Cell)
 
     class Ended:
         status = 0
@@ -1666,4 +1681,23 @@ def test_via_the_plant_on_the_plants_domain_runs_and_asks_for_a_console(monkeypa
         monkeypatch, {"CITE_DOMAIN_BASE": "40", "ROS_DOMAIN_ID": "40"}
     )
     assert status == 0
-    assert reached == ["init", ("run_program", plan.console.state, False)]
+    assert reached == ["init", "asked the graph", ("run_program", plan.console.state, False)]
+
+
+def test_via_the_plant_is_refused_where_the_graph_shows_no_simulated_side(
+    monkeypatch, capsys
+) -> None:
+    """S-02r: the plant's domain in the environment, and no simulated clock on the graph.
+
+    A shell that exported the counterpart's ROS_DOMAIN_ID derives the base from
+    it, so the environment check passes; the graph's answer refuses before any
+    goal or mode.
+    """
+    status, reached = _plant_main(
+        monkeypatch,
+        {"CITE_DOMAIN_BASE": "41", "ROS_DOMAIN_ID": "41"},
+        simulated="no /clock on this domain after 60 s",
+    )
+    assert status == 2
+    assert reached == ["init", "asked the graph"]
+    assert "--via plant refused: no /clock" in capsys.readouterr().err

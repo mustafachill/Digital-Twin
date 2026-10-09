@@ -816,6 +816,10 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
     arguments, _ = module._bridge_topics(plan)
 
     assert module.CLOCK_BRIDGE in arguments
+    # S-02r: the name `--via plant` hears as a simulated side's is the one bridged.
+    from cite_bringup.program.cell import SIMULATED_CLOCK
+
+    assert module.CLOCK_BRIDGE.split("@", 1)[0] == SIMULATED_CLOCK
     for conveyor in plan.conveyors:
         assert (
             f"{conveyor.command_topic}@std_msgs/msg/Float64]gz.msgs.Double" in arguments

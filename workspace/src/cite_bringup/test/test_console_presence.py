@@ -17,11 +17,15 @@
 `RosCell.console_refusal` on a live graph of its own domain: the twin's latched
 mode is published here as the boundary publishes it, and the console's latched
 `ConsoleState` as `cell_console` does. Nothing here moves anything.
+
+`RosCell.simulated_side_refusal` (S-02r) on the same graph: a simulated
+clock published continuously, as Gazebo's bridge does, and none.
 """
 
 from __future__ import annotations
 
 import os
+import threading
 import time
 
 from cite_bringup.plan import default_plan_path, load
@@ -29,11 +33,16 @@ import cite_bringup.program.cell as cell_module
 from cite_bringup.program.cell import RosCell, TERMINAL_NODE
 from cite_bringup.program.steps import StepFailed
 from cite_interfaces.msg import ConsoleState, RobotState, TwinMode
-from cite_interfaces.qos import LATCHED
+from cite_interfaces.qos import LATCHED, SENSOR
 import pytest
 import rclpy
+from rosgraph_msgs.msg import Clock
 
-DOMAIN = 100 + os.getpid() % 100
+#: The private band `cite_runtime`'s signal test established: valid on Linux,
+#: and disjoint from every cell's domain (1 to 100, `scripts/_lib.sh`) and from
+#: every launch test's, so this file never joins a live pair nor a launch test.
+PRIVATE_DOMAIN_BAND = range(215, 233)
+DOMAIN = PRIVATE_DOMAIN_BAND[os.getpid() % len(PRIVATE_DOMAIN_BAND)]
 
 
 @pytest.fixture(scope="module")
@@ -167,3 +176,43 @@ def test_the_console_names_a_terminal_program_client_on_its_graph(graph) -> None
         _until_on_graph(lambda: console._terminal_client() is None)
     finally:
         console.destroy_node()
+
+
+# --- S-02r: `--via plant` asks the graph for a simulated side ----------------
+
+
+def test_a_simulated_clock_on_the_domain_is_a_simulated_side(graph, monkeypatch) -> None:
+    """S-02r: heard continuously, as Gazebo's bridge publishes it, the clock lets the run on."""
+    twin, reader = graph
+    # A name of this test's own, so a copy of another clock test sharing the
+    # band cannot answer for it; the launch tests tie the real name to Gazebo.
+    topic = "/test_s02r/clock_published"
+    monkeypatch.setattr(cell_module, "SIMULATED_CLOCK", topic)
+    publisher = twin.create_publisher(Clock, topic, SENSOR)
+    done = threading.Event()
+
+    def tick() -> None:
+        while not done.is_set():
+            publisher.publish(Clock())
+            done.wait(0.01)
+
+    ticking = threading.Thread(target=tick, daemon=True)
+    ticking.start()
+    try:
+        assert reader.simulated_side_refusal() is None
+    finally:
+        done.set()
+        ticking.join()
+        twin.destroy_publisher(publisher)
+
+
+def test_no_simulated_clock_on_the_domain_refuses(graph, monkeypatch) -> None:
+    """S-02r: a physical side publishes no simulated clock, so the run is refused."""
+    _twin, reader = graph
+    monkeypatch.setattr(cell_module, "SIMULATED_CLOCK", "/test_s02r/clock_absent")
+    monkeypatch.setattr(cell_module, "SERVER_WAIT_S", 0.3)
+    refusal = reader.simulated_side_refusal()
+    assert refusal is not None
+    assert "/test_s02r/clock_absent" in refusal and "simulated side" in refusal
+    # The probe's subscription does not outlive the question.
+    assert reader.node.count_subscribers("/test_s02r/clock_absent") == 0

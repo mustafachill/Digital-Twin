@@ -41,6 +41,8 @@
   <exec_depend>trajectory_msgs</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <!-- Via the plant alone, the program hears a simulated side's `/clock` before it moves anything (S-02r). -->
+  <exec_depend>rosgraph_msgs</exec_depend>
   <exec_depend>cite_runtime</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>launch</exec_depend>

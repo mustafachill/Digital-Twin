@@ -42,7 +42,10 @@ on this process's own domain, with no twin, no operator gate and, by default,
 the program's own speed. It is therefore refused unless this process is on the
 PLANT's domain (`plan.require_domain`, the check the plant's own launch makes):
 run on the counterpart's domain it would have driven the physical arm
-directly. Like the twin route, it is also refused where an operator console
+directly. A shell that exported the counterpart's domain passes that check, so
+once the context exists the graph is asked too: a simulated side's `/clock`
+must be heard there before any goal or mode (`RosCell.simulated_side_refusal`).
+Like the twin route, it is also refused where an operator console
 serves the pair (one operator surface per pair, ADR-0071).
 
 A PHYSICAL SIDE, through the twin (ADR-0070 item 7). Before each run the twin's
@@ -136,6 +139,13 @@ def main(argv: list[str] | None = None) -> int:
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
         ros = RosCell(cell.arm, args.via, track=cell.track, speed=scale)
+        if args.via == "plant":
+            # The environment's domain is only what the shell exported (S-02r):
+            # the graph must show a simulated side before anything is asked.
+            refusal = ros.simulated_side_refusal()
+            if refusal is not None:
+                print(f"--via plant refused: {refusal}", file=sys.stderr, flush=True)
+                return 2
         riding = f" on {cell.track.asset}" if cell.track is not None else ""
         # The order - SIM read, the operator asked, custody, VALIDATED (homing
         # first before the first cycle), the program, SIM again - is the one

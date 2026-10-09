@@ -42,12 +42,13 @@ from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, 
 from cite_bringup.readiness import waits_for_a_physical_side, waits_for_goals_to_end
 from cite_interfaces.action import Grasp, MoveTo
 from cite_interfaces.msg import ConsoleState, ResultCode, RobotState, TwinMode
-from cite_interfaces.qos import COMMAND, LATCHED, STATE
+from cite_interfaces.qos import COMMAND, LATCHED, SENSOR, STATE
 from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64
 from trajectory_msgs.msg import JointTrajectory
@@ -276,6 +277,11 @@ def ask_until_accepted(
 #: such a client runs (S-01), so a second spelling would be a console that never
 #: sees one. The console's own cells are named otherwise (`console._CELL_NODE`).
 TERMINAL_NODE = "fixed_program"
+
+#: The simulated clock, bridged from Gazebo onto a simulated side's domain
+#: (`simulation.launch.py`'s `CLOCK_BRIDGE`). A physical side runs on the wall
+#: clock (`hardware.launch.py`, L-7) and nothing on it publishes this name.
+SIMULATED_CLOCK = "/clock"
 
 
 def console_holds(topic: str, state: ConsoleState | None) -> str:
@@ -533,6 +539,34 @@ class RosCell:
         if not present:
             return None
         return console_holds(topic, heard[-1] if heard else None)
+
+    def simulated_side_refusal(self) -> str | None:
+        """Say why this domain is not shown to be a simulated side, or None (S-02r).
+
+        `--via plant` checks its domain from the environment before any
+        context exists (`plan.require_domain`); a shell that exported the
+        counterpart's ROS_DOMAIN_ID would derive the base from it and pass that
+        check. This is the graph's own answer: a simulated side's Gazebo
+        publishes `SIMULATED_CLOCK` here, and a physical side publishes no such
+        thing. A clock message heard is the event; none heard within
+        `SERVER_WAIT_S` is no evidence, and refuses. Asked before any goal or
+        mode, so a refusal moves nothing.
+        """
+        heard: list[Clock] = []
+        # Best effort subscribes to a publisher of either reliability.
+        subscription = self.node.create_subscription(
+            Clock, SIMULATED_CLOCK, heard.append, SENSOR
+        )
+        try:
+            self._until_true(lambda: bool(heard), f"{SIMULATED_CLOCK} on this domain")
+        except StepFailed as error:
+            return (
+                f"{error}: nothing shows this domain is a simulated side, and a "
+                "physical side publishes no simulated clock"
+            )
+        finally:
+            self.node.destroy_subscription(subscription)
+        return None
 
     def carriage_refusal(self, homing: bool = False) -> str | None:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).
