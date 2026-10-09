@@ -2,6 +2,7 @@
 
 - **Status:** Proposed
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** Home and Start program carry an explicit target (simulation, real arm or twin); "at the start" is per side; the console takes a mode hold for each run and reads custody through L5 (`/cite/twin/holding`), so it no longer reads another domain for custody.
+- **Amended 2026-10-09:** the panel gains **Reset view**, which returns the 3D view's camera, zoom included, to the generated starting pose through gz-gui's `/gui/move_to/pose`. It moves no robot, so it is the one control that does not depend on the console. It adds gz-transport, gz-msgs and gz-math (vendor packages) to the panel's dependencies.
 - **Date:** 2026-10-08 (Decision 1–4 amended 2026-10-08 after the safety, architecture and code reviews of the first implementation)
 - **Deciders:** Project owner
 - **Related:** [ADR-0018](0018-visualization-rviz-and-foxglove.md) (no Phase 4 HMI commitment),

@@ -18,8 +18,8 @@ An L7 package depends on:
 
 - `cite_interfaces`, the typed contracts it calls and reads;
 - client libraries (`rclcpp`, `rclcpp_action`);
-- its own toolkit. For the panel that is `gz_gui_vendor`, `gz_plugin_vendor` and Qt 5 through
-  rosdep.
+- its own toolkit. For the panel that is `gz_gui_vendor`, `gz_plugin_vendor`, `gz_transport_vendor`,
+  `gz_msgs_vendor`, `gz_math_vendor` and Qt 5 through rosdep.
 
 It never depends on `cite_bringup`, `cite_twin`, `cite_tools` or `cite_generated` at build or
 run time. One test, `test_console_config`, reads `cite_generated`'s installed GUI configuration,
@@ -35,9 +35,12 @@ L2→L7 dependency.
   does not resolve on that path.
 - **Where it appears.** The generator emits one GUI config per side, and only the plant's config
   carries the `CellConsole` plugin block (`tools/cite_tools/generate/gui.py`).
-- **Names.** The plugin block passes the console's six names as plugin parameters, taken from the
+- **Names.** The plugin block passes the console's names as plugin parameters, taken from the
   same function that writes the plan's `console:` block (`bringup.console_names`). The panel forms
   no name, and it takes the twin-mode topic from `TwinMode::TOPIC`.
+- **Home view.** The plugin block also carries `home_camera_pose`, rendered from the same text as
+  the 3D view's `camera_pose`. **Reset view** sends it to gz-gui's `/gui/move_to/pose`
+  (served by the `CameraTracking` plugin) from a worker thread. It moves only the GUI camera.
 - **ROS domain.** The panel runs inside `gz sim`, so it inherits the plant side's `ROS_DOMAIN_ID`.
   It holds one ROS context, on that domain only (ADR-0044's L7 clause).
 
@@ -47,7 +50,8 @@ L2→L7 dependency.
   is one function with no Qt and no ROS (`enablement.hpp`, `enabled_for`). It mirrors the server's
   gating so that a button the server would refuse is greyed out. It does not replace that gating.
 - **When the console is silent.** If the panel hears no `ConsoleState`, or the console's publisher
-  leaves the graph, it shows "No console" and disables every button.
+  leaves the graph, it shows "No console" and disables every console button. Reset view is the
+  one control that does not depend on the console: it moves no robot.
 - **Stop.** Stop is labelled a software stop, not an E-stop
   ([`cross-cutting-safety.md`](cross-cutting-safety.md)).
 
@@ -55,7 +59,9 @@ L2→L7 dependency.
 
 | Failure | What the operator sees |
 |---|---|
-| The console is not running, or has exited | "No console"; every button is disabled |
+| The console is not running, or has exited | "No console"; every console button is disabled; Reset view still works |
 | `CellConsole` is not built or not on the plugin path | `./scripts/sim --pair --console` refuses before bring-up |
 | A request is refused | The refusal reason in the panel's last-error line |
-| A plugin parameter is missing or unknown | The panel says which one and stays disabled |
+| A console name is missing, or a parameter is unknown | The panel says which one and its console buttons stay disabled |
+| `home_camera_pose` is missing or malformed | Reset view is disabled and the panel says why |
+| gz-gui does not answer `/gui/move_to/pose` | The panel reports it; the camera does not move |
