@@ -2,7 +2,8 @@
 
 - **Status:** Proposed
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** Home and Start program carry an explicit target (simulation, real arm or twin); "at the start" is per side; the console takes a mode hold for each run and reads custody through L5 (`/cite/twin/holding`), so it no longer reads another domain for custody.
-- **Amended 2026-10-09:** the panel gains **Reset view**, which returns the 3D view's camera, zoom included, to the generated starting pose through gz-gui's `/gui/move_to/pose`. It moves no robot, so it is the one control that does not depend on the console. It adds gz-transport, gz-msgs and gz-math (vendor packages) to the panel's dependencies.
+- **Amended 2026-10-09:** the panel gains **Reset view**, which returns the 3D view's camera, zoom included, to the generated starting pose through gz-gui's `/gui/move_to/pose`. It moves no robot, so it does not depend on the console. It adds gz-transport, gz-msgs and gz-math (vendor packages) to the panel's dependencies.
+- **Amended 2026-10-09 (panel features):** Top, Side and Front views and Follow robot (the track carriage) beside Reset view, none depending on the console; a connection display read from `TwinHeartbeat`, `TwinSides` and `TwinMode` on the plant's domain, labelled monitoring only; the speed floor shown; ISA-101 colours (grey when normal, colour only for the abnormal; Stop dark grey so it is not read as an E-stop); and the validate-then-run button of [ADR-0073](0073-validate-in-simulation-then-run-the-twin.md).
 - **Date:** 2026-10-08 (Decision 1–4 amended 2026-10-08 after the safety, architecture and code reviews of the first implementation)
 - **Deciders:** Project owner
 - **Related:** [ADR-0018](0018-visualization-rviz-and-foxglove.md) (no Phase 4 HMI commitment),
@@ -121,7 +122,7 @@ Option C.
      (ADR-0037); the operator decides the next step.
 
 5. **Panel.** `cite_console_gui` is a gz-gui 8 plugin (C++ and QML) and the first L7 package. It
-   holds no logic. If it hears no `ConsoleState`, it disables every button. The generated GUI
+   holds no logic. If it hears no `ConsoleState`, it disables every console button (the camera views stay usable). The generated GUI
    config adds it only on the plant side of a paired zone (P1).
 
 6. **Interim.** This panel is the first operator surface, not the Phase 4 HMI. A web HMI reuses

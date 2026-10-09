@@ -10,8 +10,8 @@
     telemetry view. ADR-0018 still makes no commitment to that stack.
   - **Also built:** the validate-then-run button
     ([ADR-0073](../adr/0073-validate-in-simulation-then-run-the-twin.md)), a connection display
-    (live, stale or absent for the twin boundary and each side, from `TwinHeartbeat` and
-    `TwinSides` on the plant's domain; monitoring only), Top / Side / Front view presets and
+    (live, stale, not ready, not started or absent for the twin boundary and each side, from
+    `TwinHeartbeat`, `TwinSides` and `TwinMode` on the plant's domain; monitoring only), Top / Side / Front view presets and
     Follow robot beside Reset view, and the speed floor shown beside the speed choices.
   - **Tests:** the button-enablement table, the connection display's rule, the ROS client, the
     camera client and the generated plugin parameters are tested headlessly. Nothing in CI
@@ -48,8 +48,9 @@ L2→L7 dependency.
   the 3D view's `camera_pose`. **Reset view** sends it to gz-gui's `/gui/move_to/pose`
   (served by the `CameraTracking` plugin) from a worker thread. It moves only the GUI camera.
 - **Other views and the connection display.** The plugin block also carries the Top, Side and
-  Front poses (`camera_presets`), the model Follow robot asks `/gui/follow` to follow
-  (`follow_model`), the pair's side names and the heartbeat's stale threshold (the physical
+  Front poses (`camera_presets`), the node Follow robot asks `/gui/follow` to follow
+  (`follow_target`: the track's carriage link, `<asset>::<carriage link>`, which moves with the
+  arm; `/gui/follow` is deprecated in gz-gui 8.4 but `/gui/track` cannot stop following), the pair's side names and the heartbeat's stale threshold (the physical
   side's deadman timeout), each derived from L0 in `tools/cite_tools/generate/gui.py`.
 - **ROS domain.** The panel runs inside `gz sim`, so it inherits the plant side's `ROS_DOMAIN_ID`.
   It holds one ROS context, on that domain only (ADR-0044's L7 clause).
