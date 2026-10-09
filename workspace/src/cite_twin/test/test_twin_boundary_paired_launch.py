@@ -648,16 +648,38 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         counterpart, which SIM no longer commands, and none to the plant, which
         SIM still commands (ADR-0072); only then is an operator's zero sent in
         SIM, which reaches both sides, the counterpart included.
+
+        **The baseline is taken behind a barrier, never at once.** An exact count
+        is only as good as the count it starts from, and a zero an EARLIER
+        transition sent may still be on its way when this test begins: the
+        test before this one ends VALIDATED -> SIM, which stops the
+        counterpart's belt, and nothing waits for that line to be printed. Under
+        load it landed after the baseline was read, the counterpart then showed
+        two zeros against an expected one, and `==` waited out its ceiling on a
+        count that had already overshot (ADR-0072). So a distinct setpoint is
+        sent in VALIDATED first and the baseline is read only once both sides
+        have printed it: each side is fed by one boundary publisher, delivery on
+        it is reliable and in order, and each fake prints and flushes in order,
+        so every zero published before the marker is already in the output.
         """
-        def zeros(side: str) -> int:
-            line = f"{side}: belt {BELT} 0"
+        def lines(side: str, value: str) -> int:
+            line = f"{side}: belt {BELT} {value}"
             return sum(1 for text in _stdout(proc_output).splitlines() if text == line)
+
+        def zeros(side: str) -> int:
+            return lines(side, "0")
 
         sides = ("plant", "counterpart")
         self._spin_until(
             lambda: self.node.count_subscribers(TWIN_BELT) > 0, "L5 subscribed to the belt"
         )
         self._enter_validated()
+        marker = Float64(data=0.0625)
+        for side in sides:
+            self._spin_until(
+                lambda side=side: self.belt.publish(marker) or lines(side, "0.0625"),
+                f"the barrier setpoint reached the {side}",
+            )
         before = {side: zeros(side) for side in sides}
         self.assertTrue(self._request(TwinMode.MODE_SIM, "leaving VALIDATED").accepted)
         self._spin_until(
