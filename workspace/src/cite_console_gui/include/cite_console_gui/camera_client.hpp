@@ -21,7 +21,18 @@
 //   - `MOVE_TO_POSE_SERVICE` (gz.msgs.GUICamera in, gz.msgs.Boolean out): move
 //     the user camera to the request's pose on its next render;
 //   - `FOLLOW_SERVICE` (gz.msgs.StringMsg in, gz.msgs.Boolean out): follow the
-//     named model from then on; an empty name stops following.
+//     named rendering node from then on (looked up by `Scene::NodeByName`); an
+//     empty name stops following.
+//
+// `/gui/follow` IS DEPRECATED in gz-gui 8.4 (CameraTracking logs it as such)
+// in favour of the `/gui/track` topic (gz.msgs.CameraTrack). It is kept here
+// because, read off gz-gui 8.4.0's CameraTracking.cc, `/gui/track` cannot do
+// what the panel needs: an empty `follow_target` is ignored rather than
+// clearing the target, and `track_mode: NONE` leaves a camera that is already
+// following on its target, so nothing sent on it stops following before a
+// move to a pose. It is also a topic, which answers nothing, so a window
+// without CameraTracking could not be told from one that obeyed. Revisit when
+// gz-gui removes `/gui/follow` or `/gui/track` gains a way to stop.
 // gz-gui 8 has no in-process event that does either (gz/gui/GuiEvents.hh has
 // none), so the services are the documented way. Their names are not scoped by
 // the world; they are scoped by the gz-transport partition, and this client's
@@ -60,7 +71,8 @@ namespace cite_console_gui
 /// gz-gui 8's CameraTracking: move the user camera to a pose.
 constexpr const char * MOVE_TO_POSE_SERVICE = "/gui/move_to/pose";
 
-/// gz-gui 8's CameraTracking: follow a model by name; an empty name stops.
+/// gz-gui 8's CameraTracking: follow a rendering node by name; an empty name
+/// stops. Deprecated in gz-gui 8.4; see the header for why it is still used.
 constexpr const char * FOLLOW_SERVICE = "/gui/follow";
 
 /// How long one call may wait for its answer, on the worker thread. The
@@ -71,7 +83,7 @@ constexpr unsigned int MOVE_TO_POSE_TIMEOUT_MS = 1000;
 /// One press of a view button: what to follow, then where to move.
 struct CameraCommand
 {
-  /// Sent first, when set: the model to follow; empty stops following.
+  /// Sent first, when set: the node to follow; empty stops following.
   std::optional<std::string> follow;
   /// Sent next, when set: the pose to move the camera to.
   std::optional<CameraPose> pose;
@@ -82,10 +94,10 @@ struct CameraCommand
     return CameraCommand{std::string(), pose};
   }
 
-  /// Follow `model` from now on: Follow robot.
-  static CameraCommand following(const std::string & model)
+  /// Follow the rendering node `target` from now on: Follow robot.
+  static CameraCommand following(const std::string & target)
   {
-    return CameraCommand{model, std::nullopt};
+    return CameraCommand{target, std::nullopt};
   }
 };
 

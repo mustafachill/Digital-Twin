@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// What the panel shows of each side's connection: live, stale or absent - as
-// one pure function of what it has heard on its own domain, with no Qt, no ROS
-// and no clock in it.
+// What the panel shows of each side's connection: live, stale, absent, not
+// ready or not started - as one pure function of what it has heard on its own
+// domain, and the twin boundary's latched state as one holder (`BoundaryState`),
+// with no Qt, no ROS and no clock in either.
 //
 // A MONITORING DISPLAY, NEVER A SAFETY FUNCTION. Nothing here gates a request
 // or stops a motion: the physical side's deadman does that, on that side's
@@ -45,17 +46,29 @@
 namespace cite_console_gui
 {
 
-/// What the panel shows of one connection.
+/// What the panel shows of one connection. Freshness (LIVE, STALE, ABSENT)
+/// and readiness (NOT_READY) are different things: a side the boundary hears
+/// on time but does not judge commandable is NOT_READY, never STALE.
 enum class Link
 {
   /// Heard, recently, and (for a side) judged commandable by the boundary.
   LIVE,
-  /// Heard before but late, or running and not commandable: what was last
-  /// said may no longer hold.
+  /// Heard before but late: what was last said may no longer hold.
   STALE,
-  /// Not heard at all: no boundary, no TwinSides, or a side not started.
+  /// Not heard at all: no boundary, no TwinSides, or a side that was running
+  /// and that TwinSides no longer lists as running.
   ABSENT,
+  /// A side running, the boundary on time, but not judged commandable
+  /// (TwinSides' `detail` says why): connected, not ready.
+  NOT_READY,
+  /// A side TwinSides has never listed as running since the panel started: not
+  /// part of this deployment (a plant-only run's counterpart). Normal.
+  NOT_STARTED,
 };
+
+/// Whether `link` is abnormal, for the panel's colour (ISA-101: colour only
+/// for the abnormal): everything but LIVE and NOT_STARTED.
+bool link_abnormal(Link link);
 
 /// TwinSides as the panel last heard it.
 struct SidesView
@@ -97,11 +110,58 @@ struct SideHealth
 };
 
 /// The side named `side` (by the plan's side names, which TwinSides uses):
-/// ABSENT while the boundary is absent, TwinSides is unheard or the side is not
-/// running; STALE while the boundary's heartbeat is late (what it last said may
-/// be old) or the boundary does not judge the side commandable (with
-/// TwinSides' `detail` as the reason); LIVE otherwise.
-SideHealth side_health(const std::string & side, const SidesView & sides, Link boundary);
+/// ABSENT while the boundary is absent or TwinSides is unheard; when TwinSides
+/// does not list the side as running, ABSENT if it `was_running` (it was
+/// listed before and has gone) and NOT_STARTED if it never was; STALE while the
+/// boundary's heartbeat is late (what it last said may be old); NOT_READY while
+/// the boundary does not judge the side commandable (with TwinSides' `detail`
+/// as the reason); LIVE otherwise.
+SideHealth side_health(
+  const std::string & side, const SidesView & sides, Link boundary, bool was_running);
+
+/// What the panel has heard of the twin boundary's latched state - its mode
+/// and its sides - and what it remembers of it, with no Qt, no ROS and no clock.
+///
+/// EACH THING IS FORGOTTEN ONLY WHEN ITS OWN PUBLISHER LEAVES. TwinMode and
+/// TwinSides are the boundary's latched, published-on-change topics: a value
+/// cleared for any other reason is never delivered again while the boundary
+/// stays up, and the panel would show "unknown" beside a twin that is in SIM.
+/// So the console leaving (`console_lost`) clears nothing here; the mode is
+/// cleared when TwinMode's publisher unmatches (`twin_mode_lost`), and the
+/// sides when TwinSides' does (`sides_lost`).
+class BoundaryState
+{
+public:
+  /// A TwinMode was heard: `name` as the operator reads it, `is_sim` when the
+  /// twin is in SIM and not on its way out of it.
+  void twin_mode_heard(const std::string & name, bool is_sim);
+  /// TwinMode's publisher left the graph: the mode is unknown again.
+  void twin_mode_lost();
+  /// TwinSides was heard. Every side it lists as running is remembered as
+  /// having run, for as long as the panel lives.
+  void sides_heard(const SidesView & sides);
+  /// TwinSides' publisher left the graph: the sides are unheard again. What
+  /// ran is still remembered.
+  void sides_lost();
+  /// The console's state publisher left the graph. Nothing here is the
+  /// console's, so nothing is cleared (R-02).
+  void console_lost() {}
+
+  /// The mode's name, or "unknown" while none is heard.
+  const std::string & twin_mode_name() const {return mode_name_;}
+  bool twin_mode_heard() const {return mode_heard_;}
+  bool twin_mode_is_sim() const {return mode_heard_ && mode_is_sim_;}
+  const SidesView & sides() const {return sides_;}
+  /// `side_health` of `side`, with what this holder remembers of it.
+  SideHealth side(const std::string & side, Link boundary) const;
+
+private:
+  std::string mode_name_{"unknown"};
+  bool mode_heard_{false};
+  bool mode_is_sim_{false};
+  SidesView sides_;
+  std::set<std::string> ever_running_;
+};
 
 /// Whether a physical side may be being commanded: the pair has a physical
 /// side and the twin's mode is not known to be SIM (ADR-0072 decision 2: in SIM
@@ -109,7 +169,8 @@ SideHealth side_health(const std::string & side, const SidesView & sides, Link b
 /// cannot show that nothing reaches it. For the panel's colour, nothing else.
 bool physical_side_commanded(bool has_physical_side, bool mode_heard, bool mode_is_sim);
 
-/// The link as the operator reads it: "live", "stale", "absent".
+/// The link as the operator reads it: "live", "stale", "absent", "not ready",
+/// "not started".
 const char * link_name(Link link);
 
 }  // namespace cite_console_gui

@@ -22,7 +22,8 @@ MinimalScene's `<camera_pose>` and the panel's parameter carry.
 
 Beside it, three more views the operator can pick - Top, Side and Front - each
 derived here from the same extent of the zone's assets (`camera_presets`), the
-model the panel's "Follow robot" asks the window to follow (`follow_model`), the
+node the panel's "Follow robot" asks the window to follow (`follow_target`: the
+link that rides the arm's track, not the arm's model, whose root is welded), the
 sides of the pair (`twin_sides`), and how long the panel lets the twin
 boundary's heartbeat go unheard before it shows the boundary as stale
 (`heartbeat_stale_after_s`). Each is a value the panel would otherwise have to
@@ -83,29 +84,17 @@ class CameraPose:
 
 
 def gui_camera_pose(cell: ResolvedCell) -> CameraPose:
-    """Frame the whole zone from the customer side of the line."""
-    robot_assets = cell.of_category("robot")
-    robots = [a.world_pose.xyz_m for a in robot_assets]
-    others = [a.world_pose.xyz_m for a in cell.assets if a not in robot_assets]
-    everything = [a.world_pose.xyz_m for a in cell.assets]
+    """Frame the whole zone from the customer side of the line.
 
-    xs = [p[0] for p in everything]
-    ys = [p[1] for p in everything]
-    target_x = (min(xs) + max(xs)) / 2.0
-    target_y = (min(ys) + max(ys)) / 2.0
-    # The arms are mounted on the work surface, so their mount height is the
-    # height the eye should rest at.
-    target_z = sum(p[2] for p in robots) / len(robots)
-
-    # +1: the rest of the cell is on +Y of the arms, so the customer is on +Y.
-    side = 1.0
-    if others and robots:
-        mean_other_y = sum(p[1] for p in others) / len(others)
-        mean_robot_y = sum(p[1] for p in robots) / len(robots)
-        side = 1.0 if mean_other_y >= mean_robot_y else -1.0
-
-    width = max(xs) - min(xs) + 2.0 * MARGIN_M
-    distance = (width / 2.0) / math.tan(HORIZONTAL_FOV_RAD / 2.0)
+    The centre, the extent and the customer side are `_framing`'s, the one
+    derivation every preset also frames.
+    """
+    framing = _framing(cell)
+    target_x, target_y, target_z = framing.target
+    # The arms are mounted on the work surface, so their mount height (the
+    # target's z) is the height the eye should rest at.
+    side = framing.customer_side
+    distance = (framing.span_x_m / 2.0) / math.tan(HORIZONTAL_FOV_RAD / 2.0)
 
     return CameraPose(
         x=target_x,
@@ -216,22 +205,41 @@ def camera_presets(cell: ResolvedCell) -> tuple[tuple[str, CameraPose], ...]:
     )
 
 
-def follow_model(cell: ResolvedCell) -> str:
-    """The model the panel's "Follow robot" asks the window to follow.
+#: How gz-sim's rendering scene names a link's node: the model's node name, this
+#: separator, then the link's name (gz-sim 8 `SceneManager::CreateLink`). It is
+#: the name CameraTracking looks the follow target up by
+#: (`Scene::NodeByName`, gz-gui 8 `CameraTracking.cc`).
+RENDERING_SCOPE = "::"
 
-    The zone's first robot as L0 declares it: its asset id, which is the name it
-    is spawned under in the plant's world (`simulation.launch.py` spawns each
-    arm with ``-name`` set to its plan manager's asset, which is this id).
+
+def follow_target(cell: ResolvedCell) -> str:
+    """The rendering node the panel's "Follow robot" asks the window to follow.
+
+    The zone's first robot as L0 declares it. Its model is spawned under its
+    asset id (`simulation.launch.py` spawns each arm with ``-name`` set to its
+    plan manager's asset, which is this id), and that model's root is welded to
+    the world (`<asset>_mount_world_anchor`): following the model would follow a
+    node that never moves. An arm that rides a track moves with its carriage,
+    the child link of the track's prismatic joint, so that link's node is the
+    target: ``<asset id>::<carriage link>``. The carriage is the link to name,
+    not the arm's base: the base is fixed to the carriage, and the URDF-to-SDF
+    conversion merges a fixed joint's child into its parent, so no link of the
+    base's name reaches the world. An arm bolted in place moves nowhere as a
+    whole, and its model is followed.
     """
     (first, *_) = cell.of_category("robot")
-    return first.id
+    if first.axis is None:
+        return first.id
+    return f"{first.id}{RENDERING_SCOPE}{first.axis.carriage_link}"
 
 
 def heartbeat_stale_after_s(cell: ResolvedCell) -> float:
     """How long the panel lets the boundary's heartbeat go unheard (ADR-0070 item 5).
 
-    Where the zone declares a physical side, its deadman's timeout: the panel
-    shows the boundary as stale exactly when a physical deadman would trip.
+    Where the zone declares a physical side, its deadman's timeout: the same
+    threshold a physical deadman applies to its own side's heartbeat. The panel
+    times the plant side's copy of the heartbeat, on its own clock, so it does
+    not show what that deadman decides, and never says when it trips.
     Where it declares none, the shortest timeout the validator accepts for one
     (`deadman-timeout-below-three-heartbeats`). A display threshold only:
     nothing waits for it and it gates nothing.
@@ -259,7 +267,7 @@ def panel_parameters(cell: ResolvedCell) -> dict[str, object]:
     """Everything the panel is handed besides the console's names and its home view."""
     return {
         "presets": camera_presets(cell),
-        "follow_model": follow_model(cell),
+        "follow_target": follow_target(cell),
         "twin_sides": " ".join(side.name for side in cell.sides),
         "heartbeat_stale_after_s": heartbeat_stale_after_s(cell),
     }

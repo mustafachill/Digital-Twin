@@ -130,7 +130,9 @@ class CellConsole : public gz::gui::Plugin
   // Each side's connection (health.hpp), a monitoring display only.
   Q_PROPERTY(bool healthShown READ healthShown NOTIFY healthChanged)
   Q_PROPERTY(QString boundaryLink READ boundaryLink NOTIFY healthChanged)
-  // One map per side: name, link, abnormal, physical, stationary, why.
+  // One map per side: name, link, abnormal, physical, stationary, why. `link`
+  // is "live", "stale", "absent", "not ready" or "not started"; `abnormal` is
+  // `link_abnormal`.
   Q_PROPERTY(QVariantList sideHealth READ sideHealth NOTIFY healthChanged)
 
   // The last request's progress and how it ended.
@@ -158,7 +160,7 @@ public:
   double minimumSpeedScale() const {return selection_.view().minimum_speed_scale;}
   double speedScale() const {return speed_scale_;}
   QString validationPhase() const;
-  QString twinMode() const {return twin_mode_;}
+  QString twinMode() const {return QString::fromStdString(boundary_.twin_mode_name());}
   bool physicalCommanded() const;
   bool startRobotEnabled() const {return selection_.buttons().start_robot;}
   bool homeEnabled() const {return selection_.buttons().home;}
@@ -179,7 +181,7 @@ public:
   int selectedTarget() const;
   bool resetViewEnabled() const {return static_cast<bool>(camera_);}
   QStringList viewPresets() const;
-  bool followEnabled() const {return camera_ && !view_config_.follow_model.empty();}
+  bool followEnabled() const {return camera_ && !view_config_.follow_target.empty();}
   QString viewError() const;
   bool healthShown() const {return view_config_.heartbeat_stale_after_s > 0.0;}
   QString boundaryLink() const;
@@ -235,10 +237,9 @@ private:
   QString last_error_;
   QStringList physical_sides_;
   double speed_scale_{0.0};
-  QString twin_mode_;
-  bool twin_mode_heard_{false};
-  bool twin_mode_is_sim_{false};
-  SidesView sides_;
+  /// The twin boundary's mode and sides, each forgotten only when its own
+  /// publisher leaves (health.hpp `BoundaryState`).
+  BoundaryState boundary_;
   bool heartbeat_present_{false};
   bool heartbeat_heard_{false};
   QElapsedTimer last_heartbeat_;

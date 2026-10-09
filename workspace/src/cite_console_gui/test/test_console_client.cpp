@@ -47,6 +47,7 @@ using cite_interfaces::action::RunProgram;
 using cite_interfaces::action::ValidateThenRun;
 using cite_interfaces::msg::ConsoleState;
 using cite_interfaces::msg::TwinHeartbeat;
+using cite_interfaces::msg::TwinMode;
 using cite_interfaces::msg::TwinSides;
 using cite_interfaces::srv::ConfirmOperator;
 using cite_interfaces::srv::StartRobot;
@@ -95,6 +96,10 @@ public:
         record([&]() {states.push_back(state); publishers.push_back(publisher);});
       };
     callbacks.on_state_lost = [this]() {record([&]() {++lost;});};
+    callbacks.on_twin_mode = [this](const TwinMode & message) {
+        record([&]() {modes.push_back(message);});
+      };
+    callbacks.on_twin_mode_lost = [this]() {record([&]() {++modes_lost;});};
     callbacks.on_twin_sides = [this](const TwinSides & message) {
         record([&]() {sides.push_back(message);});
       };
@@ -125,6 +130,8 @@ public:
   std::vector<std::string> progress;
   std::vector<std::string> outcomes;
   int lost{0};
+  std::vector<TwinMode> modes;
+  int modes_lost{0};
   std::vector<TwinSides> sides;
   int sides_lost{0};
   int heartbeats{0};
@@ -302,7 +309,7 @@ private:
 };
 
 /// The twin boundary as far as the panel can tell on its own domain: its
-/// latched TwinSides and its heartbeat, on a context of its own. Each
+/// latched TwinMode and TwinSides and its heartbeat, on a context of its own. Each
 /// publisher is on a node no executor holds, so withdrawing it unmatches it.
 class FakeBoundary
 {
@@ -315,11 +322,19 @@ public:
     context_->init(0, nullptr, options);
     node_ = std::make_shared<rclcpp::Node>(
       "fake_twin_boundary", rclcpp::NodeOptions().context(context_));
+    mode_ = node_->create_publisher<TwinMode>(TwinMode::TOPIC, cite::qos::latched());
     sides_ = node_->create_publisher<TwinSides>(TwinSides::TOPIC, cite::qos::latched());
     heartbeat_ = node_->create_publisher<TwinHeartbeat>(TwinHeartbeat::TOPIC, cite::qos::state());
   }
 
   ~FakeBoundary() {context_->shutdown("the test ended");}
+
+  void publish_mode(std::uint8_t mode)
+  {
+    TwinMode message;
+    message.mode = mode;
+    mode_->publish(message);
+  }
 
   void publish_sides(const std::vector<std::string> & running, const std::string & detail)
   {
@@ -341,12 +356,14 @@ public:
   /// panel matched reaches nobody (STATE is volatile).
   std::size_t heartbeat_subscribers() const {return heartbeat_->get_subscription_count();}
 
+  void withdraw_mode() {mode_.reset();}
   void withdraw_sides() {sides_.reset();}
   void withdraw_heartbeat() {heartbeat_.reset();}
 
 private:
   rclcpp::Context::SharedPtr context_;
   rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<TwinMode>::SharedPtr mode_;
   rclcpp::Publisher<TwinSides>::SharedPtr sides_;
   rclcpp::Publisher<TwinHeartbeat>::SharedPtr heartbeat_;
   std::uint64_t sequence_{0};
@@ -597,4 +614,34 @@ TEST(ConsoleClient, EachHeartbeatArrivalIsSaidAndItsPublisherLeavingIsAbsence)
   boundary.withdraw_heartbeat();
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.heartbeat_lost == 1;}))
     << "the heartbeat's publisher left and the panel was not told";
+}
+
+TEST(ConsoleClient, TheModeIsForgottenOnlyWhenItsOwnPublisherLeaves)
+{
+  // R-02: TwinMode is latched and published on change. The console leaving
+  // says nothing about it; its own publisher leaving is what makes it unknown.
+  const ConsoleNames names = names_for("mode");
+  FakeBoundary boundary;
+  boundary.publish_mode(TwinMode::MODE_SIM);
+  auto console = std::make_unique<FakeConsole>(names);
+  console->publish(ConsoleState::READY);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  ASSERT_TRUE(
+    recorder.wait_for([&]() {return !recorder.modes.empty() && !recorder.states.empty();}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.modes.back().mode, TwinMode::MODE_SIM);
+  }
+
+  console->withdraw_state();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.lost == 1;}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.modes_lost, 0) << "the console leaving was taken for the mode's";
+  }
+
+  boundary.withdraw_mode();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.modes_lost == 1;}))
+    << "TwinMode's publisher left and the panel was not told";
 }

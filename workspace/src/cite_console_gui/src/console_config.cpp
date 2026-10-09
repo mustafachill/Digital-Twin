@@ -41,7 +41,7 @@ std::string joined(const std::vector<std::string> & items)
 
 bool is_known(const char * name)
 {
-  for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_MODEL_KEY, TWIN_SIDES_KEY,
+  for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_TARGET_KEY, TWIN_SIDES_KEY,
       HEARTBEAT_STALE_AFTER_KEY})
   {
     if (std::strcmp(name, key) == 0) {
@@ -169,11 +169,11 @@ std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewCo
     read.presets.emplace_back(preset.label, pose);
   }
 
-  const char * model = child_text(plugin_element, FOLLOW_MODEL_KEY);
-  if (model == nullptr || std::string(model).find_first_not_of(" \t\n") == std::string::npos) {
-    return unnamed(FOLLOW_MODEL_KEY);
+  const char * target = child_text(plugin_element, FOLLOW_TARGET_KEY);
+  if (target == nullptr || std::string(target).find_first_not_of(" \t\n") == std::string::npos) {
+    return unnamed(FOLLOW_TARGET_KEY);
   }
-  read.follow_model = model;
+  read.follow_target = target;
 
   const char * sides = child_text(plugin_element, TWIN_SIDES_KEY);
   if (sides != nullptr) {

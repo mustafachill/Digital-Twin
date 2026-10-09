@@ -66,9 +66,11 @@ constexpr std::array<CameraPresetKey, 3> CAMERA_PRESET_KEYS = {{
   {"front_camera_pose", "Front"},
 }};
 
-/// The model "Follow robot" asks the window to follow: the arm's name in the
-/// plant's world (generate/gui.py `follow_model`).
-constexpr const char * FOLLOW_MODEL_KEY = "follow_model";
+/// The rendering node "Follow robot" asks the window to follow: the link that
+/// rides the arm's track, as gz-sim names its node, `<model>::<link>`
+/// (generate/gui.py `follow_target`). Not the arm's model: its root is welded
+/// to the world, so a camera following it would never move.
+constexpr const char * FOLLOW_TARGET_KEY = "follow_target";
 
 /// The pair's side names, space-separated, by the names TwinSides uses.
 constexpr const char * TWIN_SIDES_KEY = "twin_sides";
@@ -82,7 +84,7 @@ struct ViewConfig
 {
   /// Each preset's label and pose, in `CAMERA_PRESET_KEYS` order.
   std::vector<std::pair<std::string, CameraPose>> presets;
-  std::string follow_model;
+  std::string follow_target;
   std::vector<std::string> twin_sides;
   double heartbeat_stale_after_s{0.0};
 };
@@ -106,7 +108,7 @@ std::string read_home_camera_pose(const tinyxml2::XMLElement * plugin_element, C
 std::string read_camera_pose(
   const tinyxml2::XMLElement * plugin_element, const char * key, CameraPose & pose);
 
-/// Fill `config` from `plugin_element`: every preset pose, the follow model,
+/// Fill `config` from `plugin_element`: every preset pose, the follow target,
 /// the side names (at least one) and a positive, finite stale threshold.
 /// Returns what is wrong, or an empty string when nothing is; on a problem
 /// `config` is left untouched.

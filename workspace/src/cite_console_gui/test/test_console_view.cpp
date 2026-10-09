@@ -33,9 +33,11 @@ using cite_console_gui::Target;
 using cite_console_gui::target_from;
 using cite_console_gui::target_value;
 using cite_console_gui::twin_mode_name;
+using cite_console_gui::validate_then_run_outcome;
 using cite_console_gui::validation_phase_from;
 using cite_console_gui::ValidationPhase;
 using cite_console_gui::view_from;
+using cite_interfaces::action::ValidateThenRun;
 using cite_interfaces::msg::ConsoleState;
 using cite_interfaces::msg::TwinMode;
 
@@ -230,4 +232,70 @@ TEST(ConsoleView, TheViewCarriesTheOfferAndThePhase)
   view = view_from(state);
   EXPECT_FALSE(view.validate_then_run_offered);
   EXPECT_EQ(view.validation_phase, ValidationPhase::NONE);
+}
+
+TEST(ConsoleView, AValidateThenRunRefusedBeforeEitherPhaseSaysSo)
+{
+  // ValidateThenRun.action: PHASE_NONE is a request refused before either
+  // phase began - at the goal's checks, or phase 1 measuring the plant away.
+  ValidateThenRun::Result result;
+  result.success = false;
+  result.detail = "the plant is not at the program's start";
+  result.ended_in = ConsoleState::PHASE_NONE;
+  result.cycles_completed = 0;
+  EXPECT_EQ(
+    validate_then_run_outcome(result),
+    "Validate then run: refused or failed. the plant is not at the program's start "
+    "Refused before either phase began. Cycles completed on the twin: 0.");
+}
+
+TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
+{
+  ValidateThenRun::Result failed;
+  failed.success = false;
+  failed.detail = "stopped";
+  failed.ended_in = ConsoleState::PHASE_VALIDATING;
+  EXPECT_EQ(
+    validate_then_run_outcome(failed),
+    "Validate then run: refused or failed. stopped Ended in: Validating in simulation. "
+    "Cycles completed on the twin: 0.");
+
+  ValidateThenRun::Result passed;
+  passed.success = true;
+  passed.detail = "passed in simulation; 2 cycles on the twin";
+  passed.ended_in = ConsoleState::PHASE_RUNNING;
+  passed.cycles_completed = 2;
+  EXPECT_EQ(
+    validate_then_run_outcome(passed),
+    "Validate then run: done. passed in simulation; 2 cycles on the twin "
+    "Ended in: Running twin. Cycles completed on the twin: 2.");
+}
+
+TEST(ConsoleView, AValidateThenRunPhaseTheContractDoesNotProduceIsNotARefusal)
+{
+  // A success that names no phase is not said as a refusal, and a phase this
+  // panel does not know is said as unrecognised, never guessed.
+  ValidateThenRun::Result odd;
+  odd.success = true;
+  odd.ended_in = ConsoleState::PHASE_NONE;
+  const std::string none = validate_then_run_outcome(odd);
+  EXPECT_EQ(none.find("Refused"), std::string::npos) << none;
+  EXPECT_NE(none.find("named no phase"), std::string::npos) << none;
+
+  std::uint8_t undefined = 0;
+  const std::set<std::uint8_t> defined = {
+    ConsoleState::PHASE_NONE, ConsoleState::PHASE_VALIDATING, ConsoleState::PHASE_RUNNING};
+  while (defined.count(undefined) == 1) {
+    ++undefined;
+  }
+  ValidateThenRun::Result unknown;
+  unknown.ended_in = undefined;
+  const std::string line = validate_then_run_outcome(unknown);
+  EXPECT_NE(line.find("Unrecognised phase"), std::string::npos) << line;
+  // Never the words ADR-0073 decision 5 forbids.
+  for (const std::string & text : {none, line}) {
+    for (const char * word : {"safe", "verified", "validated"}) {
+      EXPECT_EQ(text.find(word), std::string::npos) << text;
+    }
+  }
 }

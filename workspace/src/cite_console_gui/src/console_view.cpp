@@ -131,6 +131,23 @@ ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publ
   return view;
 }
 
+std::string validate_then_run_outcome(
+  const cite_interfaces::action::ValidateThenRun::Result & result)
+{
+  const ValidationPhase ended = validation_phase_from(result.ended_in);
+  std::string where;
+  if (ended != ValidationPhase::NONE) {
+    where = std::string("Ended in: ") + validation_phase_name(ended) + ".";
+  } else if (result.success) {
+    where = "The console named no phase.";
+  } else {
+    where = "Refused before either phase began.";
+  }
+  return std::string("Validate then run") +
+         (result.success ? ": done. " : ": refused or failed. ") + result.detail + " " + where +
+         " Cycles completed on the twin: " + std::to_string(result.cycles_completed) + ".";
+}
+
 std::string twin_mode_name(std::uint8_t mode)
 {
   switch (mode) {

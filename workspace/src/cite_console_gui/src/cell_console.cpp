@@ -37,7 +37,7 @@ namespace cite_console_gui
 {
 
 CellConsole::CellConsole()
-: state_name_("No console"), twin_mode_("unknown")
+: state_name_("No console")
 {
 }
 
@@ -135,9 +135,15 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
         !mode.transition_in_progress;
       QMetaObject::invokeMethod(
         this, [this, name, is_sim]() {
-          twin_mode_ = name;
-          twin_mode_heard_ = true;
-          twin_mode_is_sim_ = is_sim;
+          boundary_.twin_mode_heard(name.toStdString(), is_sim);
+          emit twinModeChanged();
+          emit healthChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_twin_mode_lost = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          boundary_.twin_mode_lost();
           emit twinModeChanged();
           emit healthChanged();
         }, Qt::QueuedConnection);
@@ -152,14 +158,14 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
       sides.detail = message.detail;
       QMetaObject::invokeMethod(
         this, [this, sides]() {
-          sides_ = sides;
+          boundary_.sides_heard(sides);
           emit healthChanged();
         }, Qt::QueuedConnection);
     };
   callbacks.on_twin_sides_lost = [this]() {
       QMetaObject::invokeMethod(
         this, [this]() {
-          sides_ = SidesView{};
+          boundary_.sides_lost();
           emit healthChanged();
         }, Qt::QueuedConnection);
     };
@@ -225,11 +231,9 @@ void CellConsole::forget_state()
   physical_sides_.clear();
   speed_scale_ = 0.0;
   emit viewChanged();
-  // Nothing said while the console was there stands for one that is gone.
-  twin_mode_ = "unknown";
-  twin_mode_heard_ = false;
-  twin_mode_is_sim_ = false;
-  emit twinModeChanged();
+  // The twin's mode is the boundary's, not the console's: it stays until
+  // TwinMode's own publisher leaves (R-02).
+  boundary_.console_lost();
   emit healthChanged();
   set_progress(QString());
   set_outcome(QString());
@@ -262,11 +266,11 @@ QVariantList CellConsole::sideHealth() const
 {
   QVariantList rows;
   for (const std::string & side : view_config_.twin_sides) {
-    const SideHealth health = side_health(side, sides_, shown_boundary_);
+    const SideHealth health = boundary_.side(side, shown_boundary_);
     QVariantMap row;
     row["name"] = QString::fromStdString(side);
     row["link"] = QString::fromUtf8(link_name(health.link));
-    row["abnormal"] = health.link != Link::LIVE;
+    row["abnormal"] = link_abnormal(health.link);
     row["physical"] = health.physical;
     row["stationary"] = health.stationary;
     row["why"] = QString::fromStdString(health.why);
@@ -277,8 +281,9 @@ QVariantList CellConsole::sideHealth() const
 
 bool CellConsole::physicalCommanded() const
 {
-  const bool has_physical = !sides_.physical.empty() || !physical_sides_.isEmpty();
-  return physical_side_commanded(has_physical, twin_mode_heard_, twin_mode_is_sim_);
+  const bool has_physical = !boundary_.sides().physical.empty() || !physical_sides_.isEmpty();
+  return physical_side_commanded(
+    has_physical, boundary_.twin_mode_heard(), boundary_.twin_mode_is_sim());
 }
 
 QString CellConsole::validationPhase() const
@@ -442,7 +447,7 @@ void CellConsole::selectPreset(int index)
 void CellConsole::followRobot()
 {
   if (followEnabled()) {
-    camera_->request(CameraCommand::following(view_config_.follow_model));
+    camera_->request(CameraCommand::following(view_config_.follow_target));
   }
 }
 

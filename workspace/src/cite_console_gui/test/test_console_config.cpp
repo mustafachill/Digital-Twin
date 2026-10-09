@@ -37,7 +37,7 @@ using cite_console_gui::CAMERA_PRESET_KEYS;
 using cite_console_gui::CameraPose;
 using cite_console_gui::CONSOLE_KEYS;
 using cite_console_gui::ConsoleNames;
-using cite_console_gui::FOLLOW_MODEL_KEY;
+using cite_console_gui::FOLLOW_TARGET_KEY;
 using cite_console_gui::GZ_GUI_ELEMENT;
 using cite_console_gui::HEARTBEAT_STALE_AFTER_KEY;
 using cite_console_gui::HOME_CAMERA_POSE_KEY;
@@ -69,7 +69,7 @@ std::vector<std::filesystem::path> installed_gui_configs()
 }
 
 /// Every child the panel reads besides gz-gui's own: the console's names, the
-/// 3D view's home pose and presets, the follow model and the connection
+/// 3D view's home pose and presets, the follow target and the connection
 /// display's two values.
 std::set<std::string> keys()
 {
@@ -78,7 +78,7 @@ std::set<std::string> keys()
   for (const auto & preset : CAMERA_PRESET_KEYS) {
     all.insert(preset.key);
   }
-  all.insert(FOLLOW_MODEL_KEY);
+  all.insert(FOLLOW_TARGET_KEY);
   all.insert(TWIN_SIDES_KEY);
   all.insert(HEARTBEAT_STALE_AFTER_KEY);
   return all;
@@ -95,7 +95,7 @@ const char * const ALL_VIEWS =
   "<top_camera_pose>1 2 9 0 1.55 1.57</top_camera_pose>"
   "<side_camera_pose>4 2 1 0 0.26 3.14</side_camera_pose>"
   "<front_camera_pose>1 0 1 0 0.26 1.57</front_camera_pose>"
-  "<follow_model>picker</follow_model>"
+  "<follow_target>picker::picker_track_carriage</follow_target>"
   "<twin_sides>plant counterpart</twin_sides>"
   "<heartbeat_stale_after_s>0.5</heartbeat_stale_after_s>";
 
@@ -179,11 +179,11 @@ TEST(ConsoleConfig, TheInstalledPlantConfigurationGivesThePanelExactlyItsKeys)
       EXPECT_EQ(std::string(home->GetText()), scene_camera_pose(document)) << path;
       CameraPose pose;
       EXPECT_EQ(read_home_camera_pose(plugin, pose), "") << path;
-      // The presets, the follow model and the connection display read whole.
+      // The presets, the follow target and the connection display read whole.
       ViewConfig view;
       EXPECT_EQ(read_view_config(plugin, view), "") << path;
       EXPECT_EQ(view.presets.size(), CAMERA_PRESET_KEYS.size()) << path;
-      EXPECT_FALSE(view.follow_model.empty()) << path;
+      EXPECT_FALSE(view.follow_target.empty()) << path;
       EXPECT_GE(view.twin_sides.size(), 1u) << path;
       EXPECT_GT(view.heartbeat_stale_after_s, 0.0) << path;
     }
@@ -316,7 +316,7 @@ TEST(ViewConfig, ACompleteConfigurationIsReadInOrder)
   EXPECT_DOUBLE_EQ(view.presets[0].second.z, 9.0);
   EXPECT_DOUBLE_EQ(view.presets[1].second.x, 4.0);
   EXPECT_DOUBLE_EQ(view.presets[2].second.pitch, 0.26);
-  EXPECT_EQ(view.follow_model, "picker");
+  EXPECT_EQ(view.follow_target, "picker::picker_track_carriage");
   EXPECT_EQ(view.twin_sides, (std::vector<std::string>{"plant", "counterpart"}));
   EXPECT_DOUBLE_EQ(view.heartbeat_stale_after_s, 0.5);
 }
@@ -335,8 +335,10 @@ TEST(ViewConfig, EachMissingOrMalformedValueIsNamedAndChangesNothing)
     {"<side_camera_pose>4 2 1 0 0.26 3.14</side_camera_pose>",
       "<side_camera_pose>4 2 1</side_camera_pose>", "side_camera_pose"},
     {"<front_camera_pose>1 0 1 0 0.26 1.57</front_camera_pose>", "", "front_camera_pose"},
-    {"<follow_model>picker</follow_model>", "", "names no follow_model"},
-    {"<follow_model>picker</follow_model>", "<follow_model> </follow_model>", "follow_model"},
+    {"<follow_target>picker::picker_track_carriage</follow_target>", "",
+      "names no follow_target"},
+    {"<follow_target>picker::picker_track_carriage</follow_target>",
+      "<follow_target> </follow_target>", "follow_target"},
     {"<twin_sides>plant counterpart</twin_sides>", "", "names no twin_sides"},
     {"<twin_sides>plant counterpart</twin_sides>", "<twin_sides> </twin_sides>", "twin_sides"},
     {"<heartbeat_stale_after_s>0.5</heartbeat_stale_after_s>", "",
@@ -354,10 +356,10 @@ TEST(ViewConfig, EachMissingOrMalformedValueIsNamedAndChangesNothing)
     tinyxml2::XMLDocument document;
     document.Parse(panel_with(row.replace, row.with).c_str());
     ViewConfig view;
-    view.follow_model = "untouched";
+    view.follow_target = "untouched";
     const std::string problem = read_view_config(document.FirstChildElement(), view);
     EXPECT_NE(problem.find(row.named), std::string::npos) << row.with << ": " << problem;
-    EXPECT_EQ(view.follow_model, "untouched") << row.with;
+    EXPECT_EQ(view.follow_target, "untouched") << row.with;
     EXPECT_TRUE(view.presets.empty()) << row.with;
   }
 }

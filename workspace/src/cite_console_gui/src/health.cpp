@@ -27,7 +27,8 @@ Link boundary_link(const HeartbeatView & heartbeat, double stale_after_s)
   return heartbeat.age_s > stale_after_s ? Link::STALE : Link::LIVE;
 }
 
-SideHealth side_health(const std::string & side, const SidesView & sides, Link boundary)
+SideHealth side_health(
+  const std::string & side, const SidesView & sides, Link boundary, bool was_running)
 {
   SideHealth health;
   health.physical = sides.heard && sides.physical.count(side) == 1;
@@ -41,6 +42,11 @@ SideHealth side_health(const std::string & side, const SidesView & sides, Link b
     return health;
   }
   if (sides.running.count(side) == 0) {
+    if (was_running) {
+      health.why = "Was running; the twin boundary no longer lists it as running.";
+      return health;
+    }
+    health.link = Link::NOT_STARTED;
     health.why = "Not started in this deployment.";
     return health;
   }
@@ -50,13 +56,48 @@ SideHealth side_health(const std::string & side, const SidesView & sides, Link b
     return health;
   }
   if (sides.commandable.count(side) == 0) {
-    health.link = Link::STALE;
+    health.link = Link::NOT_READY;
     health.why = sides.detail.empty() ?
       "The twin boundary does not judge this side commandable." : sides.detail;
     return health;
   }
   health.link = Link::LIVE;
   return health;
+}
+
+bool link_abnormal(Link link)
+{
+  return link != Link::LIVE && link != Link::NOT_STARTED;
+}
+
+void BoundaryState::twin_mode_heard(const std::string & name, bool is_sim)
+{
+  mode_name_ = name;
+  mode_heard_ = true;
+  mode_is_sim_ = is_sim;
+}
+
+void BoundaryState::twin_mode_lost()
+{
+  mode_name_ = "unknown";
+  mode_heard_ = false;
+  mode_is_sim_ = false;
+}
+
+void BoundaryState::sides_heard(const SidesView & sides)
+{
+  sides_ = sides;
+  ever_running_.insert(sides.running.begin(), sides.running.end());
+}
+
+void BoundaryState::sides_lost()
+{
+  sides_ = SidesView{};
+}
+
+SideHealth BoundaryState::side(const std::string & side, Link boundary) const
+{
+  return side_health(side, sides_, boundary, ever_running_.count(side) == 1);
 }
 
 bool physical_side_commanded(bool has_physical_side, bool mode_heard, bool mode_is_sim)
@@ -71,6 +112,10 @@ const char * link_name(Link link)
       return "live";
     case Link::STALE:
       return "stale";
+    case Link::NOT_READY:
+      return "not ready";
+    case Link::NOT_STARTED:
+      return "not started";
     case Link::ABSENT:
       break;
   }

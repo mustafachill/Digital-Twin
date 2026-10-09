@@ -89,13 +89,27 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
       }
     },
     state_options);
+  // The mode is forgotten when ITS publisher leaves, and for no other reason:
+  // latched and published on change, it is not heard again while the boundary
+  // stays up (R-02).
+  rclcpp::SubscriptionOptions mode_options;
+  mode_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      if (twin_mode_heard_ && info.current_count == 0) {
+        twin_mode_heard_ = false;
+        if (callbacks_.on_twin_mode_lost) {
+          callbacks_.on_twin_mode_lost();
+        }
+      }
+    };
   twin_mode_sub_ = node_->create_subscription<TwinMode>(
     TwinMode::TOPIC, cite::qos::latched(),
     [this](const TwinMode & mode) {
+      twin_mode_heard_ = true;
       if (callbacks_.on_twin_mode) {
         callbacks_.on_twin_mode(mode);
       }
-    });
+    },
+    mode_options);
 
   // What the panel shows of each side's connection (health.hpp): a display,
   // never a gate. TwinSides is LATCHED, as the boundary publishes it; the
@@ -338,14 +352,7 @@ void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
       }
       // The console's own words: "passed in simulation", never "safe",
       // "verified" or "validated for the real cell" (ADR-0073 decision 5).
-      const ValidationPhase ended = validation_phase_from(result.result->ended_in);
-      const std::string where = ended == ValidationPhase::NONE ?
-        "Refused before either phase." :
-        std::string("Ended in: ") + validation_phase_name(ended) + ".";
-      outcome(
-        answered("Validate then run", result.result->success, result.result->detail) + " " +
-        where + " Cycles completed on the twin: " +
-        std::to_string(result.result->cycles_completed) + ".");
+      outcome(validate_then_run_outcome(*result.result));
     };
   validate_then_run_->async_send_goal(goal, options);
 }

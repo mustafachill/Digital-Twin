@@ -19,8 +19,9 @@
 // `Text.PlainText` (P-R05): it is shown, never interpreted as markup.
 //
 // COLOUR IS FOR THE ABNORMAL (ISA-101). Everything normal is grey; colour
-// appears only for a FAULT or a refusal (alarm), a side that is stale or
-// absent, and a physical side that may be commanded (warning), and the
+// appears only for a FAULT or a refusal (alarm), a side that is stale, absent
+// or not ready (`link_abnormal`; a side never started is normal), and a
+// physical side that may be commanded (warning), and the
 // console asking the operator to act (attention). Every colour is in `theme`,
 // and nowhere else.
 
@@ -48,7 +49,7 @@ Rectangle {
     readonly property color onStrong: "#ffffff"
     // Abnormal only.
     readonly property color alarm: "#c62828"      // FAULT, a refusal, a view failure
-    readonly property color warning: "#e65100"    // stale or absent; a physical side commanded
+    readonly property color warning: "#e65100"    // a side abnormal; a physical side commanded
     readonly property color attention: "#1565c0"  // the console asks the operator to act
     readonly property color onColour: "#ffffff"
   }

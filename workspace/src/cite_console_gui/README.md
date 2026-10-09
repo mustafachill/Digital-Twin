@@ -26,7 +26,7 @@ connection display and its Stop.
 | At start, per side | "Simulation at start" (`plant_at_start`) and "Real arm at start" (`counterpart_at_start`), the second only when the console says that side runs (`counterpart_running`) |
 | Twin mode | `TwinMode` on `TwinMode::TOPIC`, read directly from the twin boundary (ADR-0044); marked "the real arm may be commanded" whenever a physical side runs and the mode is not known to be `SIM` |
 | Phase | While a validate-then-run request runs: "Validating in simulation" or "Running twin" (`ConsoleState.phase`) |
-| Connections | Live, stale or absent, for the twin boundary and for each side (see below). Monitoring only |
+| Connections | Live, stale or absent for the twin boundary; for each side also not ready or not started (see below). Monitoring only |
 | Start robot | `StartRobot` |
 | Target | Simulation, Real arm or Twin (`ConsoleState.TARGET_*`, [ADR-0072](../../../docs/adr/0072-the-operator-chooses-where-the-signal-goes.md)); a choice not in `available_targets` is disabled and labelled "not running". **Never preselected**, not even when only one is offered (see below) |
 | Speed | 1.0 ("Original speed") preselected, then 0.5, 0.25, 0.1. The selected scale is stated under the choices. Where the console states a floor (`minimum_speed_scale`), the panel shows it and says whether it applies to the selected target; for a target the console lists in `floored_targets` — and while no target is selected — choices below it are disabled and labelled "below the floor". A choice per request, not a live override |
@@ -42,8 +42,12 @@ Which buttons are enabled is `enabled_for` in
 [`include/cite_console_gui/enablement.hpp`](include/cite_console_gui/enablement.hpp), a pure
 function with no Qt and no ROS in it, and nothing else. Before any `ConsoleState` is heard,
 or once its publisher has unmatched (the subscription's matched event, not a poll), every
-console button is disabled, the twin mode, progress and outcome said for the console that
-left are cleared, and the panel says "No console".
+console button is disabled, the progress and outcome said for the console that left are
+cleared, and the panel says "No console". The twin mode is not the console's and is not
+cleared: `TwinMode` is the boundary's latched, published-on-change topic, so a mode cleared
+then would not be heard again while the boundary stays up. It becomes "unknown" only when
+`TwinMode`'s own publisher unmatches, as `TwinSides` and the heartbeat do
+(`BoundaryState` in [`include/cite_console_gui/health.hpp`](include/cite_console_gui/health.hpp)).
 
 ### The target selection
 
@@ -76,18 +80,22 @@ arm's cycle is safe (ADR-0073 decision 5).
 What the panel can hear on its own domain, and nothing more: it opens no other domain
 (ADR-0044). `side_health` in
 [`include/cite_console_gui/health.hpp`](include/cite_console_gui/health.hpp) is the rule, a
-pure function.
+pure function, and `BoundaryState` in the same header holds what it is applied to.
 
 - **Twin boundary:** its `TwinHeartbeat` on the plant's domain (`TwinHeartbeat::TOPIC`),
   timed on the panel's own steady clock between arrivals. Absent with no publisher or none
   heard yet; stale once the last is older than the configuration's
   `heartbeat_stale_after_s` (the physical side's deadman timeout, where one is declared);
   live otherwise.
-- **Each side** (the configuration's `twin_sides`): absent while the boundary is absent,
-  `TwinSides` is unheard, or the side is not running; stale while the boundary's heartbeat
-  is late or the boundary does not list the side as `commandable`, with `TwinSides.detail`
-  as the reason; live otherwise. A live physical side also shows whether the boundary lists
-  it as stationary.
+- **Each side** (the configuration's `twin_sides`): absent while the boundary is absent or
+  `TwinSides` is unheard. A side `TwinSides` does not list as running is **not started**
+  (grey, normal: a plant-only deployment's counterpart) if it has never been listed since
+  the panel started, and **absent** if it was and has gone. A running side is stale while
+  the boundary's heartbeat is late, and **not ready** while the boundary does not list it
+  as `commandable` (connected and on time, but not commandable), with `TwinSides.detail` as
+  the reason; live otherwise. Freshness and readiness are kept apart: not ready is never
+  shown as stale. A live physical side also shows whether the boundary lists it as
+  stationary.
 
 What it cannot show: the counterpart's own heartbeat is on the counterpart's domain, so how
 fresh that side is, is the boundary's `commandable` verdict, which `TwinSides` publishes on
@@ -105,11 +113,24 @@ calls gz-gui 8's `CameraTracking` plugin, which serves, in the same window:
   `side_camera_pose` and `front_camera_pose`. In a perspective view zoom is the camera's
   distance, so a pose restores it.
 - `/gui/follow` (`gz.msgs.StringMsg`): **Follow robot** sends the configuration's
-  `follow_model`, and the view follows that model until another view button is pressed.
-  Every pose is preceded by an empty follow, which stops following; a followed camera would
-  otherwise be put back on the model every frame.
+  `follow_target`, and the view follows that rendering node until another view button is
+  pressed. The target is the link that rides the arm's track, as gz-sim names its node,
+  `<model>::<link>` (`picker::picker_track_carriage` in `cell_b`), not the arm's model: the
+  model's root is welded to the world and the carriage moves on a prismatic joint inside
+  it, so a camera following the model would never move. Every pose is preceded by an empty
+  follow, which stops following; a followed camera would otherwise be put back on its target
+  every frame.
+- **`/gui/follow` is deprecated in gz-gui 8.4** in favour of the `/gui/track` topic
+  (`gz.msgs.CameraTrack`). The panel keeps it because, in gz-gui 8.4.0's `CameraTracking`,
+  `/gui/track` cannot stop following (an empty `follow_target` is ignored and
+  `track_mode: NONE` leaves the current target in place), and as a topic it answers nothing.
+  See [`include/cite_console_gui/camera_client.hpp`](include/cite_console_gui/camera_client.hpp).
 
-Both names were read off the vendor's `libCameraTracking.so` (gz-gui 8). gz-gui 8 has no
+Both names were read off the vendor's `libCameraTracking.so` (gz-gui 8). The node name
+`<model>::<link>` is gz-sim 8's (`SceneManager::CreateLink`), looked up by `NodeByName` in
+`CameraTracking`; it was read from their sources, and the link was checked to survive the
+URDF-to-SDF conversion (the arm's base, fixed to the carriage, does not). It has not been
+seen followed in a rendered window. gz-gui 8 has no
 in-process event that moves the camera, so the services are the documented route. Their
 names are scoped by the gz-transport partition, not the world, and the panel's node is in
 the window's process, so it carries the window's `GZ_PARTITION`.
@@ -131,7 +152,7 @@ nothing that was waiting.
   `TwinSides::TOPIC`, `TwinHeartbeat::TOPIC`.
 - The home view is the plugin's `home_camera_pose` parameter: the same text the generator
   writes as the 3D view's `camera_pose`, rendered once (`gui_camera_pose`). The presets are
-  `camera_presets`, the follow model `follow_model`, the sides `twin_sides` and the stale
+  `camera_presets`, the follow target `follow_target`, the sides `twin_sides` and the stale
   threshold `heartbeat_stale_after_s`, all derived from L0 in the same file. Tests hold the
   installed plant configuration's values to those functions.
 
@@ -140,7 +161,8 @@ The panel builds no name.
 ## Colour
 
 Normal is grey; colour is only for the abnormal (ISA-101): red for a `FAULT`, a refusal's
-"Last error" and a view failure; orange for a stale or absent connection and for a physical
+"Last error" and a view failure; orange for a stale, absent or not ready connection (a side
+never started is grey) and for a physical
 side that may be commanded (twin mode not known to be `SIM`); blue for the console asking
 the operator to act. Every colour is in the QML's one `theme` object. Stop is dark grey, not
 red: red is the physical E-stop's, and Stop is not an E-stop.
@@ -165,7 +187,7 @@ asynchronous; a server that is not there is reported in the panel, never waited 
   and a test holds the installed plant configuration to them.
 - **No home pose in the configuration, or one that is not six finite numbers:** every view
   button is disabled and the panel says why; the console's buttons are unaffected.
-- **A preset, the follow model, the sides or the stale threshold missing or malformed:**
+- **A preset, the follow target, the sides or the stale threshold missing or malformed:**
   the panel says which on the view line; the presets, Follow robot and the connection
   display are not shown, and Reset view still works.
 - **No `CameraTracking` in the window, or a refused move or follow:** the view line says so

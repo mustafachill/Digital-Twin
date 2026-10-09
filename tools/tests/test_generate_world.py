@@ -21,7 +21,14 @@ from xml.etree import ElementTree
 import pytest
 import yaml
 
-from cite_tools.generate import bringup, gui, gui_config_path, world
+from cite_tools.generate import (
+    arm_description_path,
+    bringup,
+    description,
+    gui,
+    gui_config_path,
+    world,
+)
 from cite_tools.model import ids
 from cite_tools.model.loader import load
 from cite_tools.model.resolve import resolve
@@ -545,14 +552,43 @@ class TestOnlyThePlantsWindowCarriesTheConsole:
         assert presets["front_camera_pose"].pitch < home.pitch
         assert abs(math.cos(presets["side_camera_pose"].yaw)) == pytest.approx(1.0)
 
-    def test_follow_robot_names_the_arm_as_the_world_spawns_it(self, zone_cell) -> None:
-        # The plant's launch spawns each arm under its plan manager's asset.
+    def test_follow_robot_names_a_node_that_rides_the_track(self, zone_cell) -> None:
+        # R-01: the arm's model root is welded to the world, so following the
+        # model follows a node that never moves. The target is the child link
+        # of the track's prismatic joint, scoped by the model name the plant's
+        # launch spawns the arm under (its plan manager's asset).
         (plan,) = bringup.generate(zone_cell)
         managers = {m["asset"] for m in yaml.safe_load(plan.content)["plan"]["controller_managers"]}
-        followed = self._panel(zone_cell).findtext("follow_model")
-        assert followed == gui.follow_model(zone_cell)
-        assert followed in managers
-        assert followed in {a.id for a in zone_cell.of_category("robot")}
+        followed = self._panel(zone_cell).findtext("follow_target")
+        assert followed == gui.follow_target(zone_cell)
+        model, separator, link = followed.partition(gui.RENDERING_SCOPE)
+        assert separator, f"{followed!r} names a model, not a link inside one"
+        assert model in managers
+        (arm,) = (a for a in zone_cell.of_category("robot") if a.id == model)
+        assert arm.axis is not None, "the shipped arm rides a track; this test needs it to"
+
+        (urdf,) = (
+            a
+            for a in description.generate(zone_cell)
+            if a.path == arm_description_path(zone_cell.zone, model, ids.PLANT_SIDE)
+        )
+        root = ElementTree.fromstring(urdf.content)
+        # The URDF's own joints, and the world anchor the converter alone sees.
+        joints = {j.get("name"): j for j in [*root.findall("joint"), *root.findall("gazebo/joint")]}
+        track = joints[arm.axis.joint]
+        assert track.get("type") == "prismatic"
+        # Downstream of the track's joint: its child, which carries the arm.
+        assert track.find("child").get("link") == link
+        root_anchor = joints[f"{model}_mount_world_anchor"]
+        assert root_anchor.get("type") == "fixed"
+        assert root_anchor.findtext("child") == track.find("parent").get("link")
+
+    def test_an_arm_bolted_in_place_is_followed_by_its_model(self, zone_cell) -> None:
+        (arm, *_) = zone_cell.of_category("robot")
+        bolted = dataclasses.replace(arm, axis=None)
+        assets = tuple(bolted if a.id == arm.id else a for a in zone_cell.assets)
+        cell = dataclasses.replace(zone_cell, assets=assets)
+        assert gui.follow_target(cell) == arm.id
 
     def test_the_panel_is_handed_the_sides_and_the_stale_threshold(self, zone_cell) -> None:
         panel = self._panel(zone_cell)

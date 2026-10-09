@@ -33,9 +33,9 @@
 // its sides and its heartbeat - from the contract's own `TOPIC` constants
 // (TwinMode, TwinSides, TwinHeartbeat). This file builds no name.
 //
-// No clock is read and nothing runs on a timer: the console's, the sides' and
-// the heartbeat's going away are their subscriptions' matched events (the last
-// publisher unmatched), so `use_sim_time` has nothing to change. How long ago a
+// No clock is read and nothing runs on a timer: the console's, the mode's, the
+// sides' and the heartbeat's going away are their subscriptions' matched events
+// (the last publisher unmatched), so `use_sim_time` has nothing to change. How long ago a
 // heartbeat arrived is the owner's to time, on its own steady clock
 // (TwinHeartbeat.msg: a receiver concludes arrival, never age).
 
@@ -89,6 +89,10 @@ struct ConsoleCallbacks
   /// The console's state publisher left the graph after it had been heard.
   std::function<void()> on_state_lost;
   std::function<void(const cite_interfaces::msg::TwinMode &)> on_twin_mode;
+  /// TwinMode's publisher left the graph after a mode had been heard. The only
+  /// event that makes the mode unknown again: TwinMode is latched and published
+  /// on change, so nothing else re-delivers it (R-02).
+  std::function<void()> on_twin_mode_lost;
   /// The boundary's TwinSides (latched, on change).
   std::function<void(const cite_interfaces::msg::TwinSides &)> on_twin_sides;
   /// TwinSides' publisher left the graph after it had been heard.
@@ -151,6 +155,7 @@ private:
   rclcpp_action::Client<ValidateThenRun>::SharedPtr validate_then_run_;
   /// Touched only on the spin thread.
   bool heard_{false};
+  bool twin_mode_heard_{false};
   bool sides_heard_{false};
   bool heartbeat_heard_{false};
   std::thread spinner_;
