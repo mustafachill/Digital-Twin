@@ -39,6 +39,14 @@ closing - and it runs the program's ONE sequencer, `program.cycle`, the same
   `cycle.run_program` for one cycle - SIM read, the carriage checked and the
   operator's go-ahead awaited on a physical side; custody; VALIDATED;
   `steps.run`; SIM again on a physical side.
+* **Validate then run** (ADR-0073): Start program's cycles, twice, in one
+  request and one cell. Phase 1 is one cycle on the simulation target alone;
+  if it fails or is stopped the request ends, and no motion is commanded on
+  the real arm (a stop holds every carriage where it stands). Phase 2 runs
+  only once phase 1 completed: both sides MEASURED at the start (away is a
+  refusal; nothing homes between the phases, ADR-0037), then the twin
+  target's cycles with every twin gate unchanged. The twin's mode is held from
+  phase 1 to the end of phase 2 and let go once.
 
 The terminal's Enter becomes `confirm_operator`, and the terminal's Ctrl-C
 becomes `stop`: the predicate a `RosCell` is built with, so the thread waiting
@@ -57,7 +65,7 @@ the node calls them from handlers in a callback group of their own.
 from __future__ import annotations
 
 from collections.abc import Callable, MutableSet, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import threading
 import time
 
@@ -83,6 +91,14 @@ START_PROMPT = (
 #: What the operator is asked before a run on a physical side: the terminal's
 #: `operator.PLACE_PROMPT`, answered in the panel instead.
 PLACE_PROMPT = "Place the part on the table by hand and clear the cell, then confirm in the panel."
+
+#: What the operator is asked before each of a validate-then-run request's twin
+#: cycles (ADR-0073 decision 5): the place prompt, after saying plainly what the
+#: simulation pass is and is not.
+VALIDATED_PLACE_PROMPT = (
+    "The program passed one cycle in simulation. That is not evidence that the real arm's "
+    f"cycle is safe. {PLACE_PROMPT}"
+)
 
 #: What the operator is asked before a home on a physical side:
 #: `home.HOME_PROMPT`, answered in the panel instead.
@@ -143,6 +159,10 @@ class Snapshot:
     last_error: str
     speed_scale: float
     minimum_speed_scale: float
+    #: Whether ValidateThenRun is offered: the twin target is (ADR-0073).
+    validate_then_run_offered: bool = False
+    #: `ConsoleState.PHASE_*` of the validate-then-run request in progress.
+    phase: int = ConsoleState.PHASE_NONE
 
 
 @dataclass(frozen=True)
@@ -152,6 +172,25 @@ class Outcome:
     success: bool
     detail: str
     cycles_completed: int = 0
+    #: The `ConsoleState.PHASE_*` a validate-then-run request ended in.
+    ended_in: int = ConsoleState.PHASE_NONE
+
+
+@dataclass
+class _Progress:
+    """How far a request's cycles on one target got: written by `_run_cycles`.
+
+    Kept outside it so that an exception raised from a cycle - a stop, a part
+    that would not spawn - leaves what was done readable by the request.
+    """
+
+    completed: int = 0
+    stopped: bool = False
+    failure: str | None = None
+    #: A cycle ended without SIM confirmed: the request's hold is then kept,
+    #: never released (S2-04).
+    sim_unconfirmed: bool = False
+    problems: list[str] = field(default_factory=list)
 
 
 class _Observed:
@@ -206,7 +245,7 @@ class _Observed:
 
 
 class _NotAtStart(Exception):
-    """Start program measured the arms away from the program's start: refused (N-03)."""
+    """A run measured an arm away from the program's start: refused (N-03, ADR-0073)."""
 
 
 class ConsoleMachine:
@@ -284,8 +323,8 @@ class ConsoleMachine:
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
-        #: The target of the request in progress, None when none or Start robot.
-        self._target: int | None = None
+        #: The validate-then-run phase in progress (ADR-0073), PHASE_NONE else.
+        self._phase = ConsoleState.PHASE_NONE
         self._step = ""
         self._prompt = ""
         self._error = ""
@@ -355,6 +394,15 @@ class ConsoleMachine:
         """
         with self._lock:
             return self._motion_refusal(scale, cycles, target)
+
+    def validation_refusal(self, scale: float, cycles: int) -> str | None:
+        """Say why a ValidateThenRun goal would be rejected now, or None (ADR-0073).
+
+        Asked when the goal arrives and again when it is started, as
+        `motion_refusal` is.
+        """
+        with self._lock:
+            return self._validation_refusal(scale, cycles)
 
     def record_refusal(self, reason: str) -> None:
         """Publish why a request was refused, as `last_error`, changing no state (P-R01).
@@ -430,7 +478,6 @@ class ConsoleMachine:
             scale,
             owner=owner,
             cancelled=cancelled,
-            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
@@ -512,29 +559,20 @@ class ConsoleMachine:
             scale,
             owner=owner,
             cancelled=cancelled,
-            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
             return Outcome(False, refusal)
         say = self._sayer()
         sides = targets.SIDES[target]
-        physical = self._physical_in(target)
-        simulated = [side for side in sides if side in self._simulated]
 
         def on_step(number_of_cycle: int, number: int, count: int, step: Step) -> None:
             if feedback is not None:
                 feedback(number_of_cycle, number, count, str(step))
 
-        failure: str | None = None
-        stopped = False
-        problems: list[str] = []
-        completed = 0
+        progress = _Progress()
         observed = None
         refusal: str | None = None
-        #: Whether a cycle ended without SIM confirmed: then the hold this
-        #: request took is kept, never released (S2-04).
-        sim_unconfirmed = False
         try:
             cell = self._make_cell(scale, self.interrupted)
             observed = _Observed(cell, self._set_entered)
@@ -543,94 +581,207 @@ class ConsoleMachine:
                 # what this console last saw, and anything may have moved the
                 # arms since. Every side of the target is measured; away is a
                 # refusal, as the command line's measurement is.
-                away = observed.away_from_start(self._start, sides)
-                if away is not None:
-                    raise _NotAtStart(
-                        f"{targets.label(target)} is not at the program's start: {away}. "
-                        "Home first"
-                    )
-                for number in range(1, cycles + 1):
-                    self._raise_if_stopped()
-                    with self._lock:
-                        # The first step moves the arm away from the start.
-                        for side in sides:
-                            self._at_start[side] = False
-                    if simulated:
-                        # Parts and belts on the target's simulated sides only.
-                        say(
-                            f"cycle {number}: putting a work-piece on "
-                            f"{', '.join(simulated)}'s table"
-                        )
-                        self._place_parts(simulated, self._parts, say, self.interrupted)
-                        self._start_belts(say)
-                    self._raise_if_stopped()
-                    ended = cycle.run_program(
-                        observed,
-                        self._steps,
-                        target=target,
-                        physical=physical,
-                        scale=scale,
-                        cycles=1,
-                        say=say,
-                        await_operator=self._awaiter(observed),
-                        prompt=PLACE_PROMPT,
-                        first_cycle=number,
-                        on_step=on_step,
-                        # Held across the cycles of this request, and let go
-                        # once, after the last (S2-01).
-                        release=False,
-                    )
-                    if ended.sim_confirmed is False:
-                        sim_unconfirmed = True
-                        problems.append(
-                            "the twin did not confirm SIM after the cycle, so no one is "
-                            "asked into the cell, and this request keeps its hold on the "
-                            "twin's mode"
-                        )
-                    if ended.status == EXIT_INTERRUPTED:
-                        stopped = True
-                        break
-                    if ended.status != 0:
-                        failure = (
-                            ended.failure
-                            or observed.failure
-                            or (problems.pop(0) if problems else None)
-                            or f"cycle {number} did not complete"
-                        )
-                        break
-                    completed += 1
-                    with self._lock:
-                        # A cycle of the real program ends where it began.
-                        for side in sides:
-                            self._at_start[side] = True
+                self._refuse_unless_at_start(
+                    observed,
+                    target,
+                    f"{targets.label(target)} is not at the program's start: {{away}}. "
+                    "Home first",
+                )
+                self._run_cycles(
+                    observed,
+                    progress,
+                    target=target,
+                    scale=scale,
+                    cycles=cycles,
+                    say=say,
+                    on_step=on_step,
+                    prompt=PLACE_PROMPT,
+                )
             finally:
                 # Once per request, whatever ended it, unless SIM was not
                 # confirmed (S2-04).
-                if not sim_unconfirmed:
+                if not progress.sim_unconfirmed:
                     cell.release_hold()
                 cell.close()
         except _NotAtStart as away:
             refusal = str(away)
         except Interrupted:
-            stopped = True
+            progress.stopped = True
         except StepFailed as step_failure:
-            failure = str(step_failure)
+            progress.failure = str(step_failure)
         except Exception as error:  # noqa: BLE001 - never leave the console busy
-            failure = f"unexpected: {error!r}"
+            progress.failure = f"unexpected: {error!r}"
         if refusal is not None:
-            # Nothing was started: no part placed, no belt run, no mode asked.
-            self._log(f"Start program refused: {refusal}")
-            with self._lock:
-                for side in sides:
-                    self._at_start[side] = False
-            self._end(ConsoleState.READY, error=refusal)
-            return Outcome(False, refusal)
+            return self._refused_at_start("Start program", refusal, sides)
+        problems = list(progress.problems)
         if observed is not None and observed.cancel_failure is not None:
             problems.append(f"the cancel failed: {observed.cancel_failure}")
         outcome = self._finish(
-            "Start program", stopped, failure, problems, f"{completed} cycle(s) completed"
+            "Start program",
+            progress.stopped,
+            progress.failure,
+            problems,
+            f"{progress.completed} cycle(s) completed",
         )
-        return Outcome(outcome.success, outcome.detail, completed)
+        return Outcome(outcome.success, outcome.detail, progress.completed)
+
+    def validate_then_run(
+        self,
+        scale: float,
+        cycles: int,
+        feedback: Callable[[int, int, int, int, str], None] | None = None,
+        *,
+        owner: object = None,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> Outcome:
+        """One cycle on the simulation, then ``cycles`` on the twin if it passed (ADR-0073).
+
+        Phase 1 (`PHASE_VALIDATING`) is Start program's cycle on the
+        simulation target: the plant measured at the start, then
+        `_run_cycles` for one cycle. A failure or a stop ends the request
+        there, and nothing - no measurement, no hold on SIM for a prompt, no
+        mode - is asked of the physical side. Phase 2 (`PHASE_RUNNING`) runs
+        only once that cycle completed in THIS request: both sides measured,
+        a side away refused and never homed (ADR-0037), then the twin
+        target's cycles through the same `_run_cycles`, every twin gate
+        `cycle.run_program`'s own, the go-ahead asked with
+        `VALIDATED_PLACE_PROMPT`. One cell drives both phases, so the twin's
+        mode is held from phase 1's SIM to the end of phase 2 by one holder
+        and let go once (S2-01), unless SIM was not confirmed (S2-04).
+        ``feedback(phase, cycle, step_index, step_count, step)`` reports
+        each step, and each phase's opening with zeros.
+        """
+        refusal = self._begin(
+            ConsoleState.RUNNING,
+            lambda: self._validation_refusal(scale, cycles),
+            scale,
+            owner=owner,
+            cancelled=cancelled,
+            phase=ConsoleState.PHASE_VALIDATING,
+        )
+        if refusal is not None:
+            self.record_refusal(refusal)
+            return Outcome(False, refusal)
+        say = self._sayer()
+        phase = ConsoleState.PHASE_VALIDATING
+
+        def report(cycle_number: int, number: int, count: int, text: str) -> None:
+            if feedback is not None:
+                feedback(phase, cycle_number, number, count, text)
+
+        def on_step(cycle_number: int, number: int, count: int, step: Step) -> None:
+            report(cycle_number, number, count, str(step))
+
+        def opening(text: str) -> None:
+            self._set_phase(phase)
+            say(text)
+            report(0, 0, 0, text)
+
+        validation, run = _Progress(), _Progress()
+        observed = None
+        refusal = None
+        try:
+            cell = self._make_cell(scale, self.interrupted)
+            observed = _Observed(cell, self._set_entered)
+            try:
+                opening(
+                    "validating: one cycle on the simulation alone; no motion is commanded "
+                    "on the real arm"
+                )
+                # The plant alone: phase 1 reads nothing of the physical side.
+                self._refuse_unless_at_start(
+                    observed,
+                    targets.SIM,
+                    "the simulation's arm is not at the program's start: {away}. Home first",
+                )
+                self._run_cycles(
+                    observed,
+                    validation,
+                    target=targets.SIM,
+                    scale=scale,
+                    cycles=1,
+                    say=say,
+                    on_step=on_step,
+                    prompt=PLACE_PROMPT,
+                )
+                if validation.completed == 1:
+                    # A stop that came after phase 1's last step ends the
+                    # request here, still in phase 1: phase 2 never began.
+                    self._raise_if_stopped()
+                    phase = ConsoleState.PHASE_RUNNING
+                    opening(
+                        "passed in simulation (not evidence that the real arm's cycle is "
+                        "safe); measuring both arms at the program's start"
+                    )
+                    self._refuse_unless_at_start(
+                        observed,
+                        targets.TWIN,
+                        "the simulation passed, but {away}, so the twin is not at the "
+                        "program's start. Nothing homes between the phases (ADR-0037): Home "
+                        "with the twin, then validate again - the simulation pass does not "
+                        "carry over (ADR-0073)",
+                    )
+                    self._run_cycles(
+                        observed,
+                        run,
+                        target=targets.TWIN,
+                        scale=scale,
+                        cycles=cycles,
+                        say=say,
+                        on_step=on_step,
+                        prompt=VALIDATED_PLACE_PROMPT,
+                    )
+            finally:
+                # Once per request, across both phases, unless SIM was not
+                # confirmed (S2-04).
+                if not (validation.sim_unconfirmed or run.sim_unconfirmed):
+                    cell.release_hold()
+                cell.close()
+        except _NotAtStart as away:
+            refusal = str(away)
+        except Interrupted:
+            (run if phase == ConsoleState.PHASE_RUNNING else validation).stopped = True
+        except StepFailed as step_failure:
+            (run if phase == ConsoleState.PHASE_RUNNING else validation).failure = str(
+                step_failure
+            )
+        except Exception as error:  # noqa: BLE001 - never leave the console busy
+            (run if phase == ConsoleState.PHASE_RUNNING else validation).failure = (
+                f"unexpected: {error!r}"
+            )
+        what = (
+            "Validate then run, on the twin"
+            if phase == ConsoleState.PHASE_RUNNING
+            else "Validate then run, in simulation"
+        )
+        if refusal is not None:
+            # The sides measured: the plant alone in phase 1, both in phase 2.
+            measured = targets.TWIN if phase == ConsoleState.PHASE_RUNNING else targets.SIM
+            refused = self._refused_at_start(what, refusal, targets.SIDES[measured])
+            # Refused at phase 1's measurement, before any cycle: neither phase
+            # began (ValidateThenRun.action, `ended_in`). Phase 2's measurement
+            # follows phase 1's cycle, so that refusal ends in PHASE_RUNNING.
+            ended_in = phase if phase == ConsoleState.PHASE_RUNNING else ConsoleState.PHASE_NONE
+            return Outcome(False, refused.detail, 0, ended_in)
+        current = run if phase == ConsoleState.PHASE_RUNNING else validation
+        problems = [*validation.problems, *run.problems]
+        if observed is not None and observed.cancel_failure is not None:
+            problems.append(f"the cancel failed: {observed.cancel_failure}")
+        outcome = self._finish(
+            what,
+            current.stopped,
+            current.failure,
+            problems,
+            f"passed in simulation (1 cycle), then {run.completed} cycle(s) completed on the "
+            "twin",
+        )
+        detail = outcome.detail
+        if phase == ConsoleState.PHASE_VALIDATING and not outcome.success:
+            detail = (
+                f"{detail}; no motion was commanded on the real arm (a stop holds every "
+                "carriage where it stands)"
+            )
+        return Outcome(outcome.success, detail, run.completed, phase)
 
     def confirm_operator(self) -> Outcome:
         """Answer the go-ahead the console is asking for, while the twin is heard in SIM."""
@@ -812,6 +963,121 @@ class ConsoleMachine:
                 )
         return None
 
+    def _validation_refusal(self, scale: float, cycles: int) -> str | None:
+        """`_motion_refusal` for a twin Start program, offered only with the twin (ADR-0073).
+
+        Judged as the twin target's whole request: its floor for the scale,
+        which both phases run at, and both sides known to be at the start.
+        """
+        if targets.TWIN not in self._available():
+            return (
+                "Validate then run needs the twin: it runs on the simulation, then on the "
+                "simulation and the real arm together, and the twin is not offered now (both "
+                "sides must run and the real arm be ready; ADR-0073)"
+            )
+        return self._motion_refusal(scale, cycles, targets.TWIN)
+
+    def _refuse_unless_at_start(self, observed, target: int, template: str) -> None:
+        """Measure every side of ``target`` at the start; raise `_NotAtStart` if one is away.
+
+        ``template`` says the refusal, with ``{away}`` for what was measured.
+        Nothing is moved: away is the operator's to resolve (ADR-0037).
+        """
+        away = observed.away_from_start(self._start, targets.SIDES[target])
+        if away is not None:
+            raise _NotAtStart(template.format(away=away))
+
+    def _refused_at_start(self, what: str, refusal: str, sides: Sequence[str]) -> Outcome:
+        """End a request whose measured start refused it: READY, the sides' start unknown."""
+        self._log(f"{what} refused: {refusal}")
+        with self._lock:
+            for side in sides:
+                self._at_start[side] = False
+        self._end(ConsoleState.READY, error=refusal)
+        return Outcome(False, refusal)
+
+    def _run_cycles(
+        self,
+        observed: _Observed,
+        progress: _Progress,
+        *,
+        target: int,
+        scale: float,
+        cycles: int,
+        say: Callable[[str], None],
+        on_step: Callable[[int, int, int, Step], None],
+        prompt: str,
+    ) -> None:
+        """Run ``cycles`` cycles on ``target``, one part each, by `cycle.run_program`.
+
+        The one loop Start program and Validate then run share: per cycle a
+        work-piece on the target's simulated sides and their belts running,
+        then one cycle of the program's sequencer with its every gate, the
+        hold kept for the caller to let go (S2-01). Writes ``progress``; a
+        stop or a failure ends the loop there. Raises what a part placement
+        or a stop raises, as `Interrupted` or `StepFailed`.
+        """
+        sides = targets.SIDES[target]
+        physical = self._physical_in(target)
+        simulated = [side for side in sides if side in self._simulated]
+        for number in range(1, cycles + 1):
+            self._raise_if_stopped()
+            with self._lock:
+                # The first step moves the arm away from the start.
+                for side in sides:
+                    self._at_start[side] = False
+            if simulated:
+                # Parts and belts on the target's simulated sides only.
+                say(f"cycle {number}: putting a work-piece on {', '.join(simulated)}'s table")
+                self._place_parts(simulated, self._parts, say, self.interrupted)
+                self._start_belts(say)
+            self._raise_if_stopped()
+            ended = cycle.run_program(
+                observed,
+                self._steps,
+                target=target,
+                physical=physical,
+                scale=scale,
+                cycles=1,
+                say=say,
+                await_operator=self._awaiter(observed),
+                prompt=prompt,
+                first_cycle=number,
+                on_step=on_step,
+                # Held across the cycles of this request, and let go once,
+                # after the last (S2-01).
+                release=False,
+            )
+            if ended.sim_confirmed is False:
+                progress.sim_unconfirmed = True
+                progress.problems.append(
+                    "the twin did not confirm SIM after the cycle, so no one is asked into "
+                    "the cell, and this request keeps its hold on the twin's mode"
+                )
+            if ended.status == EXIT_INTERRUPTED:
+                progress.stopped = True
+                return
+            if ended.status != 0:
+                progress.failure = (
+                    ended.failure
+                    or observed.failure
+                    or (progress.problems.pop(0) if progress.problems else None)
+                    or f"cycle {number} did not complete"
+                )
+                return
+            progress.completed += 1
+            with self._lock:
+                # A cycle of the real program ends where it began.
+                for side in sides:
+                    self._at_start[side] = True
+
+    def _set_phase(self, phase: int) -> None:
+        """Publish the validate-then-run phase in progress (ADR-0073)."""
+        with self._lock:
+            self._phase = phase
+            snapshot = self._snapshot()
+        self._on_change(snapshot)
+
     def _physical_in(self, target: int) -> list[str]:
         """Return the running physical sides ``target`` commands: what operator gates key on."""
         return [side for side in self._physical if side in targets.SIDES[target]]
@@ -830,14 +1096,14 @@ class ConsoleMachine:
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
         foreign_mode_refuses: bool = True,
-        target: int | None = None,
+        phase: int = ConsoleState.PHASE_NONE,
     ) -> str | None:
         with self._lock:
             reason = self._refusal(foreign_mode_refuses) or refusal()
             if reason is not None:
                 return reason
             self._busy = True
-            self._target = target
+            self._phase = phase
             self._state = state
             self._owner = owner
             self._cancelled = cancelled
@@ -869,7 +1135,7 @@ class ConsoleMachine:
                 self._at_start[side] = True
             self._state = state
             self._busy = False
-            self._target = None
+            self._phase = ConsoleState.PHASE_NONE
             self._owner = None
             self._cancelled = None
             self._prompt = ""
@@ -1075,4 +1341,7 @@ class ConsoleMachine:
             last_error=self._error,
             speed_scale=self._speed,
             minimum_speed_scale=self._minimum_speed_scale,
+            # Derived here, as the targets are, so no panel restates the rule.
+            validate_then_run_offered=targets.TWIN in available,
+            phase=self._phase,
         )

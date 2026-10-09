@@ -18,13 +18,17 @@
 #include <string>
 #include <utility>
 
+#include "cite_console_gui/console_view.hpp"
+#include "cite_console_gui/enablement.hpp"
 #include "cite_interfaces/qos.hpp"
 
 namespace cite_console_gui
 {
 
 using cite_interfaces::msg::ConsoleState;
+using cite_interfaces::msg::TwinHeartbeat;
 using cite_interfaces::msg::TwinMode;
+using cite_interfaces::msg::TwinSides;
 using cite_interfaces::srv::ConfirmOperator;
 using cite_interfaces::srv::StartRobot;
 using cite_interfaces::srv::StopCell;
@@ -35,6 +39,13 @@ namespace
 std::string answered(const std::string & request, bool success, const std::string & detail)
 {
   return request + (success ? ": done. " : ": refused or failed. ") + detail;
+}
+
+/// A ValidateThenRun phase as the operator reads it, for a progress line.
+std::string phase_label(std::uint8_t phase)
+{
+  const std::string name = validation_phase_name(validation_phase_from(phase));
+  return name.empty() ? "Validate then run" : name;
 }
 
 }  // namespace
@@ -78,19 +89,76 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
       }
     },
     state_options);
+  // The mode is forgotten when ITS publisher leaves, and for no other reason:
+  // latched and published on change, it is not heard again while the boundary
+  // stays up (R-02).
+  rclcpp::SubscriptionOptions mode_options;
+  mode_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      if (twin_mode_heard_ && info.current_count == 0) {
+        twin_mode_heard_ = false;
+        if (callbacks_.on_twin_mode_lost) {
+          callbacks_.on_twin_mode_lost();
+        }
+      }
+    };
   twin_mode_sub_ = node_->create_subscription<TwinMode>(
     TwinMode::TOPIC, cite::qos::latched(),
     [this](const TwinMode & mode) {
+      twin_mode_heard_ = true;
       if (callbacks_.on_twin_mode) {
         callbacks_.on_twin_mode(mode);
       }
-    });
+    },
+    mode_options);
+
+  // What the panel shows of each side's connection (health.hpp): a display,
+  // never a gate. TwinSides is LATCHED, as the boundary publishes it; the
+  // heartbeat is STATE, the profile the boundary publishes it with and a
+  // physical side's deadman subscribes with (cite_interfaces/qos.hpp).
+  rclcpp::SubscriptionOptions sides_options;
+  sides_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      if (sides_heard_ && info.current_count == 0) {
+        sides_heard_ = false;
+        if (callbacks_.on_twin_sides_lost) {
+          callbacks_.on_twin_sides_lost();
+        }
+      }
+    };
+  twin_sides_sub_ = node_->create_subscription<TwinSides>(
+    TwinSides::TOPIC, cite::qos::latched(),
+    [this](const TwinSides & sides) {
+      sides_heard_ = true;
+      if (callbacks_.on_twin_sides) {
+        callbacks_.on_twin_sides(sides);
+      }
+    },
+    sides_options);
+  rclcpp::SubscriptionOptions heartbeat_options;
+  heartbeat_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      if (heartbeat_heard_ && info.current_count == 0) {
+        heartbeat_heard_ = false;
+        if (callbacks_.on_heartbeat_lost) {
+          callbacks_.on_heartbeat_lost();
+        }
+      }
+    };
+  heartbeat_sub_ = node_->create_subscription<TwinHeartbeat>(
+    TwinHeartbeat::TOPIC, cite::qos::state(),
+    [this](const TwinHeartbeat &) {
+      heartbeat_heard_ = true;
+      if (callbacks_.on_heartbeat) {
+        callbacks_.on_heartbeat();
+      }
+    },
+    heartbeat_options);
 
   start_robot_ = node_->create_client<StartRobot>(names.start_robot);
   confirm_operator_ = node_->create_client<ConfirmOperator>(names.confirm_operator);
   stop_ = node_->create_client<StopCell>(names.stop);
   home_ = rclcpp_action::create_client<Home>(node_, names.home);
   run_program_ = rclcpp_action::create_client<Run>(node_, names.run_program);
+  validate_then_run_ =
+    rclcpp_action::create_client<ValidateThenRun>(node_, names.validate_then_run);
 
   rclcpp::ExecutorOptions executor_options;
   executor_options.context = context_;
@@ -249,6 +317,44 @@ void ConsoleClient::run_program(
         " Cycles completed: " + std::to_string(result.result->cycles_completed) + ".");
     };
   run_program_->async_send_goal(goal, options);
+}
+
+void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
+{
+  if (!validate_then_run_->action_server_is_ready()) {
+    outcome("Validate then run: the console does not serve it right now.");
+    return;
+  }
+  ValidateThenRun::Goal goal;
+  goal.speed_scale = speed_scale;
+  goal.cycles = cycles;
+
+  rclcpp_action::Client<ValidateThenRun>::SendGoalOptions options;
+  options.goal_response_callback =
+    [this](const rclcpp_action::ClientGoalHandle<ValidateThenRun>::SharedPtr & handle) {
+      progress(
+        handle ? "Validate then run: accepted." :
+        "Validate then run: rejected by the console (see last error).");
+    };
+  options.feedback_callback =
+    [this](rclcpp_action::ClientGoalHandle<ValidateThenRun>::SharedPtr,
+    const std::shared_ptr<const ValidateThenRun::Feedback> feedback) {
+      progress(
+        phase_label(feedback->phase) + " - cycle " + std::to_string(feedback->cycle) +
+        ", step " + std::to_string(feedback->step_index) + " of " +
+        std::to_string(feedback->step_count) + ": " + feedback->step);
+    };
+  options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<ValidateThenRun>::WrappedResult & result) {
+      if (!result.result) {
+        outcome("Validate then run: ended with no result.");
+        return;
+      }
+      // The console's own words: "passed in simulation", never "safe",
+      // "verified" or "validated for the real cell" (ADR-0073 decision 5).
+      outcome(validate_then_run_outcome(*result.result));
+    };
+  validate_then_run_->async_send_goal(goal, options);
 }
 
 }  // namespace cite_console_gui

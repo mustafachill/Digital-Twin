@@ -49,6 +49,8 @@ ButtonStates enabled_for(const ConsoleView & view, Target selected)
   states.stop = view.busy ||
     (view.phase == Phase::FAULT && !view.twin_in_sim && view.has_physical_side);
   states.confirm = view.phase == Phase::AWAITING_OPERATOR;
+  states.validate_then_run = idle && view.robot_started && ready &&
+    view.validate_then_run_offered && startable(view, Target::TWIN);
   return states;
 }
 
@@ -76,9 +78,28 @@ bool speed_choice_enabled(double scale, const ConsoleView & view, Target target)
   if (!view.heard || scale <= 0.0 || scale > 1.0) {
     return false;
   }
-  const bool floor_applies =
-    target == Target::NONE || view.floored_targets.count(target) == 1;
-  return !floor_applies || scale >= view.minimum_speed_scale;
+  return !floor_applies(view, target) || scale >= view.minimum_speed_scale;
+}
+
+bool floor_applies(const ConsoleView & view, Target target)
+{
+  return view.heard && view.minimum_speed_scale > 0.0 &&
+         (target == Target::NONE || view.floored_targets.count(target) == 1);
+}
+
+const char * validation_phase_name(ValidationPhase phase)
+{
+  switch (phase) {
+    case ValidationPhase::VALIDATING:
+      return "Validating in simulation";
+    case ValidationPhase::RUNNING:
+      return "Running twin";
+    case ValidationPhase::NONE:
+      return "";
+    case ValidationPhase::UNKNOWN:
+      break;
+  }
+  return "Unrecognised phase";
 }
 
 const char * target_name(Target target)

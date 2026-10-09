@@ -1,0 +1,57 @@
+# Validate then run: the real robot's program on the simulation first and, only
+# if it passed there in this same request, on the twin (ADR-0073).
+#
+# Phase 1, ConsoleState.PHASE_VALIDATING: the plant measured at the program's
+# start, then ONE cycle of `cite_bringup.program.cycle.run_program` on the
+# simulation target (the twin in SIM, the plant alone), at `speed_scale`. If it
+# fails or is stopped the request ends there, and no motion is commanded on the
+# real arm (a stop holds every carriage where it stands).
+#
+# Phase 2, ConsoleState.PHASE_RUNNING, only once phase 1 completed in this
+# request: both sides MEASURED at the program's start - a side away is a refusal
+# and nothing homes between the phases (ADR-0037): the operator homes and
+# presses again - then `cycles` cycles on the twin target (VALIDATED) with every
+# twin gate unchanged: the twin held in SIM before the operator is asked, the
+# physical carriage reported stationary, the operator's go-ahead naming the
+# target and the physical side, the speed floor, and SIM again after each cycle.
+# The go-ahead's prompt says that the simulation pass is not evidence that the
+# physical cycle is safe. A pass in phase 1 is "passed in simulation" - never
+# "safe", "verified" or "validated for the real cell" - and it never carries
+# over to another request.
+#
+# The request holds the twin's mode (HoldMode.srv) from phase 1 to the end of
+# phase 2, and lets it go once. Rejected unless the twin target is offered
+# (ConsoleState.validate_then_run_offered: both sides run and the real arm is
+# ready; a plant-only deployment is refused), unless both sides are known to be
+# at the program's start (TARGET_TWIN in ConsoleState.startable_targets), and
+# unless Start robot has succeeded and the console is READY. Cancelling the goal
+# is the same software stop as StopCell, in either phase.
+#
+# Served under the plan's `console.validate_then_run` (ConsoleState.msg).
+
+float64 speed_scale     # (0, 1] of the program's own speed, for BOTH phases, sent
+                        # explicitly by the operator's panel. Never defaulted: 0,
+                        # any value outside (0, 1], or one below
+                        # ConsoleState.minimum_speed_scale (the twin target's
+                        # floor) is rejected (ADR-0071 decision 2)
+uint32 cycles           # how many cycles phase 2 runs on the twin, at least 1; 0
+                        # is REJECTED, never read as "until stopped". Phase 1 is
+                        # always one cycle
+---
+bool success            # both phases completed every cycle
+string detail           # what was done, or which phase and step failed and why
+uint8 ended_in          # ConsoleState.PHASE_VALIDATING or PHASE_RUNNING: the phase
+                        # the request ended in; PHASE_NONE if it was refused
+                        # before either began - at the goal's checks, or because
+                        # phase 1 measured the plant away from the program's
+                        # start before its cycle. Phase 2's measurement follows
+                        # phase 1's cycle: a side away there ends in PHASE_RUNNING
+uint32 cycles_completed # phase 2's cycles that ran every step to the end; the
+                        # phase 1 cycle is not counted here
+---
+uint8 phase             # ConsoleState.PHASE_VALIDATING or PHASE_RUNNING
+uint32 cycle            # 1-based number of the cycle in progress within the phase;
+                        # 0 for a phase's opening report, before any step
+uint32 step_index       # 1-based number of the step in progress within it; 0 likewise
+uint32 step_count       # how many steps one cycle has; 0 likewise
+string step             # the step in progress, as the operator reads it

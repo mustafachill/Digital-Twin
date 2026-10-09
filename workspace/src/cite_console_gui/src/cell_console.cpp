@@ -15,8 +15,10 @@
 #include "cell_console.hpp"
 
 #include <QMetaObject>
+#include <QVariantMap>
 #include <QtGlobal>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -29,12 +31,13 @@
 
 #include "cite_console_gui/console_config.hpp"
 #include "cite_console_gui/console_view.hpp"
+#include "cite_interfaces/msg/twin_mode.hpp"
 
 namespace cite_console_gui
 {
 
 CellConsole::CellConsole()
-: state_name_("No console"), twin_mode_("unknown")
+: state_name_("No console")
 {
 }
 
@@ -42,7 +45,8 @@ CellConsole::~CellConsole()
 {
   // Joins the spin thread first, so nothing is queued onto this object once it
   // starts going away; anything already queued is dropped with it by Qt. The
-  // camera client's worker likewise, after at most one request's bounded wait.
+  // camera client's worker likewise, after at most the one call in flight.
+  health_timer_.stop();
   client_.reset();
   camera_.reset();
 }
@@ -53,38 +57,50 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
     this->title = "Cell console";
   }
 
-  // "Reset view" first, and on its own: it moves no robot, so a configuration
-  // whose console names are wrong still lets the operator find the cell again.
+  // The view buttons first, and on their own: they move no robot, so a
+  // configuration whose console names are wrong still lets the operator find
+  // the cell again. Reset view needs only its home pose; the presets, Follow
+  // robot and the connection display need the rest (`read_view_config`).
   const std::string view_problem = read_home_camera_pose(plugin_element, home_camera_pose_);
   if (view_problem.empty()) {
     try {
       // Called on the client's worker thread, and queued onto this object's.
-      // Only a refusal or an absent service is said, on the outcome line; a
-      // move that succeeds takes back a failure of its own still shown there,
-      // and never the console's last answer.
+      // Its answer is the view's, said on the view's own line (`viewError`),
+      // never on the console's outcome line (R-02).
       camera_ = std::make_unique<CameraClient>(
         [this](bool ok, const std::string & detail) {
-          const QString line = QString::fromStdString(detail);
+          const QString line = ok ? QString() : QString::fromStdString(detail);
           QMetaObject::invokeMethod(
-            this, [this, ok, line]() {
-              if (!ok) {
-                set_outcome(line);
-                view_outcome_ = line;
-              } else if (!view_outcome_.isEmpty() && outcome_ == view_outcome_) {
-                set_outcome(QString());
+            this, [this, line]() {
+              if (view_request_error_ != line) {
+                view_request_error_ = line;
+                emit viewChanged();
               }
             }, Qt::QueuedConnection);
         });
     } catch (const std::exception & error) {
-      view_error_ = QString("Reset view could not join gz transport: ") + error.what();
+      view_config_error_ = QString("The view buttons could not join gz transport: ") +
+        error.what();
     }
   } else {
-    view_error_ = QString::fromStdString(view_problem);
+    view_config_error_ = QString::fromStdString(view_problem);
   }
-  if (!view_error_.isEmpty()) {
-    qWarning("CellConsole: %s", qUtf8Printable(view_error_));
+  const std::string config_problem = read_view_config(plugin_element, view_config_);
+  if (!config_problem.empty() && view_config_error_.isEmpty()) {
+    view_config_error_ = QString::fromStdString(config_problem);
+  }
+  if (!view_config_error_.isEmpty()) {
+    qWarning("CellConsole: %s", qUtf8Printable(view_config_error_));
+  }
+  if (healthShown()) {
+    // A repaint, at twice the rate the threshold needs to be seen crossed.
+    health_timer_.setInterval(
+      std::max(50, static_cast<int>(view_config_.heartbeat_stale_after_s * 500.0)));
+    connect(&health_timer_, &QTimer::timeout, this, [this]() {refresh_health();});
+    health_timer_.start();
   }
   emit viewChanged();
+  emit healthChanged();
 
   // The keys, and the refusal of a child the panel does not read, are
   // `read_console_names`' (console_config.hpp), tested without a window.
@@ -114,10 +130,60 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
         (mode.transition_in_progress ?
         QString::fromStdString(" (to " + twin_mode_name(mode.requested_mode) + ")") :
         QString());
+      // In SIM only when it is there and not on its way out of it.
+      const bool is_sim = mode.mode == cite_interfaces::msg::TwinMode::MODE_SIM &&
+        !mode.transition_in_progress;
       QMetaObject::invokeMethod(
-        this, [this, name]() {
-          twin_mode_ = name;
+        this, [this, name, is_sim]() {
+          boundary_.twin_mode_heard(name.toStdString(), is_sim);
           emit twinModeChanged();
+          emit healthChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_twin_mode_lost = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          boundary_.twin_mode_lost();
+          emit twinModeChanged();
+          emit healthChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_twin_sides = [this](const cite_interfaces::msg::TwinSides & message) {
+      SidesView sides;
+      sides.heard = true;
+      sides.running.insert(message.running.begin(), message.running.end());
+      sides.physical.insert(message.physical.begin(), message.physical.end());
+      sides.commandable.insert(message.commandable.begin(), message.commandable.end());
+      sides.stationary.insert(message.stationary.begin(), message.stationary.end());
+      sides.detail = message.detail;
+      QMetaObject::invokeMethod(
+        this, [this, sides]() {
+          boundary_.sides_heard(sides);
+          emit healthChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_twin_sides_lost = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          boundary_.sides_lost();
+          emit healthChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_heartbeat = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          heartbeat_present_ = true;
+          heartbeat_heard_ = true;
+          last_heartbeat_.restart();
+          refresh_health();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_heartbeat_lost = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          heartbeat_present_ = false;
+          heartbeat_heard_ = false;
+          refresh_health();
         }, Qt::QueuedConnection);
     };
   callbacks.on_progress = [this](const std::string & text) {
@@ -152,6 +218,7 @@ void CellConsole::apply_state(
   }
   speed_scale_ = state.speed_scale;
   emit viewChanged();
+  emit healthChanged();
 }
 
 void CellConsole::forget_state()
@@ -164,11 +231,80 @@ void CellConsole::forget_state()
   physical_sides_.clear();
   speed_scale_ = 0.0;
   emit viewChanged();
-  // Nothing said while the console was there stands for one that is gone.
-  twin_mode_ = "unknown";
-  emit twinModeChanged();
+  // The twin's mode is the boundary's, not the console's: it stays until
+  // TwinMode's own publisher leaves (R-02).
+  boundary_.console_lost();
+  emit healthChanged();
   set_progress(QString());
   set_outcome(QString());
+}
+
+HeartbeatView CellConsole::heartbeat_now() const
+{
+  HeartbeatView heartbeat;
+  heartbeat.publisher_present = heartbeat_present_;
+  heartbeat.heard = heartbeat_heard_ && last_heartbeat_.isValid();
+  heartbeat.age_s = heartbeat.heard ? static_cast<double>(last_heartbeat_.elapsed()) / 1000.0 : 0.0;
+  return heartbeat;
+}
+
+void CellConsole::refresh_health()
+{
+  const Link now = boundary_link(heartbeat_now(), view_config_.heartbeat_stale_after_s);
+  if (now != shown_boundary_) {
+    shown_boundary_ = now;
+    emit healthChanged();
+  }
+}
+
+QString CellConsole::boundaryLink() const
+{
+  return QString::fromUtf8(link_name(shown_boundary_));
+}
+
+QVariantList CellConsole::sideHealth() const
+{
+  QVariantList rows;
+  for (const std::string & side : view_config_.twin_sides) {
+    const SideHealth health = boundary_.side(side, shown_boundary_);
+    QVariantMap row;
+    row["name"] = QString::fromStdString(side);
+    row["link"] = QString::fromUtf8(link_name(health.link));
+    row["abnormal"] = link_abnormal(health.link);
+    row["physical"] = health.physical;
+    row["stationary"] = health.stationary;
+    row["why"] = QString::fromStdString(health.why);
+    rows << row;
+  }
+  return rows;
+}
+
+bool CellConsole::physicalCommanded() const
+{
+  const bool has_physical = !boundary_.sides().physical.empty() || !physical_sides_.isEmpty();
+  return physical_side_commanded(
+    has_physical, boundary_.twin_mode_heard(), boundary_.twin_mode_is_sim());
+}
+
+QString CellConsole::validationPhase() const
+{
+  return QString::fromUtf8(validation_phase_name(selection_.view().validation_phase));
+}
+
+QString CellConsole::viewError() const
+{
+  return view_config_error_.isEmpty() ? view_request_error_ : view_config_error_;
+}
+
+QStringList CellConsole::viewPresets() const
+{
+  QStringList labels;
+  if (camera_) {
+    for (const auto & preset : view_config_.presets) {
+      labels << QString::fromStdString(preset.first);
+    }
+  }
+  return labels;
 }
 
 void CellConsole::set_progress(const QString & text)
@@ -197,6 +333,15 @@ QVariantList CellConsole::speedChoicesEnabled() const
   QVariantList enabled;
   for (const double scale : SPEED_CHOICES) {
     enabled << speed_choice_enabled(scale, selection_.view(), selection_.selected());
+  }
+  return enabled;
+}
+
+QVariantList CellConsole::twinSpeedChoicesEnabled() const
+{
+  QVariantList enabled;
+  for (const double scale : SPEED_CHOICES) {
+    enabled << speed_choice_enabled(scale, selection_.view(), Target::TWIN);
   }
   return enabled;
 }
@@ -261,6 +406,13 @@ void CellConsole::startProgram(double speed_scale, int cycles)
   }
 }
 
+void CellConsole::validateThenRun(double speed_scale, int cycles)
+{
+  if (client_ && selection_.may_validate_then_run(speed_scale, cycles)) {
+    client_->validate_then_run(speed_scale, static_cast<std::uint32_t>(cycles));
+  }
+}
+
 void CellConsole::stop()
 {
   // Sent whenever there is a client, enabled or not: Stop is also the cancel
@@ -282,6 +434,20 @@ void CellConsole::resetView()
   // Independent of the console: no state, no target, no "No console" gates it.
   if (camera_) {
     camera_->move_to(home_camera_pose_);
+  }
+}
+
+void CellConsole::selectPreset(int index)
+{
+  if (camera_ && index >= 0 && static_cast<std::size_t>(index) < view_config_.presets.size()) {
+    camera_->move_to(view_config_.presets[static_cast<std::size_t>(index)].second);
+  }
+}
+
+void CellConsole::followRobot()
+{
+  if (followEnabled()) {
+    camera_->request(CameraCommand::following(view_config_.follow_target));
   }
 }
 

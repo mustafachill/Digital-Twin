@@ -1,13 +1,13 @@
 # Interfaces
 
-- **Status:** `BUILT` — `cite_interfaces` exists and holds **27 definitions** (10 `.msg`,
-  10 `.srv`, 7 `.action`), every one frozen against a stored baseline at
+- **Status:** `BUILT` — `cite_interfaces` exists and holds **28 definitions** (10 `.msg`,
+  10 `.srv`, 8 `.action`), every one frozen against a stored baseline at
   `workspace/src/cite_interfaces/test/interfaces.baseline`, so a breaking change fails the
   build rather than surfacing at runtime. The conventions below are what that package does,
   not what it intends to do.
   The five skill actions have a server, `cite_skills`' skill server, one per arm; the
-  operator console's two, `HomeRobot` and `RunProgram`, are served with its services and
-  `ConsoleState` by `cite_bringup`'s `cell_console` (ADR-0071). The real robot's
+  operator console's three, `HomeRobot`, `RunProgram` and `ValidateThenRun`, are served with
+  its services and `ConsoleState` by `cite_bringup`'s `cell_console` (ADR-0071, ADR-0073). The real robot's
   program calls `MoveTo` and `Grasp`; `Pick`, `Place` and `Transfer` have no in-tree caller
   outside tests and the twin boundary's forwarding — an
   [L3](../architecture/L3-capabilities.md) gap, not an interface gap.

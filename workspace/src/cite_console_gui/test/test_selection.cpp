@@ -193,3 +193,45 @@ TEST(PanelSelection, HomeAndStartProgramAreNotSentAtAScaleTheTargetRefuses)
   EXPECT_FALSE(selection.may_home(1.0));
   EXPECT_FALSE(selection.may_run(1.0, 1));
 }
+
+TEST(PanelSelection, ValidateThenRunIsSentOnlyAtAScaleTheTwinAccepts)
+{
+  // ADR-0073: no target is sent, and the twin's floor holds for both phases
+  // whatever target the operator has selected for Home and Start program.
+  ConsoleState state = ready();
+  state.validate_then_run_offered = true;
+  PanelSelection selection;
+  selection.apply(view_from(state, FIRST));
+  EXPECT_TRUE(selection.buttons().validate_then_run);
+  EXPECT_TRUE(selection.may_validate_then_run(0.5, 1));
+  EXPECT_TRUE(selection.may_validate_then_run(0.25, 3));
+  EXPECT_FALSE(selection.may_validate_then_run(0.1, 1)) << "below the twin's floor";
+  EXPECT_FALSE(selection.may_validate_then_run(0.5, 0)) << "no cycle";
+  EXPECT_FALSE(selection.may_validate_then_run(0.0, 1));
+  // SIM selected: 0.1 is allowed for Home, still not for ValidateThenRun.
+  ASSERT_TRUE(selection.select(Target::SIM));
+  EXPECT_TRUE(selection.may_home(0.1));
+  EXPECT_FALSE(selection.may_validate_then_run(0.1, 1));
+  EXPECT_TRUE(selection.may_validate_then_run(1.0, 1));
+}
+
+TEST(PanelSelection, ValidateThenRunFollowsTheConsolesOfferAndTheTwinsStart)
+{
+  ConsoleState state = ready();
+  state.validate_then_run_offered = false;
+  PanelSelection selection;
+  selection.apply(view_from(state, FIRST));
+  EXPECT_FALSE(selection.buttons().validate_then_run) << "not offered";
+  EXPECT_FALSE(selection.may_validate_then_run(1.0, 1));
+
+  state.validate_then_run_offered = true;
+  state.startable_targets = {ConsoleState::TARGET_SIM};
+  selection.apply(view_from(state, FIRST));
+  EXPECT_FALSE(selection.buttons().validate_then_run) << "the twin is not startable";
+
+  state.startable_targets = BOTH_SIDES;
+  selection.apply(view_from(state, FIRST));
+  EXPECT_TRUE(selection.buttons().validate_then_run);
+  selection.forget();
+  EXPECT_FALSE(selection.buttons().validate_then_run) << "the console left";
+}

@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "cite_console_gui/enablement.hpp"
+#include "cite_interfaces/action/validate_then_run.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
 
 namespace cite_console_gui
@@ -44,10 +45,25 @@ Target target_from(std::uint8_t value);
 /// console rejects) for `NONE`.
 std::uint8_t target_value(Target target);
 
+/// ConsoleState.PHASE_* (ConsoleState.phase, and ValidateThenRun's feedback
+/// `phase` and result `ended_in`) as a validation phase; `UNKNOWN` for a value
+/// the contract this panel was built against does not define.
+ValidationPhase validation_phase_from(std::uint8_t value);
+
 /// What the buttons depend on, from a ConsoleState that was just heard from
 /// the publisher identified by `publisher` (its rmw GID; empty if unknown).
 ConsoleView view_from(
   const cite_interfaces::msg::ConsoleState & state, std::vector<std::uint8_t> publisher = {});
+
+/// The outcome line for a ValidateThenRun result: the console's success and
+/// detail, the phase it ended in (`ended_in`), and phase 2's completed cycles.
+/// `PHASE_NONE` on a failed result is a request refused before either phase
+/// began (ValidateThenRun.action); on a successful one, which the contract does
+/// not produce, it is said as no phase rather than as a refusal. A value the
+/// contract does not define is said as unrecognised. In the console's words:
+/// never "safe", "verified" or "validated for the real cell" (ADR-0073).
+std::string validate_then_run_outcome(
+  const cite_interfaces::action::ValidateThenRun::Result & result);
 
 /// A TwinMode.MODE_* value (or ConsoleState.TWIN_MODE_UNKNOWN) by its name.
 std::string twin_mode_name(std::uint8_t mode);

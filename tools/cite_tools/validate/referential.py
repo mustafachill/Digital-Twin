@@ -30,6 +30,12 @@ from cite_tools.model.schema import (
 )
 from cite_tools.validate import Finding, error
 
+#: The fewest heartbeat periods a physical side's deadman timeout may span
+#: (`deadman-timeout-below-three-heartbeats`): one or two late heartbeats must
+#: not trip it. Named once, because the operator panel's stale threshold on a
+#: zone with no physical side is this many periods (`generate.gui`).
+MINIMUM_HEARTBEATS_PER_DEADMAN_TIMEOUT = 3.0
+
 #: Which configuration kind each category expects. `None` means the category
 #: carries no configuration at all, so any configuration on it is a mistake.
 _CATEGORY_CONFIG_KIND: dict[str, str | None] = {
@@ -928,7 +934,7 @@ def _a_physical_side_states_its_timing(model: FacilityModel) -> list[Finding]:
             )
             continue
         heartbeat = twin.heartbeat_period_s or 0.0
-        if timing.deadman_timeout_s < 3.0 * heartbeat:
+        if timing.deadman_timeout_s < MINIMUM_HEARTBEATS_PER_DEADMAN_TIMEOUT * heartbeat:
             findings.append(
                 error(
                     "deadman-timeout-below-three-heartbeats",

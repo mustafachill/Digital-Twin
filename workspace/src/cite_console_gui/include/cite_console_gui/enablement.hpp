@@ -75,6 +75,18 @@ enum class Target
 /// publishes it (`startable_targets`, `floored_targets`, `counterpart_running`).
 constexpr std::array<Target, 3> ALL_TARGETS = {Target::SIM, Target::REAL, Target::TWIN};
 
+/// The phase of a validate-then-run request (ADR-0073): ConsoleState.PHASE_*,
+/// and the ValidateThenRun feedback's and result's `phase` / `ended_in`, as
+/// the panel reads them. `UNKNOWN` is a value the contract this panel was
+/// built against does not define.
+enum class ValidationPhase
+{
+  NONE,
+  VALIDATING,
+  RUNNING,
+  UNKNOWN,
+};
+
 /// What the panel knows, reduced to what the buttons depend on.
 struct ConsoleView
 {
@@ -119,6 +131,13 @@ struct ConsoleView
   /// ask the twin for SIM again; on an all-simulated pair the console refuses
   /// that Stop (StopCell.srv), so the panel does not offer it.
   bool has_physical_side{false};
+  /// ConsoleState.validate_then_run_offered: the console accepts
+  /// ValidateThenRun on this deployment (ADR-0073 decision 6). The console's
+  /// verdict; the panel does not restate the rule behind it.
+  bool validate_then_run_offered{false};
+  /// ConsoleState.phase: the phase of the validate-then-run request in
+  /// progress, NONE for any other request or none. Shown, never decided on.
+  ValidationPhase validation_phase{ValidationPhase::NONE};
 };
 
 struct ButtonStates
@@ -129,12 +148,14 @@ struct ButtonStates
   bool stop{false};
   /// The operator's go-ahead: shown only while the console asks for it.
   bool confirm{false};
+  /// "Validate in simulation, then run twin" (ADR-0073).
+  bool validate_then_run{false};
 
   bool operator==(const ButtonStates & other) const
   {
     return start_robot == other.start_robot && home == other.home &&
            start_program == other.start_program && stop == other.stop &&
-           confirm == other.confirm;
+           confirm == other.confirm && validate_then_run == other.validate_then_run;
   }
 };
 
@@ -150,6 +171,10 @@ struct ButtonStates
 ///   a pair with a physical side, where Stop asks the twin for SIM again
 ///   (StopCell.srv).
 /// - Confirm: AWAITING_OPERATOR.
+/// - Validate then run: started, READY, nothing in progress, the console offers
+///   it (`validate_then_run_offered`) and says the twin is startable (both arms
+///   at the program's start; ValidateThenRun.action). It carries no target, so
+///   the operator's selection does not touch it.
 ///
 /// Nothing at all before a ConsoleState is heard.
 ButtonStates enabled_for(const ConsoleView & view, Target selected);
@@ -185,8 +210,19 @@ constexpr std::array<double, 4> SPEED_CHOICES = {1.0, 0.5, 0.25, 0.1};
 /// floor is applied: the panel offers nothing it might have to take back.
 bool speed_choice_enabled(double scale, const ConsoleView & view, Target target);
 
+/// Whether the real arm's floor (ConsoleState.minimum_speed_scale) applies to a
+/// goal toward `target`: a console is heard, it states a floor, and the target
+/// is one it floors - or none is selected, when the floor is assumed. What the
+/// panel shows beside the speed choices, and what `speed_choice_enabled` applies.
+bool floor_applies(const ConsoleView & view, Target target);
+
 /// The target as the operator reads it.
 const char * target_name(Target target);
+
+/// The validate-then-run phase as the operator reads it: "Validating in
+/// simulation", "Running twin", an empty string for NONE. Never "validated",
+/// "verified" or "safe" (ADR-0073 decision 5).
+const char * validation_phase_name(ValidationPhase phase);
 
 /// The phase as the operator reads it, which is the constant's own name.
 const char * phase_name(Phase phase);

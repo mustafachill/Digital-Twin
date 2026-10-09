@@ -571,6 +571,7 @@ def console_names(cell: ResolvedCell) -> tuple[tuple[str, str], ...]:
         ("stop", ids.CONSOLE_STOP),
         ("home", ids.CONSOLE_HOME),
         ("run_program", ids.CONSOLE_RUN_PROGRAM),
+        ("validate_then_run", ids.CONSOLE_VALIDATE_THEN_RUN),
     )
     return tuple((key, ids.zone_scope(cell.zone, ids.CONSOLE_SCOPE, leaf)) for key, leaf in leaves)
 

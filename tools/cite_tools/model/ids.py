@@ -82,6 +82,7 @@ CONSOLE_CONFIRM_OPERATOR = "confirm_operator"
 CONSOLE_STOP = "stop"
 CONSOLE_HOME = "home"
 CONSOLE_RUN_PROGRAM = "run_program"
+CONSOLE_VALIDATE_THEN_RUN = "validate_then_run"
 
 #: `lower_snake_case`: no hyphens, no camel case, no leading digit.
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_]*$")
