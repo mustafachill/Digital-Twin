@@ -41,8 +41,10 @@ CellConsole::CellConsole()
 CellConsole::~CellConsole()
 {
   // Joins the spin thread first, so nothing is queued onto this object once it
-  // starts going away; anything already queued is dropped with it by Qt.
+  // starts going away; anything already queued is dropped with it by Qt. The
+  // camera client's worker likewise, after at most one request's bounded wait.
   client_.reset();
+  camera_.reset();
 }
 
 void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
@@ -50,6 +52,39 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   if (this->title.empty()) {
     this->title = "Cell console";
   }
+
+  // "Reset view" first, and on its own: it moves no robot, so a configuration
+  // whose console names are wrong still lets the operator find the cell again.
+  const std::string view_problem = read_home_camera_pose(plugin_element, home_camera_pose_);
+  if (view_problem.empty()) {
+    try {
+      // Called on the client's worker thread, and queued onto this object's.
+      // Only a refusal or an absent service is said, on the outcome line; a
+      // move that succeeds takes back a failure of its own still shown there,
+      // and never the console's last answer.
+      camera_ = std::make_unique<CameraClient>(
+        [this](bool ok, const std::string & detail) {
+          const QString line = QString::fromStdString(detail);
+          QMetaObject::invokeMethod(
+            this, [this, ok, line]() {
+              if (!ok) {
+                set_outcome(line);
+                view_outcome_ = line;
+              } else if (!view_outcome_.isEmpty() && outcome_ == view_outcome_) {
+                set_outcome(QString());
+              }
+            }, Qt::QueuedConnection);
+        });
+    } catch (const std::exception & error) {
+      view_error_ = QString("Reset view could not join gz transport: ") + error.what();
+    }
+  } else {
+    view_error_ = QString::fromStdString(view_problem);
+  }
+  if (!view_error_.isEmpty()) {
+    qWarning("CellConsole: %s", qUtf8Printable(view_error_));
+  }
+  emit viewChanged();
 
   // The keys, and the refusal of a child the panel does not read, are
   // `read_console_names`' (console_config.hpp), tested without a window.
@@ -239,6 +274,14 @@ void CellConsole::confirm()
 {
   if (client_ && selection_.buttons().confirm) {
     client_->confirm_operator();
+  }
+}
+
+void CellConsole::resetView()
+{
+  // Independent of the console: no state, no target, no "No console" gates it.
+  if (camera_) {
+    camera_->move_to(home_camera_pose_);
   }
 }
 

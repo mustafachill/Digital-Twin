@@ -33,10 +33,13 @@
 #include "ament_index_cpp/get_package_share_directory.hpp"
 #include "cite_console_gui/console_config.hpp"
 
+using cite_console_gui::CameraPose;
 using cite_console_gui::CONSOLE_KEYS;
 using cite_console_gui::ConsoleNames;
 using cite_console_gui::GZ_GUI_ELEMENT;
+using cite_console_gui::HOME_CAMERA_POSE_KEY;
 using cite_console_gui::read_console_names;
+using cite_console_gui::read_home_camera_pose;
 
 namespace
 {
@@ -59,9 +62,39 @@ std::vector<std::filesystem::path> installed_gui_configs()
   return found;
 }
 
+/// Every child the panel reads besides gz-gui's own: the console's names and
+/// the 3D view's home pose.
 std::set<std::string> keys()
 {
-  return std::set<std::string>(CONSOLE_KEYS.begin(), CONSOLE_KEYS.end());
+  std::set<std::string> all(CONSOLE_KEYS.begin(), CONSOLE_KEYS.end());
+  all.insert(HOME_CAMERA_POSE_KEY);
+  return all;
+}
+
+/// The 3D view's `<camera_pose>` in the same configuration, as text.
+std::string scene_camera_pose(const tinyxml2::XMLDocument & document)
+{
+  for (const tinyxml2::XMLElement * plugin = document.FirstChildElement("plugin");
+    plugin != nullptr; plugin = plugin->NextSiblingElement("plugin"))
+  {
+    const char * filename = plugin->Attribute("filename");
+    const tinyxml2::XMLElement * pose = plugin->FirstChildElement("camera_pose");
+    if (filename != nullptr && std::strcmp(filename, "MinimalScene") == 0 && pose != nullptr &&
+      pose->GetText() != nullptr)
+    {
+      return pose->GetText();
+    }
+  }
+  return "";
+}
+
+/// A panel element with every console name, and `pose` as its home pose.
+std::string panel_with_home(const std::string & pose)
+{
+  return "<plugin filename=\"CellConsole\"><gz-gui/>"
+         "<state>/s</state><start_robot>/a</start_robot><confirm_operator>/c</confirm_operator>"
+         "<stop>/t</stop><home>/h</home><run_program>/r</run_program>"
+         "<home_camera_pose>" + pose + "</home_camera_pose></plugin>";
 }
 
 }  // namespace
@@ -98,6 +131,14 @@ TEST(ConsoleConfig, TheInstalledPlantConfigurationGivesThePanelExactlyItsKeys)
       {
         EXPECT_EQ(name->rfind("/cite/", 0), 0u) << *name << " in " << path;
       }
+      // "Reset view" returns to where the window opened: the 3D view's own
+      // camera_pose, the same text.
+      const tinyxml2::XMLElement * home = plugin->FirstChildElement(HOME_CAMERA_POSE_KEY);
+      ASSERT_NE(home, nullptr) << path;
+      ASSERT_NE(home->GetText(), nullptr) << path;
+      EXPECT_EQ(std::string(home->GetText()), scene_camera_pose(document)) << path;
+      CameraPose pose;
+      EXPECT_EQ(read_home_camera_pose(plugin, pose), "") << path;
     }
   }
   // Only the plant's window of a paired zone carries the panel, and L0
@@ -152,4 +193,58 @@ TEST(ConsoleConfig, NoElementNamesNothing)
 {
   ConsoleNames names;
   EXPECT_NE(read_console_names(nullptr, names).find("names no state"), std::string::npos);
+}
+
+TEST(HomeCameraPose, SixNumbersAreReadInOrder)
+{
+  tinyxml2::XMLDocument document;
+  document.Parse(panel_with_home("  0.88 1.25\n 1.84 0 0.576 -1.5708 ").c_str());
+  CameraPose pose;
+  EXPECT_EQ(read_home_camera_pose(document.FirstChildElement(), pose), "");
+  EXPECT_DOUBLE_EQ(pose.x, 0.88);
+  EXPECT_DOUBLE_EQ(pose.y, 1.25);
+  EXPECT_DOUBLE_EQ(pose.z, 1.84);
+  EXPECT_DOUBLE_EQ(pose.roll, 0.0);
+  EXPECT_DOUBLE_EQ(pose.pitch, 0.576);
+  EXPECT_DOUBLE_EQ(pose.yaw, -1.5708);
+}
+
+TEST(HomeCameraPose, ItIsNotAConsoleName)
+{
+  // The console's names read the same with it, and it is not refused as a
+  // child the panel does not read.
+  tinyxml2::XMLDocument document;
+  document.Parse(panel_with_home("1 2 3 0 0 0").c_str());
+  ConsoleNames names;
+  EXPECT_EQ(read_console_names(document.FirstChildElement(), names), "");
+}
+
+TEST(HomeCameraPose, AMissingPoseIsNamedAndLeavesTheConsoleNamesAlone)
+{
+  tinyxml2::XMLDocument document;
+  document.Parse(
+    "<plugin filename=\"CellConsole\">"
+    "<state>/s</state><start_robot>/a</start_robot><confirm_operator>/c</confirm_operator>"
+    "<stop>/t</stop><home>/h</home><run_program>/r</run_program></plugin>");
+  CameraPose pose;
+  const std::string problem = read_home_camera_pose(document.FirstChildElement(), pose);
+  EXPECT_NE(problem.find("names no home_camera_pose"), std::string::npos) << problem;
+  ConsoleNames names;
+  EXPECT_EQ(read_console_names(document.FirstChildElement(), names), "");
+  EXPECT_NE(read_home_camera_pose(nullptr, pose), "");
+}
+
+TEST(HomeCameraPose, AnythingButSixFiniteNumbersIsRefusedAndChangesNothing)
+{
+  for (const std::string text : {
+    "", "1 2 3 4 5", "1 2 3 4 5 6 7", "1 2 3 4 5 x", "1,2,3,4,5,6", "1 2 3 4 5 6x",
+    "1 2 3 4 5 1e999", "nan 2 3 4 5 6", "inf 2 3 4 5 6"})
+  {
+    tinyxml2::XMLDocument document;
+    document.Parse(panel_with_home(text).c_str());
+    CameraPose pose{9.0, 9.0, 9.0, 9.0, 9.0, 9.0};
+    EXPECT_NE(read_home_camera_pose(document.FirstChildElement(), pose), "") << "'" << text << "'";
+    EXPECT_DOUBLE_EQ(pose.x, 9.0) << "'" << text << "'";
+    EXPECT_DOUBLE_EQ(pose.yaw, 9.0) << "'" << text << "'";
+  }
 }

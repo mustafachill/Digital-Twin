@@ -20,6 +20,12 @@ find_package(gz_plugin_vendor REQUIRED)
 find_package(gz-plugin REQUIRED COMPONENTS register)
 find_package(Qt5 REQUIRED COMPONENTS Core Qml Quick)
 find_package(tinyxml2 REQUIRED)
+find_package(gz_transport_vendor REQUIRED)
+find_package(gz-transport REQUIRED)
+find_package(gz_msgs_vendor REQUIRED)
+find_package(gz-msgs REQUIRED)
+find_package(gz_math_vendor REQUIRED)
+find_package(gz-math REQUIRED)
 
 # What the buttons may do, as a pure function of what the console last said.
 # No Qt and no ROS, so the whole table is tested without a window or a graph.
@@ -40,6 +46,17 @@ target_link_libraries(cite_console_gui_client cite_console_gui_enablement tinyxm
 ament_target_dependencies(cite_console_gui_client rclcpp rclcpp_action cite_interfaces)
 set_target_properties(cite_console_gui_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# "Reset view": the window's camera moved over gz transport, on a worker thread
+# of its own. No Qt and no ROS.
+add_library(cite_console_gui_camera STATIC src/camera_client.cpp)
+target_include_directories(cite_console_gui_camera PUBLIC include)
+target_link_libraries(cite_console_gui_camera
+  gz-transport::core
+  gz-msgs::core
+  gz-math::core
+)
+set_target_properties(cite_console_gui_camera PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # The gz-gui plugin. gz-gui loads `lib<filename>.so` for a config's
 # `<plugin filename="CellConsole">`, and its QML from the embedded resource
 # `:/CellConsole/CellConsole.qml`, so the library and the resource prefix are both
@@ -52,6 +69,7 @@ add_library(CellConsole SHARED
 set_target_properties(CellConsole PROPERTIES AUTOMOC ON AUTORCC ON)
 target_link_libraries(CellConsole
   cite_console_gui_client
+  cite_console_gui_camera
   cite_console_gui_enablement
   gz-gui::gz-gui
   gz-plugin::register
@@ -94,6 +112,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_console_config test/test_console_config.cpp)
   target_link_libraries(test_console_config cite_console_gui_client)
   ament_target_dependencies(test_console_config ament_index_cpp)
+
+  # "Reset view" against a fake CameraTracking on a partition of its own: the
+  # request carries the home pose, and an absent service is reported.
+  ament_add_gtest(test_camera_client test/test_camera_client.cpp TIMEOUT 60)
+  target_link_libraries(test_camera_client cite_console_gui_camera)
 
   # The sequences that keep or clear the operator's selected target, on the
   # holder the plugin delegates to, with views built by `view_from` (R-01).

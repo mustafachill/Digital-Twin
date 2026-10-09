@@ -1,8 +1,9 @@
 # cite_console_gui
 
 **Status: `PARTIAL`.** The panel builds; its enablement table, its reading of the contract
-and of its configuration, and its ROS client (`ConsoleClient`, against a fake console on a
-graph of its own) are unit-tested. Nothing in CI renders it; the panel in a window has not been
+and of its configuration, its ROS client (`ConsoleClient`, against a fake console on a
+graph of its own) and its Reset view's camera client (`CameraClient`, against a fake
+`CameraTracking` on a gz-transport partition of its own) are unit-tested. Nothing in CI renders it; the panel in a window has not been
 verified by a test.
 
 The operator console's panel in the Gazebo window
@@ -29,6 +30,7 @@ refusal message and nothing else.
 | Confirm | `ConfirmOperator`, shown only in `AWAITING_OPERATOR`, with `prompt` verbatim; its cancel is Stop |
 | Stop | `StopCell` — a software stop, **not an E-stop**, and labelled so |
 | Progress, outcome | The goal's feedback and the last answer's detail |
+| Reset view | Returns the 3D view's camera, zoom included, to where the window opened it (see below). Moves no robot |
 
 Which buttons are enabled is `enabled_for` in
 [`include/cite_console_gui/enablement.hpp`](include/cite_console_gui/enablement.hpp), a pure
@@ -48,6 +50,22 @@ changes in any way; Home and Start program stay disabled until the operator pick
 console that restarts without its publisher ever unmatching, serving the same targets,
 keeps the selection — the panel cannot see that restart.
 
+### Reset view
+
+The one button that asks the window rather than the console. It sends the configuration's
+`home_camera_pose` to `/gui/move_to/pose` (`gz.msgs.GUICamera`), which gz-gui 8's
+`CameraTracking` plugin serves in the same window; that plugin moves the 3D view's camera
+there on its next frame. In a perspective view zoom is the camera's distance, so the pose
+restores it. gz-gui 8 has no in-process event that moves the camera, so the service is the
+documented route. Its name is not scoped by the world but by the gz-transport partition, and
+the panel's node is in the window's process, so it carries the window's `GZ_PARTITION`.
+
+It is enabled whenever the configuration gave the panel its home pose — independent of the
+console's state and of "No console" — and it never blocks the window: `CameraClient`
+([`include/cite_console_gui/camera_client.hpp`](include/cite_console_gui/camera_client.hpp))
+makes the request on a thread of its own, with a bounded wait, and a press made while one is
+in flight replaces the pose still waiting.
+
 ## Where its names come from
 
 - The console's six names are the plugin's XML parameters, written into the plant's GUI
@@ -56,6 +74,10 @@ keeps the selection — the panel cannot see that restart.
   carries the plugin.
 - The twin mode's topic is `cite_interfaces::msg::TwinMode::TOPIC`, a constant in the
   contract.
+- The home view is the plugin's `home_camera_pose` parameter: the same text the generator
+  writes as the 3D view's `camera_pose`, rendered once (`gui_camera_pose` in
+  `tools/cite_tools/generate/gui.py`). A test holds the installed plant configuration's two
+  to each other. The camera service's name is gz-gui's own, `MOVE_TO_POSE_SERVICE`.
 
 The panel builds no name.
 
@@ -76,6 +98,11 @@ asynchronous; a server that is not there is reported in the panel, never waited 
   says which and stays disabled. The keys it reads are `CONSOLE_KEYS` in
   [`include/cite_console_gui/console_config.hpp`](include/cite_console_gui/console_config.hpp),
   and a test holds the installed plant configuration to them.
+- **No home pose in the configuration, or one that is not six finite numbers:** Reset view
+  is disabled and the panel says why; the console's buttons are unaffected.
+- **No `CameraTracking` in the window, or a refused move:** the outcome line says so
+  ("Reset view: nothing answered on /gui/move_to/pose ..."); a later move that succeeds
+  takes that line back.
 - **A target the console does not serve:** not offered, and a goal naming one is refused by
   the console (`HomeRobot.action`, `RunProgram.action`); the panel never sends an unset one.
 - **A request the console refuses:** the outcome line shows the console's detail. A
