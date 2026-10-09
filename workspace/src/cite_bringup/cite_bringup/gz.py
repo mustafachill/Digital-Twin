@@ -43,6 +43,8 @@ does — see this package's README.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+import ctypes
+import ctypes.util
 import os
 import signal
 import subprocess
@@ -157,6 +159,49 @@ _INTERRUPT_POLL_S = 0.1
 #: close at once; this bounds the case where a descendant left the group and
 #: still holds them, which would otherwise hold the stop for ever.
 KILL_WAIT_S = 2.0
+#
+# THE TRADE-OFF BOTH OF THESE MAKE (R-01). A command run with ``interrupted``
+# starts a session of its own so that a stop can kill it whole - and that same
+# session takes it out of the pair supervisor's sweep of the console's process
+# group, so a console that dies without its own shutdown (SIGKILL, a crash)
+# would leave it running. `_die_with_the_caller` ties the command back to the
+# caller's lifetime instead: the kernel sends it SIGKILL when the thread that
+# started it ends (PR_SET_PDEATHSIG). What that covers and what it does not:
+#
+# - The command itself, always. A wrapper's DESCENDANTS are not covered - the
+#   setting is cleared across fork - so the executable `ros2 run` forks
+#   outlives an abrupt end of the console; on an orderly end the console's
+#   stop kills the group (`_kill_group`), and on any end the descendant is
+#   bounded only by its own exit.
+# - "The caller" is the THREAD that forked, not the process: a command started
+#   from a thread that ends before it does is killed then. The console starts
+#   these from the executor's worker threads, which live as long as the
+#   executor, and a thread that ends while its own command still runs has
+#   abandoned that command anyway.
+# - Linux only, and set between fork and exec (`preexec_fn`), where only the
+#   prepared libc call below runs: no import, no allocation by this module.
+
+#: `prctl(2)`'s option that asks for a signal when the parent thread ends.
+_PR_SET_PDEATHSIG = 1
+
+#: libc's `prctl`, resolved once at import so the child only calls it.
+_PRCTL = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True).prctl
+
+
+def _die_with_the_caller(parent: int) -> Callable[[], None]:
+    """Return a `preexec_fn` that has the child killed when its starter ends (R-01).
+
+    ``parent`` is the starter's pid, read before the fork: a starter that ended
+    before the setting took effect would never deliver the signal, so the child
+    checks it is still its parent's and exits at once if not.
+    """
+
+    def preexec() -> None:
+        _PRCTL(_PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+        if os.getppid() != parent:
+            os._exit(1)
+
+    return preexec
 
 
 class CommandInterrupted(RuntimeError):
@@ -200,7 +245,9 @@ def run(
     or the ceiling kills its WHOLE process group: `ros2 run` is a wrapper that
     forks the real executable, and a kill of the wrapper alone left that child
     holding the output pipes, so reading them never ended (R2-01). What is
-    left of the output is then read for at most `KILL_WAIT_S`.
+    left of the output is then read for at most `KILL_WAIT_S`. The session
+    takes the command out of its caller's process group, so it is tied to the
+    caller's lifetime instead (`_die_with_the_caller`, R-01).
     """
     environment = process_environment(plan_for(zone), side=side)
     if interrupted is None:
@@ -220,6 +267,7 @@ def run(
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        preexec_fn=_die_with_the_caller(os.getpid()),
         **kwargs,
     ) as process:
         while True:

@@ -28,6 +28,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 from cite_bringup import gz
@@ -305,33 +306,69 @@ def _gone(pid: int) -> bool:
     return state == "Z"
 
 
-def test_a_stop_kills_a_forked_child_holding_the_pipes(monkeypatch) -> None:
-    """R2-01: a stop reaches the wrapper's child too, and never waits on its pipes."""
-    import subprocess as real
+def _until_gone(pid: int, what: str) -> None:
+    """Wait, within a bound, for ``pid`` to be gone or a zombie; fail otherwise."""
+    deadline = time.monotonic() + 5.0
+    while not _gone(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert _gone(pid), what
 
-    children: list[int] = []
-    popen = real.Popen
 
-    class Recording(popen):  # type: ignore[misc, valid-type]
-        def __init__(self, *args, **kwargs) -> None:
-            super().__init__(*args, **kwargs)
-            children.append(self.pid)
+def test_a_stop_kills_a_forked_child_holding_the_pipes(tmp_path: Path) -> None:
+    """R2-01: a stop reaches the wrapper's child too, and never waits on its pipes.
 
-    monkeypatch.setattr(gz.subprocess, "Popen", Recording)
-    asked: list[int] = []
+    The child's pid is written to a file rather than read off the output the
+    stop discards, and the stop comes only once it is there (R-02): the child
+    itself is then watched until it is gone, rather than its group asked once
+    while the kernel may still be tearing the group down.
+    """
+    pid_file = tmp_path / "child.pid"
+    forking = ["bash", "-c", f"sleep 30 & echo $! > {pid_file}; wait"]
 
     def interrupted() -> bool:
-        asked.append(1)
-        return len(asked) > 5
+        return pid_file.exists() and pid_file.read_text().strip() != ""
 
     started = time.monotonic()
     with pytest.raises(gz.CommandInterrupted):
-        gz.run(_FORKING, zone=ZONE, timeout=60, interrupted=interrupted)
+        gz.run(forking, zone=ZONE, timeout=60, interrupted=interrupted)
     assert time.monotonic() - started < 10.0
-    # The wrapper ran in a group of its own, and that group is gone whole.
-    (wrapper,) = children
-    with pytest.raises(ProcessLookupError):
-        os.killpg(wrapper, 0)
+    _until_gone(int(pid_file.read_text()), "the forked child outlived the stop")
+
+
+def test_a_command_dies_with_the_process_that_started_it(tmp_path: Path) -> None:
+    """R-01: its own session takes it out of the caller's group; its starter's end still kills it.
+
+    A starter killed with SIGKILL runs no cleanup at all, as a console the
+    supervisor had to kill: the command it started is killed by the kernel.
+    """
+    pid_file = tmp_path / "command.pid"
+    starter = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from cite_bringup import gz; "
+            "gz.run(['bash', '-c', 'echo $$ > ' + sys.argv[1] + '; exec sleep 30'], "
+            "zone=sys.argv[2], timeout=60, interrupted=lambda: False)",
+            str(pid_file),
+            ZONE,
+        ]
+    )
+    try:
+        deadline = time.monotonic() + 30.0
+        while not (pid_file.exists() and pid_file.read_text().strip()):
+            assert starter.poll() is None, "the starter ended before its command began"
+            assert time.monotonic() < deadline, "the command never began"
+            time.sleep(0.05)
+        command = int(pid_file.read_text())
+        # In a session of its own, so the starter's group does not hold it.
+        assert os.getsid(command) == command
+        starter.kill()
+        starter.wait(timeout=10)
+        _until_gone(command, "the command outlived the process that started it")
+    finally:
+        if starter.poll() is None:
+            starter.kill()
+            starter.wait(timeout=10)
 
 
 def test_the_ceiling_kills_a_forked_child_holding_the_pipes() -> None:
