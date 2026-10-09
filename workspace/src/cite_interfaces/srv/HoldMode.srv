@@ -1,0 +1,62 @@
+# Hold the twin's current mode for one run, or release that hold (ADR-0072, S-01).
+#
+# A client that checks the twin's mode and then sends a command races every other
+# client: between its check and the boundary's dispatch another client may switch
+# the twin, and the command then reaches sides that are not the run's target - in
+# the worst case a SIM run's next command reaching the physical arm. A hold closes
+# that race IN THE BOUNDARY: while one exists, SetMode into any mode other than the
+# held one is refused unless it carries the holder's id (SetMode.holder), so the
+# mode a run checked is the mode every one of its goals, track moves and belt
+# commands is routed in until the holder itself changes it or lets go. The one
+# exception is SetMode into SIM, which commands the plant alone: the safe direction
+# is never refused by a hold, the hold stays with its holder on SIM, and the
+# holder's run stops on a mode it did not ask for.
+#
+# A run takes its hold on SIM BEFORE it asks a person into the physical cell (the
+# accepted ACQUIRE is the gate that the mode is SIM, decided under the boundary's
+# lock), keeps it through its own transitions and its return to SIM, re-asserts it
+# before every step, and releases it once at the end of its request. A run whose
+# return to SIM was not confirmed does not release: its hold lapses.
+#
+# ACQUIRE takes the hold, and is accepted only if `mode` is the mode in force now
+# (a client holds what it checked, never what it hoped for) and no other holder
+# has one. Asked again by the holder it is a re-assertion, under the same rule.
+# RELEASE lets go, and is accepted only from the holder (or when nothing is held).
+# A transition the holder makes carries the hold to the new mode: a run that holds
+# REAL and returns to SIM holds SIM until it releases.
+#
+# LIVENESS. The hold names the holder's ROS node (`node`, its fully qualified
+# name). The boundary reads the plant's ROS graph at its heartbeat period, and a
+# hold whose node has not been on that graph for the boundary's ceiling
+# (`cite_twin.hold.UNSEEN_CEILING_S`) LAPSES, so a client that died - a console
+# killed, a terminal closed - cannot lock the twin forever. A node that crashed
+# leaves the graph only once its middleware lease expires, so that is added to
+# the bound. A lapse changes NO mode: the twin stays where the dead holder left
+# it, the lapse is logged, and any client may then change the mode under the
+# ordinary gates (the hardware opt-in, readiness, the in-flight refusal). The
+# physical side's own deadman is unaffected by a hold either way.
+#
+# What this is NOT: ownership of the commands themselves. A goal or a track
+# command is routed by the mode whoever sends it; the hold fixes the mode, not who
+# may command in it (open-work #100).
+#
+# SERVICE is the one place this name is written, as SetMode's is.
+
+string SERVICE="/cite/twin/hold_mode"
+
+uint8 ACQUIRE=1       # take, or re-assert, the hold on `mode`
+uint8 RELEASE=2       # let the hold go
+
+uint8 action          # ACQUIRE or RELEASE; 0, or any other value, is refused
+string holder         # the run's own id, unique per run; never empty. SetMode.holder
+                      # carries the same string
+string node           # the holder's ROS node, fully qualified (`/fixed_program`): what
+                      # the boundary looks for on the graph. Required with ACQUIRE
+uint8 mode            # ACQUIRE: the TwinMode.MODE_* the client read and holds. Ignored
+                      # with RELEASE
+---
+bool accepted
+ResultCode result     # SUCCESS, or why not (PRECONDITION_FAILED: held by another, the
+                      # mode is not the one in force, a field missing)
+string holder         # who holds the twin after this call; empty when nobody does
+uint8 mode            # the mode in force after this call

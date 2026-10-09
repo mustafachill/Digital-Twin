@@ -15,6 +15,8 @@
 #include "cite_console_gui/console_view.hpp"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "cite_interfaces/msg/twin_mode.hpp"
 
@@ -48,14 +50,66 @@ Phase phase_from(std::uint8_t state)
   }
 }
 
-ConsoleView view_from(const ConsoleState & state)
+Target target_from(std::uint8_t value)
+{
+  switch (value) {
+    case ConsoleState::TARGET_SIM:
+      return Target::SIM;
+    case ConsoleState::TARGET_REAL:
+      return Target::REAL;
+    case ConsoleState::TARGET_TWIN:
+      return Target::TWIN;
+    default:
+      return Target::NONE;
+  }
+}
+
+std::uint8_t target_value(Target target)
+{
+  switch (target) {
+    case Target::SIM:
+      return ConsoleState::TARGET_SIM;
+    case Target::REAL:
+      return ConsoleState::TARGET_REAL;
+    case Target::TWIN:
+      return ConsoleState::TARGET_TWIN;
+    case Target::NONE:
+      break;
+  }
+  return 0;
+}
+
+ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publisher)
 {
   ConsoleView view;
   view.heard = true;
+  view.publisher = std::move(publisher);
   view.phase = phase_from(state.state);
   view.robot_started = state.robot_started;
   view.busy = state.busy;
-  view.at_start = state.at_start;
+  view.plant_at_start = state.plant_at_start;
+  view.counterpart_at_start = state.counterpart_at_start;
+  view.counterpart_running = state.counterpart_running;
+  for (const std::uint8_t value : state.available_targets) {
+    view.served_values.insert(value);
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.available_targets.insert(target);
+    }
+  }
+  for (const std::uint8_t value : state.startable_targets) {
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.startable_targets.insert(target);
+    }
+  }
+  for (const std::uint8_t value : state.floored_targets) {
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.floored_targets.insert(target);
+    }
+  }
+  view.minimum_speed_scale = state.minimum_speed_scale;
   view.twin_in_sim = state.twin_mode == TwinMode::MODE_SIM;
   view.has_physical_side = !state.physical_sides.empty();
   return view;

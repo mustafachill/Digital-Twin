@@ -45,6 +45,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "cite_interfaces/action/home_robot.hpp"
 #include "cite_interfaces/action/run_program.hpp"
@@ -73,7 +74,11 @@ struct ConsoleNames
 /// What the client tells its owner. Each is called on the spin thread.
 struct ConsoleCallbacks
 {
-  std::function<void(const cite_interfaces::msg::ConsoleState &)> on_state;
+  /// A ConsoleState, with the rmw GID of the publisher that sent it: a GID
+  /// that differs from the last one heard is a console that came back, even
+  /// when its predecessor's unmatch was never seen.
+  std::function<void(const cite_interfaces::msg::ConsoleState &,
+    const std::vector<std::uint8_t> &)> on_state;
   /// The console's state publisher left the graph after it had been heard.
   std::function<void()> on_state_lost;
   std::function<void(const cite_interfaces::msg::TwinMode &)> on_twin_mode;
@@ -95,8 +100,10 @@ public:
   void start_robot();
   void confirm_operator();
   void stop();
-  void home(double speed_scale);
-  void run_program(double speed_scale, std::uint32_t cycles);
+  /// `target` is the ConsoleState.TARGET_* the goal carries (ADR-0072), sent
+  /// as given: the console, not this client, refuses one it does not serve.
+  void home(double speed_scale, std::uint8_t target);
+  void run_program(double speed_scale, std::uint8_t target, std::uint32_t cycles);
 
 private:
   using Home = cite_interfaces::action::HomeRobot;

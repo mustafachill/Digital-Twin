@@ -739,7 +739,7 @@ def test_an_untwinned_zone_is_refused_rather_than_given_a_second_side(
     # Present, so that the refusal is the one about sides and not the one about
     # a base the deployment did not supply.
     monkeypatch.setenv(DOMAIN_BASE_ENV, "42")
-    assert pair.main(["--zone", ZONE]) == 1
+    assert pair.main(["--zone", ZONE, "--sides", "all"]) == 1
     assert "declares 1 side(s)" in capsys.readouterr().err
 
 
@@ -933,6 +933,10 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
 ) -> None:
     """ADR-0057's promotion clause 3, as a test that fails if it passes more.
 
+    ADR-0072 adds the one other fact the supervisor holds: which sides it
+    started (`--sides`). That is the deployment, not a decision about what
+    crosses.
+
     **Starting a process is not deciding what crosses**, and the two facts the
     supervisor hands over are ones it already holds. `divergence_period_s` is the
     argument this asserts the absence of by name: it is a ROS parameter, so
@@ -941,7 +945,7 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
     """
     plan = _paired_plan(tmp_path)
     path = tmp_path / "plan.yaml"
-    spec = pair.boundary_spec(plan, path)
+    spec = pair.boundary_spec(plan, path, "all")
     assert plan.zone == ZONE
 
     assert spec.argv == (
@@ -953,12 +957,15 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
         plan.zone,
         "--plan",
         str(path),
+        "--sides",
+        "all",
     )
     # Asserted as a set as well as a sequence, so that an added option fails here
     # even if it is inserted where the tuple comparison above reads plausibly.
     assert [token for token in spec.argv if token.startswith("--")] == [
         "--zone",
         "--plan",
+        "--sides",
     ]
     assert "--ros-args" not in spec.argv
     assert "divergence_period_s" not in " ".join(spec.argv)
@@ -1380,7 +1387,7 @@ def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
     """The boundary's two facts, and the one a side is given: its domain, the plant's."""
     plan = _paired_plan(tmp_path)
     path = tmp_path / "plan.yaml"
-    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"})
+    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"}, "plant")
     assert spec.argv == (
         "ros2",
         "run",
@@ -1390,6 +1397,8 @@ def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
         plan.zone,
         "--plan",
         str(path),
+        "--sides",
+        "plant",
     )
     assert spec.env == {DOMAIN_ENV: str(resolve_domain_id(plan, PLANT_SIDE, 41))}
     # `ros2 run`, so only the group signal reaches the program it starts.
@@ -1497,13 +1506,15 @@ def _main_against(tmp_path: Path, monkeypatch, argv: list[str]) -> dict:
 
 def test_a_pair_starts_no_console_unless_asked(tmp_path: Path, monkeypatch) -> None:
     """D2: `./scripts/program` asks for no console, so its pair has none to end it."""
-    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE])
+    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE, "--sides", "all"])
     assert captured["console"] is None
     assert captured["boundary"] is not None
 
 
 def test_a_pair_asked_for_a_console_starts_one(tmp_path: Path, monkeypatch) -> None:
-    captured = _main_against(tmp_path, monkeypatch, ["--zone", ZONE, "--console"])
+    captured = _main_against(
+        tmp_path, monkeypatch, ["--zone", ZONE, "--console", "--sides", "all"]
+    )
     assert captured["console"].name == pair.CONSOLE_NAME
     assert "cell_console.py" in captured["console"].argv
 
@@ -1522,8 +1533,9 @@ def test_the_teardown_ceiling_is_the_supervisors_own_worst_case_and_more(
 ) -> None:
     """D8: `./scripts/program` derives its ceiling here rather than restating 420."""
     plan = _paired_plan(tmp_path)
-    assert pair.participants(plan, console=False) == 3
-    assert pair.participants(plan, console=True) == 4
+    assert pair.participants(plan, console=False, sides="all") == 3
+    assert pair.participants(plan, console=True, sides="all") == 4
+    assert pair.participants(plan, console=True, sides="plant") == 3
     worst = 3 * (pair.STOP_GRACE_S + pair.STOP_KILL_S)
     assert pair.teardown_ceiling_s(3) > worst
     root = Path(__file__).resolve().parents[4]
@@ -1548,3 +1560,58 @@ def test_the_consoles_shutdown_ends_before_the_supervisor_escalates() -> None:
     from cite_bringup.program.sides import physical_sides
 
     console._require_track_stops_within_the_tail(plan, physical_sides(plan))
+
+
+# --- ADR-0072: a pair may start with the plant alone, when told to -----------
+
+
+def test_sides_is_required_and_never_inferred(capsys) -> None:
+    """Which sides start is the caller's (the hardware opt-in in `./scripts/sim`)."""
+    with pytest.raises(SystemExit) as exit_code:
+        pair.main(["--zone", ZONE])
+    assert exit_code.value.code == 2
+    assert "--sides" in capsys.readouterr().err
+
+
+def test_the_plant_alone_starts_one_side_a_boundary_and_a_console_told_so(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = _main_against(
+        tmp_path, monkeypatch, ["--zone", ZONE, "--console", "--sides", "plant"]
+    )
+    assert [spec.name for spec in captured["specs"]] == [PLANT_SIDE]
+    for follower in (captured["boundary"], captured["console"]):
+        argv = list(follower.argv)
+        assert argv[argv.index("--sides") + 1] == "plant"
+
+
+def test_every_side_starts_and_the_participants_are_told_all(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = _main_against(
+        tmp_path, monkeypatch, ["--zone", ZONE, "--console", "--sides", "all"]
+    )
+    assert [spec.name for spec in captured["specs"]] == ["plant", "counterpart"]
+    for follower in (captured["boundary"], captured["console"]):
+        argv = list(follower.argv)
+        assert argv[argv.index("--sides") + 1] == "all"
+
+
+def test_the_two_packages_spell_sides_alike() -> None:
+    """`cite_twin` depends on this package and not the reverse, so the words are held here."""
+    twin = Path(__file__).resolve().parents[2] / "cite_twin" / "cite_twin" / "twin_boundary.py"
+    text = twin.read_text()
+    assert f'SIDES_PLANT = "{pair.SIDES_PLANT}"' in text
+    assert f'SIDES_ALL = "{pair.SIDES_ALL}"' in text
+
+
+def test_a_plant_alone_pair_joins_on_the_plant_and_ends_with_it() -> None:
+    """One side, no ROS: the join completes on its announcement, and its exit ends the pair."""
+    code, output = _run([_announces(PLANT_SIDE)])
+    assert code == pair.PAIR_ENDED
+    assert "every side started announced readiness" in output
+
+
+def test_started_sides_refuses_a_choice_it_does_not_know(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="--sides"):
+        pair.started_sides(_paired_plan(tmp_path), "counterpart")

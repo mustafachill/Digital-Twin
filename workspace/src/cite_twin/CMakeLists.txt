@@ -47,6 +47,11 @@ if(BUILD_TESTING)
   # and that `force` cannot reach the gate. Pure logic - the hardware check is
   # injected, so both answers are driven without touching the environment.
   ament_add_pytest_test(mode test/test_mode.py)
+  # ADR-0072, S-01: a run's hold on the mode - a foreign transition refused,
+  # the holder's own allowed, a dead holder's hold lapsing by the graph.
+  ament_add_pytest_test(hold test/test_hold.py)
+  # ADR-0072, R-01: each side's custody answered by the boundary as a verdict.
+  ament_add_pytest_test(custody test/test_custody.py)
   # ADR-0070 item 6: a mode commanding a physical side waits until it is enabled
   # and publishing.
   ament_add_pytest_test(physical_readiness test/test_physical_readiness.py)
@@ -94,6 +99,10 @@ if(BUILD_TESTING)
   # automated could show, which was overstated. It brings no cell up either, so
   # nothing here is evidence about motion.
   add_launch_test(test/test_twin_boundary_paired_launch.py TIMEOUT 300)
+  # ADR-0072: the boundary of a pair started with the plant alone - no
+  # counterpart process, no counterpart context - routing SIM to the plant and
+  # refusing every mode that needs a far side.
+  add_launch_test(test/test_twin_boundary_plant_alone_launch.py TIMEOUT 300)
   # ADR-0071: the operator console server from cite_bringup over the real
   # boundary and two fake sides - its refusals, Start robot, and a Home
   # cancelled at its track slide. Here rather than in cite_bringup because it

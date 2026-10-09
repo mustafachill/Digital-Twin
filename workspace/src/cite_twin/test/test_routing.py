@@ -54,12 +54,24 @@ def test_both_sides_evaluate_the_goal(mode: int) -> None:
     assert chosen.sides == (PLANT_SIDE, COUNTERPART_SIDE)
 
 
-@pytest.mark.parametrize(
-    "mode", [TwinMode.MODE_SIM, TwinMode.MODE_REAL, TwinMode.MODE_SHADOW]
-)
-def test_the_modes_with_no_command_flow_refuse(mode: int) -> None:
-    """L5's endpoint is not a second front door to the plant's own skill server."""
-    chosen = route(mode)
+def test_sim_routes_to_the_plant_alone() -> None:
+    """ADR-0072: in SIM nothing reaches the far side, by the table itself (SA-S-05)."""
+    chosen = route(TwinMode.MODE_SIM)
+    assert chosen.accepted
+    assert chosen.sides == (PLANT_SIDE,)
+    assert COUNTERPART_SIDE not in chosen.sides
+
+
+def test_real_routes_to_the_counterpart_alone() -> None:
+    """ADR-0072: in REAL the plant is idle and nothing reaches it."""
+    chosen = route(TwinMode.MODE_REAL)
+    assert chosen.accepted
+    assert chosen.sides == (COUNTERPART_SIDE,)
+
+
+def test_shadow_has_no_command_flow_and_refuses() -> None:
+    """SHADOW carries state, never a command, in either direction."""
+    chosen = route(TwinMode.MODE_SHADOW)
     assert not chosen.accepted
     assert chosen.code == ResultCode.PRECONDITION_FAILED
 
@@ -100,6 +112,51 @@ class TestWhichSidesAModeCommands:
         in that state; this is the assertion that says so out loud.
         """
         assert set(route(mode).sides) <= set(commanded_sides(mode))
+
+    @pytest.mark.parametrize("mode", DECLARED_MODES)
+    def test_a_mode_that_routes_routes_to_exactly_the_sides_it_commands(
+        self, mode: int
+    ) -> None:
+        """ADR-0072: the two tables agree side for side, not only on "anything at all".
+
+        A subset would let SIM route away from the plant, or VALIDATED lose a
+        side, and still import. The package refuses to import in that state.
+        """
+        chosen = route(mode)
+        if chosen.accepted:
+            assert chosen.sides == commanded_sides(mode)
+
+    def test_the_import_check_refuses_a_table_that_disagrees_side_for_side(
+        self, monkeypatch
+    ) -> None:
+        """The guard itself, driven with a REAL row that names both sides."""
+        from cite_twin import routing
+
+        table = dict(routing._TABLE)
+        table[TwinMode.MODE_REAL] = routing.Route(
+            (PLANT_SIDE, COUNTERPART_SIDE), ResultCode.SUCCESS, "both"
+        )
+        monkeypatch.setattr(routing, "_TABLE", table)
+        with pytest.raises(ImportError, match="side for side"):
+            routing._refuse_to_import_a_mode_no_table_knows_about()
+
+    @pytest.mark.parametrize(
+        "sides", [(PLANT_SIDE, COUNTERPART_SIDE), (COUNTERPART_SIDE,), ()]
+    )
+    def test_the_import_check_refuses_a_sim_row_that_is_not_the_plant_alone(
+        self, monkeypatch, sides
+    ) -> None:
+        """R-01: SIM reaching anything but the plant fails the import, both tables or not."""
+        from cite_twin import routing
+
+        table = dict(routing._TABLE)
+        table[TwinMode.MODE_SIM] = routing.Route(sides, ResultCode.SUCCESS, "x")
+        commanded = dict(routing._COMMANDED)
+        commanded[TwinMode.MODE_SIM] = sides or (PLANT_SIDE,)
+        monkeypatch.setattr(routing, "_TABLE", table)
+        monkeypatch.setattr(routing, "_COMMANDED", commanded)
+        with pytest.raises(ImportError, match="plant alone"):
+            routing._refuse_to_import_a_mode_no_table_knows_about()
 
     def test_the_table_written_out_by_hand(self) -> None:
         """Read off `TwinMode.msg`'s per-mode comment, mode by mode.
@@ -167,3 +224,16 @@ def test_the_two_side_identities_are_not_positions() -> None:
     assert PLANT_SIDE != COUNTERPART_SIDE
     assert PLANT_SIDE == "plant"
     assert COUNTERPART_SIDE == "counterpart"
+
+
+def test_the_consoles_targets_command_the_sides_this_table_routes_to() -> None:
+    """ADR-0072: `cite_bringup.program.targets` states target -> mode -> sides once.
+
+    That package cannot import this one, so this test holds the two equal: a
+    target's sides are exactly the sides its mode routes a goal to here.
+    """
+    from cite_bringup.program import targets
+
+    for target in targets.ALL:
+        mode = targets.MODES[target]
+        assert targets.SIDES[target] == route(mode).sides == commanded_sides(mode)

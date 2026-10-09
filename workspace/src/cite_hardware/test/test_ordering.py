@@ -641,3 +641,116 @@ def test_a_speed_acknowledged_across_a_closure_is_not_trusted(closes):
         assert _sent(log).count("set_linear_motor_speed") == 2, log
     finally:
         node.destroy_node()
+
+
+# ---------------------------------------------------------------------- #
+# The track adapter: S-03, no position until the track is on its zero
+# ---------------------------------------------------------------------- #
+
+
+class _Published:
+    """The joint-state publisher, recording what it is handed."""
+
+    def __init__(self) -> None:
+        self.messages: list = []
+
+    def publish(self, message) -> None:
+        self.messages.append(message)
+
+
+def _zeroed(gate: StubGate):
+    node, log = _track(gate)
+    node._zero_client = FakeClient("get_linear_motor_on_zero", log)
+    node._state_publisher = _Published()
+    return node, log
+
+
+def _zero_reads(log: list) -> int:
+    return sum(1 for service, _ in log if service == "get_linear_motor_on_zero")
+
+
+def _read(node, millimetres: int) -> None:
+    node._get_client.futures[-1].set_result(GetInt16.Response(ret=0, data=millimetres))
+
+
+def test_no_position_is_published_until_the_track_is_read_on_its_zero():
+    node, log = _zeroed(StubGate())
+    try:
+        node._poll()
+        assert _zero_reads(log) == 1, "the zero is read on activation"
+        _read(node, 200)
+        assert node._state_publisher.messages == [], "unknown is not on its zero"
+        node._zero_client.futures[-1].set_result(GetInt16.Response(ret=0, data=0))
+        node._poll()
+        assert _zero_reads(log) == 2, "a track not on its zero is read again"
+        _read(node, 200)
+        assert node._state_publisher.messages == [], "0 is not on its zero"
+        node._zero_client.futures[-1].set_result(GetInt16.Response(ret=0, data=1))
+        node._poll()
+        assert _zero_reads(log) == 2, "a track on its zero is not read again"
+        _read(node, 250)
+        (message,) = node._state_publisher.messages
+        assert list(message.position) == [0.25]
+    finally:
+        node.destroy_node()
+
+
+@pytest.mark.parametrize("failure", [82, RuntimeError("vendor transport failed")])
+def test_after_a_vendor_error_the_zero_is_read_again(failure):
+    node, log = _zeroed(StubGate())
+    try:
+        node._poll()
+        node._zero_client.futures[-1].set_result(GetInt16.Response(ret=0, data=1))
+        _read(node, 100)
+        node._on_command(_command(0.3, 2))
+        future = node._set_client.futures[-1]
+        if isinstance(failure, Exception):
+            future.set_exception(failure)
+        else:
+            _answer(future, failure, LinearMotorSetPos)
+        node._poll()
+        assert _zero_reads(log) == 2, "the zero is read again after the vendor's error"
+        published = len(node._state_publisher.messages)
+        _read(node, 120)
+        assert len(node._state_publisher.messages) == published, (
+            "nothing is published until the zero is read again"
+        )
+    finally:
+        node.destroy_node()
+
+
+def test_a_vendor_error_discards_a_zero_read_in_flight():
+    """R-15: a zero read asked before the error cannot answer for the track after it."""
+    node, log = _zeroed(StubGate())
+    try:
+        node._poll()
+        in_flight = node._zero_client.futures[-1]
+        # A vendor error while that read is unanswered.
+        node._get_client.futures[-1].set_result(GetInt16.Response(ret=82, data=0))
+        # Its late answer says "on its zero": ignored.
+        if not in_flight.cancelled():
+            in_flight.set_result(GetInt16.Response(ret=0, data=1))
+        assert node._on_zero is None, "a stale zero read restored the zero"
+        node._poll()
+        assert _zero_reads(log) == 2, "the zero is read again after the vendor's error"
+        _read(node, 120)
+        assert node._state_publisher.messages == [], (
+            "nothing is published until a read asked after the error answers"
+        )
+    finally:
+        node.destroy_node()
+
+
+def test_a_reactivation_reads_the_zero_again():
+    node, log = _zeroed(StubGate())
+    try:
+        node._poll()
+        node._zero_client.futures[-1].set_result(GetInt16.Response(ret=0, data=1))
+        node._on_zero is True or pytest.fail("the zero was not taken")
+        node.on_activate(None)
+        assert node._on_zero is None
+        node._get_client.futures[-1].set_result(GetInt16.Response(ret=0, data=100))
+        node._poll()
+        assert _zero_reads(log) == 2
+    finally:
+        node.destroy_node()

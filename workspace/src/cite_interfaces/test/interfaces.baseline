@@ -8,11 +8,19 @@ msg/ConsoleState.msg
   uint8 STOPPING=6
   uint8 FAULT=7
   uint8 TWIN_MODE_UNKNOWN=255
+  uint8 TARGET_SIM=1
+  uint8 TARGET_REAL=2
+  uint8 TARGET_TWIN=3
   builtin_interfaces/Time stamp
   uint8 state
   bool robot_started
   bool busy
-  bool at_start
+  bool plant_at_start
+  bool counterpart_at_start
+  uint8[] available_targets
+  uint8[] startable_targets
+  uint8[] floored_targets
+  bool counterpart_running
   string step
   string prompt
   string last_error
@@ -122,6 +130,14 @@ msg/TwinMode.msg
   uint8 requested_mode
   bool transition_in_progress
   string reason
+msg/TwinSides.msg
+  string TOPIC="/cite/twin/sides"
+  builtin_interfaces/Time stamp
+  string[] running
+  string[] physical
+  string[] commandable
+  string[] stationary
+  string detail
 srv/ConfirmOperator.srv
   ---
   bool success
@@ -129,6 +145,27 @@ srv/ConfirmOperator.srv
 srv/GetModelVersion.srv
   ---
   ModelVersion version
+srv/HoldMode.srv
+  string SERVICE="/cite/twin/hold_mode"
+  uint8 ACQUIRE=1
+  uint8 RELEASE=2
+  uint8 action
+  string holder
+  string node
+  uint8 mode
+  ---
+  bool accepted
+  ResultCode result
+  string holder
+  uint8 mode
+srv/Holding.srv
+  string SERVICE="/cite/twin/holding"
+  string[] sides
+  ---
+  string[] sides
+  bool[] heard
+  bool[] holding
+  string[] detail
 srv/InitializeAsset.srv
   ---
   bool success
@@ -138,6 +175,7 @@ srv/JointsAt.srv
   string[] joints
   float64[] positions
   float64 tolerance
+  string[] sides
   ---
   uint8 AT=0
   uint8 AWAY=1
@@ -152,6 +190,7 @@ srv/SetMode.srv
   string reason
   bool force
   bool homing
+  string holder
   ---
   bool accepted
   ResultCode result
@@ -169,6 +208,7 @@ srv/TrackArrived.srv
   string joint
   float64 position_m
   float64 tolerance_m
+  string[] sides
   ---
   uint8 ARRIVED=0
   uint8 AWAY=1
@@ -192,6 +232,7 @@ action/Grasp.action
   float64 current_effort_n
 action/HomeRobot.action
   float64 speed_scale
+  uint8 target
   ---
   bool success
   string detail
@@ -249,6 +290,7 @@ action/Place.action
   float64 fraction_complete
 action/RunProgram.action
   float64 speed_scale
+  uint8 target
   uint32 cycles
   ---
   bool success

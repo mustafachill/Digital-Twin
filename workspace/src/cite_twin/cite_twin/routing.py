@@ -95,26 +95,28 @@ class Route:
 #: most informative and the one an operator is watching.
 _BOTH_SIDES = (PLANT_SIDE, COUNTERPART_SIDE)
 
-#: ADR-0050 decision 2's table, keyed by mode. The value is either the sides a
-#: goal is dispatched to or the reason there are none.
+#: ADR-0050 decision 2's table, keyed by mode, as ADR-0072 amends it for `SIM`
+#: and `REAL`. The value is either the sides a goal is dispatched to or the
+#: reason there are none.
 #:
-#: `SIM`, `REAL` and `SHADOW` carry no command across the boundary at all, so
-#: L5's operator endpoint has no job in them — and it is deliberately NOT a
-#: second front door to the plant's own skill server, which keeps its own
-#: callers. `CLOSED_LOOP` is the one row the record leaves undecided, and an
-#: undefined gate is not something to improvise inside a router.
+#: `SIM` routes to the plant ONLY and `REAL` to the counterpart ONLY (ADR-0072):
+#: each mode commands exactly the sides `_COMMANDED` names for it, and nothing
+#: crosses from one side to the other. **In `SIM` nothing reaches the physical
+#: side** - that is now this row, not the absence of a row, and the import check
+#: below holds it. `SHADOW` carries no command across the boundary at all.
+#: `CLOSED_LOOP` is the one row the record leaves undecided, and an undefined
+#: gate is not something to improvise inside a router.
 _TABLE: Mapping[int, Route] = {
     TwinMode.MODE_SIM: Route(
-        (),
-        ResultCode.PRECONDITION_FAILED,
-        "in SIM nothing crosses the boundary: the counterpart is idle, and the "
-        "operator commands the plant's own L3 action server directly.",
+        (PLANT_SIDE,),
+        ResultCode.SUCCESS,
+        "the plant alone evaluates the goal: the counterpart is idle and nothing "
+        "reaches it (ADR-0072).",
     ),
     TwinMode.MODE_REAL: Route(
-        (),
-        ResultCode.PRECONDITION_FAILED,
-        "in REAL nothing crosses the boundary: the plant is idle, and the "
-        "physical side is commanded on its own side.",
+        (COUNTERPART_SIDE,),
+        ResultCode.SUCCESS,
+        "the counterpart alone evaluates the goal: the plant is idle (ADR-0072).",
     ),
     TwinMode.MODE_SHADOW: Route(
         (),
@@ -149,9 +151,9 @@ _TABLE: Mapping[int, Route] = {
 #:
 #: This is not :data:`_TABLE`. `_TABLE` answers *where does L5 send a goal*;
 #: this answers *which side is being driven at all*, including by callers L5
-#: never sees. The two differ in exactly the modes where a side is commanded on
-#: its own side: `REAL` and `SHADOW` carry no command across the boundary, and
-#: the physical side is being driven in both.
+#: never sees. Where a mode routes, the two agree side for side (ADR-0072); they
+#: differ only where a mode routes nothing: `SHADOW`, whose physical side is
+#: driven on its own side, and `CLOSED_LOOP`, whose gate is undecided.
 #:
 #: Read out of `TwinMode.msg`, mode by mode, and out of nothing else — that
 #: file's per-mode comment is the one statement of what a mode means (P1):
@@ -214,14 +216,25 @@ def _refuse_to_import_a_mode_no_table_knows_about() -> None:
                 "which sides that mode commands, are decided in the mode set and read "
                 "here - never defaulted, because a defaulted mode is an ungated one."
             )
+    # Written out, not only derived, because it is the premise of asking a
+    # person into the cell (SA-S-05, ADR-0072): in SIM a goal reaches the plant
+    # and nothing else. A change to either table that moved it fails here.
+    if tuple(_TABLE[TwinMode.MODE_SIM].sides) != (PLANT_SIDE,):
+        raise ImportError(
+            "SIM must route to the plant alone (ADR-0072): it is what makes the cell "
+            "safe to enter, and nothing in SIM may reach the counterpart"
+        )
     for mode, chosen in _TABLE.items():
-        undeclared = set(chosen.sides) - set(_COMMANDED.get(mode, ()))
-        if undeclared:
+        # Side for side, not only "a subset" (ADR-0072): a mode that dispatches a
+        # goal dispatches it to EXACTLY the sides it commands. A subset would let
+        # `SIM` route nowhere near the plant, or `VALIDATED` lose a side, and still
+        # import; a superset would send a goal to a side the gate judges idle.
+        if chosen.sides and tuple(chosen.sides) != tuple(_COMMANDED.get(mode, ())):
             raise ImportError(
-                f"mode {mode} dispatches a goal to {sorted(undeclared)}, which "
-                "_COMMANDED does not list as commanded in it. The two tables answer "
-                "different questions and the second must contain the first: a side "
-                "L5 sends a goal to is a side under command by definition."
+                f"mode {mode} dispatches a goal to {list(chosen.sides)} and _COMMANDED "
+                f"names {list(_COMMANDED.get(mode, ()))}. A mode that routes a goal "
+                "routes it to exactly the sides it commands, in the same order "
+                "(ADR-0072): the two tables must agree side for side."
             )
 
 
@@ -235,7 +248,7 @@ def commanded_sides(mode: int) -> tuple[str, ...]:
     computed from: *placing physical actuation under an authority that was not
     previously commanding it* (`cross-cutting-safety.md`) is a question about
     which sides the mode drives, not about which of them L5 happens to be the
-    caller for. `REAL` is the case that separates the two — L5 dispatches
+    caller for. `SHADOW` is the case that separates the two — L5 dispatches
     nothing in it and the physical side is being driven.
 
     A mode no table knows about commands **both** sides. That is the

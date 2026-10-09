@@ -48,6 +48,9 @@ _TRACK_SERVICES = {
     "speed_service": "set_linear_motor_speed",
     "get_position_service": "get_linear_motor_pos",
     "stop_service": "set_linear_motor_stop",
+    # Whether the track has found its zero: the adapter publishes no position
+    # until it has (S-03).
+    "on_zero_service": "get_linear_motor_on_zero",
 }
 _GRIPPER_SERVICES = {"get_position_service": "get_gripper_position"}
 #: The initializer's: what the operator does in UFACTORY Studio before running

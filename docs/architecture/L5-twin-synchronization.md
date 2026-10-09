@@ -6,7 +6,13 @@
   (`cite_twin/twin_boundary.py`); a `SetMode` server that applies the hardware opt-in **at the
   transition** and publishes `TwinMode` latched on `/cite/twin/mode`; an action server per arm
   per skill under `/cite/twin/...` that dispatches the L3 goal to each side's own server in the
-  modes ADR-0050's table gives a command flow; the belt and track routes below; and a
+  modes ADR-0050's table gives a command flow, as amended by
+  [ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md) (`SIM` to the plant
+  alone, `REAL` to the counterpart alone, `VALIDATED` to both); a mode hold
+  (`/cite/twin/hold_mode`) that refuses another client's mode change while a run holds it; a
+  per-side custody verdict (`/cite/twin/holding`) and a latched `TwinSides` on
+  `/cite/twin/sides` (running, physical, commandable and stationary sides); the belt and track
+  routes below; and a
   per-asset `DivergenceMetrics` publisher on `/cite/twin/divergence`. Each rule is held by a
   test in that package; `cite_twin/test/test_twin_boundary_paired_launch.py` runs each side as
   its own process on its own `ROS_DOMAIN_ID` and sends a goal across.
@@ -50,11 +56,13 @@
     VALIDATED again without it before its first cycle.
   - **Between cycles.** At the end of each run the program puts the twin in SIM; a failed
     return to SIM fails the run. Before the next run it asks the operator to place the part
-    only once it has read the twin's mode as SIM, then asks for VALIDATED again through that
+    only once it holds the twin in SIM at the boundary (`/cite/twin/hold_mode`, ADR-0072), then asks for VALIDATED again through that
     check.
 
-  Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` is refused at the physical
-  counterpart, and `./scripts/program` is refused before it brings anything up.
+  Without `CITE_ALLOW_HARDWARE=1`, `./scripts/sim --pair` starts the plant alone with the
+  boundary on `--sides plant` ([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)):
+  no counterpart context, no heartbeat on its domain, and every mode but `SIM` refused even with
+  `force`. `./scripts/program` is still refused before it brings anything up.
   **Not built:** an automated gate. **Nothing in CI brings a boundary up** — CI drives the
   plant alone (`bringup`, `program_cycle`) — because `launch_test` holds one context on one
   domain, so a paired scenario cannot take today's shape; that is ADR-0057's unmet promotion
@@ -204,9 +212,11 @@ to know it says, each with the clause that carries it:
   on the project owner's decision). For each conveyor in the plan L5 subscribes, on the
   plant's domain, to `/cite/twin/<zone>/<belt>/command` (`std_msgs/Float64`, m/s, the
   `COMMAND` profile) and publishes each value on each side's own `/cite/<zone>/<belt>/command`,
-  under the same routing table as the skills: a non-zero setpoint is dropped with a log line in
-  `SIM`, `REAL` and `SHADOW`, refused in `CLOSED_LOOP` (its gate is undecided, so `routing.py`
-  answers `NOT_IMPLEMENTED`), and sent to both sides in `VALIDATED` and `VIRTUAL_LEAD`. **A zero
+  under the same routing table as the skills: since [ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)
+  a non-zero setpoint goes to the plant in `SIM`, is dropped in `REAL` and `SHADOW`, refused in
+  `CLOSED_LOOP` (its gate is undecided, so `routing.py` answers `NOT_IMPLEMENTED`), and sent to
+  the plant in `VALIDATED` and `VIRTUAL_LEAD`. **A non-zero setpoint never reaches a physical
+  side**, which declares no belt. **A zero
   setpoint — a stop — is never gated**: it is sent to every side in every mode, because a
   physical belt's setpoint persists (`twin_boundary.py`'s `_on_belt_command`). The belt's state
   does not cross. The real program drives no belt — `./scripts/program` starts each side's belt on that

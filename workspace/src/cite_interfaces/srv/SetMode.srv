@@ -97,6 +97,12 @@ bool homing                 # true ONLY for the pre-start homing move (ADR-0070)
                             # all still apply. The program re-asks VALIDATED
                             # without it before its first cycle, so a cycle
                             # never runs under it.
+string holder               # the caller's run id, as given to HoldMode.srv; empty
+                            # for a caller that holds nothing. While a hold exists
+                            # a request for any mode other than the held one is
+                            # refused unless this is the holder's id, and `force`
+                            # does not skip that refusal (ADR-0072, S-01). A
+                            # request for SIM is never refused by a hold (S2-05)
 ---
 bool accepted
 ResultCode result

@@ -26,8 +26,8 @@ answers are driven here without touching the process environment.
 from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
-from cite_twin.mode import Deployment, MODE_NAMES, ModeAuthority
-from cite_twin.routing import commanded_sides, route
+from cite_twin.mode import Deployment, deployment_from_plan, MODE_NAMES, ModeAuthority
+from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, route
 import pytest
 
 #: A Phase 2.A pair: three arms, every far side a second simulation.
@@ -165,8 +165,10 @@ class TestTheGateIsDerivedAndNotListed:
         Driven off `route()` rather than off a list of mode names, so a seventh
         mode that dispatches a goal fails here on the day it is added.
         """
-        if not route(mode).accepted:
-            pytest.skip(f"{MODE_NAMES[mode]} dispatches no goal; covered below")
+        if COUNTERPART_SIDE not in route(mode).sides:
+            # SIM dispatches to the plant alone since ADR-0072, and the plant
+            # of a paired zone is never physical.
+            pytest.skip(f"{MODE_NAMES[mode]} dispatches no goal to the far side; covered below")
         verdict = authority(MIXED, _refused).request(mode, "", "because", force=False)
         assert not verdict.accepted, f"{MODE_NAMES[mode]} reached a physical far side"
         assert verdict.code == ResultCode.SAFETY_BLOCKED
@@ -345,3 +347,53 @@ class TestAcceptedTransitions:
                 mode, "", "because", force=False
             )
             assert verdict.accepted, f"mode {mode} was refused: {verdict.detail}"
+
+
+class TestAPairStartedWithThePlantAlone:
+    """ADR-0072, amending ADR-0057: a side that does not run is no far side at all."""
+
+    class _Manager:
+        def __init__(self, asset: str, physical: bool) -> None:
+            self.asset = asset
+            self._physical = physical
+
+        def commands_physical_hardware_on_or_none(self, side: str) -> bool | None:
+            return self._physical if side == "counterpart" else False
+
+    class _Plan:
+        def __init__(self, managers) -> None:
+            self.controller_managers = managers
+
+    def _plan(self):
+        return self._Plan([self._Manager("picker", True)])
+
+    def test_both_sides_running_is_the_plan_as_declared(self) -> None:
+        deployment = deployment_from_plan(self._plan(), ("plant", "counterpart"))
+        assert deployment.declares_physical_hardware("picker", "counterpart") is True
+
+    def test_a_counterpart_that_does_not_run_reads_as_none(self) -> None:
+        deployment = deployment_from_plan(self._plan(), ("plant",))
+        assert deployment.declares_physical_hardware("picker", "counterpart") is None
+        assert deployment.declares_physical_hardware("picker", "plant") is False
+
+    @pytest.mark.parametrize("mode", [TwinMode.MODE_REAL, TwinMode.MODE_VALIDATED])
+    def test_real_and_validated_are_refused_as_having_no_far_side(self, mode: int) -> None:
+        """Refuse before the hardware gate: with no counterpart there is nothing to gate.
+
+        The refusal says why.
+        """
+        machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
+        verdict = machine.request(mode, "", "because", force=False)
+        assert not verdict.accepted
+        assert verdict.code == ResultCode.PRECONDITION_FAILED
+        assert "far side" in verdict.detail and "plant alone" in verdict.detail
+        assert machine.mode == TwinMode.MODE_SIM
+
+    def test_the_running_sides_have_no_default(self) -> None:
+        """S-04: a caller that does not say which sides run is a TypeError, not both."""
+        with pytest.raises(TypeError):
+            deployment_from_plan(self._plan())  # type: ignore[call-arg]
+
+    def test_sim_is_accepted(self) -> None:
+        machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
+        assert machine.request(TwinMode.MODE_SIM, "", "because", force=False).accepted

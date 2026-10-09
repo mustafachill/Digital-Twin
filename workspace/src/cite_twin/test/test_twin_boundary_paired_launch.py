@@ -52,6 +52,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 from cite_bringup.plan import COUNTERPART_ARTIFACT_KEYS, default_plan_path
@@ -60,7 +61,7 @@ from cite_bringup.track_command import move as track_move
 from cite_interfaces.action import MoveTo, Pick
 from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
-from cite_interfaces.srv import SetMode, TrackArrived
+from cite_interfaces.srv import Holding, HoldMode, SetMode, TrackArrived
 import launch
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
@@ -182,7 +183,7 @@ TRACK, TRACK_JOINT = _TRACK["command_topic"], _TRACK["joint"]
 TWIN_TRACK = TRACK.replace("/cite/", "/cite/twin/", 1)
 
 
-def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
+def _side(name: str, domain: int, offset: float, custody: str) -> ExecuteProcess:
     return ExecuteProcess(
         cmd=[
             sys.executable,
@@ -201,6 +202,9 @@ def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
             TRACK,
             "--track-joint",
             TRACK_JOINT,
+            # Each side's custody, latched on its own domain (R-01).
+            "--custody",
+            custody,
         ],
         # The whole of the isolation, and the reason this rig can hold two
         # sides at once: each child process discovers only its own domain.
@@ -219,13 +223,13 @@ def generate_test_description():
     # the gate has its own rig. Cleared anyway, so that a machine that happens
     # to export it does not change what this test means.
     os.environ.pop("CITE_ALLOW_HARDWARE", None)
-    plant = _side("plant", PLANT_DOMAIN, 0.25)
-    counterpart = _side("counterpart", COUNTERPART_DOMAIN, 0.75)
+    plant = _side("plant", PLANT_DOMAIN, 0.25, "empty")
+    counterpart = _side("counterpart", COUNTERPART_DOMAIN, 0.75, "holding")
     boundary = Node(
         package="cite_twin",
         executable="twin_boundary.py",
         name="twin_boundary",
-        arguments=["--plan", str(PLAN_PATH)],
+        arguments=["--plan", str(PLAN_PATH), "--sides", "all"],
         output="screen",
     )
     return (
@@ -255,6 +259,8 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         cls.track_arrived = cls.node.create_client(
             TrackArrived, TrackArrived.Request.SERVICE
         )
+        cls.hold_mode = cls.node.create_client(HoldMode, HoldMode.Request.SERVICE)
+        cls.holding = cls.node.create_client(Holding, Holding.Request.SERVICE)
 
     @classmethod
     def tearDownClass(cls):
@@ -272,7 +278,7 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
                 return value
         self.fail(f"{what} did not happen within {timeout_s:g} s")
 
-    def _request(self, mode: int, reason: str, force: bool = False):
+    def _request(self, mode: int, reason: str, force: bool = False, holder: str = ""):
         self.assertTrue(
             self.set_mode.wait_for_service(timeout_sec=SETTLE_S),
             f"{SetMode.Request.SERVICE} was never advertised",
@@ -281,8 +287,17 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         request.mode = mode
         request.reason = reason
         request.force = force
+        request.holder = holder
         future = self.set_mode.call_async(request)
         self._spin_until(future.done, f"SetMode({mode}) returned")
+        return future.result()
+
+    def _hold(self, action: int, holder: str, node: str = "", mode: int = 0):
+        self.assertTrue(self.hold_mode.wait_for_service(timeout_sec=SETTLE_S))
+        future = self.hold_mode.call_async(
+            HoldMode.Request(action=action, holder=holder, node=node, mode=mode)
+        )
+        self._spin_until(future.done, f"HoldMode({action}, {holder}) returned")
         return future.result()
 
     def _enter_validated(self) -> None:
@@ -309,6 +324,125 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         return goal
 
     # ------------------------------------------------------------------ #
+
+    # --- S-01: a run's hold on the mode -------------------------------------
+
+    def test_a_foreign_set_mode_is_refused_while_a_sim_run_holds_the_mode(self):
+        """S-01: the race a SIM run had with another client, closed in the boundary.
+
+        A run holds SIM; another client's SetMode(REAL) - forced or not - is
+        refused and the mode stays SIM; the holder's own transitions are taken
+        and carry the hold; only the holder releases it, and once it has, the
+        same foreign request is accepted.
+        """
+        run = "paired-run"
+        me = self.node.get_fully_qualified_name()
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "before the hold").accepted)
+        taken = self._hold(HoldMode.Request.ACQUIRE, run, me, TwinMode.MODE_SIM)
+        self.assertTrue(taken.accepted, taken.result.detail)
+        try:
+            for force in (False, True):
+                foreign = self._request(TwinMode.MODE_REAL, "another client", force=force)
+                self.assertFalse(foreign.accepted, f"force={force}")
+                self.assertEqual(foreign.result.code, ResultCode.PRECONDITION_FAILED)
+                self.assertIn("held by a run in progress", foreign.result.detail)
+                self.assertEqual(foreign.current_mode, TwinMode.MODE_SIM)
+            # A second run may not take the hold, nor release this one.
+            other = self._hold(HoldMode.Request.ACQUIRE, "other-run", me, TwinMode.MODE_SIM)
+            self.assertFalse(other.accepted)
+            self.assertEqual(other.holder, run)
+            self.assertFalse(self._hold(HoldMode.Request.RELEASE, "other-run").accepted)
+            # The holder's own transition is taken, and carries the hold.
+            own = self._request(TwinMode.MODE_REAL, "the run itself", holder=run)
+            self.assertTrue(own.accepted, own.result.detail)
+            again = self._request(TwinMode.MODE_VALIDATED, "another client")
+            self.assertFalse(again.accepted, "the hold moved with the holder to REAL")
+            self.assertIn("held by a run in progress", again.result.detail)
+            # S2-05: SIM, the safe direction, is never refused by a hold; the
+            # hold stays with its holder, now on SIM.
+            back = self._request(TwinMode.MODE_SIM, "another client")
+            self.assertTrue(back.accepted, back.result.detail)
+            self.assertEqual(back.current_mode, TwinMode.MODE_SIM)
+            still = self._request(TwinMode.MODE_REAL, "another client, still held")
+            self.assertFalse(still.accepted, "the hold stayed with its holder on SIM")
+            self.assertIn("held by a run in progress", still.result.detail)
+            self.assertTrue(
+                self._request(TwinMode.MODE_SIM, "the run ends", holder=run).accepted
+            )
+        finally:
+            released = self._hold(HoldMode.Request.RELEASE, run)
+        self.assertTrue(released.accepted, released.result.detail)
+        self.assertEqual(released.holder, "")
+        after = self._request(TwinMode.MODE_REAL, "another client, after the run")
+        self.assertTrue(after.accepted, after.result.detail)
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "back to SIM").accepted)
+
+    def test_a_hold_is_not_taken_on_a_mode_that_is_not_in_force(self):
+        """A run holds the mode it checked, or nothing (S-01)."""
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "SIM first").accepted)
+        me = self.node.get_fully_qualified_name()
+        refused = self._hold(HoldMode.Request.ACQUIRE, "late-run", me, TwinMode.MODE_REAL)
+        self.assertFalse(refused.accepted)
+        self.assertEqual(refused.holder, "")
+        self.assertEqual(refused.mode, TwinMode.MODE_SIM)
+
+    def test_a_hold_lapses_once_its_holders_node_leaves_the_graph(self):
+        """S-01: a dead client cannot lock the twin for good; the mode is left alone."""
+        from cite_twin.hold import UNSEEN_CEILING_S
+
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "SIM first").accepted)
+        holder = rclpy.create_node(f"hold_holder_{os.getpid()}")
+        try:
+            taken = self._hold(
+                HoldMode.Request.ACQUIRE,
+                "dying-run",
+                holder.get_fully_qualified_name(),
+                TwinMode.MODE_SIM,
+            )
+            self.assertTrue(taken.accepted, taken.result.detail)
+            refused = self._request(TwinMode.MODE_REAL, "while the holder lives")
+            self.assertFalse(refused.accepted)
+        finally:
+            holder.destroy_node()
+        # Gone from the graph: within the ceiling and a discovery's margin the
+        # hold lapses, and the same request is then taken.
+        # Asked at most every half second: each refusal is a line in the log.
+        last = [0.0]
+
+        def lapsed() -> bool:
+            if time.monotonic() - last[0] < 0.5:
+                return False
+            last[0] = time.monotonic()
+            return self._request(TwinMode.MODE_REAL, "after the holder died").accepted
+
+        accepted = self._spin_until(
+            lapsed, "the dead holder's hold lapsed", timeout_s=UNSEEN_CEILING_S + SETTLE_S
+        )
+        self.assertTrue(accepted)
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "back to SIM").accepted)
+
+    # --- R-01: each side's custody, read by the boundary on its own domain ----
+
+    def test_each_sides_custody_is_answered_by_the_boundary(self):
+        """R-01: the counterpart's custody is read on its domain by L5, not by a client."""
+        self.assertTrue(self.holding.wait_for_service(timeout_sec=SETTLE_S))
+
+        def asked():
+            future = self.holding.call_async(Holding.Request())
+            self._spin_until(future.done, "Holding returned")
+            answer = future.result()
+            return answer if all(answer.heard) else None
+
+        answer = self._spin_until(asked, "both sides' custody was heard")
+        by_side = dict(zip(answer.sides, zip(answer.heard, answer.holding, answer.detail)))
+        self.assertEqual(set(by_side), {"plant", "counterpart"})
+        self.assertFalse(by_side["plant"][1])
+        self.assertTrue(by_side["counterpart"][1])
+        self.assertIn("counterpart_part", by_side["counterpart"][2])
+        # Asked for one side, answered for that one side.
+        future = self.holding.call_async(Holding.Request(sides=["counterpart"]))
+        self._spin_until(future.done, "Holding(counterpart) returned")
+        self.assertEqual(list(future.result().sides), ["counterpart"])
 
     def test_the_boundary_announces_itself_on_stdout(self, proc_output):
         """ADR-0057's promotion clause 1: the mechanism a pair supervisor joins on.
@@ -426,44 +560,94 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         )
         self.assertEqual(result.result.code, ResultCode.MOTION_INTERRUPTED)
 
-    def test_a_belt_command_crosses_only_when_the_mode_routes_it(self, proc_output):
-        """ADR-0066: a belt setpoint follows the skills' routing table.
+    def test_a_belt_command_goes_to_the_sides_the_mode_routes(self, proc_output):
+        """ADR-0066, ADR-0072: a belt setpoint follows the skills' routing table.
 
-        Sent in SIM first, where nothing crosses, then in VALIDATED, where it
-        must reach both sides. The SIM value is distinct so that its absence
-        can be read from the same output the arrival is read from.
+        SIM sends to the plant alone, REAL to the counterpart alone and
+        VALIDATED to both. Each mode's value is distinct, so the side it must
+        NOT have reached can be read from the same output its arrival is.
         """
         self._spin_until(
             lambda: self.node.count_subscribers(TWIN_BELT) > 0, "L5 subscribed to the belt"
         )
+        for mode, value, reached, idle in (
+            (TwinMode.MODE_SIM, 0.125, ("plant",), "counterpart"),
+            (TwinMode.MODE_REAL, 0.375, ("counterpart",), "plant"),
+            (TwinMode.MODE_VALIDATED, 0.25, ("plant", "counterpart"), None),
+        ):
+            response = self._request(mode, f"belt in mode {mode}")
+            self.assertTrue(response.accepted, response.result.detail)
+            command = Float64(data=value)
+            for side in reached:
+                self._spin_until(
+                    lambda side=side: self.belt.publish(command)
+                    or f"{side}: belt {BELT} {value:g}" in _stdout(proc_output),
+                    f"the belt command in mode {mode} reached the {side}",
+                )
+            if idle is not None:
+                self.assertNotIn(
+                    f"{idle}: belt {BELT} {value:g}",
+                    _stdout(proc_output),
+                    f"a belt command crossed to the idle {idle} in mode {mode}",
+                )
         self.assertTrue(self._request(TwinMode.MODE_SIM, "resetting").accepted)
-        refused = Float64(data=0.125)
-        deadline = self.node.get_clock().now().nanoseconds + int(2e9)
-        while self.node.get_clock().now().nanoseconds < deadline:
-            self.belt.publish(refused)
-            rclpy.spin_once(self.node, timeout_sec=0.1)
 
-        self._enter_validated()
-        routed = Float64(data=0.25)
-        for side in ("plant", "counterpart"):
-            self._spin_until(
-                lambda side=side: self.belt.publish(routed)
-                or f"{side}: belt {BELT} 0.25" in _stdout(proc_output),
-                f"the belt command reached the {side}",
+    def test_a_goal_reaches_exactly_the_sides_its_mode_commands(self, proc_output):
+        """ADR-0072: SIM reaches the plant only, REAL the counterpart only, VALIDATED both.
+
+        In SIM nothing reaches the far side: that is the premise of asking a
+        person into the cell (SA-S-05), and it is now the routing table itself.
+        Each mode's goal carries its own word, so a side it must not reach is
+        read as the absence of that word on that side's output. The counterpart
+        is simulated here, so REAL is entered without the hardware opt-in.
+        """
+        for mode, word, reached, idle in (
+            (TwinMode.MODE_SIM, "insim", ("plant",), "counterpart"),
+            (TwinMode.MODE_REAL, "inreal", ("counterpart",), "plant"),
+            (TwinMode.MODE_VALIDATED, "intwin", ("plant", "counterpart"), None),
+        ):
+            response = self._request(mode, f"a goal in mode {mode}")
+            self.assertTrue(response.accepted, response.result.detail)
+            result = self._result_of(
+                self._send(self.move_to, self._move_to(f"{word}:{word}"))
             )
-        self.assertNotIn(
-            f"belt {BELT} 0.125",
-            _stdout(proc_output),
-            "a belt command crossed the boundary in SIM",
+            self.assertEqual(result.result.code, ResultCode.SUCCESS, result.result.detail)
+            for side in reached:
+                _wait_for_side(proc_output, f"{side}: accepted {MOVE_TO_ON_A_SIDE} as {word}")
+                self.assertIn(f"{side}:", result.result.detail)
+            if idle is not None:
+                self.assertNotIn(
+                    f"{idle}: accepted {MOVE_TO_ON_A_SIDE} as {word}", _stdout(proc_output)
+                )
+                self.assertNotIn(f"{idle}:", result.result.detail)
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "resetting").accepted)
+
+    def test_a_track_move_reaches_only_the_side_a_single_side_mode_commands(
+        self, proc_output
+    ):
+        """ADR-0072: a track command in SIM moves the plant's carriage, in REAL the far one."""
+        self._spin_until(
+            lambda: self.track.get_subscription_count() > 0, "the boundary's track endpoint"
         )
+        for mode, start, reached, idle in (
+            (TwinMode.MODE_SIM, 0.0, "plant", "counterpart"),
+            (TwinMode.MODE_REAL, 0.875, "counterpart", "plant"),
+        ):
+            response = self._request(mode, f"a track move in mode {mode}")
+            self.assertTrue(response.accepted, response.result.detail)
+            self.track.publish(track_move(TRACK_JOINT, start, 0.5, 2.5))
+            _wait_for_side(proc_output, f"{reached}: track [{start}, 0.5]")
+            self.assertNotIn(f"{idle}: track [{start}, 0.5]", _stdout(proc_output))
+        self.assertTrue(self._request(TwinMode.MODE_SIM, "resetting").accepted)
 
     def test_a_belt_stop_crosses_in_every_mode(self, proc_output):
         """ADR-0066: a zero setpoint is never gated, and leaving a mode stops its belts.
 
         Counted as exact lines, because `0` is a prefix of every other value
-        this class sends. VALIDATED -> SIM must send exactly one zero to each
-        side on its own; only then is an operator's zero sent in SIM, so the
-        second zero on each side can have come from nothing but that.
+        this class sends. VALIDATED -> SIM must send exactly one zero to the
+        counterpart, which SIM no longer commands, and none to the plant, which
+        SIM still commands (ADR-0072); only then is an operator's zero sent in
+        SIM, which reaches both sides, the counterpart included.
         """
         def zeros(side: str) -> int:
             line = f"{side}: belt {BELT} 0"
@@ -476,15 +660,16 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self._enter_validated()
         before = {side: zeros(side) for side in sides}
         self.assertTrue(self._request(TwinMode.MODE_SIM, "leaving VALIDATED").accepted)
-        for side in sides:
-            self._spin_until(
-                lambda side=side: zeros(side) == before[side] + 1,
-                f"leaving VALIDATED stopped the {side}'s belt",
-            )
+        self._spin_until(
+            lambda: zeros("counterpart") == before["counterpart"] + 1,
+            "leaving VALIDATED stopped the counterpart's belt",
+        )
+        self.assertEqual(zeros("plant"), before["plant"], "SIM still commands the plant")
         stop = Float64(data=0.0)
-        for side in sides:
+        for side, at_least in (("plant", 1), ("counterpart", 2)):
             self._spin_until(
-                lambda side=side: self.belt.publish(stop) or zeros(side) >= before[side] + 2,
+                lambda side=side, at_least=at_least: self.belt.publish(stop)
+                or zeros(side) >= before[side] + at_least,
                 f"a stop sent in SIM reached the {side}",
             )
 
@@ -527,14 +712,17 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         _wait_for_side(proc_output, "plant: track [0.25, 0.25]")
         self.assertNotIn("counterpart: track [0.25, 0.25]", _stdout(proc_output))
 
-    def _arrived(self, position_m: float, tolerance_m: float):
+    def _arrived(self, position_m: float, tolerance_m: float, sides=()):
         self.assertTrue(
             self.track_arrived.wait_for_service(timeout_sec=SETTLE_S),
             f"{TrackArrived.Request.SERVICE} was never advertised",
         )
         future = self.track_arrived.call_async(
             TrackArrived.Request(
-                joint=TRACK_JOINT, position_m=position_m, tolerance_m=tolerance_m
+                joint=TRACK_JOINT,
+                position_m=position_m,
+                tolerance_m=tolerance_m,
+                sides=list(sides),
             )
         )
         self._spin_until(future.done, "TrackArrived returned")
@@ -557,15 +745,20 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self.assertTrue(self._arrived(0.5, 0.3).arrived)
         response = self._request(TwinMode.MODE_SIM, "no side commanded")
         self.assertTrue(response.accepted, response.result.detail)
-        # In SIM the plant is the commanded side and no track command is routed
-        # through L5 (R-02, R-03): the plant's carriage is asked about, and a
+        # In SIM the plant is the commanded side, and a track command is routed
+        # to it alone (ADR-0072): the plant's carriage is asked about, and a
         # SIMULATED counterpart is not (only a physical side is judged there).
         in_sim = self._arrived(0.25, 0.001)
         self.assertTrue(in_sim.arrived, in_sim.detail)
-        self.assertFalse(in_sim.routed)
+        self.assertTrue(in_sim.routed)
         away = self._arrived(0.75, 0.001)
         self.assertFalse(away.arrived)
         self.assertIn("plant: stands at 250.0 mm", away.detail)
+        # Named sides are judged alone, whatever the mode (ADR-0072): the
+        # counterpart's own carriage, asked about in SIM.
+        far = self._arrived(0.75, 0.001, sides=("counterpart",))
+        self.assertTrue(far.arrived, far.detail)
+        self.assertFalse(self._arrived(0.75, 0.001, sides=("plant",)).arrived)
 
     def test_a_successful_pick_never_reports_an_empty_gripper(self):
         """**S-02.** `Pick.action`: false with SUCCESS "is impossible"."""

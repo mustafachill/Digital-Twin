@@ -169,7 +169,17 @@ class Cell(Protocol):
 
 
 def execute(step: Step, cell: Cell) -> None:
-    """Hand one step to the cell."""
+    """Hand one step to the cell, once the cell has said it may be sent.
+
+    A cell that keeps the twin's mode (`RosCell.check_mode`) is asked first,
+    before EVERY step (R-05, ADR-0072): a mode its run did not ask for raises
+    `StepFailed`, which `run` answers with the stop path - the goal in flight
+    cancelled, the track held - and the step is never sent. A cell without one
+    (a fake, or one driving a single side directly) is not asked.
+    """
+    check = getattr(cell, "check_mode", None)
+    if check is not None:
+        check()
     if step.kind == "move":
         cell.move(step.pose, step.velocity_scaling)
     elif step.kind == "grip":

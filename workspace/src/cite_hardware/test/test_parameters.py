@@ -49,6 +49,7 @@ GOOD = {
         "speed_service": "/v/set_linear_motor_speed",
         "get_position_service": "/v/get_linear_motor_pos",
         "stop_service": "/v/set_linear_motor_stop",
+        "on_zero_service": "/v/get_linear_motor_on_zero",
         "deadman_state_topic": "/t/deadman",
         "deadman_state_max_age_s": 0.5,
     },

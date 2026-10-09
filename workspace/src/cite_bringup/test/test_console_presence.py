@@ -30,10 +30,11 @@ import time
 
 from cite_bringup.plan import default_plan_path, load
 import cite_bringup.program.cell as cell_module
-from cite_bringup.program.cell import RosCell, TERMINAL_NODE
+from cite_bringup.program.cell import RosCell, TERMINAL_NODE, terminal_node_name
 from cite_bringup.program.steps import StepFailed
-from cite_interfaces.msg import ConsoleState, RobotState, TwinMode
+from cite_interfaces.msg import ConsoleState, RobotState, TwinMode, TwinSides
 from cite_interfaces.qos import LATCHED, SENSOR
+from cite_interfaces.srv import Holding, HoldMode
 import pytest
 import rclpy
 from rosgraph_msgs.msg import Clock
@@ -164,13 +165,15 @@ def test_the_console_names_a_terminal_program_client_on_its_graph(graph) -> None
     """S-01: the console finds a terminal run by the one name `RosCell` gives it."""
     from cite_bringup.program.console import CellConsole
 
-    console = CellConsole(load(default_plan_path("cell_b")))
+    console = CellConsole(load(default_plan_path("cell_b")), ("plant", "counterpart"))
     try:
         assert console._terminal_client() is None
-        terminal = rclpy.create_node(TERMINAL_NODE)
+        # Named as a terminal run names its cell: the prefix and its own suffix.
+        name = terminal_node_name()
+        terminal = rclpy.create_node(name)
         try:
             _until_on_graph(lambda: console._terminal_client() is not None)
-            assert console._terminal_client() == f"/{TERMINAL_NODE}"
+            assert console._terminal_client() == f"/{name}"
         finally:
             terminal.destroy_node()
         _until_on_graph(lambda: console._terminal_client() is None)
@@ -216,3 +219,189 @@ def test_no_simulated_clock_on_the_domain_refuses(graph, monkeypatch) -> None:
     assert "/test_s02r/clock_absent" in refusal and "simulated side" in refusal
     # The probe's subscription does not outlive the question.
     assert reader.node.count_subscribers("/test_s02r/clock_absent") == 0
+
+
+# --- T-01: the console's belts are the RUNNING sides', said of them alone ------
+
+
+def test_a_plant_alone_console_commands_and_names_the_plants_belt_alone(
+    graph, monkeypatch
+) -> None:
+    """T-01: a side the pair did not start is neither commanded nor mentioned."""
+    import cite_bringup.program.console as console_module
+
+    asked: list = []
+
+    def set_belts(plan, stop, say, sides=None, **kwargs):
+        asked.append(sides)
+        return True
+
+    monkeypatch.setattr(console_module, "set_belts", set_belts)
+    console = console_module.CellConsole(load(default_plan_path("cell_b")), ("plant",))
+    try:
+        assert console.on_configure(None) == console_module.TransitionCallbackReturn.SUCCESS
+        assert console.machine._set_belts(True, lambda text: None, None, None)
+        assert asked == [["plant"]]
+    finally:
+        console.destroy_node()
+
+
+# --- R-01, S-01, S-02: the cell asks the twin, on its own domain only ---------
+
+
+class _Twin:
+    """A twin boundary's Holding, HoldMode and TwinSides, served on this domain."""
+
+    def __init__(self, holding: Holding.Response) -> None:
+        from rclpy.executors import SingleThreadedExecutor
+
+        self.node = rclpy.create_node("fake_twin_services")
+        self.holding = holding
+        self.holds: list = []
+        self.hold_answer = True
+        self.node.create_service(Holding, Holding.Request.SERVICE, self._on_holding)
+        self.node.create_service(HoldMode, HoldMode.Request.SERVICE, self._on_hold)
+        self.sides = self.node.create_publisher(TwinSides, TwinSides.TOPIC, LATCHED)
+        self.executor = SingleThreadedExecutor()
+        self.executor.add_node(self.node)
+        self._thread = threading.Thread(target=self.executor.spin, daemon=True)
+        self._thread.start()
+
+    def _on_holding(self, request, response):
+        return self.holding
+
+    def _on_hold(self, request, response):
+        self.holds.append((request.action, request.holder, request.node, request.mode))
+        response.accepted = self.hold_answer
+        response.result.detail = "fake"
+        return response
+
+    def close(self) -> None:
+        self.executor.shutdown()
+        self.node.destroy_node()
+
+
+def _cell(graph) -> RosCell:
+    _, reader = graph
+    reader._holder = "run-under-test"
+    reader._holds = False
+    reader._release_owed = False
+    reader._expected_mode = None
+    reader._heard_mode = None
+    return reader
+
+
+def test_custody_of_every_side_is_asked_of_the_twin_on_this_domain(graph) -> None:
+    """R-01: one call to the boundary; the counterpart's domain is never opened."""
+    twin = _Twin(
+        Holding.Response(
+            sides=["plant", "counterpart"],
+            heard=[True, True],
+            holding=[False, True],
+            detail=["", "picker holds box_7"],
+        )
+    )
+    try:
+        cell = _cell(graph)
+        with pytest.raises(StepFailed, match="counterpart: picker holds box_7"):
+            cell.refuse_if_holding(("plant", "counterpart"))
+        twin.holding = Holding.Response(
+            sides=["plant", "counterpart"],
+            heard=[True, True],
+            holding=[False, False],
+            detail=["", ""],
+        )
+        cell.refuse_if_holding(("plant", "counterpart"))
+    finally:
+        twin.close()
+
+
+def test_the_cell_holds_and_releases_the_mode_by_its_own_node(graph) -> None:
+    """S-01: the hold names this run and this cell's node, and is let go once."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        cell._hold(TwinMode.MODE_SIM, "SIM")
+        assert cell.release_hold()
+        # R-17: nothing owed is None, and nothing is asked.
+        assert cell.release_hold() is None, "nothing held: nothing asked"
+        (acquire, release) = twin.holds
+        assert acquire == (
+            HoldMode.Request.ACQUIRE, "run-under-test", "/terminal_client", TwinMode.MODE_SIM
+        )
+        assert release[:2] == (HoldMode.Request.RELEASE, "run-under-test")
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold"):
+            cell._hold(TwinMode.MODE_REAL, "REAL")
+    finally:
+        twin.close()
+
+
+def test_a_release_is_sent_whenever_an_acquire_was(graph) -> None:
+    """R-14: owed before the ACQUIRE is sent, so a refused or lost one is released too."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold"):
+            cell.hold_sim()
+        twin.hold_answer = True
+        assert cell.release_hold() is True
+        assert [hold[0] for hold in twin.holds] == [
+            HoldMode.Request.ACQUIRE, HoldMode.Request.RELEASE
+        ]
+    finally:
+        twin.close()
+
+
+def test_the_hold_is_re_asserted_before_every_step(graph) -> None:
+    """S2-05: `check_mode` asks the twin, under its lock, whether this run still holds."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        cell._hold(TwinMode.MODE_REAL, "REAL")
+        cell._expected_mode = cell._heard_mode = TwinMode.MODE_REAL
+        cell.check_mode()
+        assert twin.holds[-1] == (
+            HoldMode.Request.ACQUIRE, "run-under-test", "/terminal_client", TwinMode.MODE_REAL
+        )
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold REAL"):
+            cell.check_mode()
+    finally:
+        twin.close()
+
+
+def test_terminal_runs_have_names_of_their_own_on_one_prefix() -> None:
+    """S2-05: each terminal run's node is its own, and is known by its prefix."""
+    from cite_bringup.program.cell import is_terminal_node, terminal_node_name
+
+    first, second = terminal_node_name(), terminal_node_name()
+    assert first != second
+    assert is_terminal_node(first) and is_terminal_node(second)
+    assert is_terminal_node(TERMINAL_NODE)
+    assert not is_terminal_node("cell_console_program_0a1b2c3d")
+    assert not is_terminal_node(f"{TERMINAL_NODE}x")
+
+
+def test_the_operator_waits_for_a_stationary_physical_carriage(graph, monkeypatch) -> None:
+    """S-02: a moving carriage holds the prompt back, bounded, and refuses at the bound."""
+    from cite_bringup.program import targets
+
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        sides = {"running": ["plant", "counterpart"], "physical": ["counterpart"]}
+        twin.sides.publish(TwinSides(**sides, commandable=["plant", "counterpart"],
+                                     stationary=[], detail="picker_track_joint is not "
+                                     "reported stationary"))
+        monkeypatch.setattr(cell_module, "PHYSICAL_SIDE_READY_CEILING_S", 1.0)
+        refusal = cell._await_physical_sides(targets.REAL)
+        assert refusal is not None and "not reported stationary" in refusal
+        assert "no one is asked into the cell" in refusal
+        twin.sides.publish(TwinSides(**sides, commandable=["plant", "counterpart"],
+                                     stationary=["counterpart"]))
+        monkeypatch.setattr(cell_module, "PHYSICAL_SIDE_READY_CEILING_S", GRAPH_S)
+        assert cell._await_physical_sides(targets.REAL) is None
+    finally:
+        twin.close()

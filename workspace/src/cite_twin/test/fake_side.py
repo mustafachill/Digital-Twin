@@ -51,7 +51,7 @@ import sys
 import threading
 
 from cite_interfaces.action import MoveTo, Pick
-from cite_interfaces.msg import ModelVersion, ResultCode, TwinHeartbeat
+from cite_interfaces.msg import ModelVersion, ResultCode, RobotState, TwinHeartbeat
 from cite_interfaces.qos import COMMAND, LATCHED, STATE
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -95,6 +95,7 @@ class FakeSide(Node):
         belts: list[str],
         track: tuple[str, str] | None = None,
         joints: tuple[str, ...] = JOINTS,
+        custody: str = "",
     ) -> None:
         super().__init__("fake_side")
         #: The arm joints this side reports. The default is the boundary rigs';
@@ -156,6 +157,23 @@ class FakeSide(Node):
         self._model = self.create_publisher(
             ModelVersion, "/cite/facility/model_version", LATCHED
         )
+        # Each arm's custody, latched as the skill server latches it, when the
+        # rig asks for it: "empty" or "holding" (R-01). Nothing otherwise, so
+        # a rig that does not ask has a side whose custody is unheard.
+        self._custody = []
+        if custody:
+            for asset in assets:
+                publisher = self.create_publisher(
+                    RobotState, f"/cite/{zone}/{asset}/state", LATCHED
+                )
+                publisher.publish(
+                    RobotState(
+                        asset_id=asset,
+                        gripper_holding=custody == "holding",
+                        held_workpiece_id=f"{side}_part" if custody == "holding" else "",
+                    )
+                )
+                self._custody.append(publisher)
         # The boundary's heartbeat on THIS side's domain (ADR-0070 item 5),
         # printed twice and no more: the first one, and the first that shows
         # the sequence advancing. Every heartbeat would flood the output the
@@ -286,6 +304,10 @@ def main() -> int:
     parser.add_argument(
         "--joints", default=",".join(JOINTS), help="The arm joints to publish."
     )
+    parser.add_argument(
+        "--custody", default="", choices=("", "empty", "holding"),
+        help="Latch each arm's RobotState: empty or holding; nothing if omitted.",
+    )
     arguments, _ = parser.parse_known_args()
 
     rclpy.init()
@@ -297,6 +319,7 @@ def main() -> int:
         [topic for topic in arguments.belts.split(",") if topic],
         (arguments.track_topic, arguments.track_joint) if arguments.track_topic else None,
         tuple(joint for joint in arguments.joints.split(",") if joint),
+        arguments.custody,
     )
     executor = MultiThreadedExecutor()
     executor.add_node(node)

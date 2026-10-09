@@ -15,7 +15,11 @@
 """The operator console's state machine, with no ROS in it (ADR-0071).
 
 `cell_console` (`program.console`) serves Start robot, Home, Start program,
-the operator's go-ahead and Stop; this class decides every one of them. It
+the operator's go-ahead and Stop; this class decides every one of them. Home
+and Start program each name a TARGET (ADR-0072, `program.targets`) - the
+simulation, the real arm or the twin - which is never defaulted and must be one
+the running deployment offers now; every gate below that concerns a physical
+side applies when the target commands one, and only then. It
 holds the refusals - nothing before Start robot, one request at a time, a speed
 scale sent with every goal and never defaulted (`sides.required_speed_scale`'s
 rule, floor included, where a side is physical), Start program only with both
@@ -57,7 +61,8 @@ from dataclasses import dataclass
 import threading
 import time
 
-from cite_bringup.program import cycle
+from cite_bringup.plan import COUNTERPART_SIDE, PLANT_SIDE
+from cite_bringup.program import cycle, targets
 from cite_bringup.program.home import StartPose
 from cite_bringup.program.steps import (
     EXIT_INTERRUPTED,
@@ -120,7 +125,19 @@ class Snapshot:
     state: int
     robot_started: bool
     busy: bool
-    at_start: bool
+    #: Per side: brought to, or ended a full cycle at, the program's start, and
+    #: nothing has moved it since as far as this console knows (ADR-0072).
+    plant_at_start: bool
+    counterpart_at_start: bool
+    #: The targets the running deployment can serve now (`targets.available`).
+    available_targets: tuple[int, ...]
+    #: Those of them every side of which is at the program's start (R-02):
+    #: the targets Start program is accepted for, so no panel restates which
+    #: sides a target commands.
+    startable_targets: tuple[int, ...]
+    #: Those of them that command a running physical side: the targets the
+    #: speed floor applies to (R-02).
+    floored_targets: tuple[int, ...]
     step: str
     prompt: str
     last_error: str
@@ -160,13 +177,16 @@ class _Observed:
             self.cancel_failure = str(error)
             raise
 
-    def enter_validated(self, **kwargs) -> None:
+    def enter_target(self, target: int, **kwargs) -> None:
         # Before the ask: a refused or unanswered ask may still have entered.
-        self._entered(True)
-        self._recorded(self._cell.enter_validated, **kwargs)
+        # SIM is no commanding mode of this console's own: it commands the
+        # plant alone, and is what every other client may expect to find.
+        if target != targets.SIM:
+            self._entered(True)
+        self._recorded(self._cell.enter_target, target, **kwargs)
 
-    def leave_validated(self) -> bool:
-        left = self._cell.leave_validated()
+    def return_to_sim(self) -> bool:
+        left = self._cell.return_to_sim()
         if left:
             self._entered(False)
         return left
@@ -195,14 +215,19 @@ class ConsoleMachine:
     ``make_cell(speed, interrupted)`` returns a `RosCell`-like cell driving the
     twin at ``speed`` that raises `Interrupted` once ``interrupted()`` is true,
     and ``speed`` None for a cell that is never handed a step; the caller
-    closes it. ``initialize_physical(say, interrupted)`` is `home.initialize`
-    for the plan's physical sides. ``place_parts(may_hold, say, interrupted)``
-    puts a work-piece on every simulated side (`program.part`), clearing the
-    sides in ``may_hold`` first. ``set_belts(running, say, interrupted,
+    closes it. ``physical`` is the RUNNING physical sides
+    (`targets.running_physical`, R-16). ``initialize_physical(say,
+    interrupted)`` is `home.initialize` for those sides.
+    ``place_parts(sides, may_hold, say, interrupted)`` puts a work-piece on
+    every simulated side of ``sides`` (`program.part`), clearing the sides in
+    ``may_hold`` first. ``set_belts(running, say, interrupted,
     match_ceiling_s)`` runs or stops every simulated side's belt and says
-    whether every one took it (`program.belt`). ``check_scale`` returns a goal's
-    scale or raises `ValueError` (`sides.required_speed_scale`), and
-    ``minimum_speed_scale`` is the floor it applies, 0 for none.
+    whether every one took it (`program.belt`). ``check_scale(scale, target)``
+    returns a goal's scale or raises `ValueError` (`sides.required_speed_scale`
+    for the target's sides, R-25), and ``minimum_speed_scale`` is the floor it
+    applies to a target with a physical side, 0 for none. ``available()`` is
+    the targets the running deployment offers now (`targets.available`, read
+    from the twin's `TwinSides`, R-19).
     ``heard_twin_mode`` is the twin's mode as last heard on its topic, None
     before any. ``terminal_client`` says which terminal program client is on
     the graph, None for none: while one is, every request but the return to
@@ -221,14 +246,15 @@ class ConsoleMachine:
         make_cell: Callable[[float | None, Callable[[], bool]], object],
         initialize_physical: Callable[[Callable[[str], None], Callable[[], bool]], None],
         place_parts: Callable[
-            [MutableSet[str], Callable[[str], None], Callable[[], bool]], None
+            [Sequence[str], MutableSet[str], Callable[[str], None], Callable[[], bool]], None
         ],
         set_belts: Callable[
             [bool, Callable[[str], None], Callable[[], bool] | None, float | None], bool
         ],
+        available: Callable[[], Sequence[int]],
         heard_twin_mode: Callable[[], int | None] = lambda: None,
         terminal_client: Callable[[], str | None] = lambda: None,
-        check_scale: Callable[[float], float] = speed_scale,
+        check_scale: Callable[[float, int], float] = lambda scale, target: speed_scale(scale),
         minimum_speed_scale: float = 0.0,
         on_change: Callable[[Snapshot], None] = lambda snapshot: None,
         log: Callable[[str], None] = print,
@@ -242,6 +268,7 @@ class ConsoleMachine:
         self._initialize_physical = initialize_physical
         self._place_parts = place_parts
         self._set_belts = set_belts
+        self._available = available
         self._heard_twin_mode = heard_twin_mode
         self._terminal_client = terminal_client
         self._check_scale = check_scale
@@ -255,7 +282,10 @@ class ConsoleMachine:
         self._state = ConsoleState.NOT_STARTED
         self._started = False
         self._busy = False
-        self._at_start = False
+        #: Per side, whether it is at the program's start (ADR-0072).
+        self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
+        #: The target of the request in progress, None when none or Start robot.
+        self._target: int | None = None
         self._step = ""
         self._prompt = ""
         self._error = ""
@@ -314,14 +344,17 @@ class ConsoleMachine:
         cancelled = self._cancelled
         return cancelled is not None and cancelled()
 
-    def motion_refusal(self, scale: float, cycles: int | None = None) -> str | None:
+    def motion_refusal(
+        self, scale: float, cycles: int | None = None, target: int = 0
+    ) -> str | None:
         """Say why a Home (``cycles`` None) or Start program goal would be rejected now, or None.
 
         Asked when the goal arrives, and again when it is started: two goals
         that both pass here race for the one request, and the second loses.
+        ``target`` is the goal's own, and 0 - unset - is refused (R-18).
         """
         with self._lock:
-            return self._motion_refusal(scale, cycles)
+            return self._motion_refusal(scale, cycles, target)
 
     def record_refusal(self, reason: str) -> None:
         """Publish why a request was refused, as `last_error`, changing no state (P-R01).
@@ -352,7 +385,7 @@ class ConsoleMachine:
             # Nothing this console placed is known any more, and nothing it
             # knew of the arms' place either.
             self._parts = set(self._simulated)
-            self._at_start = False
+            self._forget_the_start()
         say = self._sayer()
         try:
             say("starting the robot")
@@ -384,25 +417,29 @@ class ConsoleMachine:
     def home(
         self,
         scale: float,
+        target: int,
         feedback: Callable[[str], None] | None = None,
         *,
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
     ) -> Outcome:
-        """Bring both arms to the program's start, as `./scripts/home` does (`cycle.home`)."""
+        """Bring the target's arms to the program's start (`cycle.home`, as `./scripts/home`)."""
         refusal = self._begin(
             ConsoleState.HOMING,
-            lambda: self._motion_refusal(scale),
+            lambda: self._motion_refusal(scale, None, target),
             scale,
             owner=owner,
             cancelled=cancelled,
+            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
             return Outcome(False, refusal)
         say = self._sayer(feedback)
+        physical = self._physical_in(target)
         with self._lock:
-            self._at_start = False
+            for side in targets.SIDES[target]:
+                self._at_start[side] = False
         failure: str | None = None
         stopped = False
         problems: list[str] = []
@@ -415,12 +452,17 @@ class ConsoleMachine:
                     observed,
                     self._home_steps,
                     self._start,
-                    physical=self._physical,
+                    target=target,
+                    physical=physical,
                     scale=scale,
                     say=say,
                     await_operator=self._awaiter(observed),
-                    initialize_physical=lambda: self._initialize_physical(
-                        say, self.interrupted
+                    # Only a target with a physical side initializes one; the
+                    # simulation calls no vendor service at all (R-03).
+                    initialize_physical=(
+                        (lambda: self._initialize_physical(say, self.interrupted))
+                        if physical
+                        else (lambda: None)
                     ),
                     prompt=HOME_PROMPT,
                 )
@@ -428,7 +470,10 @@ class ConsoleMachine:
                 cell.close()
             stopped = ended.status == EXIT_INTERRUPTED
             if ended.sim_confirmed is False:
-                problems.append("the twin did not confirm SIM after the home")
+                problems.append(
+                    "the twin did not confirm SIM after the home, and this request keeps "
+                    "its hold on the twin's mode"
+                )
             if ended.status != 0 and not stopped:
                 failure = (
                     ended.failure
@@ -446,31 +491,36 @@ class ConsoleMachine:
             stopped,
             failure,
             problems,
-            "both arms are at the program's start",
-            at_start=True,
+            f"{targets.ARMS[target]} at the program's start",
+            at_start=targets.SIDES[target],
         )
 
     def run_program(
         self,
         scale: float,
         cycles: int,
+        target: int,
         feedback: Callable[[int, int, int, str], None] | None = None,
         *,
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
     ) -> Outcome:
-        """Run ``cycles`` cycles of the program, one part each, by `cycle.run_program`."""
+        """Run ``cycles`` cycles on ``target``, one part each, by `cycle.run_program`."""
         refusal = self._begin(
             ConsoleState.RUNNING,
-            lambda: self._motion_refusal(scale, cycles),
+            lambda: self._motion_refusal(scale, cycles, target),
             scale,
             owner=owner,
             cancelled=cancelled,
+            target=target,
         )
         if refusal is not None:
             self.record_refusal(refusal)
             return Outcome(False, refusal)
         say = self._sayer()
+        sides = targets.SIDES[target]
+        physical = self._physical_in(target)
+        simulated = [side for side in sides if side in self._simulated]
 
         def on_step(number_of_cycle: int, number: int, count: int, step: Step) -> None:
             if feedback is not None:
@@ -482,31 +532,43 @@ class ConsoleMachine:
         completed = 0
         observed = None
         refusal: str | None = None
+        #: Whether a cycle ended without SIM confirmed: then the hold this
+        #: request took is kept, never released (S2-04).
+        sim_unconfirmed = False
         try:
             cell = self._make_cell(scale, self.interrupted)
             observed = _Observed(cell, self._set_entered)
             try:
-                # Measured, not only remembered (N-03): `at_start` says what
-                # this console last saw, and anything may have moved the arms
-                # since. Away is a refusal, as the command line's measurement is.
-                away = observed.away_from_start(self._start)
+                # Measured, not only remembered (N-03, R-22): `at_start` says
+                # what this console last saw, and anything may have moved the
+                # arms since. Every side of the target is measured; away is a
+                # refusal, as the command line's measurement is.
+                away = observed.away_from_start(self._start, sides)
                 if away is not None:
                     raise _NotAtStart(
-                        f"the arms are not at the program's start: {away}. Home first"
+                        f"{targets.label(target)} is not at the program's start: {away}. "
+                        "Home first"
                     )
                 for number in range(1, cycles + 1):
                     self._raise_if_stopped()
                     with self._lock:
                         # The first step moves the arm away from the start.
-                        self._at_start = False
-                    say(f"cycle {number}: putting a work-piece on each simulated side's table")
-                    self._place_parts(self._parts, say, self.interrupted)
-                    self._start_belts(say)
+                        for side in sides:
+                            self._at_start[side] = False
+                    if simulated:
+                        # Parts and belts on the target's simulated sides only.
+                        say(
+                            f"cycle {number}: putting a work-piece on "
+                            f"{', '.join(simulated)}'s table"
+                        )
+                        self._place_parts(simulated, self._parts, say, self.interrupted)
+                        self._start_belts(say)
                     self._raise_if_stopped()
                     ended = cycle.run_program(
                         observed,
                         self._steps,
-                        physical=self._physical,
+                        target=target,
+                        physical=physical,
                         scale=scale,
                         cycles=1,
                         say=say,
@@ -514,11 +576,16 @@ class ConsoleMachine:
                         prompt=PLACE_PROMPT,
                         first_cycle=number,
                         on_step=on_step,
+                        # Held across the cycles of this request, and let go
+                        # once, after the last (S2-01).
+                        release=False,
                     )
                     if ended.sim_confirmed is False:
+                        sim_unconfirmed = True
                         problems.append(
                             "the twin did not confirm SIM after the cycle, so no one is "
-                            "asked into the cell"
+                            "asked into the cell, and this request keeps its hold on the "
+                            "twin's mode"
                         )
                     if ended.status == EXIT_INTERRUPTED:
                         stopped = True
@@ -534,8 +601,13 @@ class ConsoleMachine:
                     completed += 1
                     with self._lock:
                         # A cycle of the real program ends where it began.
-                        self._at_start = True
+                        for side in sides:
+                            self._at_start[side] = True
             finally:
+                # Once per request, whatever ended it, unless SIM was not
+                # confirmed (S2-04).
+                if not sim_unconfirmed:
+                    cell.release_hold()
                 cell.close()
         except _NotAtStart as away:
             refusal = str(away)
@@ -548,7 +620,10 @@ class ConsoleMachine:
         if refusal is not None:
             # Nothing was started: no part placed, no belt run, no mode asked.
             self._log(f"Start program refused: {refusal}")
-            self._end(ConsoleState.READY, error=refusal, at_start=False)
+            with self._lock:
+                for side in sides:
+                    self._at_start[side] = False
+            self._end(ConsoleState.READY, error=refusal)
             return Outcome(False, refusal)
         if observed is not None and observed.cancel_failure is not None:
             problems.append(f"the cancel failed: {observed.cancel_failure}")
@@ -569,7 +644,7 @@ class ConsoleMachine:
                     f"nothing is awaiting the operator: the console is "
                     f"{STATE_NAMES[self._state]}, not AWAITING_OPERATOR"
                 )
-            elif self._physical and mode != TwinMode.MODE_SIM:
+            elif mode != TwinMode.MODE_SIM:
                 refusal = (
                     f"the twin is heard in mode {mode}, not SIM ({TwinMode.MODE_SIM}), so no "
                     "one is let into the cell; the question stands until it is in SIM or "
@@ -702,9 +777,17 @@ class ConsoleMachine:
                 )
         return None
 
-    def _motion_refusal(self, scale: float, cycles: int | None = None) -> str | None:
+    def _motion_refusal(
+        self, scale: float, cycles: int | None = None, target: int = 0
+    ) -> str | None:
+        # The target first (R-18): nothing about a goal with no target, or one
+        # this deployment does not offer now, is worth judging further.
+        refusal = targets.refusal(target, list(self._available()))
+        if refusal is not None:
+            return refusal
         try:
-            self._check_scale(scale)
+            # The floor is the target's, fixed for the run (R-25).
+            self._check_scale(scale, target)
         except ValueError as error:
             return (
                 f"{error}: the panel sends the speed scale explicitly with every goal, and "
@@ -719,12 +802,24 @@ class ConsoleMachine:
             return refusal
         if self._state != ConsoleState.READY:
             return f"the console is {STATE_NAMES[self._state]}, not READY"
-        if cycles is not None and not self._at_start:
-            return (
-                "the arms are not known to be at the program's start: Home first. A stop, a "
-                "failure and Start robot each leave that unknown"
-            )
+        if cycles is not None:
+            away = [side for side in targets.SIDES[target] if not self._at_start[side]]
+            if away:
+                return (
+                    f"{', '.join(away)} is not known to be at the program's start: Home first, "
+                    f"with the target {targets.label(target)}. A stop, a failure and Start "
+                    "robot each leave that unknown"
+                )
         return None
+
+    def _physical_in(self, target: int) -> list[str]:
+        """Return the running physical sides ``target`` commands: what operator gates key on."""
+        return [side for side in self._physical if side in targets.SIDES[target]]
+
+    def _forget_the_start(self) -> None:
+        """Every side's start is unknown again (R-22): a stop, a fault, Start robot."""
+        for side in self._at_start:
+            self._at_start[side] = False
 
     def _begin(
         self,
@@ -735,12 +830,14 @@ class ConsoleMachine:
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
         foreign_mode_refuses: bool = True,
+        target: int | None = None,
     ) -> str | None:
         with self._lock:
             reason = self._refusal(foreign_mode_refuses) or refusal()
             if reason is not None:
                 return reason
             self._busy = True
+            self._target = target
             self._state = state
             self._owner = owner
             self._cancelled = cancelled
@@ -765,13 +862,14 @@ class ConsoleMachine:
         *,
         started: bool | None = None,
         error: str = "",
-        at_start: bool | None = None,
+        at_start: Sequence[str] = (),
     ) -> None:
         with self._lock:
-            if at_start is not None:
-                self._at_start = at_start
+            for side in at_start:
+                self._at_start[side] = True
             self._state = state
             self._busy = False
+            self._target = None
             self._owner = None
             self._cancelled = None
             self._prompt = ""
@@ -786,7 +884,7 @@ class ConsoleMachine:
     def _fault(self, error: str, started: bool | None = None) -> Outcome:
         self._log(f"FAULT: {error}")
         with self._lock:
-            self._at_start = False
+            self._forget_the_start()
         self._end(ConsoleState.FAULT, started=started, error=error)
         return Outcome(False, error)
 
@@ -797,12 +895,12 @@ class ConsoleMachine:
         failure: str | None,
         problems: list[str],
         done: str,
-        at_start: bool = False,
+        at_start: Sequence[str] = (),
     ) -> Outcome:
         """End a motion request: READY, or FAULT with why. Never a homing move (ADR-0037).
 
-        ``at_start`` True says the arms are at the program's start when the
-        request completed, under the same lock that releases it.
+        ``at_start`` names the sides at the program's start when the request
+        completed, set under the same lock that releases it.
 
         Reached only once the cell has returned: every cancel answered and the
         cancelled goal's end read (`RosCell.cancel`), so READY is said of a
@@ -810,7 +908,7 @@ class ConsoleMachine:
         """
         if stopped or failure is not None:
             with self._lock:
-                self._at_start = False
+                self._forget_the_start()
                 # While the process closes, the shutdown stops the belts once
                 # this request has ended, with its own short ceilings (R2-02).
                 closing = self._closing
@@ -823,7 +921,7 @@ class ConsoleMachine:
             verb = "stopped" if stopped else "ended"
             return self._fault("; ".join([f"{what} {verb}, and the stop was not confirmed",
                                           *problems]))
-        self._end(ConsoleState.READY, at_start=True if at_start and not stopped else None)
+        self._end(ConsoleState.READY, at_start=() if stopped else at_start)
         if stopped:
             return Outcome(False, f"{what} was stopped; nothing homes on its own (ADR-0037)")
         return Outcome(True, f"{what}: {done}")
@@ -840,7 +938,7 @@ class ConsoleMachine:
         try:
             cell = self._make_cell(None, lambda: False)
             try:
-                left = _Observed(cell, self._set_entered).leave_validated()
+                left = _Observed(cell, self._set_entered).return_to_sim()
             finally:
                 cell.close()
         except Exception as error:  # noqa: BLE001 - never leave the console busy
@@ -894,9 +992,10 @@ class ConsoleMachine:
         It shows ``prompt`` in AWAITING_OPERATOR and waits for
         `confirm_operator` - which is refused unless the twin is heard in SIM -
         or a stop, which raises `Interrupted` as Ctrl-C at the terminal prompt
-        would have. Once confirmed it READS the twin's mode again, from the
-        twin, and refuses anything but SIM: a confirmation is never taken as
-        leave to enter a cell the twin may command (ADR-0071).
+        would have. Once confirmed it RE-ASSERTS the run's hold on SIM, taken
+        before the prompt (`hold_sim`, S2-01), and refuses anything but SIM: a
+        confirmation is never taken as leave to enter a cell the twin may
+        command (ADR-0071).
         """
 
         def await_operator(prompt: str) -> str:
@@ -921,7 +1020,9 @@ class ConsoleMachine:
                 self._step = "the operator confirmed"
                 snapshot = self._snapshot()
             self._on_change(snapshot)
-            mode = cell.twin_mode()
+            # Re-asserted, not read (S2-01): the hold taken before the prompt
+            # is confirmed held, on SIM, under the boundary's lock.
+            mode = cell.hold_sim()
             if mode != TwinMode.MODE_SIM:
                 raise StepFailed(
                     f"the operator confirmed, and the twin was then read in mode {mode}, not "
@@ -953,12 +1054,22 @@ class ConsoleMachine:
 
     def _snapshot(self) -> Snapshot:
         self._sequence += 1
+        available = tuple(self._available())
         return Snapshot(
             sequence=self._sequence,
             state=self._state,
             robot_started=self._started,
             busy=self._busy,
-            at_start=self._at_start,
+            plant_at_start=self._at_start[PLANT_SIDE],
+            counterpart_at_start=self._at_start[COUNTERPART_SIDE],
+            available_targets=available,
+            # Derived here, from the one target table, and published (R-02).
+            startable_targets=tuple(
+                target
+                for target in available
+                if all(self._at_start[side] for side in targets.SIDES[target])
+            ),
+            floored_targets=tuple(target for target in available if self._physical_in(target)),
             step=self._step,
             prompt=self._prompt,
             last_error=self._error,

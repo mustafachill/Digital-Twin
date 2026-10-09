@@ -66,9 +66,11 @@ from cite_bringup.plan import (
     load,
     Plan,
     PlanError,
+    PLANT_SIDE,
     resolve_domain_id,
     resolve_uri,
 )
+from cite_bringup.program import targets
 from cite_bringup.program.from_plan import program, Target, target
 from cite_bringup.program.steps import (
     _interrupts_ignored,
@@ -180,34 +182,57 @@ def bring_to_start(
     initialize_physical: Callable[[], None],
     say: Callable[[str], None],
     via_twin: bool = True,
+    target: int = targets.TWIN,
 ) -> bool:
-    """Initialize; measure the start; home only if a side is not there; measure again.
+    """Initialize; measure the target's start; home only if a side is not there; measure again.
 
     ``initialize_physical`` runs first, every time (ADR-0070): it is
-    idempotent, and only an initialized physical arm is measured. Returns
-    whether a homing move was made. Ends, through the twin, in
-    VALIDATED asked WITHOUT `SetMode.homing`, so whatever runs next runs under
-    the ordinary carriage-agreement refusal. Raises `StepFailed` - and retries
-    nothing - when initializing, entering VALIDATED, a home step, or the second
+    idempotent, and only an initialized physical arm is measured; for a target
+    with no physical side the caller hands a no-op (R-03). ``target`` names the
+    sides measured and moved (ADR-0072, `targets.SIDES`). Returns whether a
+    homing move was made. Ends, through the twin, in the target's mode asked
+    WITHOUT `SetMode.homing`, so whatever runs next runs under the ordinary
+    carriage-agreement refusal. The homing allowance is asked only where the
+    target's mode is VALIDATED (R-11). Raises `StepFailed` - and retries
+    nothing - when initializing, entering the mode, a home step, or the second
     measurement fails; ``ros`` is a `RosCell`.
     """
+    sides = targets.SIDES[target]
     initialize_physical()
-    away = ros.away_from_start(start)
+    away = ros.away_from_start(start, sides)
     if away is None:
-        say(f"every side is at the program's start ({start.pose}): no homing move")
+        say(f"every side of {targets.label(target)} is at the program's start ({start.pose}): "
+            "no homing move")
         if via_twin:
-            ros.enter_validated()
+            ros.enter_target(target)
         return False
     say(f"not at the program's start: {away}")
+    if (
+        via_twin
+        and PLANT_SIDE not in sides
+        and start.track_m is not None
+        and ros.target_carriage_unknown()
+    ):
+        # R-10: before any mode is asked and before anything moves. A track
+        # step of a target without the plant starts from where the twin
+        # confirmed that carriage stands, and the twin confirmed it nowhere.
+        raise StepFailed(
+            f"{targets.ARMS[target]} initialized, and its carriage is still not at the "
+            f"program's start ({start.track_m * 1000:.0f} mm): {away}. This program cannot "
+            "read where that carriage stands - the twin answers verdicts, not positions "
+            "(ADR-0050 decision 1b) - so it cannot command a track move from it. Run Start "
+            "robot again, whose initializer brings the carriage to the start, or Home with "
+            "the twin as the target. Nothing was moved"
+        )
     if via_twin:
-        ros.enter_validated(homing=True)
+        ros.enter_target(target, homing=targets.homing_allowance(target))
     run_home(steps, ros, say)
-    away = ros.away_from_start(start)
+    away = ros.away_from_start(start, sides)
     if away is not None:
         raise StepFailed(f"homed, and still not at the program's start: {away}")
-    say(f"every side is at the program's start ({start.pose})")
-    if via_twin:
-        ros.enter_validated()
+    say(f"every side of {targets.label(target)} is at the program's start ({start.pose})")
+    if via_twin and targets.homing_allowance(target):
+        ros.enter_target(target)
     return True
 
 
@@ -458,13 +483,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--zone", required=True)
     parser.add_argument("--speed-scale", default="")
+    parser.add_argument(
+        "--target",
+        choices=tuple(targets.NAMES.values()),
+        default=targets.NAMES[targets.TWIN],
+        help="The sides homed: sim, real or twin (default, as ./scripts/home always has).",
+    )
     args = parser.parse_args(argv)
+    chosen = targets.by_name(args.target)
+    sides = targets.SIDES[chosen]
     plan = load(default_plan_path(args.zone))
     try:
-        scale = required_speed_scale(plan, args.speed_scale, "twin")
+        scale = required_speed_scale(plan, args.speed_scale, "twin", sides)
     except ValueError as error:
         parser.error(f"--speed-scale: {error}")
-    physical = physical_sides(plan)
+    physical = [side for side in physical_sides(plan) if side in sides]
     cell = target(plan)
     steps = home_steps(cell)
     start = start_pose(cell, steps)
@@ -481,10 +514,12 @@ def main(argv: list[str] | None = None) -> int:
             ros,
             steps,
             start,
+            target=chosen,
             physical=physical,
             scale=scale,
             say=say_now,
             await_operator=input,
+            # A target with no physical side initializes nothing (R-03).
             initialize_physical=lambda: initialize(plan, physical, say_now),
             prompt=HOME_PROMPT,
             # One operator surface per pair (N-01): `./scripts/home` is refused

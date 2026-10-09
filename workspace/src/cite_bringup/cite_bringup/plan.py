@@ -400,6 +400,16 @@ class SkillActions:
     grasp: str
     transfer: str
 
+    @property
+    def state(self) -> str:
+        """Return the arm's latched `RobotState` topic: `state`, in the skill server's namespace.
+
+        The one place it is formed, from the server's own action names: the
+        program reads the plant's here, and the twin boundary reads every
+        side's (`Holding.srv`).
+        """
+        return f"{self.move_to.rsplit('/', 1)[0]}/state"
+
 
 #: Every gripper key the plan carries, under the exact name the skill server
 #: declares it.

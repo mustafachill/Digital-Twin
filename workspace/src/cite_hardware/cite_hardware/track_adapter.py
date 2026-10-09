@@ -56,6 +56,14 @@ presents the simulated names on the physical side and translates:
 - **State.** It polls `get_linear_motor_pos` and publishes the track joint's
   position on the arm's joint-state topic, where the simulated side's
   `joint_state_broadcaster` publishes it. The program reads arrival from there.
+- **Zero.** A position read from a track that has not found its zero is
+  measured from wherever the carriage stood at power-up, so it is no place on
+  the track at all. The adapter reads `get_linear_motor_on_zero` on activation
+  and again after any vendor error, and - while the answer is not 1 - on every
+  poll until it is (the initializer homes it). Until then it publishes NO track
+  position, so the twin boundary hears the side as not ready and offers no
+  target that commands it (S-03). Commands are handled exactly as before: the
+  vendor refuses a move on a track it has not initialized.
 
 **It never commands motion while not ACTIVE, and never while the deadman does
 not permit it** (`cite_hardware.gate`). **It stops the carriage itself** with
@@ -203,6 +211,12 @@ SPECS: tuple[Spec, ...] = (
         "the vendor's set_linear_motor_stop service (xarm_msgs/Call)",
     ),
     Spec(
+        "on_zero_service",
+        Parameter.Type.STRING,
+        "the vendor's get_linear_motor_on_zero service (xarm_msgs/GetInt16): whether the "
+        "track has found its zero; no position is published until it has",
+    ),
+    Spec(
         "deadman_state_topic",
         Parameter.Type.STRING,
         "the deadman's DeadmanState topic for this side",
@@ -232,6 +246,7 @@ class TrackAdapter(LifecycleNode):
         self._speed_client = None
         self._get_client = None
         self._stop_client = None
+        self._zero_client = None
         self._state_publisher = None
         self._command_subscription = None
         self._gate: DeadmanGate | None = None
@@ -293,6 +308,13 @@ class TrackAdapter(LifecycleNode):
         #: Completed once the carriage is no longer driven from here, while the
         #: process is ending (`stop_before_exit`).
         self._exit_future: Future | None = None
+        #: Whether the vendor says the track has found its zero: `None` until
+        #: read, and again after activation and after any vendor error. No
+        #: position is published unless it is True (S-03).
+        self._on_zero: bool | None = None
+        #: The zero read in flight, and when it is abandoned.
+        self._zero_future = None
+        self._zero_deadline_ns = 0
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -323,6 +345,9 @@ class TrackAdapter(LifecycleNode):
         )
         self._stop_client = self.create_client(
             Call, config["stop_service"], callback_group=self._group
+        )
+        self._zero_client = self.create_client(
+            GetInt16, config["on_zero_service"], callback_group=self._group
         )
         # STATE is `joint_state_broadcaster`'s own profile on this topic, so a
         # reader of the arm's joint states is matched by both publishers alike.
@@ -364,6 +389,8 @@ class TrackAdapter(LifecycleNode):
             # period: the first move after activation writes it.
             self._acked_speed = None
             self._speed_epoch += 1
+            # Nor whether the track has found its zero (S-03): read again.
+            self._on_zero = None
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
@@ -430,11 +457,18 @@ class TrackAdapter(LifecycleNode):
             self.destroy_lifecycle_publisher(self._state_publisher)
             self._state_publisher = None
         for client in (
-            self._set_client, self._speed_client, self._get_client, self._stop_client
+            self._set_client,
+            self._speed_client,
+            self._get_client,
+            self._stop_client,
+            self._zero_client,
         ):
             if client is not None:
                 self.destroy_client(client)
         self._set_client = self._speed_client = self._get_client = self._stop_client = None
+        self._zero_client = None
+        self._zero_future = None
+        self._on_zero = None
         self._position_m = None
         self._get_future = None
         self._get_in_flight = False
@@ -613,6 +647,7 @@ class TrackAdapter(LifecycleNode):
         error = future.exception()
         response = None if error is not None else future.result()
         if response is None or response.ret != 0:
+            self._forget_zero()
             with self._lock:
                 # Ends the move as a failed position call does: nothing
                 # accepted before this answer is sent after it.
@@ -722,6 +757,8 @@ class TrackAdapter(LifecycleNode):
         error = future.exception()
         response = None if error is not None else future.result()
         failed = response is None or response.ret != 0
+        if failed:
+            self._forget_zero()
         with self._lock:
             if failed:
                 # Abort the entire accepted pipeline, including a successor
@@ -822,9 +859,11 @@ class TrackAdapter(LifecycleNode):
             return
         error = future.exception()
         if error is not None:
+            self._forget_zero()
             self.get_logger().error(f"set_linear_motor_stop failed: {error}")
             return
         if future.result().ret != 0:
+            self._forget_zero()
             self.get_logger().error(
                 f"set_linear_motor_stop returned vendor code {future.result().ret}; "
                 "sent again on the next poll"
@@ -889,6 +928,7 @@ class TrackAdapter(LifecycleNode):
             self._stop_if_moving(f"motion is not permitted: {why}", repeated=True)
         elif holding:
             self._stop_if_moving("a hold was commanded", repeated=True)
+        self._read_zero_if_unknown(config)
         now = self._steady.now().nanoseconds
         overdue = None
         with self._lock:
@@ -937,6 +977,7 @@ class TrackAdapter(LifecycleNode):
         error = future.exception()
         response = None if error is not None else future.result()
         if config is None or response is None or response.ret != 0:
+            self._forget_zero()
             with self._lock:
                 self._position_m = None
             detail = error if error is not None else (
@@ -952,18 +993,108 @@ class TrackAdapter(LifecycleNode):
         with self._lock:
             self._position_m = position
             self._position_at_ns = self._steady.now().nanoseconds
-        message = JointState()
-        message.header.stamp = self.get_clock().now().to_msg()
-        message.name = [config["joint"]]
-        message.position = [position]
+            on_zero = self._on_zero
         publisher = self._state_publisher
-        if publisher is not None:
+        if on_zero is not True:
+            # S-03: no place on the track until it has found its zero.
+            self.get_logger().warning(
+                f"{config['joint']} is not published: the track has not been read as on its "
+                "zero (get_linear_motor_on_zero)",
+                throttle_duration_sec=5.0,
+            )
+        elif publisher is not None:
+            message = JointState()
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.name = [config["joint"]]
+            message.position = [position]
             publisher.publish(message)
         # The next segment of a move in progress, from this fresh position,
         # only while motion is permitted (SA2c-S-02 d).
         gate = self._gate
         if gate is not None and gate.permits_motion():
             self._advance(position)
+
+    # ------------------------------------------------------------------ #
+    # Zero (S-03)
+    # ------------------------------------------------------------------ #
+
+    def _forget_zero(self) -> None:
+        """After a vendor error, whether the track is on its zero is read again.
+
+        A read already in flight is discarded with it (R-15): it was asked
+        before the error, so its answer says nothing about the track after it,
+        and a late "on its zero" must not restore what the error took away.
+        `_on_zero_answered` ignores a future that is no longer the current one.
+        """
+        with self._lock:
+            self._on_zero = None
+            stale, self._zero_future = self._zero_future, None
+        if stale is not None and self._zero_client is not None:
+            self._zero_client.remove_pending_request(stale)
+            stale.cancel()
+
+    def _read_zero_if_unknown(self, config: dict) -> None:
+        """Read `get_linear_motor_on_zero` while the track is not known to be on its zero.
+
+        One read at a time; one unanswered within `position_max_age_s` is
+        abandoned and sent again on the next poll, as a position read is.
+        """
+        now = self._steady.now().nanoseconds
+        overdue = None
+        with self._lock:
+            if not self._active or self._on_zero is True:
+                return
+            if self._zero_future is not None:
+                if now <= self._zero_deadline_ns:
+                    return
+                overdue, self._zero_future = self._zero_future, None
+        client = self._zero_client
+        if client is None:
+            return
+        if overdue is not None:
+            client.remove_pending_request(overdue)
+            overdue.cancel()
+        if not client.service_is_ready():
+            self.get_logger().warning(
+                f"whether the track is on its zero is unread: {client.srv_name} is not "
+                "available, so no track position is published",
+                throttle_duration_sec=5.0,
+            )
+            return
+        with self._lock:
+            future = client.call_async(GetInt16.Request())
+            self._zero_future = future
+            self._zero_deadline_ns = now + int(config["position_max_age_s"] * 1e9)
+        future.add_done_callback(self._on_zero_answered)
+
+    def _on_zero_answered(self, future) -> None:
+        with self._lock:
+            if self._zero_future is not future:
+                return  # abandoned at its deadline, or the node was cleaned up
+            self._zero_future = None
+        if future.cancelled():
+            return
+        error = future.exception()
+        response = None if error is not None else future.result()
+        if response is None or response.ret != 0:
+            detail = error if error is not None else f"vendor code {response.ret}"
+            self.get_logger().error(
+                f"get_linear_motor_on_zero failed ({detail}); read again on the next poll",
+                throttle_duration_sec=5.0,
+            )
+            return
+        on_zero = response.data == 1
+        with self._lock:
+            before, self._on_zero = self._on_zero, on_zero
+        if on_zero and before is not True:
+            self.get_logger().info("the track is on its zero: its position is published")
+        elif not on_zero:
+            self.get_logger().error(
+                "the track has not found its zero (get_linear_motor_on_zero = "
+                f"{response.data}): no position is published until it has - initialize it "
+                "(Start robot)",
+                throttle_duration_sec=5.0,
+            )
 
 
 def main() -> int:

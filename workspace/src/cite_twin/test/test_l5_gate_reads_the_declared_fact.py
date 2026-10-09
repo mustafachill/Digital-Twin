@@ -228,7 +228,7 @@ def _untwinned_plan(tmp_path: Path) -> Path:
 @pytest.fixture
 def shipped(tmp_path: Path) -> Deployment:
     """Build a `Deployment` from the shipped plan in its untwinned shape."""
-    return deployment_from_plan(load_plan(_untwinned_plan(tmp_path)))
+    return deployment_from_plan(load_plan(_untwinned_plan(tmp_path)), ("plant", "counterpart"))
 
 
 def test_only_the_shape_helper_reads_the_live_plan() -> None:
@@ -399,7 +399,7 @@ def test_the_boundary_refuses_the_shipped_plan_at_side_resolution(tmp_path: Path
 
     plan = load_plan(_untwinned_plan(tmp_path))
     with pytest.raises(SideNotDeclaredError) as raised:
-        TwinBoundary(plan, base=1, environ={})
+        TwinBoundary(plan, base=1, environ={}, running=("plant", "counterpart"))
     assert "declares no side named" in str(raised.value), (
         "the shipped plan must be refused for having one side, not for anything "
         "the hardware declaration says"

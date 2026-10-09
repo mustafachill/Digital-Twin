@@ -15,8 +15,11 @@
 """Run the fixed program: `python3 -m cite_bringup.program --zone cell_b`.
 
     --cycles N       how many cycles (default 1; 0 runs until Ctrl-C)
-    --via twin       through the twin boundary, both sides (default)
+    --via twin       through the twin boundary (default), on --target's sides
     --via plant      the plant's own servers only
+    --target T       through the twin: `twin` (default; both sides, VALIDATED),
+                     `sim` (the plant alone, SIM) or `real` (the real arm alone,
+                     REAL) - ADR-0072. Refused with --via plant
     --dry-run        print the steps and exit
     --speed-scale S  every move and track slide at S in (0, 1] of its speed; 1 when not
                      given, except through the twin on a pair with a physical side,
@@ -63,6 +66,7 @@ import os
 import sys
 
 from cite_bringup.plan import default_plan_path, load, PlanError, PLANT_SIDE, require_domain
+from cite_bringup.program import targets
 from cite_bringup.program.cycle import Homing, run_program
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, start_pose
@@ -82,6 +86,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cycles", type=int, default=1, help="Cycles to run; 0 = forever.")
     parser.add_argument("--via", choices=("twin", "plant"), default="twin")
     parser.add_argument(
+        "--target",
+        choices=tuple(targets.NAMES.values()),
+        default=None,
+        help="Through the twin, the sides the signal goes to: sim, real or twin (default).",
+    )
+    parser.add_argument(
         "--first-cycle", type=int, default=1, help="Number of the first cycle, for the log."
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the steps and exit.")
@@ -96,14 +106,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.cycles < 0:
         parser.error("--cycles must be 0 or more")
 
+    if args.via == "plant" and args.target is not None:
+        parser.error("--target names sides of the twin; --via plant drives the plant alone")
+    # `./scripts/program` drives the twin, as it always has (ADR-0072 decision 5).
+    chosen = targets.by_name(args.target or targets.NAMES[targets.TWIN])
+    sides = targets.SIDES[chosen]
+
     plan = load(default_plan_path(args.zone))
     # The one rule, the same `./scripts/program` asks before bring-up (SA-S-02):
-    # a physical side is never commanded at a defaulted scale.
+    # a physical side the run commands is never commanded at a defaulted scale.
     try:
-        scale = required_speed_scale(plan, args.speed_scale, args.via)
+        scale = required_speed_scale(plan, args.speed_scale, args.via, sides)
     except ValueError as error:
         parser.error(f"--speed-scale: {error}")
-    physical = physical_sides(plan) if args.via == "twin" else []
+    physical = (
+        [side for side in physical_sides(plan) if side in sides] if args.via == "twin" else []
+    )
     cell = target(plan)
     steps = program(cell)
     # Before the first cycle only: each later invocation by `./scripts/program`
@@ -138,7 +156,12 @@ def main(argv: list[str] | None = None) -> int:
     install_interrupt_handlers()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     try:
-        ros = RosCell(cell.arm, args.via, track=cell.track, speed=scale)
+        ros = RosCell(
+            cell.arm,
+            args.via,
+            track=cell.track,
+            speed=scale,
+        )
         if args.via == "plant":
             # The environment's domain is only what the shell exported (S-02r):
             # the graph must show a simulated side before anything is asked.
@@ -153,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         ended = run_program(
             ros,
             steps,
+            target=chosen,
             physical=physical,
             scale=scale,
             cycles=args.cycles,
@@ -171,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
             console=plan.console.state if plan.console is not None else None,
             banner=(
                 f"==> {args.zone}: {cell.arm.asset}{riding}, running {cell.program.source} "
-                f"via {args.via} at {scale:g} of its speed"
+                f"via {args.via}"
+                + (f" on {targets.label(chosen)}" if args.via == "twin" else "")
+                + f" at {scale:g} of its speed"
             ),
         )
         return ended.status

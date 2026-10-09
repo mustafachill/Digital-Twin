@@ -26,7 +26,8 @@ from __future__ import annotations
 
 from cite_bringup.program import cycle
 from cite_bringup.program.home import StartPose
-from cite_bringup.program.steps import EXIT_INTERRUPTED, move
+from cite_bringup.program.steps import EXIT_INTERRUPTED, move, StepFailed
+from cite_bringup.program.targets import TWIN
 from cite_interfaces.msg import TwinMode
 import pytest
 
@@ -48,6 +49,11 @@ class Cell:
         self.log = log
         self.raises = raises or {}
         self.left = left
+        #: Each `release_hold` that had a hold to let go, as the length of
+        #: ``log`` when it came.
+        self.released: list[int] = []
+        #: Whether a hold was asked for, so a release is owed (R-14).
+        self.owed = False
 
     def _call(self, name: str) -> None:
         self.log.append(f"call {name}")
@@ -58,21 +64,40 @@ class Cell:
         self._call("twin_mode")
         return TwinMode.MODE_SIM
 
-    def carriage_refusal(self, homing: bool = False):
+    def hold_sim(self) -> int:
+        # The gate before the prompt (S2-01): the twin held in SIM.
+        self.owed = True
+        self._call("hold_sim")
+        return TwinMode.MODE_SIM
+
+    def carriage_refusal(self, target: int, homing: bool = False):
         self._call("carriage_refusal")
         return None
 
-    def refuse_if_holding(self) -> None:
+    def refuse_if_holding(self, sides=("plant",)) -> None:
         self._call("refuse_if_holding")
 
-    def enter_validated(self, homing: bool = False) -> None:
-        self._call("enter_validated")
+    def require_running(self, target: int) -> None:
+        pass
 
-    def leave_validated(self) -> bool:
-        self._call("leave_validated")
+    def enter_target(self, target: int, homing: bool = False) -> None:
+        self.owed = True
+        self._call("enter_target")
+
+    def return_to_sim(self) -> bool:
+        self._call("return_to_sim")
         return self.left
 
-    def away_from_start(self, start) -> None:
+    def release_hold(self) -> bool | None:
+        # Kept out of `log`, whose tails the tests below hold exactly; the
+        # order against the return to SIM is held by its own test.
+        if not self.owed:
+            return None
+        self.owed = False
+        self.released.append(len(self.log))
+        return True
+
+    def away_from_start(self, start, sides=()) -> None:
         self._call("measure")
         return None
 
@@ -97,6 +122,7 @@ def _run(cell: Cell, log: list[str], read) -> cycle.Ended:
     return cycle.run_program(
         cell,
         [move("pick")],
+        target=TWIN,
         physical=PHYSICAL,
         scale=0.1,
         cycles=1,
@@ -110,6 +136,7 @@ def _home(cell: Cell, log: list[str], read) -> cycle.Ended:
         cell,
         [move("zero")],
         START,
+        target=TWIN,
         physical=PHYSICAL,
         scale=0.1,
         say=lambda text: log.append(f"said {text}"),
@@ -132,16 +159,16 @@ def test_run_interrupted_at_the_prompt_exits_130_and_leaves_nothing() -> None:
     assert ended.status == EXIT_INTERRUPTED == 130
     assert ended.sim_confirmed is None
     assert _said(log)[-1] == "interrupted before the first step"
-    assert "call enter_validated" not in log and "call leave_validated" not in log
+    assert "call enter_target" not in log and "call return_to_sim" not in log
 
 
 def test_run_interrupted_while_entering_exits_130_then_leaves() -> None:
     log: list[str] = []
-    cell = Cell(log, {"enter_validated": KeyboardInterrupt()})
+    cell = Cell(log, {"enter_target": KeyboardInterrupt()})
     ended = _run(cell, log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (130, True)
     said = log.index("said interrupted before the first step")
-    assert log[said + 1:] == ["call leave_validated"]
+    assert log[said + 1:] == ["call return_to_sim"]
 
 
 def test_run_interrupted_in_a_step_cancels_then_leaves() -> None:
@@ -154,7 +181,7 @@ def test_run_interrupted_in_a_step_cancels_then_leaves() -> None:
         "call move pick",
         "said interrupted in cycle 1",
         "call cancel",
-        "call leave_validated",
+        "call return_to_sim",
     ]
 
 
@@ -166,22 +193,69 @@ def test_run_with_no_answer_at_the_prompt_exits_1_and_leaves_nothing() -> None:
         "FAILED before the first step: no operator answer (end of input): a physical "
         "side needs one at this terminal"
     )
-    assert "call leave_validated" not in log
+    assert "call return_to_sim" not in log
 
 
 def test_run_whose_return_to_sim_is_unconfirmed_exits_1() -> None:
     log: list[str] = []
-    ended = _run(Cell(log, left=False), log, _reader(log))
+    cell = Cell(log, left=False)
+    ended = _run(cell, log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (1, False)
     assert "said done: 1 cycle(s)" in log
-    assert log[-1] == "call leave_validated"
+    assert log[-2:] == ["call return_to_sim", f"said FAILED: {cycle.HOLD_KEPT}"]
+    # S2-04: the hold is kept, and the failure says so.
+    assert cell.released == [] and ended.hold_released is None
+    assert ended.failure == cycle.HOLD_KEPT
+
+
+def test_home_whose_return_to_sim_is_unconfirmed_keeps_its_hold() -> None:
+    """S2-04: a home that could not confirm SIM does not let the mode go."""
+    log: list[str] = []
+    cell = Cell(log, left=False)
+    ended = _home(cell, log, _reader(log))
+    assert (ended.status, ended.sim_confirmed) == (1, False)
+    assert cell.released == [] and ended.hold_released is None
+    assert cycle.HOLD_KEPT in ended.failure
+
+
+@pytest.mark.parametrize("sequence", ["run", "home"])
+def test_sim_is_held_before_the_operator_is_asked(sequence) -> None:
+    """S2-01: the hold on SIM, not a read of the mode, is the gate before the prompt."""
+    log: list[str] = []
+    cell = Cell(log)
+    (_run if sequence == "run" else _home)(cell, log, _reader(log))
+    asked = next(index for index, line in enumerate(log) if line.startswith("asked "))
+    assert log.index("call hold_sim") < asked
+    assert "call twin_mode" not in log
+    # Held through the program and the return to SIM, and let go once after.
+    (released,) = cell.released
+    assert log[released - 1] == "call return_to_sim"
+
+
+def test_a_run_told_not_to_release_keeps_its_hold() -> None:
+    """S2-01: the console holds across its cycles and lets go once, itself."""
+    log: list[str] = []
+    cell = Cell(log)
+    ended = cycle.run_program(
+        cell,
+        [move("pick")],
+        target=TWIN,
+        physical=PHYSICAL,
+        scale=0.1,
+        cycles=1,
+        say=lambda text: log.append(f"said {text}"),
+        await_operator=_reader(log),
+        release=False,
+    )
+    assert ended.status == 0 and ended.hold_released is None
+    assert cell.released == [] and cell.owed
 
 
 def test_a_completed_run_exits_0_after_sim() -> None:
     log: list[str] = []
     ended = _run(Cell(log), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (0, True)
-    assert log[-2:] == ["call cancel", "call leave_validated"]
+    assert log[-2:] == ["call cancel", "call return_to_sim"]
 
 
 # --- ./scripts/home -----------------------------------------------------------
@@ -192,7 +266,7 @@ def test_home_interrupted_at_the_prompt_exits_130_then_asks_for_sim() -> None:
     log: list[str] = []
     ended = _home(Cell(log), log, _reader(log, KeyboardInterrupt()))
     assert (ended.status, ended.sim_confirmed) == (130, True)
-    assert log[-2:] == ["said interrupted", "call leave_validated"]
+    assert log[-2:] == ["said interrupted", "call return_to_sim"]
     assert "call initialize" not in log
 
 
@@ -210,8 +284,9 @@ def test_a_completed_home_says_done_and_exits_0() -> None:
     log: list[str] = []
     ended = _home(Cell(log), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (0, True)
-    assert log[-2:] == ["said done: both arms are at the program's start", "call leave_validated"]
-    assert log.index("asked HOME?") < log.index("call initialize")
+    assert log[-2:] == ["said done: both arms are at the program's start", "call return_to_sim"]
+    assert log.index("asked Target: the twin (simulation and real arm); physical side(s) "
+                     "commanded: counterpart. HOME?") < log.index("call initialize")
 
 
 @pytest.mark.parametrize("homed", [True, False])
@@ -221,3 +296,43 @@ def test_a_home_whose_return_to_sim_is_unconfirmed_exits_1(homed: bool) -> None:
     ended = _home(Cell(log, raises, left=False), log, _reader(log))
     assert ended.sim_confirmed is False
     assert ended.status == (1 if homed else 130)
+
+
+# --- S-01: the run's hold on the twin's mode is let go last, whatever happened ---
+
+
+@pytest.mark.parametrize(
+    "raises",
+    [
+        {},  # completed
+        {"move pick": StepFailed("refused")},  # a step failed
+        {"move pick": KeyboardInterrupt()},  # stopped in a step
+        {"enter_target": KeyboardInterrupt()},  # stopped while entering
+    ],
+)
+def test_a_run_lets_its_hold_go_after_the_return_to_sim(raises) -> None:
+    log: list[str] = []
+    cell = Cell(log, raises)
+    ended = _run(cell, log, _reader(log))
+    assert ended.hold_released is True
+    (released,) = cell.released
+    assert log[released - 1] == "call return_to_sim", "released after SIM, never before"
+
+
+def test_a_run_refused_at_the_prompt_lets_go_of_the_sim_hold_it_took() -> None:
+    """S2-01: SIM is held from before the prompt, so a run that ends there releases it."""
+    log: list[str] = []
+    cell = Cell(log)
+    ended = _run(cell, log, _reader(log, EOFError()))
+    assert ended.hold_released is True and len(cell.released) == 1
+    assert "call return_to_sim" not in log
+
+
+@pytest.mark.parametrize("raises", [{}, {"measure": KeyboardInterrupt()}])
+def test_a_home_lets_its_hold_go_after_the_return_to_sim(raises) -> None:
+    log: list[str] = []
+    cell = Cell(log, raises)
+    ended = _home(cell, log, _reader(log))
+    assert ended.hold_released is True
+    (released,) = cell.released
+    assert log[released - 1] == "call return_to_sim"

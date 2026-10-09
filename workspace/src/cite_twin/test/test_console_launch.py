@@ -73,6 +73,15 @@ import yaml
 
 ZONE = "cell_b"
 
+#: Every goal names its target (ADR-0072); this rig drives the twin.
+TWIN = ConsoleState.TARGET_TWIN
+
+
+def _run_goal() -> RunProgram.Goal:
+    """One cycle at the program's own speed, on the twin."""
+    return RunProgram.Goal(speed_scale=1.0, cycles=1, target=TWIN)
+
+
 #: An odd base inside `DOMAIN_BAND`, offset from the paired rig's so that two
 #: rigs run side by side do not share a domain.
 BASE = 1 + 2 * ((os.getpid() + 17) % 50)
@@ -135,7 +144,7 @@ def generate_test_description():
         package="cite_twin",
         executable="twin_boundary.py",
         name="twin_boundary",
-        arguments=["--plan", str(PLAN_PATH)],
+        arguments=["--plan", str(PLAN_PATH), "--sides", "all"],
         output="screen",
     )
     console = Node(
@@ -143,7 +152,7 @@ def generate_test_description():
         executable="cell_console.py",
         # No `name`: a node-name remap reaches every node in the process,
         # and the console creates one per request for the cell it drives.
-        arguments=["--zone", ZONE, "--plan", str(PLAN_PATH)],
+        arguments=["--zone", ZONE, "--plan", str(PLAN_PATH), "--sides", "all"],
         output="screen",
     )
     return (
@@ -225,7 +234,7 @@ class TestTheConsole(unittest.TestCase):
         self.assertEqual(self.states[-1].state, ConsoleState.NOT_STARTED)
 
         # Nothing but Start robot before it has succeeded.
-        handle = self._send(self.home, HomeRobot.Goal(speed_scale=1.0))
+        handle = self._send(self.home, HomeRobot.Goal(speed_scale=1.0, target=TWIN))
         self.assertFalse(handle.accepted, "Home was accepted before Start robot")
         # P-R01: the rejection carries no reason to its client; the state does,
         # and the state itself is unchanged.
@@ -237,7 +246,7 @@ class TestTheConsole(unittest.TestCase):
         )
         self.assertIn("Start robot", refused.last_error)
         self.assertEqual(refused.state, ConsoleState.NOT_STARTED)
-        handle = self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1))
+        handle = self._send(self.run_program, _run_goal())
         self.assertFalse(handle.accepted, "Start program was accepted before Start robot")
         self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)
         self.assertFalse(self._call(self.stop, StopCell.Request()).success)
@@ -248,27 +257,38 @@ class TestTheConsole(unittest.TestCase):
         ready = self._state(ConsoleState.READY, "READY after Start robot")
         self.assertTrue(ready.robot_started)
         # Not at the program's start until a Home says so: Start program is refused.
-        self.assertFalse(ready.at_start)
+        self.assertFalse(ready.plant_at_start or ready.counterpart_at_start)
+        # ADR-0072: both sides run and are simulated, so every target is offered.
+        self.assertEqual(
+            list(ready.available_targets),
+            [ConsoleState.TARGET_SIM, ConsoleState.TARGET_REAL, ConsoleState.TARGET_TWIN],
+        )
         self.assertEqual(ready.prompt, "")
         self.assertEqual(ready.minimum_speed_scale, 0.0)
         self.assertFalse(
-            self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1)).accepted
+            self._send(self.run_program, _run_goal()).accepted
         )
 
         # The scale and the cycle count are refused at the goal, never defaulted.
         for goal in (
-            RunProgram.Goal(speed_scale=0.0, cycles=1),
-            RunProgram.Goal(speed_scale=1.5, cycles=1),
-            RunProgram.Goal(speed_scale=1.0, cycles=0),
+            RunProgram.Goal(speed_scale=0.0, cycles=1, target=TWIN),
+            RunProgram.Goal(speed_scale=1.5, cycles=1, target=TWIN),
+            RunProgram.Goal(speed_scale=1.0, cycles=0, target=TWIN),
         ):
             self.assertFalse(self._send(self.run_program, goal).accepted, str(goal))
         self.assertFalse(self._send(self.home, HomeRobot.Goal()).accepted)
+        # R-18: a goal with no target is rejected, and the state says why.
+        self.assertFalse(self._send(self.home, HomeRobot.Goal(speed_scale=1.0)).accepted)
+        self._spin_until(
+            lambda: "no target was sent" in self.states[-1].last_error,
+            "the missing target named in the console's state",
+        )
 
         # Home, through the boundary, until the fake carriage that never moves.
         steps: list[str] = []
         handle = self._send(
             self.home,
-            HomeRobot.Goal(speed_scale=1.0),
+            HomeRobot.Goal(speed_scale=1.0, target=TWIN),
             feedback=lambda message: steps.append(message.feedback.step),
         )
         self.assertTrue(handle.accepted)
@@ -291,7 +311,7 @@ class TestTheConsole(unittest.TestCase):
             )
         # A second motion goal is refused while one runs.
         self.assertFalse(
-            self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1)).accepted
+            self._send(self.run_program, _run_goal()).accepted
         )
 
         # Cancel: the same software stop as StopCell.
@@ -312,7 +332,7 @@ class TestTheConsole(unittest.TestCase):
         after = self._state(ConsoleState.READY, "READY after the cancel")
         self.assertTrue(after.robot_started)
         self.assertFalse(after.busy)
-        self.assertFalse(after.at_start)
+        self.assertFalse(after.plant_at_start or after.counterpart_at_start)
         self.assertEqual(after.last_error, "")
         self.assertTrue(any(state.state == ConsoleState.STOPPING for state in self.states))
         # And no homing move followed the stop (ADR-0037): the first move was

@@ -3,7 +3,9 @@
 #
 #   ./scripts/sim                    GUI (requires a display)
 #   ./scripts/sim --headless         no GUI — the form used by CI and by the tester agent
-#   ./scripts/sim --pair             both sides of a twin pair, under the pair supervisor
+#   ./scripts/sim --pair             a twin pair, under the pair supervisor: both sides
+#                                    with CITE_ALLOW_HARDWARE=1 when a side is physical,
+#                                    the plant alone without it (ADR-0072)
 #   ./scripts/sim --pair --console   the same, and the operator console once the
 #                                    twin boundary is up (ADR-0071)
 #   ./scripts/sim --zone cell_b      name the zone rather than letting the model choose
@@ -258,6 +260,36 @@ if [ "$PAIR" -eq 1 ]; then
     if [ "$CONSOLE" -eq 1 ]; then
         PAIR_ARGS=(--console "${PAIR_ARGS[@]}")
     fi
+    # WHICH SIDES START is decided here, by the hardware opt-in resolved above,
+    # and handed to the supervisor explicitly (ADR-0072): a plan with a physical
+    # side starts it only with CITE_ALLOW_HARDWARE=1, and without it the plant
+    # starts alone with the boundary and any console - simulation target only.
+    # The rule is `program.sides.pair_sides`; the real arm is never started by
+    # default, and a plant-only pair is a supported deployment, not a failure.
+    # Standard output is the choice and nothing else; why is on standard error,
+    # captured apart so that a warning the helper prints can never be read as
+    # the choice (R-09).
+    PAIR_SIDES_WHY_FILE="$(mktemp)"
+    PAIR_SIDES="$(python3 -m cite_bringup.program.sides --zone "$ZONE" --pair-sides 2>"$PAIR_SIDES_WHY_FILE")" \
+        || { cat "$PAIR_SIDES_WHY_FILE" >&2; rm -f "$PAIR_SIDES_WHY_FILE"; die "could not read which sides of ${ZONE} a pair starts"; }
+    PAIR_SIDES_WHY="$(cat "$PAIR_SIDES_WHY_FILE")"
+    rm -f "$PAIR_SIDES_WHY_FILE"
+    # The words are the supervisor's own (`cite_bringup.pair.SIDES_CHOICES`,
+    # the plant-alone one first), read rather than spelled again here (R-17).
+    SIDES_WORDS="$(python3 -c 'from cite_bringup.pair import SIDES_CHOICES, SIDES_PLANT; print(SIDES_PLANT, *SIDES_CHOICES)')" \
+        || die "could not read cite_bringup.pair.SIDES_CHOICES"
+    read -r SIDES_PLANT_WORD SIDES_CHOICE_WORDS <<<"$SIDES_WORDS"
+    case " ${SIDES_CHOICE_WORDS} " in
+        *" ${PAIR_SIDES} "*) ;;
+        *) die "cite_bringup.program.sides --pair-sides answered '${PAIR_SIDES}', not one of: ${SIDES_CHOICE_WORDS}" ;;
+    esac
+    if [ "$PAIR_SIDES" = "$SIDES_PLANT_WORD" ]; then
+        if [ -n "$PAIR_SIDES_WHY" ]; then
+            warn "$PAIR_SIDES_WHY"
+        fi
+        info "Starting the plant alone: the twin boundary supports SIM only (ADR-0072)"
+    fi
+    PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")
     exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
 fi
 

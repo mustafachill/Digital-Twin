@@ -29,6 +29,7 @@
   `cite_interfaces/test/interfaces.baseline` regenerated and the reason in the commit message.
   **Promotion is not a claim that any number is a fidelity number** — see *What this record
   does not claim*, which is a permanent clause and not a status caveat.
+- **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** decision 2's `SIM` and `REAL` rows now route goals, track and belt commands to the side they name (`SIM` to the plant alone, `REAL` to the counterpart alone). The table below is kept as written.
 - **Date:** 2026-08-31
 - **Deciders:** Docs-writer agent, from the three deferrals that name L5 by name:
   [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)'s `SHADOW` fork,

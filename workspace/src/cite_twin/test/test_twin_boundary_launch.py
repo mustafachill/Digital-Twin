@@ -69,6 +69,9 @@ from cite_interfaces.msg import DivergenceMetrics, ResultCode, TwinMode
 from cite_interfaces.qos import LATCHED, STATE
 from cite_interfaces.srv import SetMode
 from cite_twin.divergence import UNMEASURED
+# The boundary's own discovery wait, which a goal to a side that never appears
+# spends in full before it is refused.
+from cite_twin.twin_boundary import SERVER_WAIT_S
 import launch
 from launch_ros.actions import Node
 import launch_testing
@@ -167,7 +170,7 @@ def generate_test_description():
                 package="cite_twin",
                 executable="twin_boundary.py",
                 name="twin_boundary",
-                arguments=["--plan", str(PLAN_PATH)],
+                arguments=["--plan", str(PLAN_PATH), "--sides", "all"],
                 output="screen",
             ),
             launch_testing.actions.ReadyToTest(),
@@ -349,11 +352,13 @@ class TestTheTwinBoundary(unittest.TestCase):
             twin.destroy()
             side.destroy()
 
-    def test_a_goal_in_a_mode_with_no_command_flow_is_refused_with_a_code(self):
-        """A refusal is an abort carrying a `ResultCode`, never a bare rejection.
+    def test_a_goal_in_sim_is_sent_to_the_plant_alone_and_refused_with_a_code(self):
+        """ADR-0072: in SIM a goal goes to the plant only, never to the physical side.
 
-        A rejected goal carries no result, so a caller would learn that the twin
-        said no and never learn why.
+        This rig runs no side at all, so the plant's server never appears and
+        the goal is refused - as an abort carrying a `ResultCode` naming the
+        plant, never a bare rejection, and never naming the counterpart, whose
+        backend here is physical: in SIM nothing is even asked of it.
         """
         self._reset_to_sim()
         client = ActionClient(self.node, MoveTo, f"/cite/twin/{ZONE}/{PHYSICAL_ASSET}/move_to")
@@ -368,10 +373,15 @@ class TestTheTwinBoundary(unittest.TestCase):
             handle = sent.result()
             self.assertTrue(handle.accepted)
             result = handle.get_result_async()
-            self._spin_until(lambda: result.done(), "the goal produced a result")
+            self._spin_until(
+                lambda: result.done(),
+                "the goal produced a result",
+                timeout_s=SERVER_WAIT_S + SETTLE_S,
+            )
             code = result.result().result.result
             self.assertEqual(code.code, ResultCode.PRECONDITION_FAILED)
-            self.assertIn("SIM", code.detail)
+            self.assertIn("'plant'", code.detail)
+            self.assertNotIn("counterpart", code.detail)
         finally:
             client.destroy()
 

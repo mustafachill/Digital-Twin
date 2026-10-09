@@ -20,15 +20,32 @@ cite_bringup.program.home` (`./scripts/home`) and the operator console
 (`console_machine`, ADR-0071). Now each calls these functions, and a change to
 the order is made once.
 
-* `run_program`, before the program: on a physical side the twin's mode READ as
-  SIM, the carriage judged and the operator's go-ahead awaited
-  (`operator.confirm_operator`); the arm's custody read; VALIDATED - through
-  `home.bring_to_start` when the run homes first; then `steps.run`; then, on a
-  physical side, SIM again, whatever happened.
-* `home`: the same gate with the home prompt, `home.bring_to_start`, and SIM
-  again on a physical side.
+Every motion request names a TARGET (ADR-0072, `program.targets`): the
+simulation (SIM, the plant), the real arm (REAL, the counterpart) or the twin
+(VALIDATED, both). The caller passes ``physical``: the physical sides THE TARGET
+commands, which is what every operator gate below keys on.
+
+* `run_program`, before the program: through the twin, every side the target
+  commands must run (`require_running`, R-17). With a physical side in the
+  target the twin HELD in SIM (S2-01), the carriage judged where the plant is
+  commanded too, and the operator's go-ahead awaited (`operator.confirm_operator`),
+  with a prompt naming the target and its physical sides (R-12); the custody of
+  every side the target commands read (R-09); the target's mode - through
+  `home.bring_to_start` when the run homes first; then `steps.run`, every step
+  checked against that mode (R-05), which the run HOLDS from entering it to its
+  end so no other client can move the twin under it (S-01, `HoldMode.srv`);
+  then, for any target but the simulation, SIM again, whatever happened,
+  confirmed or the run fails (R-20); then the hold is let go - never when SIM
+  was not confirmed (S2-04), and by the console once per request.
+* `home`: the same gate with the home prompt, `home.bring_to_start` on the
+  target's sides, and SIM again for any target but the simulation.
 * `start_robot`: the gate without a carriage check - nothing has initialized the
-  track yet - then every physical arm's initialization, then custody.
+  track yet - then every RUNNING physical arm's initialization, then custody.
+
+A simulation target asks no one anything and tells no one the cell is safe to
+enter (R-13): it initializes nothing and calls no vendor service (R-03), and it
+asks the twin for SIM - the mode that commands the plant alone - rather than
+assuming it.
 
 What differs between the callers is injected, never branched on here:
 ``await_operator`` is `input` at a terminal and the panel's confirmation in the
@@ -42,6 +59,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from cite_bringup.plan import PLANT_SIDE
+from cite_bringup.program import targets
 from cite_bringup.program.home import bring_to_start, StartPose
 from cite_bringup.program.operator import confirm_operator, PLACE_PROMPT
 from cite_bringup.program.steps import EXIT_INTERRUPTED, run, Step, StepFailed
@@ -58,6 +77,35 @@ class Ended:
     failure: str | None = None
     #: Whether the twin confirmed SIM afterwards; None where it was not asked.
     sim_confirmed: bool | None = None
+    #: Whether the run let go of its hold on the twin's mode (S-01); None where
+    #: nothing was held (no hold was asked for), and None too where SIM was not
+    #: confirmed, since the hold is then kept on purpose (S2-04). False is said,
+    #: never fatal: the hold lapses once the run's node leaves the graph
+    #: (`HoldMode.srv`).
+    hold_released: bool | None = None
+
+
+#: Said, and made the run's failure, when the twin did not confirm SIM at the
+#: end (S2-04): the hold is then not released, so nobody else moves the twin out
+#: of the mode it was left in.
+HOLD_KEPT = (
+    "the twin did not confirm SIM, so this run keeps its hold on the twin's mode: no "
+    "other client may move the twin to any mode but SIM until the hold lapses, once this "
+    "run's node has left the graph (HoldMode.srv)"
+)
+
+
+def _release_unless_sim_unconfirmed(cell, sim: bool | None) -> bool | None:
+    """Let the run's hold go, unless the twin did not confirm SIM (S2-04)."""
+    return None if sim is False else cell.release_hold()
+
+
+def _with_hold_kept(failure: str | None, sim: bool | None, say) -> str | None:
+    """``failure``, with `HOLD_KEPT` added and said where SIM was not confirmed."""
+    if sim is not False:
+        return failure
+    say(f"FAILED: {HOLD_KEPT}")
+    return HOLD_KEPT if failure is None else f"{failure}; {HOLD_KEPT}"
 
 
 @dataclass(frozen=True)
@@ -78,21 +126,33 @@ def start_robot(
     initialize_physical: Callable[[], None],
     prompt: str,
 ) -> None:
-    """Enable the robot: on a physical side, SIM read and the cell cleared first.
+    """Enable the robot: on a physical side, SIM held and the cell cleared first.
 
     The initializer may home the physical track and bring the carriage to the
-    program's start, so on a physical side it runs only once the twin's mode
-    is read as SIM and the operator has confirmed ``prompt`` (ADR-0071). The
-    carriage is not judged first: initializing is what gives it a position.
-    Then custody. Raises `StepFailed` or `KeyboardInterrupt`; leaves the twin's
-    mode alone.
+    program's start, so on a physical side it runs only once the twin is HELD
+    in SIM (`hold_sim`, S2-01) and the operator has confirmed ``prompt``
+    (ADR-0071); the hold is kept until the request ends. The carriage is not
+    judged first: initializing is what gives it a position. Then custody.
+    Raises `StepFailed` or `KeyboardInterrupt`; leaves the twin's mode alone.
     """
-    if physical:
-        confirm_operator(
-            cell.twin_mode(), physical, None, say, await_operator, lambda: None, prompt=prompt
-        )
-    initialize_physical()
-    cell.refuse_if_holding()
+    try:
+        if physical:
+            confirm_operator(
+                cell.hold_sim(), physical, None, say, await_operator, lambda: None, prompt=prompt
+            )
+        initialize_physical()
+        cell.refuse_if_holding()
+    finally:
+        # The mode was never changed here, so SIM stands: the hold is let go.
+        cell.release_hold()
+
+
+def targeted_prompt(prompt: str, target: int, physical: Sequence[str]) -> str:
+    """Return ``prompt`` naming the target and the physical sides it commands (R-12)."""
+    return (
+        f"Target: {targets.label(target)}; physical side(s) commanded: "
+        f"{', '.join(physical) or 'none'}. {prompt}"
+    )
 
 
 def home(
@@ -100,6 +160,7 @@ def home(
     steps: Sequence[Step],
     start: StartPose,
     *,
+    target: int,
     physical: Sequence[str],
     scale: float,
     say: Callable[[str], None],
@@ -108,11 +169,12 @@ def home(
     prompt: str,
     console: str | None = None,
 ) -> Ended:
-    """Bring both arms to the program's start; on a physical side, SIM again after.
+    """Bring the target's arms to the program's start; SIM again after, but in SIM.
 
     The gate (`_ask_the_operator`, with ``homing``: a carriage apart is what
-    the home brings back), then `home.bring_to_start`. Says `done: ...`,
-    `FAILED: ...` or `interrupted`, as `./scripts/home` always has.
+    the home brings back), then `home.bring_to_start` on the target's sides.
+    Says `done: ...`, `FAILED: ...` or `interrupted`, as `./scripts/home`
+    always has.
 
     ``console`` is the zone's console state topic, given by a TERMINAL caller:
     where a console serves the pair the home is refused before anything -
@@ -125,11 +187,14 @@ def home(
     failure: str | None = None
     try:
         try:
+            cell.require_running(target)
             _ask_the_operator(
-                cell, physical, scale, say, await_operator, prompt, homing=True
+                cell, target, physical, scale, say, await_operator, prompt, homing=True
             )
-            bring_to_start(list(steps), start, cell, initialize_physical, say)
-            say("done: both arms are at the program's start")
+            bring_to_start(
+                list(steps), start, cell, initialize_physical, say, target=target
+            )
+            say(f"done: {targets.ARMS[target]} at the program's start")
             status = 0
         except StepFailed as error:
             failure = str(error)
@@ -139,17 +204,21 @@ def home(
             status = EXIT_INTERRUPTED
     finally:
         # The operator's next step may be in the cell, so SIM is asked for
-        # whatever happened (SA-S-05).
-        sim = cell.leave_validated() if physical else None
+        # whatever happened (SA-S-05, R-20) - by this run, which holds the
+        # mode - and only then is the hold let go (S-01), unless SIM was not
+        # confirmed (S2-04).
+        sim = cell.return_to_sim() if target != targets.SIM else None
+        released = _release_unless_sim_unconfirmed(cell, sim)
     if sim is False:
         status = status or 1
-    return Ended(status, failure, sim)
+    return Ended(status, _with_hold_kept(failure, sim, say), sim, released)
 
 
 def run_program(
     cell,
     steps: Sequence[Step],
     *,
+    target: int,
     physical: Sequence[str],
     scale: float,
     cycles: int,
@@ -162,17 +231,26 @@ def run_program(
     on_step: Callable[[int, int, int, Step], None] | None = None,
     banner: str | None = None,
     console: str | None = None,
+    release: bool = True,
 ) -> Ended:
-    """Gate, custody, VALIDATED (homing first if asked), the program, then SIM again.
+    """Gate, custody, the target's mode (homing first if asked), the program, SIM again.
 
     Before the first step a failure says `FAILED before the first step: ...`
     and an interrupt `interrupted before the first step`, as `python3 -m
     cite_bringup.program` always has; ``banner`` is said just before the
-    program runs. On a physical side SIM is asked for once VALIDATED may have
-    been asked - after the run, after a failure, after an interrupt - and an
-    unconfirmed SIM fails the sequence, so no caller asks a person in next
-    (SA-S-05). ``console``, from a terminal caller, refuses the run before
-    anything where an operator console serves the pair (N-01, as `home`).
+    program runs. For any target but the simulation SIM is asked for once its
+    mode may have been asked - after the run, after a failure, after an
+    interrupt - and an unconfirmed SIM fails the sequence, so no caller asks a
+    person in next (SA-S-05, R-20). ``console``, from a terminal caller,
+    refuses the run before anything where an operator console serves the pair
+    (N-01, as `home`).
+
+    The twin's mode is HELD from before the operator is asked (SIM,
+    `hold_sim`, S2-01) or from entering the target's mode, through the
+    program and the return to SIM. ``release`` False keeps it at the end: the
+    console holds it across the cycles of one request and lets it go once,
+    after the last (S2-01). A SIM that was not confirmed keeps it always
+    (S2-04), and says so in the failure.
     """
     refused = _refused_for_a_console(cell, console, say)
     if refused is not None:
@@ -181,14 +259,25 @@ def run_program(
     outcome: tuple[int, str | None] | None = None
     try:
         try:
+            if via_twin:
+                cell.require_running(target)
             # Read, not assumed: the operator is asked in only while the twin
             # forwards nothing to the physical side (SA-S-05). Before a homing
             # first cycle a carriage apart is no refusal here: homing brings it
             # to the start, and the start is measured.
             _ask_the_operator(
-                cell, physical, scale, say, await_operator, prompt, homing=homing is not None
+                cell,
+                target,
+                physical,
+                scale,
+                say,
+                await_operator,
+                prompt,
+                homing=homing is not None,
             )
-            cell.refuse_if_holding()
+            # Every side the target commands (R-09); the plant's alone via
+            # the plant.
+            cell.refuse_if_holding(targets.SIDES[target] if via_twin else (PLANT_SIDE,))
             entering = via_twin
             if homing is not None:
                 bring_to_start(
@@ -198,9 +287,10 @@ def run_program(
                     homing.initialize_physical,
                     say,
                     via_twin=entering,
+                    target=target,
                 )
             elif entering:
-                cell.enter_validated()
+                cell.enter_target(target)
         except (StepFailed, KeyboardInterrupt) as failure:
             interrupted = isinstance(failure, KeyboardInterrupt)
             say(
@@ -215,13 +305,18 @@ def run_program(
             status = run(steps, cell, cycles, say, first_cycle=first_cycle, on_step=on_step)
             outcome = (status, None)
     finally:
-        # VALIDATED may have been entered: the operator's next step is in the
-        # cell, so SIM is asked for whatever happened (SA-S-05).
-        sim = cell.leave_validated() if physical and entering else None
+        # The target's mode may have been entered: the operator's next step is
+        # in the cell, so SIM is asked for whatever happened (SA-S-05, R-20) -
+        # by this run, which holds the mode - and only then is the hold let go
+        # (S-01), unless SIM was not confirmed (S2-04) or the caller lets it
+        # go after a later cycle. A SIM target holds SIM for the run and
+        # returns nowhere.
+        sim = cell.return_to_sim() if entering and target != targets.SIM else None
+        released = _release_unless_sim_unconfirmed(cell, sim) if release else None
     status, failure_text = outcome
     if sim is False:
         status = status or 1
-    return Ended(status, failure_text, sim)
+    return Ended(status, _with_hold_kept(failure_text, sim, say), sim, released)
 
 
 def _refused_for_a_console(
@@ -246,6 +341,7 @@ def _refused_for_a_console(
 
 def _ask_the_operator(
     cell,
+    target: int,
     physical: Sequence[str],
     scale: float | None,
     say: Callable[[str], None],
@@ -254,14 +350,21 @@ def _ask_the_operator(
     *,
     homing: bool,
 ) -> None:
-    """On a physical side: SIM read, the carriage judged, then the operator asked."""
+    """With a physical side in the target: SIM held, the carriage judged, the operator asked.
+
+    Asked for every request whose target commands a physical side (R-12), and
+    never for the simulation, which tells no one the cell is safe (R-13). The
+    twin is HELD in SIM before the operator is asked (`hold_sim`, S2-01): a
+    read of its mode would let another client switch it while the person is
+    in the cell.
+    """
     if physical:
         confirm_operator(
-            cell.twin_mode(),
+            cell.hold_sim(),
             physical,
             scale,
             say,
             await_operator,
-            lambda: cell.carriage_refusal(homing=homing),
-            prompt=prompt,
+            lambda: cell.carriage_refusal(target, homing=homing),
+            prompt=targeted_prompt(prompt, target, physical),
         )

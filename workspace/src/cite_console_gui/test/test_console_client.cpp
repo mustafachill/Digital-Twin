@@ -86,8 +86,9 @@ public:
   ConsoleCallbacks callbacks()
   {
     ConsoleCallbacks callbacks;
-    callbacks.on_state = [this](const ConsoleState & state) {
-        record([&]() {states.push_back(state);});
+    callbacks.on_state = [this](
+      const ConsoleState & state, const std::vector<std::uint8_t> & publisher) {
+        record([&]() {states.push_back(state); publishers.push_back(publisher);});
       };
     callbacks.on_state_lost = [this]() {record([&]() {++lost;});};
     callbacks.on_progress = [this](const std::string & text) {
@@ -109,6 +110,8 @@ public:
   std::mutex mutex;
   std::condition_variable changed;
   std::vector<ConsoleState> states;
+  /// The publisher identity each state came with, in the same order.
+  std::vector<std::vector<std::uint8_t>> publishers;
   std::vector<std::string> progress;
   std::vector<std::string> outcomes;
   int lost{0};
@@ -185,7 +188,9 @@ public:
     home_ = rclcpp_action::create_server<HomeRobot>(
       node_, names.home,
       [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const HomeRobot::Goal> goal) {
-        note("home " + std::to_string(goal->speed_scale));
+        note(
+          "home " + std::to_string(goal->speed_scale) + " target " +
+          std::to_string(goal->target));
         return rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<HomeRobot>>) {
@@ -196,8 +201,8 @@ public:
       node_, names.run_program,
       [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const RunProgram::Goal> goal) {
         note(
-          "run_program " + std::to_string(goal->speed_scale) + " " +
-          std::to_string(goal->cycles));
+          "run_program " + std::to_string(goal->speed_scale) + " target " +
+          std::to_string(goal->target) + " cycles " + std::to_string(goal->cycles));
         return rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {
@@ -229,6 +234,17 @@ public:
   /// Withdraw the state publisher, as a console that went away.
   void withdraw_state() {state_.reset();}
 
+  /// A second state publisher on the same topic, as a console restarted
+  /// before its predecessor's publisher unmatched; publishes `state` on it.
+  void publish_from_another(std::uint8_t state)
+  {
+    other_state_ = state_node_->create_publisher<ConsoleState>(
+      state_->get_topic_name(), cite::qos::latched());
+    ConsoleState message;
+    message.state = state;
+    other_state_->publish(message);
+  }
+
   std::vector<std::string> requests()
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -246,6 +262,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Node::SharedPtr state_node_;
   rclcpp::Publisher<ConsoleState>::SharedPtr state_;
+  rclcpp::Publisher<ConsoleState>::SharedPtr other_state_;
   rclcpp::Service<StartRobot>::SharedPtr start_robot_;
   rclcpp::Service<ConfirmOperator>::SharedPtr confirm_;
   rclcpp::Service<StopCell>::SharedPtr stop_;
@@ -318,15 +335,21 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
     sent_once_served(recorder, [&]() {client.stop();}, &Recorder::outcomes),
     "Stop: done. fake stop");
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.home(0.5);}, &Recorder::progress),
+    sent_once_served(
+      recorder, [&]() {client.home(0.5, ConsoleState::TARGET_REAL);}, &Recorder::progress),
     "Home: rejected by the console (see last error).");
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.run_program(0.25, 3);}, &Recorder::progress),
+    sent_once_served(
+      recorder, [&]() {client.run_program(0.25, ConsoleState::TARGET_TWIN, 3);},
+      &Recorder::progress),
     "Start program: rejected by the console (see last error).");
 
+  // ADR-0072: each goal carries the target it was given, field for field.
   const std::vector<std::string> expected = {
-    "start_robot", "confirm_operator", "stop", "home " + std::to_string(0.5),
-    "run_program " + std::to_string(0.25) + " 3",
+    "start_robot", "confirm_operator", "stop",
+    "home " + std::to_string(0.5) + " target " + std::to_string(ConsoleState::TARGET_REAL),
+    "run_program " + std::to_string(0.25) + " target " +
+    std::to_string(ConsoleState::TARGET_TWIN) + " cycles 3",
   };
   EXPECT_EQ(console.requests(), expected);
 }
@@ -351,6 +374,44 @@ TEST(ConsoleClient, TheLatchedStateIsHeardAndItsPublisherLeavingIsNoConsole)
     << "the publisher left and the panel was not told (P-R04)";
 }
 
+TEST(ConsoleClient, EachStateCarriesItsPublishersIdentity)
+{
+  // R-02: a console restarted with no unmatch in between is told apart by
+  // its publisher's GID, which the panel's selection is settled against.
+  const ConsoleNames names = names_for("identity");
+  FakeConsole console(names);
+  console.publish(ConsoleState::READY);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.states.size() == 1;}));
+
+  // Published while the first publisher is still matched: never an unmatch.
+  console.publish_from_another(ConsoleState::NOT_STARTED);
+  ASSERT_TRUE(
+    recorder.wait_for(
+      [&]() {
+        for (const auto & state : recorder.states) {
+          if (state.state == ConsoleState::NOT_STARTED) {
+            return true;
+          }
+        }
+        return false;
+      }));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  EXPECT_EQ(recorder.lost, 0);
+  ASSERT_EQ(recorder.publishers.size(), recorder.states.size());
+  const std::vector<std::uint8_t> first = recorder.publishers.front();
+  EXPECT_FALSE(first.empty());
+  EXPECT_NE(first, std::vector<std::uint8_t>(first.size(), 0)) << "no GID was read";
+  for (std::size_t i = 0; i < recorder.states.size(); ++i) {
+    if (recorder.states[i].state == ConsoleState::NOT_STARTED) {
+      EXPECT_NE(recorder.publishers[i], first) << "two publishers, one identity";
+    } else {
+      EXPECT_EQ(recorder.publishers[i], first);
+    }
+  }
+}
+
 TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
 {
   const ConsoleNames names = names_for("unserved");
@@ -361,8 +422,8 @@ TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
   client.start_robot();
   client.confirm_operator();
   client.stop();
-  client.home(1.0);
-  client.run_program(1.0, 1);
+  client.home(1.0, ConsoleState::TARGET_SIM);
+  client.run_program(1.0, ConsoleState::TARGET_SIM, 1);
   const auto took = std::chrono::steady_clock::now() - started;
 
   // Said on the caller's thread before each call returned: nothing waited.

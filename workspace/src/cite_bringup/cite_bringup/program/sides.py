@@ -18,6 +18,8 @@
     --zone cell_b --simulated     the others
     --zone cell_b --speed-scale S the speed scale to run at, or a refusal
     --zone cell_b --hardware-opt-in  refuse unless the opt-in permits a physical side
+    --zone cell_b --pair-sides    which sides a pair started now starts: `all`, or
+                                  `plant` (ADR-0072), and why, on standard error
 
 `./scripts/program` asks this before every Gazebo-only step (ADR-0070 item 7):
 it spawns a box, removes one, reads a model's pose and runs a belt only on a
@@ -29,9 +31,11 @@ never an asset's type or a backend's name.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 import os
 import sys
 
+from cite_bringup.pair import SIDES_ALL, SIDES_PLANT
 from cite_bringup.plan import (
     default_plan_path,
     HARDWARE_OPT_IN_ENV,
@@ -96,7 +100,9 @@ def minimum_speed_scale(plan: Plan) -> float | None:
     return max(floors) / min(slides)
 
 
-def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
+def required_speed_scale(
+    plan: Plan, given: str, via: str = "twin", sides: Sequence[str] | None = None
+) -> float:
     """Return the speed scale a run uses, refusing one the operator must state (S-04).
 
     ``given`` is `--speed-scale` exactly as typed, empty when it was not. The
@@ -104,8 +110,15 @@ def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
     run commands is physical - any physical side, through the twin - the scale
     is never defaulted: the operator names the fraction of the program's speed
     the real arm and carriage move at. ``via`` "plant" commands the plant only.
+    ``sides`` is the target's (ADR-0072, `program.targets.SIDES`), None for
+    every side: only a physical side the run commands makes the scale
+    mandatory and applies the floor (R-25) - a simulation target has neither.
     """
-    physical = physical_sides(plan) if via == "twin" else []
+    physical = (
+        [side for side in physical_sides(plan) if sides is None or side in sides]
+        if via == "twin"
+        else []
+    )
     if not given:
         if physical:
             raise ValueError(
@@ -150,6 +163,31 @@ def hardware_opt_in_refusal(plan: Plan, environ) -> str | None:
     return None
 
 
+#: What `pair_sides` answers: the pair supervisor's own `--sides` words, imported
+#: from the one module that states them rather than spelled again (R-05).
+PAIR_SIDES_ALL = SIDES_ALL
+PAIR_SIDES_PLANT = SIDES_PLANT
+
+#: Said when a pair starts the plant alone (ADR-0072): the operator reads WHY
+#: the real arm is absent, so a plant-only pair is never mistaken for a failure.
+REAL_ARM_NOT_STARTED = (
+    f"real arm not started: {HARDWARE_OPT_IN_ENV} is not {HARDWARE_OPT_IN_VALUE}; "
+    "simulation target only"
+)
+
+
+def pair_sides(plan: Plan, environ) -> str:
+    """Return which sides a pair of ``plan`` starts now: every side, or the plant alone.
+
+    ADR-0072 decision 4: the hardware opt-in decides. A plan with a physical side
+    starts it only with the opt-in (`hardware_opt_in_refusal`, the one rule);
+    without it the plant starts alone, with the boundary and any console. A plan
+    with no physical side starts every side. The real arm is never started by
+    default.
+    """
+    return PAIR_SIDES_ALL if hardware_opt_in_refusal(plan, environ) is None else PAIR_SIDES_PLANT
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m cite_bringup.program.sides", description="List a zone's sides by kind."
@@ -168,8 +206,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help=f"Refuse unless {HARDWARE_OPT_IN_ENV} permits bringing up every physical side.",
     )
+    kind.add_argument(
+        "--pair-sides",
+        action="store_true",
+        help="Print which sides a pair starts now (all, or plant), by the hardware opt-in.",
+    )
     args = parser.parse_args(argv)
     plan = load(default_plan_path(args.zone))
+    if args.pair_sides:
+        chosen = pair_sides(plan, os.environ)
+        if chosen == PAIR_SIDES_PLANT and physical_sides(plan):
+            print(REAL_ARM_NOT_STARTED, file=sys.stderr)
+        print(chosen)
+        return 0
     if args.hardware_opt_in:
         refusal = hardware_opt_in_refusal(plan, os.environ)
         if refusal is not None:

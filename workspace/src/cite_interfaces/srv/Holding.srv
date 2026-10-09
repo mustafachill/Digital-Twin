@@ -1,0 +1,27 @@
+# Whether each side's arm says it holds a part (ADR-0072; review R-01).
+#
+# A run opens with a release, and a release on an arm that holds a part drops it
+# where the arm stands, so before its first step a run reads the custody of every
+# side its target commands. The plant's is on the program's own domain; any
+# other side's is on that side's, which no client opens (ADR-0044 clause 3,
+# ADR-0066, ADR-0071). So it is asked of the boundary, which reads each side's
+# latched `RobotState` (the skill server's `state`, per arm the plan names) on
+# that side's own domain, as it reads each side's joint states for JointsAt.
+#
+# The boundary answers a verdict per side and not the message: the reverse state
+# flow is consumed by L5 and republished nowhere (ADR-0050 decision 1b). A side
+# with an arm whose state was never heard is `heard` false, and a caller refuses
+# it: an unheard custody is never assumed empty.
+#
+# SERVICE is the one place this name is written, as SetMode's is.
+
+string SERVICE="/cite/twin/holding"
+
+string[] sides      # the sides to answer for, by the plan's side names; empty answers
+                    # every side the deployment runs. A side named that does not run
+                    # is answered unheard
+---
+string[] sides      # the sides answered, in the order asked
+bool[] heard        # per side: a RobotState has been heard from every arm on it
+bool[] holding      # per side: an arm on it says it holds a part (gripper_holding)
+string[] detail     # per side: what it holds, or which arm is unheard; empty if neither

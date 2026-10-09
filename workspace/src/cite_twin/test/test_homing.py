@@ -193,3 +193,290 @@ def test_the_boundary_answers_for_every_side_in_every_mode() -> None:
     boundary._joint_positions[("counterpart", "picker_joint1")] = (0.001, now)
     answer = boundary._on_joints_at(request, JointsAt.Response())
     assert answer.at and answer.reason == JointsAt.Response.AT
+
+
+def test_real_does_not_compare_the_carriages_because_the_plant_is_idle() -> None:
+    """ADR-0072: in REAL only the physical side is commanded, so agreement is not asked.
+
+    The plant's carriage stands wherever the last target left it and nothing is
+    sent to it. Every physical-side readiness question is still asked, and
+    VALIDATED still refuses the same carriages apart.
+    """
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    machine = _authority(boundary)
+    verdict = machine.request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert verdict.accepted, verdict.detail
+    assert verdict.mode == TwinMode.MODE_REAL
+    assert verdict.commands_hardware
+    back = machine.request(TwinMode.MODE_SIM, "", "done", False)
+    assert back.accepted
+    refused = machine.request(TwinMode.MODE_VALIDATED, "", "twin", False)
+    assert not refused.accepted and "home it" in refused.detail
+
+
+def test_real_still_waits_for_a_physical_side_that_is_not_ready() -> None:
+    boundary = _boundary_with_carriages(0.0, 0.30, counterpart_age_s=2 * AGE)
+    verdict = _authority(boundary).request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert not verdict.accepted
+    assert verdict.code == ResultCode.PRECONDITION_FAILED
+    assert "old" in verdict.detail
+
+
+def test_real_still_needs_the_hardware_opt_in() -> None:
+    def refused() -> None:
+        raise RuntimeError("CITE_ALLOW_HARDWARE is not set to 1")
+
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    verdict = _authority(boundary, refused).request(TwinMode.MODE_REAL, "", "real arm", False)
+    assert not verdict.accepted
+    assert verdict.code == ResultCode.SAFETY_BLOCKED
+
+
+def test_homing_is_refused_with_real() -> None:
+    """The allowance is VALIDATED's alone; REAL needs none."""
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    verdict = _authority(boundary).request(TwinMode.MODE_REAL, "", "x", False, homing=True)
+    assert not verdict.accepted
+
+
+def _boundary_for_joints(now: float, sides=("plant", "counterpart")) -> TwinBoundary:
+    boundary = object.__new__(TwinBoundary)
+    boundary._lock = threading.Lock()
+    boundary._sides = {side: None for side in sides}
+    boundary._physical_watches = {"picker": _ready_watch(now)} if "counterpart" in sides else {}
+    boundary._state_max_age_s = AGE
+    boundary._joint_positions = {
+        ("plant", "picker_joint1"): (0.0, now),
+        ("counterpart", "picker_joint1"): (0.5, now),
+    }
+    return boundary
+
+
+def test_named_sides_are_judged_alone() -> None:
+    """ADR-0072: a target is measured on its own sides; the other's place is not its business."""
+    now = time.monotonic()
+    boundary = _boundary_for_joints(now)
+
+    def ask(sides):
+        request = JointsAt.Request(
+            joints=["picker_joint1"], positions=[0.0], tolerance=0.01, sides=list(sides)
+        )
+        return boundary._on_joints_at(request, JointsAt.Response())
+
+    assert ask(["plant"]).at
+    away = ask(["counterpart"])
+    assert not away.at and away.reason == JointsAt.Response.AWAY
+    assert not ask([]).at
+
+
+def test_a_plant_alone_deployment_judges_the_plant_alone() -> None:
+    now = time.monotonic()
+    boundary = _boundary_for_joints(now, sides=("plant",))
+    request = JointsAt.Request(joints=["picker_joint1"], positions=[0.0], tolerance=0.01)
+    assert boundary._on_joints_at(request, JointsAt.Response()).at
+
+
+def test_a_forced_mode_whose_side_does_not_run_routes_nowhere() -> None:
+    """ADR-0072: `force` past the no-far-side check cannot route to a side with no context."""
+    from cite_interfaces.msg import ResultCode as Code
+
+    boundary = object.__new__(TwinBoundary)
+    boundary._sides = {"plant": None}
+    chosen = boundary._route(TwinMode.MODE_REAL)
+    assert not chosen.accepted and chosen.code == Code.PRECONDITION_FAILED
+    assert "counterpart" in chosen.detail and "plant alone" in chosen.detail
+    sim = boundary._route(TwinMode.MODE_SIM)
+    assert sim.accepted and sim.sides == ("plant",)
+
+
+# --------------------------------------------------------------------------- #
+# ADR-0072 safety requirements, at the boundary
+# --------------------------------------------------------------------------- #
+
+
+class _Publisher:
+    def __init__(self) -> None:
+        self.sent = []
+
+    def publish(self, message) -> None:
+        self.sent.append(message)
+
+
+class _Log:
+    def __init__(self) -> None:
+        self.lines = []
+
+    def warning(self, text, **_kwargs) -> None:
+        self.lines.append(text)
+
+    error = warning
+    info = warning
+
+
+def _commanding_boundary(mode: int, physical: bool = True) -> TwinBoundary:
+    class _Authority:
+        pass
+
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    if not physical:
+        boundary._physical_watches = {}
+    boundary._lock = threading.Lock()
+    boundary._authority = _Authority()
+    boundary._authority.mode = mode
+    boundary._sides = {"plant": None, "counterpart": None}
+    boundary._log = _Log()
+    return boundary
+
+
+@pytest.mark.parametrize("value", [0.25, -0.1])
+def test_a_non_zero_belt_never_reaches_a_physical_side(value) -> None:
+    """R-24: no physical belt exists; in REAL the command is dropped, in VALIDATED plant only."""
+    from std_msgs.msg import Float64
+
+    topic = "/cite/cell_b/belt/command"
+    for mode, reached in ((TwinMode.MODE_REAL, []), (TwinMode.MODE_VALIDATED, ["plant"])):
+        boundary = _commanding_boundary(mode)
+        boundary._belt_publishers = {
+            (side, topic): _Publisher() for side in ("plant", "counterpart")
+        }
+        boundary._on_belt_command(topic, Float64(data=value))
+        sent = [side for (side, _), pub in boundary._belt_publishers.items() if pub.sent]
+        assert sent == reached, mode
+    # A stop still reaches every side, physical or not.
+    boundary._on_belt_command(topic, Float64(data=0.0))
+    assert boundary._belt_publishers[("counterpart", topic)].sent
+
+
+def test_in_sim_only_a_zero_belt_reaches_the_counterpart() -> None:
+    """R-01: in SIM the counterpart's domain receives a belt stop and nothing else."""
+    from std_msgs.msg import Float64
+
+    topic = "/cite/cell_b/belt/command"
+    for physical in (True, False):
+        boundary = _commanding_boundary(TwinMode.MODE_SIM, physical)
+        boundary._belt_publishers = {
+            (side, topic): _Publisher() for side in ("plant", "counterpart")
+        }
+        boundary._on_belt_command(topic, Float64(data=0.3))
+        assert boundary._belt_publishers[("plant", topic)].sent
+        assert not boundary._belt_publishers[("counterpart", topic)].sent
+        boundary._on_belt_command(topic, Float64(data=0.0))
+        assert [m.data for m in boundary._belt_publishers[("counterpart", topic)].sent] == [0.0]
+
+
+def _track_boundary(mode: int, physical: bool = True) -> TwinBoundary:
+    boundary = _commanding_boundary(mode, physical)
+    topic = "/cite/cell_b/picker/track/joint_trajectory"
+    boundary._track_joint_by_topic = {topic: "picker_track_joint"}
+    boundary._track_publishers = {(side, topic): _Publisher() for side in ("plant", "counterpart")}
+    return boundary
+
+
+def test_in_sim_only_a_hold_reaches_the_counterpart() -> None:
+    """R-01: a moving trajectory in SIM reaches the plant alone; a stop holds each where it is."""
+    from cite_bringup.track_command import move as track_move
+    from trajectory_msgs.msg import JointTrajectory
+
+    topic = "/cite/cell_b/picker/track/joint_trajectory"
+    boundary = _track_boundary(TwinMode.MODE_SIM)
+    boundary._on_track_command(topic, track_move("picker_track_joint", 0.0, 0.5, 2.0))
+    assert boundary._track_publishers[("plant", topic)].sent
+    assert not boundary._track_publishers[("counterpart", topic)].sent
+    boundary._on_track_command(topic, JointTrajectory(joint_names=["picker_track_joint"]))
+    (hold,) = boundary._track_publishers[("counterpart", topic)].sent
+    assert hold.points[0].positions == hold.points[-1].positions
+
+
+def test_a_stop_reaches_a_physical_carriage_never_heard() -> None:
+    """R-02: a physical adapter stops where it stands whatever a hold names, so it is sent one."""
+    from trajectory_msgs.msg import JointTrajectory
+
+    topic = "/cite/cell_b/picker/track/joint_trajectory"
+    boundary = _track_boundary(TwinMode.MODE_REAL)
+    del boundary._track_positions[("counterpart", "picker_track_joint")]
+    boundary._on_track_command(topic, JointTrajectory(joint_names=["picker_track_joint"]))
+    (hold,) = boundary._track_publishers[("counterpart", topic)].sent
+    assert hold.points[0].positions == hold.points[-1].positions
+    # A SIMULATED side never heard is sent nothing: its controller would go there.
+    boundary = _track_boundary(TwinMode.MODE_VALIDATED, physical=False)
+    del boundary._track_positions[("counterpart", "picker_track_joint")]
+    boundary._on_track_command(topic, JointTrajectory(joint_names=["picker_track_joint"]))
+    assert not boundary._track_publishers[("counterpart", topic)].sent
+
+
+def test_a_physical_carriage_outside_its_travel_is_refused_for_good() -> None:
+    """R-10: REAL and VALIDATED alike, homing or not."""
+    boundary = _boundary_with_carriages(0.0, 0.80)
+    boundary._physical_strokes = {"picker_track_joint": 0.70}
+    assert "outside its travel" in boundary._physical_carriage_outside_travel()
+    machine = ModeAuthority(
+        Deployment.paired({"picker": True}),
+        lambda: None,
+        physical_side_unready=boundary._physical_side_unready,
+        physical_carriage_outside_travel=boundary._physical_carriage_outside_travel,
+    )
+    for mode, homing in ((TwinMode.MODE_REAL, False), (TwinMode.MODE_VALIDATED, True)):
+        verdict = machine.request(mode, "", "x", False, homing=homing)
+        assert not verdict.accepted and "outside its travel" in verdict.detail
+    boundary._track_positions[("counterpart", "picker_track_joint")] = (0.70, time.monotonic())
+    assert boundary._physical_carriage_outside_travel() is None
+
+
+def test_twin_sides_offers_a_physical_side_only_when_ready() -> None:
+    """R-19: commandable by measurement - a stale physical side is running, not commandable."""
+    boundary = _boundary_with_carriages(0.0, 0.0)
+    boundary._sides = {"plant": None, "counterpart": None}
+    running, physical, commandable, stationary, detail = boundary._sides_now()
+    assert running == ("plant", "counterpart") and physical == ("counterpart",)
+    assert commandable == ("plant", "counterpart") and detail == ""
+    assert stationary == ("counterpart",)
+    stale = _boundary_with_carriages(0.0, 0.0, counterpart_age_s=2 * AGE)
+    stale._sides = {"plant": None, "counterpart": None}
+    _, _, commandable, stationary, detail = stale._sides_now()
+    assert commandable == ("plant",) and "old" in detail
+    assert stationary == (), "a carriage not heard fresh is not reported stationary"
+    alone = _boundary_with_carriages(0.0, 0.0)
+    alone._physical_watches = {}
+    alone._physical_tracks = []
+    alone._sides = {"plant": None}
+    assert alone._sides_now() == (("plant",), (), ("plant",), (), "")
+
+
+def test_twin_sides_reports_a_moving_physical_carriage_as_not_stationary() -> None:
+    """S-02: from the plan's freshness bound and the track's goal tolerance alone."""
+    boundary = _boundary_with_carriages(0.0, 0.30)
+    boundary._sides = {"plant": None, "counterpart": None}
+    now = time.monotonic()
+    boundary._track_history["picker_track_joint"] = [(0.20, now - AGE), (0.30, now)]
+    _, _, commandable, stationary, detail = boundary._sides_now()
+    assert stationary == () and "picker_track_joint is not reported stationary" in detail
+    # Moving is no readiness question: the side stays commandable.
+    assert commandable == ("plant", "counterpart")
+    # Still to within the goal tolerance over the bound: stationary again.
+    boundary._track_history["picker_track_joint"] = [(0.3005, now - AGE), (0.30, now)]
+    assert boundary._sides_now()[3] == ("counterpart",)
+
+
+def test_twin_sides_does_not_offer_a_physical_side_whose_carriage_is_outside_its_travel() -> None:
+    """R-06: what a REAL transition would refuse for good is not offered at all."""
+    boundary = _boundary_with_carriages(0.0, 0.80)
+    boundary._sides = {"plant": None, "counterpart": None}
+    _, _, commandable, _, detail = boundary._sides_now()
+    assert commandable == ("plant",) and "outside its travel" in detail
+
+
+def test_a_plant_alone_deployment_refuses_every_mode_but_sim_even_forced_and_opted_in() -> None:
+    """R-15: from the running deployment, not from the plan, and never behind `force`."""
+    from cite_twin.mode import MODE_NAMES
+
+    deployment = Deployment(
+        {"picker": {"plant": False, "counterpart": None}}, absent=frozenset({"counterpart"})
+    )
+    for mode in MODE_NAMES:
+        machine = ModeAuthority(deployment, lambda: None)
+        verdict = machine.request(mode, "", "x", True)
+        if mode == TwinMode.MODE_SIM:
+            assert verdict.accepted
+        else:
+            assert not verdict.accepted, MODE_NAMES[mode]
+            assert machine.mode == TwinMode.MODE_SIM
