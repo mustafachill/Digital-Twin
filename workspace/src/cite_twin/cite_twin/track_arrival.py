@@ -213,10 +213,13 @@ def recent(
 
     Kept: the newest sample at least ``max_age_s`` before the latest, and every
     one after it. Anything older says nothing about whether the carriage moves
-    now.
+    now. Without ``max_age_s`` `moving` judges no history at all, so only the
+    latest is kept and the list stays bounded (R-17).
     """
-    if max_age_s is None or not samples:
+    if not samples:
         return samples
+    if max_age_s is None:
+        return samples[-1:]
     latest_at = samples[-1][1]
     keep_from = 0
     for index in range(len(samples) - 1, -1, -1):

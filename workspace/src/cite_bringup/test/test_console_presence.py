@@ -30,7 +30,7 @@ import time
 
 from cite_bringup.plan import default_plan_path, load
 import cite_bringup.program.cell as cell_module
-from cite_bringup.program.cell import RosCell, TERMINAL_NODE
+from cite_bringup.program.cell import RosCell, TERMINAL_NODE, terminal_node_name
 from cite_bringup.program.steps import StepFailed
 from cite_interfaces.msg import ConsoleState, RobotState, TwinMode, TwinSides
 from cite_interfaces.qos import LATCHED, SENSOR
@@ -168,10 +168,12 @@ def test_the_console_names_a_terminal_program_client_on_its_graph(graph) -> None
     console = CellConsole(load(default_plan_path("cell_b")), ("plant", "counterpart"))
     try:
         assert console._terminal_client() is None
-        terminal = rclpy.create_node(TERMINAL_NODE)
+        # Named as a terminal run names its cell: the prefix and its own suffix.
+        name = terminal_node_name()
+        terminal = rclpy.create_node(name)
         try:
             _until_on_graph(lambda: console._terminal_client() is not None)
-            assert console._terminal_client() == f"/{TERMINAL_NODE}"
+            assert console._terminal_client() == f"/{name}"
         finally:
             terminal.destroy_node()
         _until_on_graph(lambda: console._terminal_client() is None)
@@ -283,6 +285,9 @@ def _cell(graph) -> RosCell:
     _, reader = graph
     reader._holder = "run-under-test"
     reader._holds = False
+    reader._release_owed = False
+    reader._expected_mode = None
+    reader._heard_mode = None
     return reader
 
 
@@ -318,7 +323,8 @@ def test_the_cell_holds_and_releases_the_mode_by_its_own_node(graph) -> None:
         cell = _cell(graph)
         cell._hold(TwinMode.MODE_SIM, "SIM")
         assert cell.release_hold()
-        assert cell.release_hold(), "nothing held: nothing asked"
+        # R-17: nothing owed is None, and nothing is asked.
+        assert cell.release_hold() is None, "nothing held: nothing asked"
         (acquire, release) = twin.holds
         assert acquire == (
             HoldMode.Request.ACQUIRE, "run-under-test", "/terminal_client", TwinMode.MODE_SIM
@@ -329,6 +335,53 @@ def test_the_cell_holds_and_releases_the_mode_by_its_own_node(graph) -> None:
             cell._hold(TwinMode.MODE_REAL, "REAL")
     finally:
         twin.close()
+
+
+def test_a_release_is_sent_whenever_an_acquire_was(graph) -> None:
+    """R-14: owed before the ACQUIRE is sent, so a refused or lost one is released too."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold"):
+            cell.hold_sim()
+        twin.hold_answer = True
+        assert cell.release_hold() is True
+        assert [hold[0] for hold in twin.holds] == [
+            HoldMode.Request.ACQUIRE, HoldMode.Request.RELEASE
+        ]
+    finally:
+        twin.close()
+
+
+def test_the_hold_is_re_asserted_before_every_step(graph) -> None:
+    """S2-05: `check_mode` asks the twin, under its lock, whether this run still holds."""
+    twin = _Twin(Holding.Response())
+    try:
+        cell = _cell(graph)
+        cell._hold(TwinMode.MODE_REAL, "REAL")
+        cell._expected_mode = cell._heard_mode = TwinMode.MODE_REAL
+        cell.check_mode()
+        assert twin.holds[-1] == (
+            HoldMode.Request.ACQUIRE, "run-under-test", "/terminal_client", TwinMode.MODE_REAL
+        )
+        twin.hold_answer = False
+        with pytest.raises(StepFailed, match="would not hold REAL"):
+            cell.check_mode()
+    finally:
+        twin.close()
+
+
+def test_terminal_runs_have_names_of_their_own_on_one_prefix() -> None:
+    """S2-05: each terminal run's node is its own, and is known by its prefix."""
+    from cite_bringup.program.cell import is_terminal_node, terminal_node_name
+
+    first, second = terminal_node_name(), terminal_node_name()
+    assert first != second
+    assert is_terminal_node(first) and is_terminal_node(second)
+    assert is_terminal_node(TERMINAL_NODE)
+    assert not is_terminal_node("cell_console_program_0a1b2c3d")
+    assert not is_terminal_node(f"{TERMINAL_NODE}x")
 
 
 def test_the_operator_waits_for_a_stationary_physical_carriage(graph, monkeypatch) -> None:

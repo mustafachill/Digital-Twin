@@ -161,3 +161,12 @@ def test_the_history_keeps_only_what_the_judgement_needs() -> None:
     # The newest at least MAX_AGE_S before 0.6 s is the one at 0.2 s.
     assert recent(samples, MAX_AGE_S) == samples[2:]
     assert recent([], MAX_AGE_S) == []
+
+
+def test_recent_is_bounded_without_a_max_age() -> None:
+    """R-17: a plan with no state_max_age_s keeps one sample, not every sample heard."""
+    from cite_twin.track_arrival import recent
+
+    samples = [(0.1 * index, float(index)) for index in range(1000)]
+    assert recent(samples, None) == samples[-1:]
+    assert recent([], None) == []

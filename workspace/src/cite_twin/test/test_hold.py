@@ -51,9 +51,37 @@ def test_the_holders_own_transitions_are_allowed_and_carry_the_hold() -> None:
     assert hold.refusal(REAL, RUN, SIM) is None
     hold.followed(RUN, REAL)
     assert hold.held.mode == REAL
-    # Now another client may not take it back to SIM either: only the holder.
-    assert hold.refusal(SIM, OTHER, REAL) is not None
+    # Another client may not take it on to VALIDATED: only the holder.
+    assert hold.refusal(VALIDATED, OTHER, REAL) is not None
     assert hold.refusal(SIM, RUN, REAL) is None
+
+
+def test_a_transition_into_sim_is_never_refused_by_a_hold() -> None:
+    """S2-05: SIM commands the plant alone; nobody is kept from the safe direction."""
+    hold = _held(REAL)
+    assert hold.refusal(SIM, "", REAL) is None
+    assert hold.refusal(SIM, OTHER, REAL) is None
+    # The hold stays with its holder, on the mode now in force: the holder's
+    # run stops on the mode it did not ask for, and nobody else takes it out.
+    hold.followed(OTHER, SIM)
+    assert hold.holder == RUN and hold.held.mode == SIM
+    assert hold.refusal(REAL, OTHER, SIM) is not None
+
+
+def test_the_holder_re_asserts_its_hold_idempotently() -> None:
+    """S2-05: a re-assertion on the mode in force is accepted and changes nothing."""
+    hold = _held(SIM, now=0.0)
+    for now in (1.0, 2.0):
+        assert hold.request(ACQUIRE, RUN, NODE, SIM, SIM, now).accepted
+    assert hold.holder == RUN and hold.held.mode == SIM and hold.held.seen_at == 2.0
+    # Re-asserting a mode no longer in force is refused, and the hold kept.
+    assert not hold.request(ACQUIRE, RUN, NODE, REAL, SIM, 3.0).accepted
+    assert hold.holder == RUN
+
+
+def test_a_release_with_nothing_held_is_accepted() -> None:
+    """R-14: a run that owes a release sends it whether or not its ACQUIRE landed."""
+    assert ModeHold().request(RELEASE, RUN, NODE, SIM, SIM, 0.0).accepted
 
 
 def test_a_request_for_the_mode_in_force_is_never_refused() -> None:

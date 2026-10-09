@@ -731,6 +731,9 @@ class _PairCell:
     def twin_mode(self):
         return _PairCell.mode
 
+    def hold_sim(self):
+        return _PairCell.mode
+
     def refuse_if_holding(self, sides=("plant",)) -> None:
         _PairCell.calls.append("refuse_if_holding")
 

@@ -274,11 +274,16 @@ if [ "$PAIR" -eq 1 ]; then
         || { cat "$PAIR_SIDES_WHY_FILE" >&2; rm -f "$PAIR_SIDES_WHY_FILE"; die "could not read which sides of ${ZONE} a pair starts"; }
     PAIR_SIDES_WHY="$(cat "$PAIR_SIDES_WHY_FILE")"
     rm -f "$PAIR_SIDES_WHY_FILE"
-    case "$PAIR_SIDES" in
-        all | plant) ;;
-        *) die "cite_bringup.program.sides --pair-sides answered '${PAIR_SIDES}', not all or plant" ;;
+    # The words are the supervisor's own (`cite_bringup.pair.SIDES_CHOICES`,
+    # the plant-alone one first), read rather than spelled again here (R-17).
+    SIDES_WORDS="$(python3 -c 'from cite_bringup.pair import SIDES_CHOICES, SIDES_PLANT; print(SIDES_PLANT, *SIDES_CHOICES)')" \
+        || die "could not read cite_bringup.pair.SIDES_CHOICES"
+    read -r SIDES_PLANT_WORD SIDES_CHOICE_WORDS <<<"$SIDES_WORDS"
+    case " ${SIDES_CHOICE_WORDS} " in
+        *" ${PAIR_SIDES} "*) ;;
+        *) die "cite_bringup.program.sides --pair-sides answered '${PAIR_SIDES}', not one of: ${SIDES_CHOICE_WORDS}" ;;
     esac
-    if [ "$PAIR_SIDES" = "plant" ]; then
+    if [ "$PAIR_SIDES" = "$SIDES_PLANT_WORD" ]; then
         if [ -n "$PAIR_SIDES_WHY" ]; then
             warn "$PAIR_SIDES_WHY"
         fi

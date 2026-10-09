@@ -719,6 +719,28 @@ def test_after_a_vendor_error_the_zero_is_read_again(failure):
         node.destroy_node()
 
 
+def test_a_vendor_error_discards_a_zero_read_in_flight():
+    """R-15: a zero read asked before the error cannot answer for the track after it."""
+    node, log = _zeroed(StubGate())
+    try:
+        node._poll()
+        in_flight = node._zero_client.futures[-1]
+        # A vendor error while that read is unanswered.
+        node._get_client.futures[-1].set_result(GetInt16.Response(ret=82, data=0))
+        # Its late answer says "on its zero": ignored.
+        if not in_flight.cancelled():
+            in_flight.set_result(GetInt16.Response(ret=0, data=1))
+        assert node._on_zero is None, "a stale zero read restored the zero"
+        node._poll()
+        assert _zero_reads(log) == 2, "the zero is read again after the vendor's error"
+        _read(node, 120)
+        assert node._state_publisher.messages == [], (
+            "nothing is published until a read asked after the error answers"
+        )
+    finally:
+        node.destroy_node()
+
+
 def test_a_reactivation_reads_the_zero_again():
     node, log = _zeroed(StubGate())
     try:

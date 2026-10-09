@@ -326,12 +326,26 @@ def ask_until_accepted(
         pause()
 
 
-#: The name of the node a TERMINAL client's cell creates: `python3 -m
-#: cite_bringup.program` and `./scripts/home`, by either route. Written once:
-#: the operator console reads it off the graph to refuse a motion request while
-#: such a client runs (S-01), so a second spelling would be a console that never
+#: The PREFIX of the node a TERMINAL client's cell creates: `python3 -m
+#: cite_bringup.program` and `./scripts/home`, by either route. Each run adds a
+#: suffix of its own (`terminal_node_name`, S2-05): the twin's hold lapses when
+#: its holder's node leaves the graph, and a later run under the same name would
+#: keep an earlier run's lost hold alive. Written once: the operator console
+#: reads it off the graph to refuse a motion request while such a client runs
+#: (S-01, `is_terminal_node`), so a second spelling would be a console that never
 #: sees one. The console's own cells are named otherwise (`console._CELL_NODE`).
 TERMINAL_NODE = "fixed_program"
+
+
+def terminal_node_name() -> str:
+    """Return a terminal run's node name: `TERMINAL_NODE` and a suffix of its own."""
+    return f"{TERMINAL_NODE}_{uuid.uuid4().hex[:8]}"
+
+
+def is_terminal_node(name: str) -> bool:
+    """Whether ``name`` (unqualified) is a terminal run's cell (`terminal_node_name`)."""
+    return name == TERMINAL_NODE or name.startswith(f"{TERMINAL_NODE}_")
+
 
 #: The simulated clock, bridged from Gazebo onto a simulated side's domain
 #: (`simulation.launch.py`'s `CLOCK_BRIDGE`). A physical side runs on the wall
@@ -445,6 +459,7 @@ class RosCell:
     _far_track_m: float | None = None
     _holder = ""
     _holds = False
+    _release_owed = False
 
     def __init__(
         self,
@@ -455,7 +470,7 @@ class RosCell:
         track: Track | None = None,
         speed: float = 1.0,
         interrupted: Callable[[], bool] | None = None,
-        node_name: str = TERMINAL_NODE,
+        node_name: str | None = None,
         stop_deadline: Callable[[], float | None] | None = None,
     ) -> None:
         skills = arm.skills
@@ -464,6 +479,10 @@ class RosCell:
         self._holder = uuid.uuid4().hex
         #: Whether the twin answered that this run holds its mode.
         self._holds = False
+        #: Whether this run may hold the mode and so owes a release (R-14): set
+        #: BEFORE an ACQUIRE is sent, since an ACQUIRE whose answer was lost
+        #: may still have been taken.
+        self._release_owed = False
         #: The target this cell's run commands, once `enter_target` asked for
         #: it, and the mode it is run in: what every step is checked against.
         self._target: int | None = None
@@ -495,7 +514,8 @@ class RosCell:
         self._via = via
         self._effort_n = gripper_effort_n(arm)
         self.node = Node(
-            node_name, parameter_overrides=[Parameter("use_sim_time", value=True)]
+            node_name or terminal_node_name(),
+            parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
         self._move_to = ActionClient(self.node, MoveTo, name(skills.move_to))
         self._grasp = ActionClient(self.node, Grasp, name(skills.grasp))
@@ -587,8 +607,28 @@ class RosCell:
         # any other one heard later stops the run (R-05).
         self._heard_mode = mode
 
+    def hold_sim(self) -> int:
+        """Hold the twin in SIM before anyone is asked into the cell; return SIM (S2-01).
+
+        The gate that the twin is in SIM is this ACQUIRE, decided under the
+        boundary's lock, and not a read of the latched mode: from its answer on
+        no other client may move the twin out of SIM until this run does, so a
+        person asked in is asked in while the twin forwards nothing. Asked
+        again by the same run it is a re-assertion. Raises `StepFailed` when
+        the twin is not in SIM or another run holds it. Via the plant there is
+        no twin to hold, and the mode is read as it always was.
+        """
+        if self._via != "twin":
+            mode = self.twin_mode()
+            return TwinMode.MODE_SIM if mode is None else mode
+        self._hold(TwinMode.MODE_SIM, "SIM")
+        return TwinMode.MODE_SIM
+
     def _hold(self, mode: int, name: str) -> None:
         """Hold the twin in ``mode`` for this run, or raise `StepFailed` (S-01)."""
+        # Owed before it is asked (R-14): a hold taken whose answer never came
+        # back is still a hold, and it is released like any other.
+        self._release_owed = True
         response = self._call_hold(HoldMode.Request.ACQUIRE, mode, f"HoldMode({name})")
         if not response.accepted:
             raise StepFailed(
@@ -597,16 +637,19 @@ class RosCell:
             )
         self._holds = True
 
-    def release_hold(self) -> bool:
+    def release_hold(self) -> bool | None:
         """Let the twin's mode go at the end of the run; never interrupted (S-01).
 
-        Asked whatever happened, after the return to SIM, which the hold lets
-        this run make. Returns whether nothing is held by this run any more; a
-        refusal or no answer is said, and the hold then lapses once this
-        cell's node leaves the graph (`HoldMode.srv`).
+        Asked after the return to SIM, which the hold lets this run make, and
+        never when SIM was not confirmed (the caller's, S2-04). Returns None
+        when this run never asked for a hold, else whether nothing is held by
+        it any more. The release is sent whenever one is owed, held or not
+        (R-14): a release with nothing held is accepted. A refusal or no answer
+        is said, and the hold then lapses once this cell's node leaves the
+        graph (`HoldMode.srv`).
         """
-        if not self._holds:
-            return True
+        if not self._release_owed:
+            return None
         with self._not_interrupted():
             try:
                 response = self._call_hold(
@@ -620,6 +663,7 @@ class RosCell:
             print(f"the twin kept this run's hold: {response.result.detail}", flush=True)
             return False
         self._holds = False
+        self._release_owed = False
         return True
 
     def _call_hold(
@@ -650,6 +694,11 @@ class RosCell:
         """
         if self._via != "twin":
             return
+        if self._holds and self._expected_mode is not None:
+            # Re-asserted, idempotently, before every step (S2-05): the
+            # boundary answers under its lock whether this run still holds the
+            # mode the step is checked against.
+            self._hold(self._expected_mode, _mode_name(self._expected_mode))
         self._spin_once(0.0)
         if mode_refusal(self._expected_mode, self._heard_mode) is None:
             return

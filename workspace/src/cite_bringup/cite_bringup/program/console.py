@@ -82,7 +82,7 @@ from cite_bringup.plan import (
 )
 from cite_bringup.program import targets
 from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
-from cite_bringup.program.cell import RosCell, TERMINAL_NODE
+from cite_bringup.program.cell import is_terminal_node, RosCell
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, initializer_stop, start_pose
@@ -520,14 +520,15 @@ class CellConsole(LifecycleNode):
     def _terminal_client(self) -> str | None:
         """Name the terminal program client on this domain's graph, or None (S-01).
 
-        A terminal run's cell is the node `cell.TERMINAL_NODE`, on the plant's
+        A terminal run's cell is a node named from `cell.TERMINAL_NODE`
+        (`cell.is_terminal_node`: a run's own suffix on one prefix), on the plant's
         domain by either route, which is this node's. Read off the graph as it
         is known now: DDS cannot prove an absence, so this narrows the race
         with a terminal client that is still starting and does not close it -
         that client refuses itself when it sees this console (N-01).
         """
         for name, namespace in self.get_node_names_and_namespaces():
-            if name == TERMINAL_NODE:
+            if is_terminal_node(name):
                 return f"{namespace.rstrip('/')}/{name}"
         return None
 

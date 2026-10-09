@@ -7,7 +7,16 @@
 # that race IN THE BOUNDARY: while one exists, SetMode into any mode other than the
 # held one is refused unless it carries the holder's id (SetMode.holder), so the
 # mode a run checked is the mode every one of its goals, track moves and belt
-# commands is routed in until the holder itself changes it or lets go.
+# commands is routed in until the holder itself changes it or lets go. The one
+# exception is SetMode into SIM, which commands the plant alone: the safe direction
+# is never refused by a hold, the hold stays with its holder on SIM, and the
+# holder's run stops on a mode it did not ask for.
+#
+# A run takes its hold on SIM BEFORE it asks a person into the physical cell (the
+# accepted ACQUIRE is the gate that the mode is SIM, decided under the boundary's
+# lock), keeps it through its own transitions and its return to SIM, re-asserts it
+# before every step, and releases it once at the end of its request. A run whose
+# return to SIM was not confirmed does not release: its hold lapses.
 #
 # ACQUIRE takes the hold, and is accepted only if `mode` is the mode in force now
 # (a client holds what it checked, never what it hoped for) and no other holder

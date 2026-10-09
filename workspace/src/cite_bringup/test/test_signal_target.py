@@ -185,7 +185,7 @@ class Cell:
             self.log.append((name, *args, *kwargs.values()))
             if name == "require_running" and self.not_running is not None:
                 raise StepFailed(self.not_running)
-            if name == "twin_mode":
+            if name in ("twin_mode", "hold_sim"):
                 return TwinMode.MODE_SIM
             if name == "return_to_sim":
                 return True
@@ -232,7 +232,7 @@ def test_a_simulation_run_asks_no_one_and_never_returns_to_sim() -> None:
     ended = _run(SIM, [], log)
     assert ended.status == 0 and ended.sim_confirmed is None
     names = _names(log)
-    assert "asked" not in names and "twin_mode" not in names
+    assert "asked" not in names and "hold_sim" not in names
     assert "return_to_sim" not in names
     assert ("enter_target", SIM) in log
     # S-01: a SIM run holds SIM for the run and lets it go at the end.
@@ -259,7 +259,8 @@ def test_a_real_run_carries_every_gate_and_returns_to_sim() -> None:
     ended = _run(REAL, ["counterpart"], log)
     assert ended.status == 0 and ended.sim_confirmed is True
     names = _names(log)
-    assert names.index("twin_mode") < names.index("asked") < names.index("enter_target")
+    # S2-01: SIM held before the operator is asked, and kept to the end.
+    assert names.index("hold_sim") < names.index("asked") < names.index("enter_target")
     (asked,) = [entry[1] for entry in log if entry[0] == "asked"]
     assert "Target: the real arm" in asked and "counterpart" in asked
     assert ("carriage_refusal", REAL, False) in log
@@ -558,6 +559,82 @@ def test_no_program_module_opens_another_sides_domain_for_custody() -> None:
             continue  # a link a symlinked install left behind for a removed module
         text = module.read_text()
         assert "read_state_on_side" not in text and "far_custody" not in text, module.name
+
+
+#: The only places in `cite_bringup.program` that open a ROS context on another
+#: side's domain, by (module, enclosing function): the belt setpoint, which is
+#: not twinned (ADR-0067), and the physical side's initializer (ADR-0070). Every
+#: other read or command of a side reaches it through the boundary (R-01).
+DOMAIN_OPENERS = {("belt.py", "_set_on_one_side"), ("home.py", "_call_on_domain")}
+
+
+def _domain_openings(tree):
+    """Yield (enclosing function, what) for each call that opens a ROS context or domain."""
+    import ast
+
+    def walk(node, function):
+        for child in ast.iter_child_nodes(node):
+            inner = (
+                child.name
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                else function
+            )
+            if isinstance(child, ast.Call):
+                callee = child.func
+                name = callee.attr if isinstance(callee, ast.Attribute) else getattr(
+                    callee, "id", ""
+                )
+                keywords = {keyword.arg for keyword in child.keywords}
+                if name == "Context":
+                    yield function, "a ROS Context"
+                if "domain_id" in keywords:
+                    yield function, f"{name}(domain_id=...)"
+                if "context" in keywords and name in ("init", "create_node", "Node"):
+                    yield function, f"{name}(context=...)"
+            yield from walk(child, inner)
+
+    yield from walk(tree, "<module>")
+
+
+def test_no_program_module_opens_another_domain_outside_the_carve_outs() -> None:
+    """R-16: a program module reaches another side's domain only where it is allowed to.
+
+    Names alone do not hold R-01: a reader renamed is still a reader. So every
+    call that makes a ROS context, passes a domain or binds a node to a context
+    of its own is found in the syntax, and must be in an allowed function.
+    """
+    import ast
+    from pathlib import Path
+
+    import cite_bringup.program as program_package
+
+    folder = Path(program_package.__file__).parent
+    found = set()
+    for module in folder.glob("*.py"):
+        if not module.exists():
+            continue
+        for function, what in _domain_openings(ast.parse(module.read_text())):
+            assert (module.name, function) in DOMAIN_OPENERS, (
+                f"{module.name}:{function} opens {what}: only the boundary reads or "
+                "commands another side's domain (R-01)"
+            )
+            found.add((module.name, function))
+    # The carve-outs exist, so the scan above is looking at the right syntax.
+    assert found == DOMAIN_OPENERS
+
+
+def test_the_domain_scan_finds_a_reader_by_its_syntax() -> None:
+    """R-16: the scan is not a name list: a renamed cross-domain reader is found."""
+    import ast
+
+    source = (
+        "import rclpy\n"
+        "def innocuous(domain):\n"
+        "    context = rclpy.Context()\n"
+        "    rclpy.init(context=context, domain_id=domain)\n"
+    )
+    found = {function for function, _ in _domain_openings(ast.parse(source))}
+    assert found == {"innocuous"}
 
 
 # --- S-02 / R-06: the physical sides before anyone is asked in ---------------

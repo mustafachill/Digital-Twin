@@ -84,6 +84,12 @@ class FakeCell:
         self._call("twin_mode")
         return self._rig.modes.pop(0) if self._rig.modes else self._rig.mode
 
+    def hold_sim(self):
+        # The hold on SIM before and after the prompt (S2-01): answers the mode
+        # in force, which `confirm_operator` and the awaiter refuse unless SIM.
+        self._call("hold_sim")
+        return self._rig.modes.pop(0) if self._rig.modes else self._rig.mode
+
     def carriage_refusal(self, target: int, homing: bool = False):
         self._call("carriage_refusal", homing)
         self._rig.targets_seen.append(("carriage_refusal", target))
@@ -416,14 +422,14 @@ def test_a_physical_start_reads_sim_and_asks_the_operator_before_initializing() 
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
     snapshot = rig.machine.snapshot()
     assert snapshot.prompt == START_PROMPT
-    # The mode was read; nothing has been initialized yet.
-    assert rig.calls == [("twin_mode",)]
+    # SIM was held (S2-01); nothing has been initialized yet.
+    assert rig.calls == [("hold_sim",)]
     assert rig.machine.confirm_operator().success
     assert join().success
-    # Read again after the confirmation, then initialized, then custody.
+    # Re-asserted after the confirmation, then initialized, then custody.
     assert rig.calls == [
-        ("twin_mode",),
-        ("twin_mode",),
+        ("hold_sim",),
+        ("hold_sim",),
         ("initialize",),
         ("refuse_if_holding",),
         ("close",),
@@ -647,7 +653,7 @@ def test_a_run_on_a_simulated_pair_places_a_part_then_runs_each_cycle() -> None:
     # No operator is asked and no SIM is asked for on a simulated pair.
     # No one is asked on an all-simulated pair; SIM is asked for after each
     # cycle all the same (R-20).
-    assert ("twin_mode",) not in rig.calls
+    assert ("hold_sim",) not in rig.calls
     assert rig.calls.count(("return_to_sim",)) == 2
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.READY and not snapshot.busy
@@ -661,14 +667,14 @@ def test_a_physical_run_awaits_the_operator_after_reading_sim_then_returns_to_si
     assert rig.machine.snapshot().prompt.endswith(PLACE_PROMPT)
     assert "Target: the twin" in rig.machine.snapshot().prompt
     # Asked only once the mode was read and the carriage judged; nothing entered.
-    assert rig.calls[-2:] == [("twin_mode",), ("carriage_refusal", False)]
+    assert rig.calls[-2:] == [("hold_sim",), ("carriage_refusal", False)]
     assert ("enter", TWIN, False) not in rig.calls
     assert rig.machine.confirm_operator().success
     outcome = join()
     assert outcome.success, outcome.detail
     after = rig.calls[rig.calls.index(("carriage_refusal", False)) + 1:]
-    # The mode read again after the go-ahead, then custody, then VALIDATED.
-    assert after[:3] == [("twin_mode",), ("refuse_if_holding",), ("enter", TWIN, False)]
+    # The hold re-asserted after the go-ahead, then custody, then VALIDATED.
+    assert after[:3] == [("hold_sim",), ("refuse_if_holding",), ("enter", TWIN, False)]
     assert after[-2:] == [("return_to_sim",), ("close",)]
 
 
@@ -739,6 +745,70 @@ def test_a_run_whose_return_to_sim_fails_asks_no_one_in_for_the_next_cycle() -> 
     # The first cycle's question only: the second was never asked.
     assert rig.asked() == asked_before + 1
     assert rig.moves() == ["pick", "place"]
+
+
+# --- S2-01 / S2-04: one hold per request, kept when SIM is not confirmed -----
+
+
+def _answer_question(rig: "Rig", number: int) -> None:
+    """Confirm the operator's ``number``-th question of this rig, once it is asked."""
+    with rig._changed:
+        asked = rig._changed.wait_for(lambda: rig.asked() >= number, timeout=SETTLE_S)
+    assert asked, f"question {number} was never asked"
+    outcome = rig.machine.confirm_operator()
+    assert outcome.success, outcome.detail
+
+
+def test_a_run_holds_the_mode_across_its_cycles_and_lets_go_once() -> None:
+    """S2-01: SIM held before each prompt, kept between cycles, released after the last."""
+    rig = Rig(physical=["counterpart"]).homed()
+    asked = rig.asked()
+    released = len(rig.released)
+    join = rig.in_thread(lambda: rig.machine.run_program(0.1, 2, TWIN))
+    _answer_question(rig, asked + 1)
+    _answer_question(rig, asked + 2)
+    outcome = join()
+    assert outcome.success, outcome.detail
+    (at,) = rig.released[released:]
+    # Let go after the second cycle's return to SIM, not after the first.
+    returns = [index for index, call in enumerate(rig.calls) if call == ("return_to_sim",)]
+    assert len(returns) == 2 and at > returns[-1]
+    # Held before each prompt and re-asserted after each go-ahead.
+    assert rig.calls.count(("hold_sim",)) == 4
+
+
+def test_a_run_stopped_between_its_cycles_lets_go_once() -> None:
+    """S2-01: a stop at the second cycle's prompt ends the request, and its hold, once."""
+    rig = Rig(physical=["counterpart"]).homed()
+    asked = rig.asked()
+    released = len(rig.released)
+    join = rig.in_thread(lambda: rig.machine.run_program(0.1, 3, TWIN))
+    _answer_question(rig, asked + 1)
+    with rig._changed:
+        assert rig._changed.wait_for(lambda: rig.asked() >= asked + 2, timeout=SETTLE_S)
+    assert rig.machine.stop().success
+    join()
+    assert len(rig.released[released:]) == 1
+
+
+@pytest.mark.parametrize("request_kind", ["run", "home"])
+def test_a_request_whose_return_to_sim_fails_keeps_its_hold(request_kind) -> None:
+    """S2-04: SIM not confirmed: the hold is not released, and the fault says so."""
+    rig = Rig(physical=["counterpart"]).homed()
+    released = len(rig.released)
+    rig.away = [None]
+    rig.left = [False]
+    join = rig.in_thread(
+        (lambda: rig.machine.run_program(0.1, 2, TWIN))
+        if request_kind == "run"
+        else (lambda: rig.machine.home(0.1, TWIN))
+    )
+    rig.answer()
+    assert not join().success
+    assert rig.released[released:] == []
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.FAULT
+    assert "keeps its hold" in snapshot.last_error
 
 
 # --- Stop and failure: READY or FAULT, and never a homing move ---------------

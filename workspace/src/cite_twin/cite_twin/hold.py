@@ -37,7 +37,7 @@ from __future__ import annotations
 from collections.abc import Collection
 from dataclasses import dataclass
 
-from cite_interfaces.msg import ResultCode
+from cite_interfaces.msg import ResultCode, TwinMode
 from cite_interfaces.srv import HoldMode
 
 #: How long a hold's node may be absent from the plant's ROS graph before the
@@ -140,10 +140,18 @@ class ModeHold:
         """Say why a `SetMode` into ``requested_mode`` is refused by the hold, or None.
 
         A request for the mode in force changes nothing and is never refused
-        here; any other is refused unless it carries the holder's id.
+        here, nor is one into SIM (S2-05): SIM commands the plant alone, so
+        taking the twin there is the safe direction and no hold may stand in
+        its way - the holder's own run then stops on the mode it did not ask
+        for (R-05). Any other is refused unless it carries the holder's id.
         """
         hold = self._hold
-        if hold is None or requested_mode == current_mode or holder == hold.holder:
+        if (
+            hold is None
+            or requested_mode == current_mode
+            or requested_mode == TwinMode.MODE_SIM
+            or holder == hold.holder
+        ):
             return None
         return (
             f"the twin's mode is held by a run in progress ({hold.holder}, node {hold.node}), "
@@ -152,8 +160,14 @@ class ModeHold:
         )
 
     def followed(self, holder: str, mode: int) -> None:
-        """Carry the hold to ``mode`` after a transition its holder made."""
-        if self._hold is not None and holder == self._hold.holder:
+        """Carry the hold to ``mode`` after a transition its holder made, or into SIM.
+
+        A transition into SIM is never refused by the hold (`refusal`), whoever
+        asks for it, and the hold stays with its holder on the mode now in force.
+        """
+        if self._hold is not None and (
+            holder == self._hold.holder or mode == TwinMode.MODE_SIM
+        ):
             self._hold.mode = mode
 
     def lapse_if_gone(self, nodes: Collection[str], now: float) -> str | None:

@@ -355,8 +355,17 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
             # The holder's own transition is taken, and carries the hold.
             own = self._request(TwinMode.MODE_REAL, "the run itself", holder=run)
             self.assertTrue(own.accepted, own.result.detail)
+            again = self._request(TwinMode.MODE_VALIDATED, "another client")
+            self.assertFalse(again.accepted, "the hold moved with the holder to REAL")
+            self.assertIn("held by a run in progress", again.result.detail)
+            # S2-05: SIM, the safe direction, is never refused by a hold; the
+            # hold stays with its holder, now on SIM.
             back = self._request(TwinMode.MODE_SIM, "another client")
-            self.assertFalse(back.accepted, "the hold moved with the holder to REAL")
+            self.assertTrue(back.accepted, back.result.detail)
+            self.assertEqual(back.current_mode, TwinMode.MODE_SIM)
+            still = self._request(TwinMode.MODE_REAL, "another client, still held")
+            self.assertFalse(still.accepted, "the hold stayed with its holder on SIM")
+            self.assertIn("held by a run in progress", still.result.detail)
             self.assertTrue(
                 self._request(TwinMode.MODE_SIM, "the run ends", holder=run).accepted
             )

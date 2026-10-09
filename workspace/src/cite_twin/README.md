@@ -153,8 +153,11 @@ anyone presenting one must label it as one
 It needs a zone that declares a counterpart, which `cell_b` does:
 
 ```bash
-./scripts/enter dev ros2 run cite_twin twin_boundary.py --zone cell_b
+./scripts/enter dev ros2 run cite_twin twin_boundary.py --zone cell_b --sides all
 ```
+
+`--sides` is required and has no default (ADR-0072): `all` runs both sides, `plant` the plant
+alone. The pair supervisor passes the sides it started.
 
 On a zone that declares `single` it exits 2 with `zone '<zone>' declares no side named
 'counterpart'`.

@@ -1085,6 +1085,10 @@ class TwinBoundary:
         same typed server on the same name (P2, P9).
         """
         sent: dict[str, Future] = {}
+        # One side's feedback reaches the operator (`_forward_feedback`): the
+        # plant's where the mode commands it, else the side it does command -
+        # the counterpart in REAL (R-08), whose arm is the one moving.
+        speaking = PLANT_SIDE if PLANT_SIDE in sides else (sides[0] if sides else None)
         for side_name in sides:
             client = self._clients[(side_name, skill.side_name)]
             if not client.wait_for_server(timeout_sec=SERVER_WAIT_S):
@@ -1100,7 +1104,7 @@ class TwinBoundary:
                 )
             feedback = (
                 partial(self._forward_feedback, goal_handle)
-                if side_name == PLANT_SIDE
+                if side_name == speaking
                 else None
             )
             sent[side_name] = client.send_goal_async(
@@ -1351,12 +1355,14 @@ class TwinBoundary:
                 publisher.publish(Float64(data=0.0))
 
     def _forward_feedback(self, goal_handle, message) -> None:
-        """Pass the PLANT's feedback through to the operator, unchanged.
+        """Pass one commanded side's feedback through to the operator, unchanged.
 
         One side's and not both: two sides produce feedback of the same type on
         the same goal, and interleaving them would give the operator a stream in
         which no message says which cell it came from. The plant is chosen
-        because it is the side the operator is on (ADR-0044 clause 5).
+        where the mode commands it, because it is the side the operator is on
+        (ADR-0044 clause 5); in a mode that commands the counterpart alone
+        (REAL) that side's, since the plant runs nothing then (R-08).
 
         Feedback and result are not a reverse state flow and may not be cited as
         one (ADR-0050 decision 2). An action client receives them by
@@ -1595,6 +1601,12 @@ class TwinBoundary:
         runs at the heartbeat period and says a change of WHICH sides at once,
         while a detail that only re-words itself (an age) is said at the
         divergence period.
+
+        **Published under the lock that took the snapshot (R-11).** The two
+        callers run on a reentrant group, so they may overlap: a snapshot
+        taken first and published last would leave an older `TwinSides` as the
+        latched one a late subscriber receives. Under one acquisition the
+        order the snapshots are taken in is the order they are published in.
         """
         with self._lock:
             now = self._sides_now()
@@ -1602,16 +1614,16 @@ class TwinBoundary:
             if last is not None and (now[:4] == last[:4] if sets_only else now == last):
                 return
             self._sides_published = now
-        running, physical, commandable, stationary, detail = now
-        message = TwinSides(
-            running=list(running),
-            physical=list(physical),
-            commandable=list(commandable),
-            stationary=list(stationary),
-            detail=detail,
-        )
-        message.stamp = self._plant.node.get_clock().now().to_msg()
-        self._sides_publisher.publish(message)
+            running, physical, commandable, stationary, detail = now
+            message = TwinSides(
+                running=list(running),
+                physical=list(physical),
+                commandable=list(commandable),
+                stationary=list(stationary),
+                detail=detail,
+            )
+            message.stamp = self._plant.node.get_clock().now().to_msg()
+            self._sides_publisher.publish(message)
 
     def _physical_carriage_apart(self) -> str | None:
         """Why a physical carriage, heard fresh, stands away from the plant's; under the lock.

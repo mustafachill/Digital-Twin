@@ -101,7 +101,8 @@ string holder               # the caller's run id, as given to HoldMode.srv; emp
                             # for a caller that holds nothing. While a hold exists
                             # a request for any mode other than the held one is
                             # refused unless this is the holder's id, and `force`
-                            # does not skip that refusal (ADR-0072, S-01)
+                            # does not skip that refusal (ADR-0072, S-01). A
+                            # request for SIM is never refused by a hold (S2-05)
 ---
 bool accepted
 ResultCode result

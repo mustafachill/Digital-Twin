@@ -1019,9 +1019,19 @@ class TrackAdapter(LifecycleNode):
     # ------------------------------------------------------------------ #
 
     def _forget_zero(self) -> None:
-        """After a vendor error, whether the track is on its zero is read again."""
+        """After a vendor error, whether the track is on its zero is read again.
+
+        A read already in flight is discarded with it (R-15): it was asked
+        before the error, so its answer says nothing about the track after it,
+        and a late "on its zero" must not restore what the error took away.
+        `_on_zero_answered` ignores a future that is no longer the current one.
+        """
         with self._lock:
             self._on_zero = None
+            stale, self._zero_future = self._zero_future, None
+        if stale is not None and self._zero_client is not None:
+            self._zero_client.remove_pending_request(stale)
+            stale.cancel()
 
     def _read_zero_if_unknown(self, config: dict) -> None:
         """Read `get_linear_motor_on_zero` while the track is not known to be on its zero.

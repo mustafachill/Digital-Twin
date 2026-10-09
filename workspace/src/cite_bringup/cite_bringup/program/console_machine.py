@@ -470,7 +470,10 @@ class ConsoleMachine:
                 cell.close()
             stopped = ended.status == EXIT_INTERRUPTED
             if ended.sim_confirmed is False:
-                problems.append("the twin did not confirm SIM after the home")
+                problems.append(
+                    "the twin did not confirm SIM after the home, and this request keeps "
+                    "its hold on the twin's mode"
+                )
             if ended.status != 0 and not stopped:
                 failure = (
                     ended.failure
@@ -529,6 +532,9 @@ class ConsoleMachine:
         completed = 0
         observed = None
         refusal: str | None = None
+        #: Whether a cycle ended without SIM confirmed: then the hold this
+        #: request took is kept, never released (S2-04).
+        sim_unconfirmed = False
         try:
             cell = self._make_cell(scale, self.interrupted)
             observed = _Observed(cell, self._set_entered)
@@ -570,11 +576,16 @@ class ConsoleMachine:
                         prompt=PLACE_PROMPT,
                         first_cycle=number,
                         on_step=on_step,
+                        # Held across the cycles of this request, and let go
+                        # once, after the last (S2-01).
+                        release=False,
                     )
                     if ended.sim_confirmed is False:
+                        sim_unconfirmed = True
                         problems.append(
                             "the twin did not confirm SIM after the cycle, so no one is "
-                            "asked into the cell"
+                            "asked into the cell, and this request keeps its hold on the "
+                            "twin's mode"
                         )
                     if ended.status == EXIT_INTERRUPTED:
                         stopped = True
@@ -593,6 +604,10 @@ class ConsoleMachine:
                         for side in sides:
                             self._at_start[side] = True
             finally:
+                # Once per request, whatever ended it, unless SIM was not
+                # confirmed (S2-04).
+                if not sim_unconfirmed:
+                    cell.release_hold()
                 cell.close()
         except _NotAtStart as away:
             refusal = str(away)
@@ -977,9 +992,10 @@ class ConsoleMachine:
         It shows ``prompt`` in AWAITING_OPERATOR and waits for
         `confirm_operator` - which is refused unless the twin is heard in SIM -
         or a stop, which raises `Interrupted` as Ctrl-C at the terminal prompt
-        would have. Once confirmed it READS the twin's mode again, from the
-        twin, and refuses anything but SIM: a confirmation is never taken as
-        leave to enter a cell the twin may command (ADR-0071).
+        would have. Once confirmed it RE-ASSERTS the run's hold on SIM, taken
+        before the prompt (`hold_sim`, S2-01), and refuses anything but SIM: a
+        confirmation is never taken as leave to enter a cell the twin may
+        command (ADR-0071).
         """
 
         def await_operator(prompt: str) -> str:
@@ -1004,7 +1020,9 @@ class ConsoleMachine:
                 self._step = "the operator confirmed"
                 snapshot = self._snapshot()
             self._on_change(snapshot)
-            mode = cell.twin_mode()
+            # Re-asserted, not read (S2-01): the hold taken before the prompt
+            # is confirmed held, on SIM, under the boundary's lock.
+            mode = cell.hold_sim()
             if mode != TwinMode.MODE_SIM:
                 raise StepFailed(
                     f"the operator confirmed, and the twin was then read in mode {mode}, not "
