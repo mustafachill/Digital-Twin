@@ -63,20 +63,24 @@ Option C.
    `console` is a reserved zone scope that no asset may take:
    - `StartRobot`, `ConfirmOperator` and `StopCell` (services)
    - `HomeRobot` and `RunProgram` (actions)
-   - `ConsoleState` (latched, and sequence-numbered so that the last message is never a stale one)
+   - `ConsoleState` (latched; the server numbers its snapshots and never publishes an older one after a newer, so the last message is never stale). A refused request's reason is published in
+     `last_error`
 
    The gating is enforced on the server:
    - Home is refused until Start robot has succeeded.
    - Start program is refused until the arm is known to be at the program's start (`at_start`).
      A successful Home or a completed cycle sets it; a Stop, a failure or a new Start robot clears
-     it.
+     it. Before cycle 1, Start program also measures the start and refuses if the arms are away.
    - `ConfirmOperator` is refused in every state except `AWAITING_OPERATOR`.
-   - When a side is physical, every request is refused while the twin is in a commanding mode that
-     the console did not enter itself.
+   - When a side is physical, every request is refused while the twin is in any mode other than
+     SIM that the console did not enter itself.
 
-   The console starts only when it is asked for (`./scripts/sim --pair --console`).
-   `./scripts/program` never starts it, so two clients never command one pair. One sequencer,
-   `program/cycle.py`, serves both the terminal path and the console.
+   The console starts only when it is asked for, through `./scripts/sim --pair --console` or
+   `./scripts/console`. `./scripts/program` never starts it. While a console serves the pair, the
+   terminal clients (`./scripts/home` and `python3 -m cite_bringup.program`) refuse to run, and
+   the console refuses while a terminal program node is on the graph. Both checks rest on DDS
+   discovery, so they are advisory. An owner that the twin enforces is open-work #100. One
+   sequencer, `program/cycle.py`, serves both the terminal path and the console.
 
    The console is a **cross-domain client**, under the carve-out ADR-0070 gave the program for
    ADR-0044 clause 3. Outside the plant domain it touches exactly two things:

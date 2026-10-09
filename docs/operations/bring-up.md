@@ -212,6 +212,50 @@ Past milestones are not run from here: each runs from its own folder under `proj
 example `projects/01-three-arm-event-driven-line/run` — see
 [`../../projects/README.md`](../../projects/README.md).
 
+### Operating the pair from the Gazebo window
+
+[ADR-0071](../adr/0071-the-first-operator-surface-is-a-panel-in-the-gazebo-window.md) adds an
+operator panel to the plant side's Gazebo window.
+
+```bash
+./scripts/console                          # the same as ./scripts/sim --pair --console, windowed
+CITE_ALLOW_HARDWARE=1 ./scripts/console    # with the physical counterpart
+```
+
+The pair comes up with the console server `cell_console`, and the panel shows in the top-right
+corner of the 3D view. **Nothing moves until a button is pressed.**
+
+| Button | What it does | Enabled when |
+|---|---|---|
+| **Start robot** | On a physical side: reads the twin as SIM, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running |
+| **Home** | Measures both arms against the program's start. If a side is away, it asks the operator to confirm and brings both arms there, then measures again. | The robot is started and the console is READY |
+| **Start program** | Measures the start again, then runs N cycles of the real program through the twin. On a physical side, each cycle first asks the operator to place the part by hand. | The robot is started, READY, and the arms are known to be at the start |
+| **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
+
+**The speed selector** preselects 1.0, the program's own speed, and also offers 0.5, 0.25 and 0.1.
+A choice below the physical side's floor is disabled. The scale is sent with every Home and every
+Start program, and the server never assumes one.
+
+**The confirmation panel** shows the server's exact prompt. The server asks only after reading the
+twin as SIM, so nothing is forwarded to the physical side while a person is in the cell. Confirm
+answers the prompt; Stop withdraws the request.
+
+**Stop is a software stop on the command path, not an E-stop.** The xArm controller's hardware
+E-stop is the only real stop ([`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)).
+Stop does not stop a gripper motion already in progress on the physical arm (ADR-0070 item 4).
+After a Stop or a failure nothing homes on its own (ADR-0037). The arms must be homed again before
+Start program is accepted.
+
+**One operator surface per pair.** `./scripts/program` never starts a console. While a console
+serves the pair, `./scripts/home` and `python3 -m cite_bringup.program` refuse and point at the
+panel. That check depends on DDS discovery, so it is advisory and not an interlock (open-work #100).
+
+**Not yet run through the panel:** a full cycle on the physical arm. Every console path is tested
+headlessly against fake sides, but the repository cannot start an all-simulated Gazebo pair, so
+the first complete Home and program cycle through the panel is the supervised physical run. Run it
+at `--speed-scale 0.1` first, with the owner at the hardware E-stop, as in "First motion, always:
+two stages".
+
 ### Reaching one side
 
 A shell is on the plant's domain by default — `./scripts/doctor` prints it — so a bare
