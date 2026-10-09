@@ -135,6 +135,9 @@ if(BUILD_TESTING)
   # it refuses, the order it calls the program's library in, and what a stop
   # and a failure leave it in. No graph.
   ament_add_pytest_test(console_machine test/test_console_machine.py)
+  # R2-05 (ADR-0071): the program sequencer's terminal lines and exit codes, and
+  # their order against the calls, on a fake cell with a physical side. No graph.
+  ament_add_pytest_test(cycle_terminal test/test_cycle_terminal.py)
   # N-01, S-01, R-05: a terminal client sees an operator console on its graph -
   # by the twin's mode or, via the plant, the arm's state - and the console sees
   # a terminal client by its one node name. A live graph on a domain of its own.
