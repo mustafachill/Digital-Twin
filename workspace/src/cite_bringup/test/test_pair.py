@@ -933,6 +933,10 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
 ) -> None:
     """ADR-0057's promotion clause 3, as a test that fails if it passes more.
 
+    ADR-0072 adds the one other fact the supervisor holds: which sides it
+    started (`--sides`). That is the deployment, not a decision about what
+    crosses.
+
     **Starting a process is not deciding what crosses**, and the two facts the
     supervisor hands over are ones it already holds. `divergence_period_s` is the
     argument this asserts the absence of by name: it is a ROS parameter, so
@@ -941,7 +945,7 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
     """
     plan = _paired_plan(tmp_path)
     path = tmp_path / "plan.yaml"
-    spec = pair.boundary_spec(plan, path)
+    spec = pair.boundary_spec(plan, path, "all")
     assert plan.zone == ZONE
 
     assert spec.argv == (
@@ -953,12 +957,15 @@ def test_the_boundary_is_given_the_zone_and_the_plan_and_nothing_else(
         plan.zone,
         "--plan",
         str(path),
+        "--sides",
+        "all",
     )
     # Asserted as a set as well as a sequence, so that an added option fails here
     # even if it is inserted where the tuple comparison above reads plausibly.
     assert [token for token in spec.argv if token.startswith("--")] == [
         "--zone",
         "--plan",
+        "--sides",
     ]
     assert "--ros-args" not in spec.argv
     assert "divergence_period_s" not in " ".join(spec.argv)
@@ -1380,7 +1387,7 @@ def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
     """The boundary's two facts, and the one a side is given: its domain, the plant's."""
     plan = _paired_plan(tmp_path)
     path = tmp_path / "plan.yaml"
-    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"})
+    spec = pair.console_spec(plan, path, {DOMAIN_BASE_ENV: "41"}, "plant")
     assert spec.argv == (
         "ros2",
         "run",
@@ -1390,6 +1397,8 @@ def test_the_console_is_given_the_zone_the_plan_and_the_plants_domain(
         plan.zone,
         "--plan",
         str(path),
+        "--sides",
+        "plant",
     )
     assert spec.env == {DOMAIN_ENV: str(resolve_domain_id(plan, PLANT_SIDE, 41))}
     # `ros2 run`, so only the group signal reaches the program it starts.

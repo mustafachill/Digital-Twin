@@ -70,7 +70,7 @@ import sys
 import threading
 
 from cite_bringup.gz import KILL_WAIT_S
-from cite_bringup.pair import STOP_GRACE_S
+from cite_bringup.pair import SIDES_CHOICES, started_sides, STOP_GRACE_S
 from cite_bringup.plan import (
     COUNTERPART_SIDE,
     default_plan_path,
@@ -80,20 +80,21 @@ from cite_bringup.plan import (
     PLANT_SIDE,
 )
 from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
-from cite_bringup.program.cell import RosCell, TERMINAL_NODE
+from cite_bringup.program import targets
+from cite_bringup.program.cell import RosCell, state_topic, TERMINAL_NODE
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
+from cite_bringup.program.custody import read_state_on_side
 from cite_bringup.program.from_plan import program, target
 from cite_bringup.program.home import home_steps, initialize, initializer_stop, start_pose
 from cite_bringup.program.part import place_on_simulated_sides
 from cite_bringup.program.sides import (
     minimum_speed_scale,
-    physical_sides,
     required_speed_scale,
     simulated_sides,
 )
 from cite_bringup.readiness import console_announcement
 from cite_interfaces.action import HomeRobot, RunProgram
-from cite_interfaces.msg import ConsoleState, TwinMode
+from cite_interfaces.msg import ConsoleState, TwinMode, TwinSides
 from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
 import rclpy
@@ -167,7 +168,7 @@ _CELL_NODE = "cell_console_program"
 class CellConsole(LifecycleNode):
     """The operator console's ROS face (ADR-0071); `ConsoleMachine` decides."""
 
-    def __init__(self, plan: Plan) -> None:
+    def __init__(self, plan: Plan, running: tuple[str, ...]) -> None:
         # Simulated time, as the cell it drives (`RosCell`), so the state's
         # stamp and the cell's waits read one clock.
         super().__init__(
@@ -175,6 +176,15 @@ class CellConsole(LifecycleNode):
         )
         self._plan = plan
         self._names = plan.console
+        #: The sides the pair supervisor started (`--sides`, ADR-0072): a fact
+        #: about this deployment, read once.
+        self._running = tuple(running)
+        #: Guards `_commandable` alone, so the machine may read it under its lock.
+        self._sides_lock = threading.Lock()
+        #: The sides a mode may command now, as the twin last said (`TwinSides`,
+        #: R-19); until it is heard, the running simulated sides and no
+        #: physical one - a physical side is offered only by measurement.
+        self._commandable: tuple[str, ...] = ()
         self._machine: ConsoleMachine | None = None
         #: The long requests' handlers, and the action servers' every callback:
         #: reentrant, so a cancel is served while its goal executes.
@@ -209,16 +219,20 @@ class CellConsole(LifecycleNode):
             homing = home_steps(cell)
             start = start_pose(cell, homing)
             steps = program(cell)
-            physical = physical_sides(plan)
+            # The RUNNING physical sides, in the one place (R-16).
+            physical = targets.running_physical(plan, self._running)
             # The floor `required_speed_scale` applies, shown to the panel.
             minimum = (minimum_speed_scale(plan) if physical else None) or 0.0
             _require_track_stops_within_the_tail(plan, physical)
         except (ValueError, PlanError, OSError, KeyError) as error:
             self.get_logger().error(f"cannot configure: {error}")
             return TransitionCallbackReturn.FAILURE
+        simulated = [side for side in simulated_sides(plan) if side in self._running]
+        with self._sides_lock:
+            self._commandable = tuple(simulated)
         self._machine = ConsoleMachine(
             physical=physical,
-            simulated=simulated_sides(plan),
+            simulated=simulated,
             home_steps=homing,
             start=start,
             steps=steps,
@@ -226,8 +240,8 @@ class CellConsole(LifecycleNode):
             initialize_physical=lambda say, interrupted: initialize(
                 plan, physical, say, interrupted=interrupted, stop_deadline=self._stop_deadline
             ),
-            place_parts=lambda may_hold, say, interrupted: place_on_simulated_sides(
-                plan.zone, may_hold, say, interrupted
+            place_parts=lambda sides, may_hold, say, interrupted: place_on_simulated_sides(
+                plan.zone, may_hold, say, interrupted, only=sides
             ),
             set_belts=lambda running, say, interrupted, ceiling: set_belts(
                 plan,
@@ -236,18 +250,22 @@ class CellConsole(LifecycleNode):
                 interrupted=interrupted,
                 match_ceiling_s=MATCH_CEILING_S if ceiling is None else ceiling,
             ),
+            available=self._available,
             heard_twin_mode=self._heard_twin_mode,
             terminal_client=self._terminal_client,
             # The command line's own rule, floor included (SA-S-07), on the
-            # value exactly as the goal carries it.
-            check_scale=lambda scale: required_speed_scale(plan, repr(float(scale))),
+            # value exactly as the goal carries it, for the target's sides
+            # alone (R-25).
+            check_scale=lambda scale, target: required_speed_scale(
+                plan, repr(float(scale)), "twin", targets.SIDES.get(target, ())
+            ),
             minimum_speed_scale=minimum,
             on_change=self._publish,
             log=lambda text: self.get_logger().info(text),
         )
         self.get_logger().info(
-            f"configured for {plan.zone}: {len(steps)} step(s) per cycle, physical side(s): "
-            f"{', '.join(physical) or 'none'}"
+            f"configured for {plan.zone}: {len(steps)} step(s) per cycle, running side(s): "
+            f"{', '.join(self._running)}, physical: {', '.join(physical) or 'none'}"
         )
         return TransitionCallbackReturn.SUCCESS
 
@@ -258,6 +276,10 @@ class CellConsole(LifecycleNode):
         self._endpoints = [
             self.create_subscription(
                 TwinMode, TwinMode.TOPIC, self._on_twin_mode, LATCHED,
+                callback_group=self._quick,
+            ),
+            self.create_subscription(
+                TwinSides, TwinSides.TOPIC, self._on_twin_sides, LATCHED,
                 callback_group=self._quick,
             ),
             self.create_service(
@@ -276,7 +298,7 @@ class CellConsole(LifecycleNode):
                 HomeRobot,
                 names.home,
                 execute_callback=self._execute_home,
-                goal_callback=lambda goal: self._accept(goal.speed_scale, None),
+                goal_callback=lambda goal: self._accept(goal.speed_scale, None, goal.target),
                 cancel_callback=self._on_cancel,
                 callback_group=self._work,
             ),
@@ -285,7 +307,9 @@ class CellConsole(LifecycleNode):
                 RunProgram,
                 names.run_program,
                 execute_callback=self._execute_run,
-                goal_callback=lambda goal: self._accept(goal.speed_scale, goal.cycles),
+                goal_callback=lambda goal: self._accept(
+                    goal.speed_scale, goal.cycles, goal.target
+                ),
                 cancel_callback=self._on_cancel,
                 callback_group=self._work,
             ),
@@ -360,6 +384,7 @@ class CellConsole(LifecycleNode):
         """
         cell = target(self._plan)
         scale = {} if speed is None else {"speed": speed}
+        topic = state_topic(cell.arm)
         return RosCell(
             cell.arm,
             "twin",
@@ -367,6 +392,10 @@ class CellConsole(LifecycleNode):
             interrupted=interrupted,
             node_name=_CELL_NODE,
             stop_deadline=self._stop_deadline,
+            # R-09: a side other than the plant is read on its own domain.
+            far_custody=lambda side: read_state_on_side(
+                self._plan, side, topic, interrupted=interrupted
+            ),
             **scale,
         )
 
@@ -393,8 +422,8 @@ class CellConsole(LifecycleNode):
         response.success, response.detail = outcome.success, outcome.detail
         return response
 
-    def _accept(self, scale: float, cycles: int | None) -> GoalResponse:
-        refusal = self._machine.motion_refusal(scale, cycles)
+    def _accept(self, scale: float, cycles: int | None, target: int) -> GoalResponse:
+        refusal = self._machine.motion_refusal(scale, cycles, target)
         if refusal is not None:
             self.get_logger().warning(f"goal rejected: {refusal}")
             # The rejection carries no reason to its client: the state does.
@@ -417,6 +446,7 @@ class CellConsole(LifecycleNode):
     def _execute_home(self, goal_handle):
         outcome = self._machine.home(
             goal_handle.request.speed_scale,
+            goal_handle.request.target,
             feedback=lambda text: goal_handle.publish_feedback(HomeRobot.Feedback(step=text)),
             owner=_owner(goal_handle),
             cancelled=lambda: goal_handle.is_cancel_requested,
@@ -433,6 +463,7 @@ class CellConsole(LifecycleNode):
         outcome = self._machine.run_program(
             goal_handle.request.speed_scale,
             goal_handle.request.cycles,
+            goal_handle.request.target,
             feedback,
             owner=_owner(goal_handle),
             cancelled=lambda: goal_handle.is_cancel_requested,
@@ -467,6 +498,22 @@ class CellConsole(LifecycleNode):
         machine = self._machine
         if machine is not None:
             self._publish(machine.snapshot())
+
+    def _on_twin_sides(self, message: TwinSides) -> None:
+        """Keep what the twin says may be commanded now, and publish what that offers (R-19)."""
+        with self._sides_lock:
+            self._commandable = tuple(
+                side for side in message.commandable if side in self._running
+            )
+        machine = self._machine
+        if machine is not None:
+            self._publish(machine.snapshot())
+
+    def _available(self) -> list[int]:
+        """The targets this deployment offers now: every side running and commandable."""
+        with self._sides_lock:
+            commandable = self._commandable
+        return targets.available(self._running, commandable)
 
     def _terminal_client(self) -> str | None:
         """Name the terminal program client on this domain's graph, or None (S-01).
@@ -507,7 +554,9 @@ class CellConsole(LifecycleNode):
                 state=snapshot.state,
                 robot_started=snapshot.robot_started,
                 busy=snapshot.busy,
-                at_start=snapshot.at_start,
+                plant_at_start=snapshot.plant_at_start,
+                counterpart_at_start=snapshot.counterpart_at_start,
+                available_targets=list(snapshot.available_targets),
                 step=snapshot.step,
                 prompt=snapshot.prompt,
                 last_error=snapshot.last_error,
@@ -553,6 +602,9 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--zone", help="The zone, e.g. cell_b.")
     parser.add_argument("--plan", help="The bring-up plan, instead of the zone's default.")
+    # Which sides the pair supervisor started (ADR-0072): it always says, and a
+    # console started by hand on a full pair passes `all`.
+    parser.add_argument("--sides", required=True, choices=SIDES_CHOICES)
     # `ros2 run` and `launch_ros` append `--ros-args ...`, which is not ours.
     known, _ = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     if not known.zone and not known.plan:
@@ -587,7 +639,7 @@ def main(argv: list[str] | None = None) -> int:
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     for number in (signal.SIGINT, signal.SIGTERM):
         signal.signal(number, end)
-    node = CellConsole(plan)
+    node = CellConsole(plan, tuple(started_sides(plan, arguments.sides)))
     executor = MultiThreadedExecutor(num_threads=EXECUTOR_THREADS)
     executor.add_node(node)
     status = 0

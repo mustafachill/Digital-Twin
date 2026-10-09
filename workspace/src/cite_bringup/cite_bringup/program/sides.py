@@ -31,6 +31,7 @@ never an asset's type or a backend's name.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 import os
 import sys
 
@@ -98,7 +99,9 @@ def minimum_speed_scale(plan: Plan) -> float | None:
     return max(floors) / min(slides)
 
 
-def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
+def required_speed_scale(
+    plan: Plan, given: str, via: str = "twin", sides: Sequence[str] | None = None
+) -> float:
     """Return the speed scale a run uses, refusing one the operator must state (S-04).
 
     ``given`` is `--speed-scale` exactly as typed, empty when it was not. The
@@ -106,8 +109,15 @@ def required_speed_scale(plan: Plan, given: str, via: str = "twin") -> float:
     run commands is physical - any physical side, through the twin - the scale
     is never defaulted: the operator names the fraction of the program's speed
     the real arm and carriage move at. ``via`` "plant" commands the plant only.
+    ``sides`` is the target's (ADR-0072, `program.targets.SIDES`), None for
+    every side: only a physical side the run commands makes the scale
+    mandatory and applies the floor (R-25) - a simulation target has neither.
     """
-    physical = physical_sides(plan) if via == "twin" else []
+    physical = (
+        [side for side in physical_sides(plan) if sides is None or side in sides]
+        if via == "twin"
+        else []
+    )
     if not given:
         if physical:
             raise ValueError(

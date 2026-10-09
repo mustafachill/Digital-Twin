@@ -17,12 +17,17 @@
 The shipped plan's counterpart is the physical xArm 5, and without the hardware
 opt-in the pair supervisor starts the plant alone and hands the boundary
 `--sides plant`. This rig is that deployment with the plant replaced by
-`fake_side.py` and NO counterpart process at all: the boundary must come up,
+`fake_side.py` and NO counterpart behind the boundary: the boundary must come up,
 announce, beat on the plant's domain, route a SIM goal and a SIM track command
 to the plant, answer `TrackArrived` for the plant without waiting on a physical
 carriage nobody runs, and refuse every mode that needs a far side as having none
 - PRECONDITION_FAILED naming the missing far side, never SAFETY_BLOCKED, since
 there is no physical side here to gate.
+
+A LISTENER sits on the counterpart's domain - a fake side the boundary is never
+told about - and must hear nothing from the boundary at all: no heartbeat, no
+goal (R-14). A physical side's deadman on that domain would therefore never
+enable its arm.
 
 Like the paired rig it brings up no cell and is evidence about the boundary only.
 """
@@ -63,6 +68,7 @@ MOVE_TO_ON_A_SIDE = f"/cite/{ZONE}/{ASSET}/move_to"
 #: offset of the process id. Nothing runs at BASE + 1, which is the point.
 BASE = 1 + 2 * ((os.getpid() + 7) % 50)
 PLANT_DOMAIN = BASE
+COUNTERPART_DOMAIN = BASE + 1
 
 SETTLE_S = 30.0
 
@@ -89,6 +95,16 @@ def generate_test_description():
         output="screen",
         name="fake_plant",
     )
+    # Listens on the counterpart's domain; nothing the boundary does may reach it.
+    listener = ExecuteProcess(
+        cmd=[
+            sys.executable, FAKE_SIDE, "--side", "counterpart", "--zone", ZONE, "--assets",
+            ASSET, "--offset", "0.75",
+        ],
+        additional_env={"ROS_DOMAIN_ID": str(COUNTERPART_DOMAIN)},
+        output="screen",
+        name="fake_counterpart_listener",
+    )
     boundary = Node(
         package="cite_twin",
         executable="twin_boundary.py",
@@ -97,8 +113,10 @@ def generate_test_description():
         output="screen",
     )
     return (
-        launch.LaunchDescription([plant, boundary, launch_testing.actions.ReadyToTest()]),
-        {"plant": plant, "boundary": boundary},
+        launch.LaunchDescription(
+            [plant, listener, boundary, launch_testing.actions.ReadyToTest()]
+        ),
+        {"plant": plant, "listener": listener, "boundary": boundary},
     )
 
 
@@ -145,6 +163,16 @@ class TestThePlantAlone(unittest.TestCase):
         proc_output.assertWaitFor(
             expected_output="plant: heartbeat advancing", stream="stdout", timeout=SETTLE_S
         )
+        proc_output.assertWaitFor(
+            expected_output="counterpart: up with", stream="stdout", timeout=SETTLE_S
+        )
+        # R-14: the plant has heard several beats; the counterpart's domain none.
+        text = "".join(
+            entry.text.decode(errors="replace") if isinstance(entry.text, bytes) else entry.text
+            for entry in proc_output
+        )
+        self.assertNotIn("counterpart: heartbeat", text)
+        self.assertNotIn("counterpart: accepted", text)
 
     def test_every_mode_needing_a_far_side_is_refused_as_having_none(self):
         for mode in (TwinMode.MODE_REAL, TwinMode.MODE_VALIDATED, TwinMode.MODE_SHADOW):

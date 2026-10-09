@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
 from cite_twin.mode import deployment_from_plan, Deployment, MODE_NAMES, ModeAuthority
-from cite_twin.routing import commanded_sides, route
+from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, route
 import pytest
 
 #: A Phase 2.A pair: three arms, every far side a second simulation.
@@ -165,8 +165,10 @@ class TestTheGateIsDerivedAndNotListed:
         Driven off `route()` rather than off a list of mode names, so a seventh
         mode that dispatches a goal fails here on the day it is added.
         """
-        if not route(mode).accepted:
-            pytest.skip(f"{MODE_NAMES[mode]} dispatches no goal; covered below")
+        if COUNTERPART_SIDE not in route(mode).sides:
+            # SIM dispatches to the plant alone since ADR-0072, and the plant
+            # of a paired zone is never physical.
+            pytest.skip(f"{MODE_NAMES[mode]} dispatches no goal to the far side; covered below")
         verdict = authority(MIXED, _refused).request(mode, "", "because", force=False)
         assert not verdict.accepted, f"{MODE_NAMES[mode]} reached a physical far side"
         assert verdict.code == ResultCode.SAFETY_BLOCKED

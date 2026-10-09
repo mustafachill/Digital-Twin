@@ -16,7 +16,8 @@
 
 `--via twin` addresses the twin boundary's operator endpoints on the plant's
 domain, and L5 forwards each goal, each belt setpoint and each track command to
-both sides. The
+the sides the twin's mode commands - the target's (ADR-0072, `program.targets`):
+the plant in SIM, the counterpart in REAL, both in VALIDATED. The
 program never opens the counterpart's domain itself: ADR-0044 clause 3 makes the
 boundary the only component with endpoints in both. `--via plant` addresses the
 plant's own servers, which is a single side.
@@ -37,11 +38,12 @@ import time
 from typing import Callable
 
 from cite_bringup import track_command
-from cite_bringup.plan import ControllerManager, Conveyor, resolve_uri, Track
+from cite_bringup.plan import ControllerManager, Conveyor, PLANT_SIDE, resolve_uri, Track
+from cite_bringup.program import targets
 from cite_bringup.program.steps import Interrupted, scaled_motion, speed_scale, StepFailed
 from cite_bringup.readiness import waits_for_a_physical_side, waits_for_goals_to_end
 from cite_interfaces.action import Grasp, MoveTo
-from cite_interfaces.msg import ConsoleState, ResultCode, RobotState, TwinMode
+from cite_interfaces.msg import ConsoleState, ResultCode, RobotState, TwinMode, TwinSides
 from cite_interfaces.qos import COMMAND, LATCHED, SENSOR, STATE
 from cite_interfaces.srv import JointsAt, SetMode, TrackArrived
 import rclpy
@@ -244,8 +246,9 @@ def ask_until_accepted(
     say,
     ceiling_s: float = PHYSICAL_SIDE_READY_CEILING_S,
     clock=time.monotonic,
+    mode: str = "VALIDATED",
 ) -> None:
-    """Ask for VALIDATED until it is accepted, refused for good, or the ceiling passes.
+    """Ask for ``mode`` until it is accepted, refused for good, or the ceiling passes.
 
     A physical side comes up held, and the twin refuses to command it until its
     deadman has enabled the arm and its controller and joints are publishing
@@ -260,7 +263,7 @@ def ask_until_accepted(
         if accepted:
             return
         if not waits_for_a_physical_side(detail):
-            raise StepFailed(f"the twin refused VALIDATED: {detail}")
+            raise StepFailed(f"the twin refused {mode}: {detail}")
         if clock() > deadline:
             raise StepFailed(
                 f"the physical side was not ready within {ceiling_s:.0f} s: {detail}"
@@ -282,6 +285,62 @@ TERMINAL_NODE = "fixed_program"
 #: (`simulation.launch.py`'s `CLOCK_BRIDGE`). A physical side runs on the wall
 #: clock (`hardware.launch.py`, L-7) and nothing on it publishes this name.
 SIMULATED_CLOCK = "/clock"
+
+
+def mode_refusal(expected: int | None, heard: int | None) -> str | None:
+    """Say why the next step may not be sent, as to the twin's mode, or None (R-05).
+
+    ``expected`` is the mode this cell asked for and had accepted, None when it
+    asked for none (via the plant alone, or before the first ask): then nothing
+    is checked. ``heard`` is the latest `TwinMode` heard. Any mode it did not
+    ask for - another client's, or one the boundary was moved to - means the
+    sides the next step would reach are not the target's, so the run stops.
+    """
+    if expected is None:
+        return None
+    if heard is None:
+        return f"no twin mode was heard since this run asked for {_mode_name(expected)}"
+    if heard != expected:
+        return (
+            f"the twin is in {_mode_name(heard)}, not the {_mode_name(expected)} this run "
+            "asked for: the next step would reach sides that are not its target's, so the "
+            "run stops"
+        )
+    return None
+
+
+def _mode_name(mode: int) -> str:
+    for name in dir(TwinMode):
+        if name.startswith("MODE_") and getattr(TwinMode, name) == mode:
+            return name[len("MODE_"):]
+    return str(mode)
+
+
+def single_side_start(
+    believed_m: float | None, confirmed: Callable[[float], tuple[bool, str]], what: str
+) -> float:
+    """Return where a carriage the program cannot read stands, confirmed by the twin (R-08).
+
+    In a target that does not command the plant - the real arm alone - the
+    carriage that moves is on a domain this program never opens, and the twin
+    answers verdicts, never positions (ADR-0050 decision 1b). So the program
+    keeps where it last SAW that carriage confirmed - the start, measured; the
+    target of its last arrival - and asks the twin whether it still stands
+    there before using it as the move's start point. Never the plant's: the
+    plant is idle and its carriage stands wherever the last target left it.
+    """
+    if believed_m is None:
+        raise StepFailed(
+            f"{what}: where the target's carriage stands is not known to this program; "
+            "Home with this target first"
+        )
+    there, detail = confirmed(believed_m)
+    if not there:
+        raise StepFailed(
+            f"{what}: the target's carriage is not where this program last measured it "
+            f"({believed_m * 1000:.0f} mm: {detail}); Home with this target first"
+        )
+    return believed_m
 
 
 def console_holds(topic: str, state: ConsoleState | None) -> str:
@@ -326,6 +385,13 @@ class RosCell:
     _stop_deadline: Callable[[], float | None] | None = None
     #: The result of the goal in flight, awaited by a cancel for the goal's end.
     _result = None
+    #: Class-level defaults of what `__init__` and `enter_target` set (ADR-0072),
+    #: so a cell assembled without them drives the twin as it always has.
+    _target: int | None = None
+    _expected_mode: int | None = None
+    _heard_mode: int | None = None
+    _far_track_m: float | None = None
+    _far_custody = None
 
     def __init__(
         self,
@@ -338,8 +404,23 @@ class RosCell:
         interrupted: Callable[[], bool] | None = None,
         node_name: str = TERMINAL_NODE,
         stop_deadline: Callable[[], float | None] | None = None,
+        far_custody: Callable[[str], RobotState | None] | None = None,
     ) -> None:
         skills = arm.skills
+        #: Reads a side's `RobotState` on THAT side's domain (R-09), for a side
+        #: other than the one this cell's node is on; None where none is given,
+        #: and then such a side's custody is unheard, and refused.
+        self._far_custody = far_custody
+        #: The target this cell's run commands, once `enter_target` asked for
+        #: it, and the mode it is run in: what every step is checked against.
+        self._target: int | None = None
+        self._expected_mode: int | None = None
+        #: The latest `TwinMode` heard, kept for the whole of a run through the
+        #: twin (R-05): asked before every step.
+        self._heard_mode: int | None = None
+        #: Where a carriage this node cannot read stands, as last confirmed by
+        #: the twin (R-08). Set by a measured start and by an arrival.
+        self._far_track_m: float | None = None
         #: Asked before every spin: True stops whatever is waiting with
         #: `Interrupted` (ADR-0071). None for a terminal run, whose stop is
         #: Ctrl-C's KeyboardInterrupt on the main thread.
@@ -395,33 +476,44 @@ class RosCell:
         self._state_topic = state_topic(arm)
         self._active = None
         self._sent = None
+        if via == "twin":
+            self.node.create_subscription(TwinMode, TwinMode.TOPIC, self._on_mode, LATCHED)
 
     # --------------------------------------------------------------- setup
 
-    def enter_validated(self, homing: bool = False) -> None:
-        """Put the twin in VALIDATED, where L5 routes a command to both sides.
+    def enter_target(self, target: int, homing: bool = False) -> None:
+        """Put the twin in ``target``'s mode (`targets.MODES`): SIM, REAL or VALIDATED.
 
-        ``homing`` asks it with `SetMode.homing`, for the homing move before the
-        first cycle only (`program.home.bring_to_start`): the carriages may
-        stand apart then, since that move is what brings them together. The
-        program itself always asks without it (ADR-0070).
+        The target is the operator's (ADR-0072); this asks for the mode it is
+        run in and records both, so every step after is checked against it
+        (R-05) and judged on the target's sides. For SIM it is an ask too, and
+        never a transition into a commanding mode: SIM commands only the plant.
+        ``homing`` asks with `SetMode.homing`, VALIDATED's alone
+        (`targets.homing_allowance`), for the homing move before the first
+        cycle only (`program.home.bring_to_start`): the carriages may stand
+        apart then, since that move is what brings them together. The program
+        itself always asks without it (ADR-0070).
         """
+        mode = targets.MODES[target]
+        if homing and not targets.homing_allowance(target):
+            raise StepFailed(f"a homing allowance is VALIDATED's alone, not {targets.label(target)}'s")
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         self._await_ready(
             client.service_is_ready, f"{SetMode.Request.SERVICE} is not served; is the pair up?"
         )
         request = SetMode.Request(
-            mode=TwinMode.MODE_VALIDATED,
+            mode=mode,
             reason=(
-                "homing to the program's start (ADR-0070)"
+                f"homing {targets.label(target)} to the program's start (ADR-0070)"
                 if homing
-                else "fixed program (ADR-0066)"
+                else f"fixed program on {targets.label(target)} (ADR-0072)"
             ),
             homing=homing,
         )
+        name = _mode_name(mode)
 
         def ask() -> tuple[bool, str]:
-            response = self._until(client.call_async(request), "SetMode(VALIDATED)")
+            response = self._until(client.call_async(request), f"SetMode({name})")
             return response.accepted, response.result.detail
 
         def pause() -> None:
@@ -429,9 +521,64 @@ class RosCell:
             while time.monotonic() < ask_again:
                 self._spin_once(_ASK_AGAIN_S)
 
-        ask_until_accepted(ask, pause, lambda text: print(text, flush=True))
+        self._target = target
+        ask_until_accepted(ask, pause, lambda text: print(text, flush=True), mode=name)
+        self._expected_mode = mode
+        # The accepted mode is latched; it is the one heard from here on, and
+        # any other one heard later stops the run (R-05).
+        self._heard_mode = mode
 
-    def leave_validated(self) -> bool:
+    def check_mode(self) -> None:
+        """Raise `StepFailed` if the twin is not in the mode this run asked for (R-05).
+
+        Asked before every step (`steps.execute`). The subscription is spun by
+        every wait this cell makes, so the latest mode heard is current to
+        within one spin slice.
+        """
+        if self._via != "twin":
+            return
+        self._spin_once(0.0)
+        if mode_refusal(self._expected_mode, self._heard_mode) is None:
+            return
+        # Confirmed before refusing: a latched message queued before the
+        # accepted transition may be delivered after it. A fresh subscription
+        # receives the latest mode the boundary has published, and that one
+        # decides.
+        self._heard_mode = self.twin_mode()
+        refusal = mode_refusal(self._expected_mode, self._heard_mode)
+        if refusal is not None:
+            raise StepFailed(refusal)
+
+    def require_running(self, target: int) -> None:
+        """Refuse ``target`` if a side it commands does not run (R-17, ADR-0072).
+
+        Read from the twin's latched `TwinSides`, before anyone is asked into the
+        cell: a pair started with the plant alone has no real arm, and a terminal
+        run naming one is refused here rather than by a mode transition after
+        the operator was asked in. Nothing falls back to another target.
+        """
+        if self._via != "twin":
+            return
+        heard: list[TwinSides] = []
+        subscription = self.node.create_subscription(
+            TwinSides, TwinSides.TOPIC, heard.append, LATCHED
+        )
+        try:
+            self._until_true(lambda: bool(heard), f"TwinSides on {TwinSides.TOPIC}")
+        finally:
+            self.node.destroy_subscription(subscription)
+        missing = [side for side in targets.SIDES[target] if side not in heard[-1].running]
+        if missing:
+            raise StepFailed(
+                f"{targets.label(target)} commands {', '.join(missing)}, which this pair does not "
+                "run (it was started with the plant alone: CITE_ALLOW_HARDWARE is not 1). "
+                "Nothing else is run in its place"
+            )
+
+    def _on_mode(self, message: TwinMode) -> None:
+        self._heard_mode = message.mode
+
+    def return_to_sim(self) -> bool:
         """Ask the twin for SIM, where no command crosses to the counterpart.
 
         Called when the program ends on a pair with a physical side, so the
@@ -445,14 +592,18 @@ class RosCell:
         where a stop ends on a pair with a physical side.
         """
         with self._not_interrupted():
-            return self._leave_validated()
+            left = self._return_to_sim()
+        if left:
+            self._expected_mode = TwinMode.MODE_SIM
+            self._heard_mode = TwinMode.MODE_SIM
+        return left
 
-    def _leave_validated(self) -> bool:
+    def _return_to_sim(self) -> bool:
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         try:
             self._await_ready(
                 client.service_is_ready,
-                f"could not leave VALIDATED: {SetMode.Request.SERVICE} is not served",
+                f"could not return to SIM: {SetMode.Request.SERVICE} is not served",
             )
         except StepFailed as failure:
             print(failure, flush=True)
@@ -472,7 +623,7 @@ class RosCell:
                     client.call_async(request), "SetMode(SIM)", CANCEL_CEILING_S
                 )
             except StepFailed as failure:
-                print(f"could not leave VALIDATED: {failure}", flush=True)
+                print(f"could not return to SIM: {failure}", flush=True)
                 return False
             if response.accepted and response.current_mode == TwinMode.MODE_SIM:
                 break
@@ -480,7 +631,7 @@ class RosCell:
                 not waits_for_goals_to_end(response.result.detail)
                 or time.monotonic() > deadline
             ):
-                print(f"the twin stayed in VALIDATED: {response.result.detail}", flush=True)
+                print(f"the twin stayed out of SIM: {response.result.detail}", flush=True)
                 return False
             self._pause_between_asks()
         print("the twin is in SIM: nothing crosses to the physical side", flush=True)
@@ -568,7 +719,7 @@ class RosCell:
             self.node.destroy_subscription(subscription)
         return None
 
-    def carriage_refusal(self, homing: bool = False) -> str | None:
+    def carriage_refusal(self, target: int, homing: bool = False) -> str | None:
         """Say why the operator may not be asked in, as to the carriages, or None (S-08).
 
         Asked in SIM, before the operator is: the twin answers `TrackArrived`
@@ -580,8 +731,14 @@ class RosCell:
         who confirmed it clear. Never heard in time refuses too. Before a
         homing move (``homing``) a carriage apart is no refusal: that move
         brings it to the start (`carriage_verdict`).
+
+        A target that does not command the plant - the real arm alone - is not
+        asked this at all (ADR-0072): the plant is idle, and the boundary does
+        not compare the carriages in REAL either.
         """
         if self._track_arrived is None or self._track is None:
+            return None
+        if PLANT_SIDE not in targets.SIDES[target]:
             return None
         self._until_true(
             lambda: self._track_position is not None,
@@ -595,15 +752,19 @@ class RosCell:
         )
         return carriage_verdict(answer, plant_m, PHYSICAL_SIDE_READY_CEILING_S, homing)
 
-    def away_from_start(self, start) -> str | None:
-        """Measure the program's start on every side; say where a side is not, or None.
+    def away_from_start(self, start, sides=()) -> str | None:
+        """Measure the program's start on ``sides``; say where a side is not, or None.
 
-        ``start`` is a `program.home.StartPose`. Through the twin every side is
-        asked of the boundary - the arm with `JointsAt`, the carriage with
-        `TrackArrived` - and a physical side counts only with fresh positions,
-        waited for within `PHYSICAL_SIDE_READY_CEILING_S`. Via the plant alone
-        this domain's own joint states are read. Nothing is commanded (ADR-0070).
+        ``start`` is a `program.home.StartPose`; ``sides`` the target's
+        (`targets.SIDES`, ADR-0072), every running side when empty. Through the
+        twin each is asked of the boundary - the arm with `JointsAt`, the
+        carriage with `TrackArrived`, both naming exactly those sides - and a
+        physical side counts only with fresh positions, waited for within
+        `PHYSICAL_SIDE_READY_CEILING_S`. Via the plant alone this domain's own
+        joint states are read. Nothing is commanded (ADR-0070). A carriage this
+        node cannot read, confirmed at the start, is remembered there (R-08).
         """
+        sides = tuple(sides)
         if self._via != "twin":
             self._until_true(
                 lambda: all(joint in self._positions for joint in start.joints)
@@ -614,7 +775,7 @@ class RosCell:
         deadline = time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S
         found = []
         answer = await_heard(
-            self._ask_joints_at(start), self._pause_between_asks, deadline
+            self._ask_joints_at(start, sides), self._pause_between_asks, deadline
         )
         found.append(
             away_verdict(answer, f"the arm at {start.pose}", PHYSICAL_SIDE_READY_CEILING_S)
@@ -622,18 +783,34 @@ class RosCell:
         if start.track_m is not None and self._track_arrived is not None:
             what = f"the track at {start.track_m * 1000:.0f} mm"
             answer = await_heard(
-                self._ask_arrival(start.track_m, what), self._pause_between_asks, deadline
+                self._ask_arrival(start.track_m, what, sides),
+                self._pause_between_asks,
+                deadline,
             )
             found.append(away_verdict(answer, what, PHYSICAL_SIDE_READY_CEILING_S))
+            if answer.arrived and sides and PLANT_SIDE not in sides:
+                self._far_track_m = start.track_m
         found = [reason for reason in found if reason is not None]
         return "; ".join(found) if found else None
 
-    def refuse_if_holding(self) -> None:
-        """Refuse to start if the arm says it holds a part (see `holding_refusal`).
+    def refuse_if_holding(self, sides=(PLANT_SIDE,)) -> None:
+        """Refuse to start if an arm of ``sides`` says it holds a part (`holding_refusal`).
 
-        Read on THIS domain only: through the twin that is the plant's arm, and
-        the counterpart's custody is not read (ADR-0066).
+        R-09 (ADR-0072): every side the target commands is read. The plant's on
+        THIS domain; any other side's on its own domain, through the reader
+        this cell was given (`far_custody`). A side whose state is not heard
+        refuses, as an unheard plant does.
         """
+        for side in sides:
+            if side == PLANT_SIDE:
+                self._refuse_if_holding_here()
+                continue
+            state = None if self._far_custody is None else self._far_custody(side)
+            refusal = holding_refusal(state, f"{side}: {self._state_topic}")
+            if refusal is not None:
+                raise StepFailed(refusal)
+
+    def _refuse_if_holding_here(self) -> None:
         received: list[RobotState] = []
         subscription = self.node.create_subscription(
             RobotState, self._state_topic, received.append, LATCHED
@@ -722,6 +899,10 @@ class RosCell:
         if speed_mps <= 0.0:
             raise StepFailed(f"a track move at {speed_mps} m/s")
         what = f"track to {position_m * 1000:.0f} mm"
+        sides = self._target_sides()
+        if self._track_arrived is not None and PLANT_SIDE not in sides:
+            self._track_without_the_plant(position_m, speed_mps, sides, what)
+            return
         self._until_true(
             lambda: self._track_position is not None,
             f"{self._track.joint} on the arm's joint states",
@@ -729,7 +910,7 @@ class RosCell:
         distance = abs(position_m - self._track_position)
         plant_there = distance <= self._track.goal_tolerance_m
         if self._track_arrived is not None:
-            answer = self._ask_arrival(position_m, what)()
+            answer = self._ask_arrival(position_m, what, sides)()
             _require_routed(answer, what)
             arrived, detail = answer.arrived, answer.detail
             if arrived:
@@ -765,8 +946,56 @@ class RosCell:
             # Through the twin, this domain's joint states are the plant's
             # only: the counterpart's carriage - the physical one - is asked of
             # the boundary, within the same ceiling (SA2c-S-02 c).
-            self._await_every_side(position_m, wall_end, what)
+            self._await_every_side(position_m, wall_end, what, sides)
         self._track_target = None
+
+    def _track_without_the_plant(
+        self, position_m: float, speed_mps: float, sides: tuple[str, ...], what: str
+    ) -> None:
+        """A track step in a target that leaves the plant idle (R-08, ADR-0072).
+
+        Every position it uses is the target's carriage's, confirmed by the
+        twin - never the plant's, which stands wherever the last target left
+        it: the move's start point is where the twin confirms that carriage
+        stands (`single_side_start`), and its arrival is the twin's verdict on
+        those sides alone.
+        """
+        ask_target = self._ask_arrival(position_m, what, sides)
+        answer = ask_target()
+        _require_routed(answer, what)
+        if answer.arrived:
+            self._far_track_m = position_m
+            return
+
+        def confirmed(at_m: float) -> tuple[bool, str]:
+            at = self._ask_arrival(at_m, what, sides)()
+            return at.arrived, at.detail
+
+        start_m = single_side_start(self._far_track_m, confirmed, what)
+        seconds = abs(position_m - start_m) / (speed_mps * self._speed)
+        if seconds <= 0.0:
+            raise StepFailed(f"{what}: a move of no length cannot be commanded")
+        self._until_true(
+            lambda: self._track_command.get_subscription_count() > 0,
+            f"a subscriber on {self._track_command.topic_name}",
+        )
+        self._track_target = position_m
+        self._track_command.publish(
+            track_trajectory(self._track, start_m, position_m, seconds)
+        )
+        # The commanded carriage is not on this domain: its arrival is the
+        # twin's, asked within the same wall ceiling a step has.
+        wall_end = time.monotonic() + WAIT_WALL_FACTOR * seconds + WAIT_WALL_MARGIN_S
+        self._far_track_m = None
+        self._await_every_side(position_m, wall_end, what, sides)
+        self._far_track_m = position_m
+        self._track_target = None
+
+    def _target_sides(self) -> tuple[str, ...]:
+        """The sides the current target commands; both before a target is entered."""
+        if self._target is None:
+            return targets.SIDES[targets.TWIN]
+        return targets.SIDES[self._target]
 
     def cancel(self) -> None:
         """Cancel the goal in flight and hold the track; never itself interrupted."""
@@ -815,8 +1044,12 @@ class RosCell:
 
     # --------------------------------------------------------------- mechanism
 
-    def _ask_arrival(self, position_m: float, what: str):
-        """Return a call answering the twin's `TrackArrived` for ``position_m``, whole."""
+    def _ask_arrival(self, position_m: float, what: str, sides=()):
+        """Return a call answering the twin's `TrackArrived` for ``position_m``, whole.
+
+        ``sides`` names exactly the sides judged (ADR-0072); empty asks the
+        boundary's own rule - every commanded side and every physical one.
+        """
         client = self._track_arrived
         assert client is not None and self._track is not None
         self._await_ready(
@@ -826,6 +1059,7 @@ class RosCell:
             joint=self._track.joint,
             position_m=float(position_m),
             tolerance_m=float(self._track.goal_tolerance_m),
+            sides=list(sides),
         )
 
         def ask():
@@ -833,7 +1067,7 @@ class RosCell:
 
         return ask
 
-    def _ask_joints_at(self, start):
+    def _ask_joints_at(self, start, sides=()):
         """Return a call answering the twin's `JointsAt` for the arm's start pose."""
         client = self.node.create_client(JointsAt, JointsAt.Request.SERVICE)
         self._await_ready(
@@ -843,6 +1077,7 @@ class RosCell:
             joints=list(start.joints),
             positions=[float(value) for value in start.positions],
             tolerance=float(start.tolerance_rad),
+            sides=list(sides),
         )
 
         def ask():
@@ -857,8 +1092,10 @@ class RosCell:
         while time.monotonic() < again:
             self._spin_once(_ARRIVAL_ASK_S)
 
-    def _await_every_side(self, position_m: float, wall_end: float, what: str) -> None:
-        ask_twin = self._ask_arrival(position_m, what)
+    def _await_every_side(
+        self, position_m: float, wall_end: float, what: str, sides=()
+    ) -> None:
+        ask_twin = self._ask_arrival(position_m, what, sides)
 
         def ask() -> tuple[bool, str]:
             answer = ask_twin()

@@ -164,7 +164,7 @@ def test_the_console_names_a_terminal_program_client_on_its_graph(graph) -> None
     """S-01: the console finds a terminal run by the one name `RosCell` gives it."""
     from cite_bringup.program.console import CellConsole
 
-    console = CellConsole(load(default_plan_path("cell_b")))
+    console = CellConsole(load(default_plan_path("cell_b")), ("plant", "counterpart"))
     try:
         assert console._terminal_client() is None
         terminal = rclpy.create_node(TERMINAL_NODE)

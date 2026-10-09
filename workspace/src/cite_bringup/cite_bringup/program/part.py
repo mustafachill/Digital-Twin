@@ -33,7 +33,7 @@ the part there by hand.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, MutableSet
+from collections.abc import Callable, Collection, MutableSet
 from pathlib import Path
 import subprocess
 import sys
@@ -66,8 +66,12 @@ def place_on_simulated_sides(
     may_hold: MutableSet[str],
     say: Callable[[str], None],
     interrupted: Callable[[], bool] | None = None,
+    only: Collection[str] | None = None,
 ) -> None:
     """Spawn one work-piece on every simulated side's pick table, or raise StepFailed.
+
+    ``only`` limits it to those sides - a target's (ADR-0072) - None for every
+    simulated side.
 
     ``may_hold`` is the sides whose world may still hold the previous
     work-piece, BY SIDE: each of them has it taken off first, and is dropped
@@ -91,6 +95,8 @@ def place_on_simulated_sides(
         sdf.write(workpiece_sdf(part))
     try:
         for side in plan.sides:
+            if only is not None and side.name not in only:
+                continue
             if is_physical(plan, side.name):
                 say(f"  --  {side.name}: physical; no box is spawned or removed there")
                 continue

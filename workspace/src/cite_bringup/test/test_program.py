@@ -51,6 +51,7 @@ from cite_bringup.program.steps import (
     StepFailed,
     wait,
 )
+from cite_bringup.program.targets import TWIN
 from cite_bringup.readiness import PHYSICAL_SIDE_NOT_READY
 from cite_interfaces.msg import RobotState
 from cite_interfaces.srv import TrackArrived
@@ -313,7 +314,7 @@ def _tracking(cell, plant_m: float, answers: list):
     ros._until_true = lambda predicate, what: None
     asked: list[float] = []
 
-    def ask_arrival(position_m: float, what: str):
+    def ask_arrival(position_m: float, what: str, sides=()):
         asked.append(position_m)
         return lambda: answers.pop(0)
 
@@ -653,14 +654,14 @@ def test_the_program_leaves_validated_before_the_operator_steps_in(capsys) -> No
     ros = object.__new__(RosCell)
     ros.node = Node()
     ros._until = lambda future, what, ceiling_s=0.0: Accepted()
-    assert ros.leave_validated()
+    assert ros.return_to_sim()
     (request,) = sent
     assert request.mode == TwinMode.MODE_SIM
     assert "nothing crosses to the physical side" in capsys.readouterr().out
     # The sequencer `__main__` runs (`program.cycle`) asks for SIM after the run.
     cycle_source = (Path(__file__).resolve().parents[1] / "cite_bringup/program/cycle.py")
     text = cycle_source.read_text()
-    assert text.index("status = run(") < text.rindex("cell.leave_validated()")
+    assert text.index("status = run(") < text.rindex("cell.return_to_sim()")
 
 
 def test_the_module_never_runs_a_physical_pair_at_a_defaulted_scale(capsys) -> None:
@@ -721,27 +722,30 @@ class _PairCell:
         _PairCell.console_asked.append(topic)
         return _PairCell.console
 
+    def require_running(self, target) -> None:
+        pass
+
     def twin_mode(self):
         return _PairCell.mode
 
-    def refuse_if_holding(self) -> None:
+    def refuse_if_holding(self, sides=("plant",)) -> None:
         _PairCell.calls.append("refuse_if_holding")
 
-    def carriage_refusal(self, homing: bool = False) -> str | None:
+    def carriage_refusal(self, target, homing: bool = False) -> str | None:
         return None if homing and _PairCell.carriage == "apart" else _PairCell.carriage
 
-    def away_from_start(self, start) -> str | None:
+    def away_from_start(self, start, sides=()) -> str | None:
         _PairCell.calls.append(f"measure {start.pose}")
         return _PairCell.away.pop(0)
 
-    def enter_validated(self, homing: bool = False) -> None:
-        _PairCell.calls.append("enter_validated homing" if homing else "enter_validated")
+    def enter_target(self, target, homing: bool = False) -> None:
+        _PairCell.calls.append("enter twin homing" if homing else "enter twin")
 
     def cancel(self) -> None:
         _PairCell.calls.append("cancel")
 
-    def leave_validated(self) -> bool:
-        _PairCell.calls.append("leave_validated")
+    def return_to_sim(self) -> bool:
+        _PairCell.calls.append("return_to_sim")
         return _PairCell.left
 
 
@@ -793,12 +797,12 @@ def _main_on_a_pair(
 
 
 def test_a_run_whose_return_to_sim_is_unconfirmed_fails(monkeypatch) -> None:
-    """SA-S-05: a failed leave_validated is the run's failure, so no one is asked in next."""
+    """SA-S-05: a failed return to SIM is the run's failure, so no one is asked in next."""
     from cite_interfaces.msg import TwinMode
 
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=True) == 0
     assert _main_on_a_pair(monkeypatch, TwinMode.MODE_SIM, left=False) != 0
-    assert _PairCell.calls[-1] == "leave_validated"
+    assert _PairCell.calls[-1] == "return_to_sim"
 
 
 def test_a_twin_not_in_sim_is_never_entered_and_no_one_is_asked(monkeypatch) -> None:
@@ -831,13 +835,13 @@ def test_a_carriage_apart_refuses_before_the_operator_is_asked() -> None:
 
 def test_the_carriages_are_asked_of_the_twin_at_the_plants_own_position(cell) -> None:
     ros, asked = _tracking(cell, 0.65, [(False, "counterpart: stands at 0.0 mm")])
-    refusal = ros.carriage_refusal()
+    refusal = ros.carriage_refusal(TWIN)
     assert asked == [0.65]
     assert refusal is not None
     assert "Bring the physical carriage to 650 mm (home it) - from outside the cell" in refusal
     assert "counterpart: stands at 0.0 mm" in refusal
     ros, _ = _tracking(cell, 0.65, [(True, "every commanded side is at the target")])
-    assert ros.carriage_refusal() is None
+    assert ros.carriage_refusal(TWIN) is None
 
 
 def test_an_unheard_physical_carriage_is_waited_for_before_the_operator(cell) -> None:
@@ -852,7 +856,7 @@ def test_an_unheard_physical_carriage_is_waited_for_before_the_operator(cell) ->
             _answer(True, "in SIM every side", routed=False),
         ],
     )
-    assert ros.carriage_refusal() is None
+    assert ros.carriage_refusal(TWIN) is None
     assert asked == [0.65]
     ros, _ = _tracking(
         cell,
@@ -862,7 +866,7 @@ def test_an_unheard_physical_carriage_is_waited_for_before_the_operator(cell) ->
             _answer(False, "counterpart: stands at 0.0 mm", routed=False),
         ],
     )
-    assert "home it" in ros.carriage_refusal()
+    assert "home it" in ros.carriage_refusal(TWIN)
 
 
 def test_a_physical_carriage_never_heard_refuses_at_the_ceiling_and_says_so() -> None:
@@ -978,13 +982,13 @@ def test_a_first_cycle_away_from_the_start_homes_measures_again_then_runs(monkey
         "refuse_if_holding",
         "initialize counterpart",
         "measure zero",
-        "enter_validated homing",
+        "enter twin homing",
         "home move track",
         "measure zero",
         # The program's own cycle never runs under the homing allowance.
-        "enter_validated",
+        "enter twin",
         "run",
-        "leave_validated",
+        "return_to_sim",
     ]
 
 
@@ -999,9 +1003,9 @@ def test_a_first_cycle_already_at_the_start_initializes_and_homes_nothing(
         "refuse_if_holding",
         "initialize counterpart",
         "measure zero",
-        "enter_validated",
+        "enter twin",
         "run",
-        "leave_validated",
+        "return_to_sim",
     ]
 
 
@@ -1015,9 +1019,9 @@ def test_a_failed_home_stops_without_a_retry_and_returns_to_sim(monkeypatch) -> 
         "refuse_if_holding",
         "initialize counterpart",
         "measure zero",
-        "enter_validated homing",
+        "enter twin homing",
         "home move track",
-        "leave_validated",
+        "return_to_sim",
     ]
 
 
@@ -1034,10 +1038,10 @@ def test_a_home_that_does_not_reach_the_start_stops_without_a_retry(monkeypatch,
         "refuse_if_holding",
         "initialize counterpart",
         "measure zero",
-        "enter_validated homing",
+        "enter twin homing",
         "home move track",
         "measure zero",
-        "leave_validated",
+        "return_to_sim",
     ]
     said = capsys.readouterr().out
     assert "still not at the program's start" in said
@@ -1063,7 +1067,7 @@ def test_a_later_cycle_neither_initializes_nor_homes(monkeypatch) -> None:
     assert _main_on_a_pair(
         monkeypatch, TwinMode.MODE_SIM, left=True, argv=("--first-cycle", "2")
     ) == 0
-    assert _PairCell.calls == ["refuse_if_holding", "enter_validated", "run", "leave_validated"]
+    assert _PairCell.calls == ["refuse_if_holding", "enter twin", "run", "return_to_sim"]
 
 
 def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -> None:
@@ -1073,7 +1077,7 @@ def test_a_refused_initialization_runs_nothing_and_returns_to_sim(monkeypatch) -
     assert _PairCell.calls == [
         "refuse_if_holding",
         "initialize counterpart",
-        "leave_validated",
+        "return_to_sim",
     ]
 
 
@@ -1168,12 +1172,12 @@ class _StartCell:
         self.fake = FakeCell(fail_on=fail_on)
         self.calls = self.fake.calls
 
-    def away_from_start(self, start):
+    def away_from_start(self, start, sides=()):
         self.calls.append(("measure",))
         return self.away.pop(0)
 
-    def enter_validated(self, homing: bool = False) -> None:
-        self.calls.append(("enter_validated", homing))
+    def enter_target(self, target, homing: bool = False) -> None:
+        self.calls.append(("enter twin", homing))
 
     def __getattr__(self, name):
         return getattr(self.fake, name)
@@ -1190,7 +1194,7 @@ def test_bring_to_start_initializes_first_and_moves_nothing_when_every_side_is_t
     assert not bring_to_start(
         steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
     )
-    assert ros.calls == [("initialize",), ("measure",), ("enter_validated", False)]
+    assert ros.calls == [("initialize",), ("measure",), ("enter twin", False)]
 
 
 def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> None:
@@ -1202,10 +1206,10 @@ def test_bring_to_start_homes_under_the_allowance_then_enters_plainly(cell) -> N
         steps, start_pose(cell, steps), ros, lambda: ros.calls.append(("initialize",)), _quiet
     )
     assert [call[0] for call in ros.calls] == [
-        "initialize", "measure", "enter_validated", "move", "track", "measure", "enter_validated"
+        "initialize", "measure", "enter twin", "move", "track", "measure", "enter twin"
     ]
-    assert ros.calls[2] == ("enter_validated", True)
-    assert ros.calls[-1] == ("enter_validated", False)
+    assert ros.calls[2] == ("enter twin", True)
+    assert ros.calls[-1] == ("enter twin", False)
 
 
 def test_bring_to_start_via_the_plant_alone_asks_no_mode(cell) -> None:
@@ -1224,9 +1228,9 @@ def test_bring_to_start_via_the_plant_alone_asks_no_mode(cell) -> None:
     [
         # The second measurement says a side is still away: stop, no retry.
         (["arm away", "still away"], None, False,
-         ["measure", "enter_validated", "move", "track", "measure"]),
+         ["measure", "enter twin", "move", "track", "measure"]),
         # A home step fails: cancelled, never retried, never measured again.
-        (["arm away"], "zero", False, ["measure", "enter_validated", "move", "cancel"]),
+        (["arm away"], "zero", False, ["measure", "enter twin", "move", "cancel"]),
         # The physical arm cannot be initialized: nothing is measured, nothing moves.
         (["arm away"], None, True, []),
     ],
@@ -1305,7 +1309,7 @@ def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 0
     # R-01: initialized every time, even when already at the start.
     assert _PairCell.calls == [
-        "initialize counterpart", "measure zero", "enter_validated", "leave_validated"
+        "initialize counterpart", "measure zero", "enter twin", "return_to_sim"
     ]
 
     _PairCell.away = ["arm away", None]
@@ -1313,16 +1317,16 @@ def test_scripts_home_homes_only_when_a_side_is_away(monkeypatch) -> None:
     assert _PairCell.calls == [
         "initialize counterpart",
         "measure zero",
-        "enter_validated homing",
+        "enter twin homing",
         "home",
         "measure zero",
-        "enter_validated",
-        "leave_validated",
+        "enter twin",
+        "return_to_sim",
     ]
 
     _PairCell.away = ["arm away", "still away"]
     assert home_module.main(["--zone", ZONE, "--speed-scale", "0.1"]) == 1
-    assert _PairCell.calls[-2:] == ["measure zero", "leave_validated"]
+    assert _PairCell.calls[-2:] == ["measure zero", "return_to_sim"]
 
 
 # --- S-03 (ADR-0071): a stop is done when the goal has ENDED and SIM is back ---
@@ -1440,7 +1444,7 @@ def test_sim_is_asked_again_while_the_boundary_still_has_goals_in_flight(monkeyp
     ros, sent = _asking_for_sim(
         monkeypatch, [refused, refused, (TwinMode.MODE_SIM, "")]
     )
-    assert ros.leave_validated()
+    assert ros.return_to_sim()
     assert len(sent) == 3
 
 
@@ -1450,7 +1454,7 @@ def test_any_other_refusal_of_sim_is_final(monkeypatch) -> None:
     ros, sent = _asking_for_sim(
         monkeypatch, [(TwinMode.MODE_VALIDATED, "refused for another reason")]
     )
-    assert not ros.leave_validated()
+    assert not ros.return_to_sim()
     assert len(sent) == 1
 
 
@@ -1462,7 +1466,7 @@ def test_sim_refused_for_goals_that_never_end_fails_at_the_cancel_ceiling(monkey
     monkeypatch.setattr(cell_module, "CANCEL_CEILING_S", 0.05)
     refused = (TwinMode.MODE_VALIDATED, f"1 {GOALS_STILL_RUNNING}")
     ros, sent = _asking_for_sim(monkeypatch, [refused] * 100000)
-    assert not ros.leave_validated()
+    assert not ros.return_to_sim()
     assert len(sent) >= 1
 
 
@@ -1546,7 +1550,7 @@ def test_a_console_refusal_that_cannot_be_read_refuses_too(capsys) -> None:
             raise AssertionError(f"{name} was called on a refused run")
 
     ended = cycle.run_program(
-        Unheard(), [], physical=["counterpart"], scale=0.1, cycles=1,
+        Unheard(), [], target=TWIN, physical=["counterpart"], scale=0.1, cycles=1,
         say=print, await_operator=lambda _p: "", console="/cite/cell_b/console/state",
     )
     assert ended.status == 1 and ended.sim_confirmed is None
@@ -1596,7 +1600,7 @@ def test_a_return_to_sim_is_cut_at_the_consoles_shutdown_deadline(monkeypatch, c
     ros.node = Node()
     ros._stop_deadline = lambda: time.monotonic() - 1.0
     started = time.monotonic()
-    assert not ros.leave_validated()
+    assert not ros.return_to_sim()
     assert time.monotonic() - started < 1.0
     assert "is not served, cut short" in capsys.readouterr().out
 

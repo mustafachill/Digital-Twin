@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from cite_bringup.program import cycle
 from cite_bringup.program.home import StartPose
+from cite_bringup.program.targets import TWIN
 from cite_bringup.program.steps import EXIT_INTERRUPTED, move
 from cite_interfaces.msg import TwinMode
 import pytest
@@ -58,21 +59,24 @@ class Cell:
         self._call("twin_mode")
         return TwinMode.MODE_SIM
 
-    def carriage_refusal(self, homing: bool = False):
+    def carriage_refusal(self, target: int, homing: bool = False):
         self._call("carriage_refusal")
         return None
 
-    def refuse_if_holding(self) -> None:
+    def refuse_if_holding(self, sides=("plant",)) -> None:
         self._call("refuse_if_holding")
 
-    def enter_validated(self, homing: bool = False) -> None:
-        self._call("enter_validated")
+    def require_running(self, target: int) -> None:
+        pass
 
-    def leave_validated(self) -> bool:
-        self._call("leave_validated")
+    def enter_target(self, target: int, homing: bool = False) -> None:
+        self._call("enter_target")
+
+    def return_to_sim(self) -> bool:
+        self._call("return_to_sim")
         return self.left
 
-    def away_from_start(self, start) -> None:
+    def away_from_start(self, start, sides=()) -> None:
         self._call("measure")
         return None
 
@@ -97,6 +101,7 @@ def _run(cell: Cell, log: list[str], read) -> cycle.Ended:
     return cycle.run_program(
         cell,
         [move("pick")],
+        target=TWIN,
         physical=PHYSICAL,
         scale=0.1,
         cycles=1,
@@ -110,6 +115,7 @@ def _home(cell: Cell, log: list[str], read) -> cycle.Ended:
         cell,
         [move("zero")],
         START,
+        target=TWIN,
         physical=PHYSICAL,
         scale=0.1,
         say=lambda text: log.append(f"said {text}"),
@@ -132,16 +138,16 @@ def test_run_interrupted_at_the_prompt_exits_130_and_leaves_nothing() -> None:
     assert ended.status == EXIT_INTERRUPTED == 130
     assert ended.sim_confirmed is None
     assert _said(log)[-1] == "interrupted before the first step"
-    assert "call enter_validated" not in log and "call leave_validated" not in log
+    assert "call enter_target" not in log and "call return_to_sim" not in log
 
 
 def test_run_interrupted_while_entering_exits_130_then_leaves() -> None:
     log: list[str] = []
-    cell = Cell(log, {"enter_validated": KeyboardInterrupt()})
+    cell = Cell(log, {"enter_target": KeyboardInterrupt()})
     ended = _run(cell, log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (130, True)
     said = log.index("said interrupted before the first step")
-    assert log[said + 1:] == ["call leave_validated"]
+    assert log[said + 1:] == ["call return_to_sim"]
 
 
 def test_run_interrupted_in_a_step_cancels_then_leaves() -> None:
@@ -154,7 +160,7 @@ def test_run_interrupted_in_a_step_cancels_then_leaves() -> None:
         "call move pick",
         "said interrupted in cycle 1",
         "call cancel",
-        "call leave_validated",
+        "call return_to_sim",
     ]
 
 
@@ -166,7 +172,7 @@ def test_run_with_no_answer_at_the_prompt_exits_1_and_leaves_nothing() -> None:
         "FAILED before the first step: no operator answer (end of input): a physical "
         "side needs one at this terminal"
     )
-    assert "call leave_validated" not in log
+    assert "call return_to_sim" not in log
 
 
 def test_run_whose_return_to_sim_is_unconfirmed_exits_1() -> None:
@@ -174,14 +180,14 @@ def test_run_whose_return_to_sim_is_unconfirmed_exits_1() -> None:
     ended = _run(Cell(log, left=False), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (1, False)
     assert "said done: 1 cycle(s)" in log
-    assert log[-1] == "call leave_validated"
+    assert log[-1] == "call return_to_sim"
 
 
 def test_a_completed_run_exits_0_after_sim() -> None:
     log: list[str] = []
     ended = _run(Cell(log), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (0, True)
-    assert log[-2:] == ["call cancel", "call leave_validated"]
+    assert log[-2:] == ["call cancel", "call return_to_sim"]
 
 
 # --- ./scripts/home -----------------------------------------------------------
@@ -192,7 +198,7 @@ def test_home_interrupted_at_the_prompt_exits_130_then_asks_for_sim() -> None:
     log: list[str] = []
     ended = _home(Cell(log), log, _reader(log, KeyboardInterrupt()))
     assert (ended.status, ended.sim_confirmed) == (130, True)
-    assert log[-2:] == ["said interrupted", "call leave_validated"]
+    assert log[-2:] == ["said interrupted", "call return_to_sim"]
     assert "call initialize" not in log
 
 
@@ -210,8 +216,9 @@ def test_a_completed_home_says_done_and_exits_0() -> None:
     log: list[str] = []
     ended = _home(Cell(log), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (0, True)
-    assert log[-2:] == ["said done: both arms are at the program's start", "call leave_validated"]
-    assert log.index("asked HOME?") < log.index("call initialize")
+    assert log[-2:] == ["said done: both arms are at the program's start", "call return_to_sim"]
+    assert log.index("asked Target: the twin (simulation and real arm); physical side(s) "
+                     "commanded: counterpart. HOME?") < log.index("call initialize")
 
 
 @pytest.mark.parametrize("homed", [True, False])

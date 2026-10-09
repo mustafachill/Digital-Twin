@@ -138,6 +138,10 @@ if(BUILD_TESTING)
   # R2-05 (ADR-0071): the program sequencer's terminal lines and exit codes, and
   # their order against the calls, on a fake cell with a physical side. No graph.
   ament_add_pytest_test(cycle_terminal test/test_cycle_terminal.py)
+  # ADR-0072: the operator's signal target - the one target table, what a
+  # deployment offers, the per-target gates of the sequencer and the console,
+  # and the pair's sides by the hardware opt-in. No graph.
+  ament_add_pytest_test(signal_target test/test_signal_target.py)
   # N-01, S-01, R-05: a terminal client sees an operator console on its graph -
   # by the twin's mode or, via the plant, the arm's state - and the console sees
   # a terminal client by its one node name. A live graph on a domain of its own.

@@ -290,7 +290,9 @@ def test_in_sim_a_physical_carriage_heard_elsewhere_has_not_arrived() -> None:
 
     answer = _track_arrived(_boundary_with_carriages(0.0, 0.30), TwinMode.MODE_SIM, 0.0)
     assert not answer.arrived and "counterpart: stands at 300.0 mm" in answer.detail
-    assert answer.reason == TrackArrived.Response.AWAY and not answer.routed
+    # SIM routes a track command to the plant (ADR-0072); the physical side is
+    # still judged, because this is the ask before a person is let in.
+    assert answer.reason == TrackArrived.Response.AWAY and answer.routed
     answer = _track_arrived(_boundary_with_carriages(0.30, 0.3005), TwinMode.MODE_SIM, 0.30)
     assert answer.arrived and answer.reason == TrackArrived.Response.ARRIVED
 
@@ -322,7 +324,8 @@ def test_in_real_and_shadow_the_physical_side_is_judged_strictly(mode) -> None:
     stale = _boundary_with_carriages(0.30, 0.30, counterpart_age_s=2 * AGE)
     answer = _track_arrived(stale, mode, 0.30)
     assert not answer.arrived and answer.reason == TrackArrived.Response.UNHEARD
-    assert not answer.routed
+    # REAL routes a track command to the counterpart (ADR-0072); SHADOW none.
+    assert answer.routed == (mode == TwinMode.MODE_REAL)
     # The plant is not commanded there, so it is not asked about.
     answer = _track_arrived(_boundary_with_carriages(0.0, 0.30), mode, 0.30)
     assert answer.arrived, answer.detail
