@@ -510,9 +510,10 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         """ADR-0066: a zero setpoint is never gated, and leaving a mode stops its belts.
 
         Counted as exact lines, because `0` is a prefix of every other value
-        this class sends. VALIDATED -> SIM must send exactly one zero to each
-        side on its own; only then is an operator's zero sent in SIM, so the
-        second zero on each side can have come from nothing but that.
+        this class sends. VALIDATED -> SIM must send exactly one zero to the
+        counterpart, which SIM no longer commands, and none to the plant, which
+        SIM still commands (ADR-0072); only then is an operator's zero sent in
+        SIM, which reaches both sides, the counterpart included.
         """
         def zeros(side: str) -> int:
             line = f"{side}: belt {BELT} 0"
@@ -525,15 +526,16 @@ class TestAGoalCrossesTheBoundary(unittest.TestCase):
         self._enter_validated()
         before = {side: zeros(side) for side in sides}
         self.assertTrue(self._request(TwinMode.MODE_SIM, "leaving VALIDATED").accepted)
-        for side in sides:
-            self._spin_until(
-                lambda side=side: zeros(side) == before[side] + 1,
-                f"leaving VALIDATED stopped the {side}'s belt",
-            )
+        self._spin_until(
+            lambda: zeros("counterpart") == before["counterpart"] + 1,
+            "leaving VALIDATED stopped the counterpart's belt",
+        )
+        self.assertEqual(zeros("plant"), before["plant"], "SIM still commands the plant")
         stop = Float64(data=0.0)
-        for side in sides:
+        for side, at_least in (("plant", 1), ("counterpart", 2)):
             self._spin_until(
-                lambda side=side: self.belt.publish(stop) or zeros(side) >= before[side] + 2,
+                lambda side=side, at_least=at_least: self.belt.publish(stop)
+                or zeros(side) >= before[side] + at_least,
                 f"a stop sent in SIM reached the {side}",
             )
 
