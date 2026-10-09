@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from cite_bringup.program import cycle
 from cite_bringup.program.home import StartPose
-from cite_bringup.program.targets import TWIN
 from cite_bringup.program.steps import EXIT_INTERRUPTED, move
+from cite_bringup.program.targets import TWIN
 from cite_interfaces.msg import TwinMode
 import pytest
 

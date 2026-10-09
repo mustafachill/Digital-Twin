@@ -76,6 +76,12 @@ ZONE = "cell_b"
 #: Every goal names its target (ADR-0072); this rig drives the twin.
 TWIN = ConsoleState.TARGET_TWIN
 
+
+def _run_goal() -> RunProgram.Goal:
+    """One cycle at the program's own speed, on the twin."""
+    return RunProgram.Goal(speed_scale=1.0, cycles=1, target=TWIN)
+
+
 #: An odd base inside `DOMAIN_BAND`, offset from the paired rig's so that two
 #: rigs run side by side do not share a domain.
 BASE = 1 + 2 * ((os.getpid() + 17) % 50)
@@ -240,7 +246,7 @@ class TestTheConsole(unittest.TestCase):
         )
         self.assertIn("Start robot", refused.last_error)
         self.assertEqual(refused.state, ConsoleState.NOT_STARTED)
-        handle = self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1, target=TWIN))
+        handle = self._send(self.run_program, _run_goal())
         self.assertFalse(handle.accepted, "Start program was accepted before Start robot")
         self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)
         self.assertFalse(self._call(self.stop, StopCell.Request()).success)
@@ -260,7 +266,7 @@ class TestTheConsole(unittest.TestCase):
         self.assertEqual(ready.prompt, "")
         self.assertEqual(ready.minimum_speed_scale, 0.0)
         self.assertFalse(
-            self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1, target=TWIN)).accepted
+            self._send(self.run_program, _run_goal()).accepted
         )
 
         # The scale and the cycle count are refused at the goal, never defaulted.
@@ -305,7 +311,7 @@ class TestTheConsole(unittest.TestCase):
             )
         # A second motion goal is refused while one runs.
         self.assertFalse(
-            self._send(self.run_program, RunProgram.Goal(speed_scale=1.0, cycles=1, target=TWIN)).accepted
+            self._send(self.run_program, _run_goal()).accepted
         )
 
         # Cancel: the same software stop as StopCell.

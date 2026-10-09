@@ -213,7 +213,7 @@ def started_sides(plan: Plan, sides: str) -> list[str]:
 
 
 def participants(plan: Plan, console: bool, sides: str) -> int:
-    """Count the participants a pair of ``plan`` stops: each side started, the boundary, any console."""
+    """Count what a pair of ``plan`` stops: each side started, the boundary, any console."""
     return len(started_sides(plan, sides)) + 1 + (1 if console else 0)
 
 

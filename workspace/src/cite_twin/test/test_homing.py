@@ -277,7 +277,7 @@ def test_a_plant_alone_deployment_judges_the_plant_alone() -> None:
 
 
 def test_a_forced_mode_whose_side_does_not_run_routes_nowhere() -> None:
-    """ADR-0072: `force` past the no-far-side check cannot send a goal to a side with no context."""
+    """ADR-0072: `force` past the no-far-side check cannot route to a side with no context."""
     from cite_interfaces.msg import ResultCode as Code
 
     boundary = object.__new__(TwinBoundary)
@@ -336,7 +336,9 @@ def test_a_non_zero_belt_never_reaches_a_physical_side(value) -> None:
     topic = "/cite/cell_b/belt/command"
     for mode, reached in ((TwinMode.MODE_REAL, []), (TwinMode.MODE_VALIDATED, ["plant"])):
         boundary = _commanding_boundary(mode)
-        boundary._belt_publishers = {(side, topic): _Publisher() for side in ("plant", "counterpart")}
+        boundary._belt_publishers = {
+            (side, topic): _Publisher() for side in ("plant", "counterpart")
+        }
         boundary._on_belt_command(topic, Float64(data=value))
         sent = [side for (side, _), pub in boundary._belt_publishers.items() if pub.sent]
         assert sent == reached, mode
@@ -352,7 +354,9 @@ def test_in_sim_only_a_zero_belt_reaches_the_counterpart() -> None:
     topic = "/cite/cell_b/belt/command"
     for physical in (True, False):
         boundary = _commanding_boundary(TwinMode.MODE_SIM, physical)
-        boundary._belt_publishers = {(side, topic): _Publisher() for side in ("plant", "counterpart")}
+        boundary._belt_publishers = {
+            (side, topic): _Publisher() for side in ("plant", "counterpart")
+        }
         boundary._on_belt_command(topic, Float64(data=0.3))
         assert boundary._belt_publishers[("plant", topic)].sent
         assert not boundary._belt_publishers[("counterpart", topic)].sent

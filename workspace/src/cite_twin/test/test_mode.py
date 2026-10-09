@@ -26,7 +26,7 @@ answers are driven here without touching the process environment.
 from __future__ import annotations
 
 from cite_interfaces.msg import ResultCode, TwinMode
-from cite_twin.mode import deployment_from_plan, Deployment, MODE_NAMES, ModeAuthority
+from cite_twin.mode import Deployment, deployment_from_plan, MODE_NAMES, ModeAuthority
 from cite_twin.routing import commanded_sides, COUNTERPART_SIDE, route
 import pytest
 
@@ -378,8 +378,10 @@ class TestAPairStartedWithThePlantAlone:
 
     @pytest.mark.parametrize("mode", [TwinMode.MODE_REAL, TwinMode.MODE_VALIDATED])
     def test_real_and_validated_are_refused_as_having_no_far_side(self, mode: int) -> None:
-        """Refused before the hardware gate is reached: with no counterpart there is
-        no physical side to gate, and the refusal says why."""
+        """Refuse before the hardware gate: with no counterpart there is nothing to gate.
+
+        The refusal says why.
+        """
         machine = ModeAuthority(deployment_from_plan(self._plan(), ("plant",)), _refused)
         verdict = machine.request(mode, "", "because", force=False)
         assert not verdict.accepted

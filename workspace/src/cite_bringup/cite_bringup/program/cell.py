@@ -496,7 +496,9 @@ class RosCell:
         """
         mode = targets.MODES[target]
         if homing and not targets.homing_allowance(target):
-            raise StepFailed(f"a homing allowance is VALIDATED's alone, not {targets.label(target)}'s")
+            raise StepFailed(
+                f"a homing allowance is VALIDATED's alone, not {targets.label(target)}'s"
+            )
         client = self.node.create_client(SetMode, SetMode.Request.SERVICE)
         self._await_ready(
             client.service_is_ready, f"{SetMode.Request.SERVICE} is not served; is the pair up?"
@@ -952,7 +954,7 @@ class RosCell:
     def _track_without_the_plant(
         self, position_m: float, speed_mps: float, sides: tuple[str, ...], what: str
     ) -> None:
-        """A track step in a target that leaves the plant idle (R-08, ADR-0072).
+        """Run a track step in a target that leaves the plant idle (R-08, ADR-0072).
 
         Every position it uses is the target's carriage's, confirmed by the
         twin - never the plant's, which stands wherever the last target left
@@ -992,7 +994,7 @@ class RosCell:
         self._track_target = None
 
     def _target_sides(self) -> tuple[str, ...]:
-        """The sides the current target commands; both before a target is entered."""
+        """Return the sides the current target commands; both before a target is entered."""
         if self._target is None:
             return targets.SIDES[targets.TWIN]
         return targets.SIDES[self._target]

@@ -81,12 +81,12 @@ def homing_allowance(target: int) -> bool:
 
 
 def running_physical(plan: Plan, running: Collection[str]) -> list[str]:
-    """The sides this deployment runs whose hardware is physical (R-16: the one place)."""
+    """Return the sides this deployment runs whose hardware is physical (R-16: the one place)."""
     return [side for side in physical_sides(plan) if side in running]
 
 
 def available(running: Collection[str], commandable: Collection[str]) -> list[int]:
-    """The targets every side of which runs and is commandable now, in panel order."""
+    """Return the targets every side of which runs and is commandable now, in panel order."""
     return [
         target
         for target in ALL

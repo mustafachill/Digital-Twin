@@ -79,8 +79,8 @@ from cite_bringup.plan import (
     PlanError,
     PLANT_SIDE,
 )
-from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
 from cite_bringup.program import targets
+from cite_bringup.program.belt import ACK_CEILING_S, MATCH_CEILING_S, set_belts
 from cite_bringup.program.cell import RosCell, state_topic, TERMINAL_NODE
 from cite_bringup.program.console_machine import ConsoleMachine, Outcome, Snapshot
 from cite_bringup.program.custody import read_state_on_side
@@ -510,7 +510,7 @@ class CellConsole(LifecycleNode):
             self._publish(machine.snapshot())
 
     def _available(self) -> list[int]:
-        """The targets this deployment offers now: every side running and commandable."""
+        """Return the targets this deployment offers now: every side running and commandable."""
         with self._sides_lock:
             commandable = self._commandable
         return targets.available(self._running, commandable)

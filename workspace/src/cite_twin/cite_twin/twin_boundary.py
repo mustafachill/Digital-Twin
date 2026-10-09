@@ -1157,7 +1157,8 @@ class TwinBoundary:
 
         ADR-0070: the program's start, measured before anything is commanded,
         so every running side is judged in every mode - or, given
-        ``request.sides``, exactly those (ADR-0072: per side, for a target). A physical side counts only with
+        ``request.sides``, exactly those (ADR-0072: per side, for a target). A
+        physical side counts only with
         fresh positions; which sides are physical is the plan's, read at
         start-up (`_physical_watches`), conservatively for every joint asked.
         """
@@ -1389,7 +1390,7 @@ class TwinBoundary:
         return "; ".join(found) if found else None
 
     def _sides_now(self) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], str]:
-        """What `TwinSides` says now: running, physical, commandable, and why not; under the lock."""
+        """Return what `TwinSides` says now: running, physical, commandable, why not; locked."""
         physical = tuple(side for side in self._sides if self._is_physical(side))
         unready = self._physical_side_unready() if physical else None
         commandable = tuple(
@@ -1854,7 +1855,7 @@ def _refuse_sim_time(side: SideContext) -> None:
 
 
 def running_sides(choice: str) -> tuple[str, ...]:
-    """The sides a `--sides` choice starts: the plant alone, or both (ADR-0072)."""
+    """Return the sides a `--sides` choice starts: the plant alone, or both (ADR-0072)."""
     return (PLANT_SIDE,) if choice == SIDES_PLANT else (PLANT_SIDE, COUNTERPART_SIDE)
 
 

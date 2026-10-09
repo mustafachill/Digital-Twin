@@ -33,7 +33,6 @@ from cite_bringup.program.console_machine import (
     START_PROMPT,
 )
 from cite_bringup.program.home import StartPose
-from cite_bringup.program.targets import ALL, REAL, SIM, TWIN
 from cite_bringup.program.steps import (
     grip,
     Interrupted,
@@ -43,6 +42,7 @@ from cite_bringup.program.steps import (
     StepFailed,
     track,
 )
+from cite_bringup.program.targets import ALL, TWIN
 from cite_interfaces.msg import ConsoleState, TwinMode
 import pytest
 

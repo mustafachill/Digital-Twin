@@ -32,8 +32,8 @@ from cite_bringup.program.home import StartPose
 from cite_bringup.program.sides import (
     pair_sides,
     physical_sides,
-    required_speed_scale,
     REAL_ARM_NOT_STARTED,
+    required_speed_scale,
 )
 from cite_bringup.program.steps import move, run, StepFailed
 from cite_interfaces.msg import ConsoleState, TwinMode

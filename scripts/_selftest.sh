@@ -1478,6 +1478,7 @@ expect_ok   "after the overlay is sourced, and before anything is launched" \
 # shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "./scripts/sim hands the supervisor --sides, read from sides --pair-sides" \
     grep -qF 'PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")' "${REPO_ROOT}/scripts/sim"
+# shellcheck disable=SC2016  # the literal text is the point; it must not expand
 expect_ok   "after the opt-in is resolved, and before the supervisor is started" \
     test "$(sim_line_of '    resolve_hardware_opt_in')" -lt "$(sim_line_of 'cite_bringup.program.sides --zone "$ZONE" --pair-sides')" \
       -a "$(sim_line_of 'cite_bringup.program.sides --zone "$ZONE" --pair-sides')" -lt "$(sim_line_of 'exec python3 -m cite_bringup.pair')"

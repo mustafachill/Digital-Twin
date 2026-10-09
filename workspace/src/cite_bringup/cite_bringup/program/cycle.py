@@ -56,10 +56,10 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from cite_bringup.plan import PLANT_SIDE
 from cite_bringup.program import targets
 from cite_bringup.program.home import bring_to_start, StartPose
 from cite_bringup.program.operator import confirm_operator, PLACE_PROMPT
-from cite_bringup.plan import PLANT_SIDE
 from cite_bringup.program.steps import EXIT_INTERRUPTED, run, Step, StepFailed
 
 

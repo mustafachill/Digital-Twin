@@ -416,7 +416,7 @@ class ConsoleMachine:
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
     ) -> Outcome:
-        """Bring the target's arms to the program's start, as `./scripts/home` does (`cycle.home`)."""
+        """Bring the target's arms to the program's start (`cycle.home`, as `./scripts/home`)."""
         refusal = self._begin(
             ConsoleState.HOMING,
             lambda: self._motion_refusal(scale, None, target),
@@ -495,7 +495,7 @@ class ConsoleMachine:
         owner: object = None,
         cancelled: Callable[[], bool] | None = None,
     ) -> Outcome:
-        """Run ``cycles`` cycles of the program on ``target``, one part each, by `cycle.run_program`."""
+        """Run ``cycles`` cycles on ``target``, one part each, by `cycle.run_program`."""
         refusal = self._begin(
             ConsoleState.RUNNING,
             lambda: self._motion_refusal(scale, cycles, target),
@@ -791,7 +791,7 @@ class ConsoleMachine:
         return None
 
     def _physical_in(self, target: int) -> list[str]:
-        """The running physical sides ``target`` commands: what every operator gate keys on."""
+        """Return the running physical sides ``target`` commands: what operator gates key on."""
         return [side for side in self._physical if side in targets.SIDES[target]]
 
     def _forget_the_start(self) -> None:
