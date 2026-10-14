@@ -43,6 +43,7 @@
 #ifndef CITE_CONSOLE_GUI__CONSOLE_CLIENT_HPP_
 #define CITE_CONSOLE_GUI__CONSOLE_CLIENT_HPP_
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -149,6 +150,13 @@ private:
   void on_state_matched(std::size_t publishers);
   void outcome(const std::string & text) const;
   void progress(const std::string & text) const;
+  /// A new request is sent: the last one's outcome is no longer the latest,
+  /// and `sent` is what is in progress (T-05).
+  void sending(const std::string & sent) const;
+  /// Whether a request sent when `stops_accepted_` read `stops_at_send`, and
+  /// that ended unsuccessfully with `code`, was ended by the operator's Stop:
+  /// its goal was cancelled, or a Stop the console accepted came in between.
+  bool stopped_since(std::uint64_t stops_at_send, rclcpp_action::ResultCode code) const;
   void run_progress(const RunProgress & position) const;
 
   ConsoleCallbacks callbacks_;
@@ -172,6 +180,9 @@ private:
   bool sides_heard_{false};
   bool heartbeat_heard_{false};
   bool divergence_heard_{false};
+  /// How many Stops the console has accepted; counted on the spin thread,
+  /// read where a request is sent.
+  std::atomic<std::uint64_t> stops_accepted_{0};
   std::thread spinner_;
 };
 

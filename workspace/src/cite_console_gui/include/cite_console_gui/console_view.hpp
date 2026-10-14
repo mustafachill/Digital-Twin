@@ -64,8 +64,15 @@ ConsoleView view_from(
 /// not produce, it is said as no phase rather than as a refusal. A value the
 /// contract does not define is said as unrecognised. In the console's words:
 /// never "safe", "verified" or "validated for the real cell" (ADR-0073).
+/// `stopped`: the request was stopped by the operator (`ConsoleClient`), so a
+/// failed result is said as stopped rather than as refused or failed.
+/// How a request ended, as its outcome line opens: "<request>: done. ",
+/// "<request>: stopped. " for one the operator stopped that did not complete,
+/// or "<request>: refused or failed. ".
+std::string outcome_opening(const std::string & request, bool success, bool stopped);
+
 std::string validate_then_run_outcome(
-  const cite_interfaces::action::ValidateThenRun::Result & result);
+  const cite_interfaces::action::ValidateThenRun::Result & result, bool stopped = false);
 
 /// The fields of a DivergenceMetrics sample the "Twin fidelity" card reads.
 DivergenceSample divergence_sample_from(const cite_interfaces::msg::DivergenceMetrics & sample);

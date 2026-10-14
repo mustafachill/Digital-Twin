@@ -39,7 +39,7 @@ namespace
 
 std::string answered(const std::string & request, bool success, const std::string & detail)
 {
-  return request + (success ? ": done. " : ": refused or failed. ") + detail;
+  return outcome_opening(request, success, false) + detail;
 }
 
 /// A ValidateThenRun phase as the operator reads it, for a progress line.
@@ -228,6 +228,18 @@ void ConsoleClient::progress(const std::string & text) const
   }
 }
 
+void ConsoleClient::sending(const std::string & sent) const
+{
+  outcome("");
+  progress(sent);
+}
+
+bool ConsoleClient::stopped_since(
+  std::uint64_t stops_at_send, rclcpp_action::ResultCode code) const
+{
+  return code == rclcpp_action::ResultCode::CANCELED || stops_accepted_.load() != stops_at_send;
+}
+
 void ConsoleClient::run_progress(const RunProgress & position) const
 {
   if (callbacks_.on_run_progress) {
@@ -241,11 +253,12 @@ void ConsoleClient::start_robot()
     outcome("Start robot: the console does not serve it right now.");
     return;
   }
-  progress("Start robot: sent.");
+  sending("Start robot: sent.");
   start_robot_->async_send_request(
     std::make_shared<StartRobot::Request>(),
     [this](rclcpp::Client<StartRobot>::SharedFuture future) {
       const auto response = future.get();
+      progress("");
       outcome(answered("Start robot", response->success, response->detail));
     });
 }
@@ -274,6 +287,9 @@ void ConsoleClient::stop()
     std::make_shared<StopCell::Request>(),
     [this](rclcpp::Client<StopCell>::SharedFuture future) {
       const auto response = future.get();
+      if (response->success) {
+        ++stops_accepted_;
+      }
       outcome(answered("Stop", response->success, response->detail));
     });
 }
@@ -287,6 +303,9 @@ void ConsoleClient::home(double speed_scale, std::uint8_t target)
   Home::Goal goal;
   goal.speed_scale = speed_scale;
   goal.target = target;
+  // A new request: the last one's outcome is no longer the latest (T-05).
+  outcome("");
+  const std::uint64_t stops_at_send = stops_accepted_.load();
 
   rclcpp_action::Client<Home>::SendGoalOptions options;
   options.goal_response_callback =
@@ -299,12 +318,16 @@ void ConsoleClient::home(double speed_scale, std::uint8_t target)
       progress("Home: " + feedback->step);
     };
   options.result_callback =
-    [this](const rclcpp_action::ClientGoalHandle<Home>::WrappedResult & result) {
+    [this, stops_at_send](const rclcpp_action::ClientGoalHandle<Home>::WrappedResult & result) {
+      progress("");
       if (!result.result) {
         outcome("Home: ended with no result.");
         return;
       }
-      outcome(answered("Home", result.result->success, result.result->detail));
+      const bool success = result.result->success;
+      outcome(
+        outcome_opening("Home", success, !success && stopped_since(stops_at_send, result.code)) +
+        result.result->detail);
     };
   home_->async_send_goal(goal, options);
 }
@@ -320,6 +343,9 @@ void ConsoleClient::run_program(
   goal.speed_scale = speed_scale;
   goal.target = target;
   goal.cycles = cycles;
+  // A new request: the last one's outcome is no longer the latest (T-05).
+  outcome("");
+  const std::uint64_t stops_at_send = stops_accepted_.load();
 
   rclcpp_action::Client<Run>::SendGoalOptions options;
   options.goal_response_callback =
@@ -347,15 +373,18 @@ void ConsoleClient::run_program(
       run_progress(position);
     };
   options.result_callback =
-    [this](const rclcpp_action::ClientGoalHandle<Run>::WrappedResult & result) {
+    [this, stops_at_send](const rclcpp_action::ClientGoalHandle<Run>::WrappedResult & result) {
       run_progress(RunProgress{});
+      progress("");
       if (!result.result) {
         outcome("Start program: ended with no result.");
         return;
       }
+      const bool success = result.result->success;
       outcome(
-        answered("Start program", result.result->success, result.result->detail) +
-        " Cycles completed: " + std::to_string(result.result->cycles_completed) + ".");
+        outcome_opening("Start program", success, !success && stopped_since(stops_at_send, result.code)) +
+        result.result->detail + " Cycles completed: " +
+        std::to_string(result.result->cycles_completed) + ".");
     };
   run_program_->async_send_goal(goal, options);
 }
@@ -369,6 +398,9 @@ void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
   ValidateThenRun::Goal goal;
   goal.speed_scale = speed_scale;
   goal.cycles = cycles;
+  // A new request: the last one's outcome is no longer the latest (T-05).
+  outcome("");
+  const std::uint64_t stops_at_send = stops_accepted_.load();
 
   rclcpp_action::Client<ValidateThenRun>::SendGoalOptions options;
   options.goal_response_callback =
@@ -400,15 +432,20 @@ void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
       run_progress(position);
     };
   options.result_callback =
-    [this](const rclcpp_action::ClientGoalHandle<ValidateThenRun>::WrappedResult & result) {
+    [this, stops_at_send](
+    const rclcpp_action::ClientGoalHandle<ValidateThenRun>::WrappedResult & result) {
       run_progress(RunProgress{});
+      progress("");
       if (!result.result) {
         outcome("Validate then run: ended with no result.");
         return;
       }
       // The console's own words: "passed in simulation", never "safe",
       // "verified" or "validated for the real cell" (ADR-0073 decision 5).
-      outcome(validate_then_run_outcome(*result.result));
+      outcome(
+        validate_then_run_outcome(
+          *result.result,
+          !result.result->success && stopped_since(stops_at_send, result.code)));
     };
   validate_then_run_->async_send_goal(goal, options);
 }

@@ -271,6 +271,25 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
     "Ended in: Running twin. Cycles completed on the twin: 2.");
 }
 
+TEST(ConsoleView, ARequestTheOperatorStoppedIsSaidStopped)
+{
+  // T-05 (b): a request the operator stopped is said stopped, not failed; one
+  // that completed despite a late Stop is still done.
+  EXPECT_EQ(cite_console_gui::outcome_opening("Start program", false, true), "Start program: stopped. ");
+  EXPECT_EQ(
+    cite_console_gui::outcome_opening("Start program", false, false), "Start program: refused or failed. ");
+  EXPECT_EQ(cite_console_gui::outcome_opening("Start program", true, true), "Start program: done. ");
+
+  ValidateThenRun::Result stopped;
+  stopped.success = false;
+  stopped.detail = "Validate then run was stopped";
+  stopped.ended_in = ConsoleState::PHASE_VALIDATING;
+  EXPECT_EQ(
+    validate_then_run_outcome(stopped, true),
+    "Validate then run: stopped. Validate then run was stopped Ended in: Validating in "
+    "simulation. Cycles completed on the twin: 0.");
+}
+
 TEST(ConsoleView, AValidateThenRunPhaseTheContractDoesNotProduceIsNotARefusal)
 {
   // A success that names no phase is not said as a refusal, and a phase this

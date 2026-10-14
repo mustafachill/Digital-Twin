@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "cite_console_gui/console_client.hpp"
+#include "cite_console_gui/enablement.hpp"
 #include "cite_interfaces/qos.hpp"
 
 using cite_console_gui::ConsoleCallbacks;
@@ -166,18 +167,35 @@ private:
   }
 };
 
+/// What the fake does with a RunProgram goal.
+enum class RunGoal
+{
+  /// Rejected.
+  REJECT,
+  /// Accepted; one feedback (cycle 2, step 3 of 7), then it succeeds.
+  SUCCEED,
+  /// Accepted; one feedback, then it holds until a Stop is served and ends
+  /// unsuccessfully, as `cell_console` ends a run its Stop stopped (aborted,
+  /// not cancelled: the stop came by StopCell, not by the goal's cancel).
+  END_WHEN_STOPPED,
+};
+
 /// A console as far as the panel can tell: its state, its services, its
 /// actions, on a context of its own. Every request is recorded; services
-/// answer success, goals are rejected.
+/// answer success, goals are rejected unless asked otherwise.
 class FakeConsole
 {
 public:
-  /// With `accept_run`, a RunProgram goal is accepted, reports one feedback
-  /// (cycle 2, step 3 of 7) and succeeds; otherwise every goal is rejected.
+  /// `run` says what a RunProgram goal meets. With `accept_validate_then_run`
+  /// a ValidateThenRun goal is accepted, reports one feedback in phase 1
+  /// (cycle 1, step 2 of 5) and one in phase 2 (cycle 2, step 4 of 5), and
+  /// succeeds having completed three cycles on the twin.
   explicit FakeConsole(
-    const ConsoleNames & names, bool answer_start_robot = true, bool accept_run = false)
+    const ConsoleNames & names, bool answer_start_robot = true, RunGoal run = RunGoal::REJECT,
+    bool accept_validate_then_run = false)
   : context_(std::make_shared<rclcpp::Context>())
   {
+    const bool accept_run = run != RunGoal::REJECT;
     rclcpp::InitOptions options;
     options.shutdown_on_signal = false;
     context_->init(0, nullptr, options);
@@ -220,6 +238,11 @@ public:
         note("stop");
         response->success = true;
         response->detail = "fake stop";
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          stopped_ = true;
+        }
+        stop_served_.notify_all();
       });
     home_ = rclcpp_action::create_server<HomeRobot>(
       node_, names.home,
@@ -246,9 +269,9 @@ public:
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>> handle) {
+      [this, run](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>> handle) {
         // Off the executor's thread, as a real server runs its goal.
-        runner_ = std::thread([handle]() {
+        runner_ = std::thread([this, handle, run]() {
           auto feedback = std::make_shared<RunProgram::Feedback>();
           feedback->cycle = 2;
           feedback->step_index = 3;
@@ -260,6 +283,17 @@ public:
             // once it has its result. A test fake's margin, not a sequence.
           std::this_thread::sleep_for(std::chrono::milliseconds(500));
           auto result = std::make_shared<RunProgram::Result>();
+          if (run == RunGoal::END_WHEN_STOPPED) {
+            // Held until a Stop is served; a hang detector bounds it.
+            std::unique_lock<std::mutex> lock(mutex_);
+            stop_served_.wait_for(lock, SETTLE, [this]() {return stopped_;});
+            lock.unlock();
+            result->success = false;
+            result->detail = "Start program was stopped; nothing homes on its own";
+            result->cycles_completed = 0;
+            handle->abort(result);
+            return;
+          }
           result->success = true;
           result->cycles_completed = 3;
           handle->succeed(result);
@@ -267,16 +301,45 @@ public:
       });
     validate_then_run_ = rclcpp_action::create_server<ValidateThenRun>(
       node_, names.validate_then_run,
-      [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const ValidateThenRun::Goal> goal) {
+      [this, accept_validate_then_run](
+        const rclcpp_action::GoalUUID &, std::shared_ptr<const ValidateThenRun::Goal> goal) {
         note(
           "validate_then_run " + std::to_string(goal->speed_scale) + " cycles " +
           std::to_string(goal->cycles));
-        return rclcpp_action::GoalResponse::REJECT;
+        return accept_validate_then_run ? rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE :
+               rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>>) {
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>>) {});
+      [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>> handle) {
+        runner_ = std::thread([handle]() {
+          auto validating = std::make_shared<ValidateThenRun::Feedback>();
+          validating->phase = ConsoleState::PHASE_VALIDATING;
+          validating->cycle = 1;
+          validating->step_index = 2;
+          validating->step_count = 5;
+          validating->step = "Pick";
+          handle->publish_feedback(validating);
+          // As for RunProgram: a test fake's margin between a topic and a
+          // service, so that neither feedback is overtaken.
+          std::this_thread::sleep_for(std::chrono::milliseconds(300));
+          auto running = std::make_shared<ValidateThenRun::Feedback>();
+          running->phase = ConsoleState::PHASE_RUNNING;
+          running->cycle = 2;
+          running->step_index = 4;
+          running->step_count = 5;
+          running->step = "Place";
+          handle->publish_feedback(running);
+          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          auto result = std::make_shared<ValidateThenRun::Result>();
+          result->success = true;
+          result->detail = "passed in simulation (1 cycle), then 3 cycle(s) on the twin";
+          result->ended_in = ConsoleState::PHASE_RUNNING;
+          result->cycles_completed = 3;
+          handle->succeed(result);
+          });
+      });
     rclcpp::ExecutorOptions executor_options;
     executor_options.context = context_;
     executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>(executor_options);
@@ -344,6 +407,8 @@ private:
   std::thread spinner_;
   std::thread runner_;
   std::mutex mutex_;
+  std::condition_variable stop_served_;
+  bool stopped_{false};
   std::vector<std::string> requests_;
 };
 
@@ -429,7 +494,8 @@ bool unserved(const std::string & line)
 }
 
 /// Send with `send` until the client's graph has discovered the server, then
-/// return the first line said after the send that reached it.
+/// return the first line said after the send that reached it. An empty line -
+/// the last outcome cleared as a new request is sent (T-05) - is not one.
 std::string sent_once_served(
   Recorder & recorder, const std::function<void()> & send,
   std::vector<std::string> Recorder::* channel)
@@ -455,11 +521,19 @@ std::string sent_once_served(
         continue;
       }
     }
-    if (!recorder.wait_for([&]() {return (recorder.*channel).size() > before;})) {
+    const auto said = [&]() -> std::string {
+        for (std::size_t at = before; at < (recorder.*channel).size(); ++at) {
+          if (!(recorder.*channel)[at].empty()) {
+            return (recorder.*channel)[at];
+          }
+        }
+        return "";
+      };
+    if (!recorder.wait_for([&]() {return !said().empty();})) {
       return "";
     }
     std::lock_guard<std::mutex> lock(recorder.mutex);
-    return (recorder.*channel)[before];
+    return said();
   }
   return "";
 }
@@ -624,7 +698,9 @@ TEST(ConsoleClient, ItTearsDownWithARequestInFlightAndStateArriving)
   publisher.join();
   EXPECT_EQ(recorder.after_close, 0) << "a callback ran after the client was destroyed";
   std::lock_guard<std::mutex> lock(recorder.mutex);
-  EXPECT_TRUE(recorder.outcomes.empty()) << "the unanswered request was reported as ended";
+  for (const auto & line : recorder.outcomes) {
+    EXPECT_TRUE(line.empty()) << "the unanswered request was reported as ended: " << line;
+  }
 }
 
 TEST(ConsoleClient, TheBoundarysSidesAreHeardAndTheirPublisherLeavingIsSaid)
@@ -728,7 +804,7 @@ TEST(ConsoleClient, EachDivergenceSampleIsHeardAndItsPublisherLeavingIsSaid)
 TEST(ConsoleClient, ARunsFeedbackIsItsPositionAndItsEndClearsIt)
 {
   const ConsoleNames names = names_for("run_progress");
-  FakeConsole console(names, true, true);
+  FakeConsole console(names, true, RunGoal::SUCCEED);
   Recorder recorder;
   ConsoleClient client(names, recorder.callbacks());
   // Sent once the action server is discovered; three cycles asked for.
@@ -758,4 +834,116 @@ TEST(ConsoleClient, ARejectedRunHasNoPosition)
   ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.positions.empty();}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
   EXPECT_FALSE(recorder.positions.back().active);
+}
+
+TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
+{
+  // R-04: phase 1 is one cycle on the simulation, whatever the goal's cycles
+  // (ValidateThenRun.action); phase 2 runs the goal's cycles on the twin. Each
+  // is labelled as the operator reads its phase, and the end clears it.
+  const ConsoleNames names = names_for("validate_progress");
+  FakeConsole console(names, true, RunGoal::REJECT, true);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  EXPECT_EQ(
+    sent_once_served(
+      recorder, [&]() {client.validate_then_run(0.5, 3);}, &Recorder::progress),
+    "Validate then run: accepted.");
+  ASSERT_TRUE(
+    recorder.wait_for(
+      [&]() {return !recorder.outcomes.empty() && !recorder.outcomes.back().empty();}));
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 3;}));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  const RunProgress & validating = recorder.positions[0];
+  EXPECT_TRUE(validating.active);
+  EXPECT_EQ(
+    validating.phase,
+    cite_console_gui::validation_phase_name(cite_console_gui::ValidationPhase::VALIDATING));
+  EXPECT_EQ(validating.cycle, 1u);
+  EXPECT_EQ(validating.cycles, 1u) << "phase 1 is one cycle, not the goal's";
+  EXPECT_EQ(validating.step_index, 2u);
+  EXPECT_EQ(validating.step_count, 5u);
+  const RunProgress & running = recorder.positions[1];
+  EXPECT_TRUE(running.active);
+  EXPECT_EQ(
+    running.phase,
+    cite_console_gui::validation_phase_name(cite_console_gui::ValidationPhase::RUNNING));
+  EXPECT_EQ(running.cycle, 2u);
+  EXPECT_EQ(running.cycles, 3u) << "phase 2 runs the goal's cycles";
+  EXPECT_FALSE(recorder.positions.back().active) << "the request ended and its position stayed";
+  // Its progress line is gone with it, and the outcome is the console's.
+  EXPECT_EQ(recorder.progress.back(), "") << "the progress line outlived its request";
+  EXPECT_EQ(
+    recorder.outcomes.back(),
+    "Validate then run: done. passed in simulation (1 cycle), then 3 cycle(s) on the twin "
+    "Ended in: Running twin. Cycles completed on the twin: 3.");
+}
+
+TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
+{
+  // T-05 (c, d): while a request runs, no earlier request's outcome is shown
+  // as the latest; once it has ended, its progress is not shown as ongoing.
+  const ConsoleNames names = names_for("outcome_cleared");
+  FakeConsole console(names, true, RunGoal::SUCCEED);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  EXPECT_EQ(
+    sent_once_served(recorder, [&]() {client.start_robot();}, &Recorder::outcomes),
+    "Start robot: done. fake start_robot");
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    ASSERT_GE(recorder.progress.size(), 2u);
+    EXPECT_EQ(recorder.progress[recorder.progress.size() - 2], "Start robot: sent.");
+    EXPECT_EQ(recorder.progress.back(), "") << "Start robot stayed 'sent' once it was done";
+  }
+
+  std::size_t before = 0;
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    before = recorder.outcomes.size();
+  }
+  client.run_program(1.0, ConsoleState::TARGET_SIM, 3);
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.outcomes.size() >= before + 2;}));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  EXPECT_EQ(recorder.outcomes[before], "") << "the last outcome was not cleared on sending";
+  EXPECT_EQ(recorder.outcomes[before + 1].rfind("Start program: done.", 0), 0u)
+    << recorder.outcomes[before + 1];
+  EXPECT_EQ(recorder.progress.back(), "");
+}
+
+TEST(ConsoleClient, ARunEndedByAStopIsSaidStoppedNotFailed)
+{
+  // T-05 (b): the console accepted the operator's Stop while the run was in
+  // flight, and the run then ended unsuccessfully: it was stopped.
+  const ConsoleNames names = names_for("stopped");
+  FakeConsole console(names, true, RunGoal::END_WHEN_STOPPED);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  EXPECT_EQ(
+    sent_once_served(
+      recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 2);},
+      &Recorder::progress),
+    "Start program: accepted.");
+  client.stop();
+  ASSERT_TRUE(
+    recorder.wait_for(
+      [&]() {
+        for (const auto & line : recorder.outcomes) {
+          if (line.rfind("Start program:", 0) == 0) {
+            return true;
+          }
+        }
+        return false;
+      }));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  std::string run_outcome;
+  for (const auto & line : recorder.outcomes) {
+    if (line.rfind("Start program:", 0) == 0) {
+      run_outcome = line;
+    }
+  }
+  EXPECT_EQ(
+    run_outcome,
+    "Start program: stopped. Start program was stopped; nothing homes on its own "
+    "Cycles completed: 0.");
 }
