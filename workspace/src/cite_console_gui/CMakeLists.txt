@@ -158,6 +158,9 @@ if(BUILD_TESTING)
     ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
   target_link_libraries(test_panel_qml CellConsole Qt5::Gui Qt5::Qml Qt5::Quick)
   set_target_properties(test_panel_qml PROPERTIES AUTOMOC ON)
+  # Where it writes its pictures of the frame unless CITE_PANEL_PNG_DIR says.
+  target_compile_definitions(test_panel_qml PRIVATE
+    CITE_PANEL_PNG_DEFAULT_DIR="${CMAKE_CURRENT_BINARY_DIR}/panel_png")
 
   # The frame's display rules (ADR-0074): the event log's ring, the twin
   # fidelity card ("Not measured" while a sample is not valid) and a request's
