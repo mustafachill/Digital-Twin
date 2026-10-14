@@ -14,7 +14,10 @@
 
 #include "cell_console.hpp"
 
+#include <QList>
 #include <QMetaObject>
+#include <QPointF>
+#include <QRectF>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTime>
@@ -24,6 +27,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <string>
@@ -40,6 +44,69 @@
 
 namespace cite_console_gui
 {
+
+namespace
+{
+
+/// Whether `item` is an ApplicationWindow's popup overlay that would keep a
+/// press: Qt Quick hands it every press first, and it lets one by unless a
+/// modal popup is open in it.
+bool overlay_keeps_the_press(const QQuickItem * item)
+{
+  if (std::strcmp(item->metaObject()->className(), "QQuickOverlay") != 0) {
+    return false;
+  }
+  for (const QQuickItem * popup : item->childItems()) {
+    if (popup->isVisible() && popup->parent() != nullptr &&
+      popup->parent()->property("modal").toBool())
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The item a left press at `scene` goes to first, under `item`; nullptr for
+/// none. Qt Quick 5.15's order (`QQuickWindowPrivate::pointerTargets`): a
+/// clipping item that does not contain the point hides its children; children
+/// in reverse paint order (z, then declaration), each visible and enabled;
+/// then the item itself if it contains the point and takes the left button.
+/// A MouseArea's own `enabled` shadows the item's: one set false is still
+/// handed the press, lets it go by, and the next item gets it; so does the
+/// popup overlay while no modal popup is open. `target`, and
+/// the items it is in, are walked whether enabled or not: what is asked is
+/// whether anything else would take its press.
+QQuickItem * first_press_target(QQuickItem * item, const QPointF & scene, QQuickItem * target)
+{
+  const QPointF local = item->mapFromScene(scene);
+  if (item->clip() && !item->contains(local)) {
+    return nullptr;
+  }
+  QList<QQuickItem *> children = item->childItems();
+  std::stable_sort(
+    children.begin(), children.end(),
+    [](const QQuickItem * a, const QQuickItem * b) {return a->z() < b->z();});
+  for (auto child = children.rbegin(); child != children.rend(); ++child) {
+    const bool on_the_way = *child == target || (*child)->isAncestorOf(target);
+    if (!(*child)->isVisible() || (!(*child)->isEnabled() && !on_the_way)) {
+      continue;
+    }
+    if (QQuickItem * found = first_press_target(*child, scene, target)) {
+      return found;
+    }
+  }
+  if (!item->contains(local)) {
+    return nullptr;
+  }
+  if (std::strcmp(item->metaObject()->className(), "QQuickOverlay") == 0) {
+    return overlay_keeps_the_press(item) ? item : nullptr;
+  }
+  const bool takes_it = (item->acceptedMouseButtons() & Qt::LeftButton) &&
+    item->property("enabled").toBool();
+  return item == target || takes_it ? item : nullptr;
+}
+
+}  // namespace
 
 CellConsole::CellConsole()
 : state_name_("No console")
@@ -407,6 +474,7 @@ void CellConsole::frame_window(QQuickWindow * window)
   }
   // Maximized, not fullscreen: the desktop's title bar and close stay.
   window->showMaximized();
+  emit windowShown();
 }
 
 HeartbeatView CellConsole::heartbeat_now() const
@@ -612,6 +680,24 @@ void CellConsole::selectPreset(int index)
   if (camera_ && index >= 0 && static_cast<std::size_t>(index) < view_config_.presets.size()) {
     camera_->move_to(view_config_.presets[static_cast<std::size_t>(index)].second);
   }
+}
+
+bool CellConsole::pressReaches(QQuickItem * target) const
+{
+  if (target == nullptr || target->window() == nullptr || target->width() <= 0.0 ||
+    target->height() <= 0.0)
+  {
+    return true;
+  }
+  const QPointF centre =
+    target->mapToScene(QPointF(target->width() / 2.0, target->height() / 2.0));
+  QQuickItem * root = target->window()->contentItem();
+  if (!QRectF(0.0, 0.0, root->width(), root->height()).contains(centre)) {
+    // Outside the window: a layout on its way somewhere, not one to judge.
+    return true;
+  }
+  QQuickItem * found = first_press_target(root, centre, target);
+  return found != nullptr && (found == target || target->isAncestorOf(found));
 }
 
 void CellConsole::followRobot()

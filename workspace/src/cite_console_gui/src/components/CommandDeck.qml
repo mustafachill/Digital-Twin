@@ -52,6 +52,8 @@ Rectangle {
   }
   readonly property string selectedSpeedText: speedText(selectedSpeed)
   signal viewChosen(string name)
+  // For the frame's check that a press on Stop reaches Stop (S-02).
+  readonly property alias stopButton: stop
 
   color: Theme.panel
   implicitHeight: Theme.deckHeight

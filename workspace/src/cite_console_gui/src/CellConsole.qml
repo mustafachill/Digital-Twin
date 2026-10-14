@@ -34,6 +34,16 @@
 // MouseAreas are disabled (gz-gui 8 internals, ADR-0074). This root accepts no
 // input; each opaque part takes the presses and the wheel that land on it.
 //
+// STOP COMES FIRST (S-02). That mask leans on how gz-gui builds its card: a
+// card that clipped its children to its shape would, masked, take every press
+// from every button in it. So once gz-gui's window is shown - every card in
+// its place; gz-gui docks a card off the window before it floats it - and
+// whenever the frame is laid out again after that, the plugin judges whether a
+// press at Stop's centre reaches Stop (`pressReaches`). If it does not, the
+// mask and the MouseAreas are put back as gz-gui made them and a warning is
+// printed: the scene loses the mouse over the middle, and the panel stays
+// usable.
+//
 // COLOUR IS FOR THE ABNORMAL (ISA-101). Every colour is in `Theme`.
 
 import QtQuick 2.9
@@ -67,6 +77,12 @@ Item {
     width: 0
     height: 0
   }
+  // The card the pass-through is applied to, and the MouseAreas of it that
+  // were disabled; null and empty while none is.
+  property var passCard: null
+  property var passAreas: []
+  // gz-gui's main window has been shown with this panel in it.
+  property bool windowShown: false
   function passMouseThrough() {
     // gz-gui's content item exposes its card (GzCard.qml); a parent that does
     // not - an offscreen test's - is left alone.
@@ -74,18 +90,48 @@ Item {
       return;
     }
     var card = frame.parent.card();
-    if (!card) {
+    if (!card || card === frame.passCard) {
       return;
     }
-    card.containmentMask = noInput;
+    var areas = [];
     var kids = card.contentItem ? card.contentItem.children : [];
     for (var i = 0; i < kids.length; ++i) {
-      if (String(kids[i]).indexOf("MouseArea") >= 0) {
+      if (String(kids[i]).indexOf("MouseArea") >= 0 && kids[i].enabled) {
         kids[i].enabled = false;
+        areas.push(kids[i]);
       }
     }
+    card.containmentMask = noInput;
+    frame.passCard = card;
+    frame.passAreas = areas;
+    checkStopReachable();
+  }
+  function checkStopReachable() {
+    if (!frame.windowShown || frame.passCard === null ||
+      CellConsole.pressReaches(deck.stopButton))
+    {
+      return;
+    }
+    frame.passCard.containmentMask = null;
+    for (var i = 0; i < frame.passAreas.length; ++i) {
+      frame.passAreas[i].enabled = true;
+    }
+    frame.passCard = null;
+    frame.passAreas = [];
+    console.warn("CellConsole: A PRESS ON STOP DID NOT REACH STOP with the mouse passed " +
+      "through to the 3D view, so the pass-through is undone: the panel takes the mouse " +
+      "over the whole view, and the scene gets none (ADR-0074, S-02).");
   }
   onParentChanged: passMouseThrough()
+  onWidthChanged: checkStopReachable()
+  onHeightChanged: checkStopReachable()
+  // Connected here rather than with Connections, whose function handlers
+  // need a newer QtQml than this file imports.
+  function onWindowShown() {
+    frame.windowShown = true;
+    frame.checkStopReachable();
+  }
+  Component.onCompleted: CellConsole.windowShown.connect(frame.onWindowShown)
 
   // -------------------------------------------------------------- the frame
   HeaderBar {

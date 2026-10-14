@@ -162,6 +162,18 @@ if(BUILD_TESTING)
   target_compile_definitions(test_panel_qml PRIVATE
     CITE_PANEL_PNG_DEFAULT_DIR="${CMAKE_CURRENT_BINARY_DIR}/panel_png")
 
+  # The panel in gz-gui's own main window and card (S-02): the mouse
+  # pass-through is applied to gz-gui's real card, and Stop still takes its
+  # press. Loaded through `gz::gui::Application`, as `gz sim` loads it.
+  ament_add_gtest(test_panel_in_gz_gui test/test_panel_in_gz_gui.cpp
+    SKIP_LINKING_MAIN_LIBRARIES
+    TIMEOUT 60
+    ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
+  target_link_libraries(test_panel_in_gz_gui CellConsole gz-gui::gz-gui Qt5::Gui Qt5::Quick)
+  set_target_properties(test_panel_in_gz_gui PROPERTIES AUTOMOC ON)
+  target_compile_definitions(test_panel_in_gz_gui PRIVATE
+    CITE_CELL_CONSOLE_DIR="$<TARGET_FILE_DIR:CellConsole>")
+
   # The frame's display rules (ADR-0074): the event log's ring, the twin
   # fidelity card ("Not measured" while a sample is not valid) and a request's
   # progress.

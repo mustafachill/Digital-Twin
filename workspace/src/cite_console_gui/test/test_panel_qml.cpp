@@ -59,6 +59,7 @@
 #include <QStringList>
 #include <QTest>
 #include <QtGlobal>
+#include <QUrl>
 
 #include <cmath>
 #include <cstring>
@@ -679,6 +680,170 @@ TEST(PanelQml, TheCyclesShownAreTheCyclesSent)
   QCoreApplication::processEvents();
   EXPECT_EQ(deck->property("cycles").toInt(), 7);
   EXPECT_TRUE(shown_is_sent());
+}
+
+namespace
+{
+
+/// A stand-in for gz-gui 8's GzCard as far as the frame touches it: a Pane
+/// whose content item holds a wheel-stopping MouseArea and a right-button
+/// MouseArea under a content Rectangle that offers `card()`. `%1` is whether
+/// the Pane clips its children to its shape - GzCard's does not.
+const char kStandInCard[] = R"(
+import QtQuick 2.9
+import QtQuick.Controls 2.2
+Pane {
+  id: cardPane
+  padding: 0
+  clip: %1
+  background: Rectangle { color: "transparent" }
+  MouseArea { anchors.fill: parent; onWheel: wheel.accepted = true }
+  MouseArea { anchors.fill: content; acceptedButtons: Qt.RightButton }
+  Rectangle {
+    objectName: "content"
+    id: content
+    anchors.fill: parent
+    clip: true
+    color: "transparent"
+    function card() { return cardPane; }
+  }
+}
+)";
+
+/// The panel inside a stand-in card, the card filling a window of 1920x1080.
+class Carded
+{
+public:
+  explicit Carded(bool clipping)
+  {
+    context = std::make_unique<QQmlContext>(engine.rootContext());
+    context->setContextProperty("CellConsole", &plugin);
+    window.resize(1920, 1080);
+    QQmlComponent card_component(&engine);
+    card_component.setData(
+      QString::fromUtf8(kStandInCard).arg(clipping ? "true" : "false").toUtf8(), QUrl());
+    card_created.reset(card_component.create(context.get()));
+    card = qobject_cast<QQuickItem *>(card_created.get());
+    if (card == nullptr) {
+      ADD_FAILURE() << describe(card_component.errors()).join("\n").toStdString();
+      return;
+    }
+    card->setParentItem(window.contentItem());
+    card->setSize(QSizeF(1920.0, 1080.0));
+    window.show();
+    QCoreApplication::processEvents();
+
+    QQmlComponent component(&engine, QString(kPanel));
+    created.reset(component.beginCreate(context.get()));
+    panel = qobject_cast<QQuickItem *>(created.get());
+    if (panel == nullptr) {
+      ADD_FAILURE() << describe(component.errors()).join("\n").toStdString();
+      return;
+    }
+    // As gz-gui adds a plugin's item to its card's content.
+    panel->setParentItem(card->findChild<QQuickItem *>("content"));
+    component.completeCreate();
+    QCoreApplication::processEvents();
+    // As the plugin says once gz-gui's main window is shown with it.
+    emit plugin.windowShown();
+    QCoreApplication::processEvents();
+  }
+
+  cite_console_gui::CellConsole plugin;
+  QQmlEngine engine;
+  std::unique_ptr<QQmlContext> context;
+  QQuickWindow window;
+  std::unique_ptr<QObject> card_created;
+  std::unique_ptr<QObject> created;
+  QQuickItem * card{nullptr};
+  QQuickItem * panel{nullptr};
+};
+
+/// Whether `item` is a MouseArea that handles a press: MouseArea's own
+/// `enabled`, which shadows the item's.
+bool enabled_mouse_area(const QQuickItem * item)
+{
+  return QString(item->metaObject()->className()).startsWith("QQuickMouseArea") &&
+         item->property("enabled").toBool();
+}
+
+}  // namespace
+
+// S-02: in a card shaped like gz-gui's, the mouse is passed through to the
+// scene and a press on Stop still reaches Stop.
+TEST(PanelQml, InACardLikeGzGuisStopTakesItsPressAndTheMiddleIsPassedThrough)
+{
+  Carded carded(false);
+  ASSERT_NE(carded.panel, nullptr);
+  auto * stop = carded.panel->findChild<QQuickItem *>("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_TRUE(carded.plugin.pressReaches(stop));
+  EXPECT_NE(carded.card->property("containmentMask").value<QObject *>(), nullptr)
+    << "the card was not given its empty mask";
+  EXPECT_EQ(carded.panel->property("passCard").value<QObject *>(), carded.card);
+  for (QQuickItem * item : descendants(carded.card)) {
+    if (item != carded.panel && !carded.panel->isAncestorOf(item)) {
+      EXPECT_FALSE(enabled_mouse_area(item)) << "a card MouseArea still takes the mouse";
+    }
+  }
+}
+
+// S-02: a card that clips its children to its shape takes, once masked, every
+// press from every button in it. The frame finds Stop unreachable, puts the
+// card back as it was and says so: Stop over camera interaction.
+TEST(PanelQml, InACardThatWouldHideStopThePassThroughIsUndone)
+{
+  Carded carded(true);
+  ASSERT_NE(carded.panel, nullptr);
+  auto * stop = carded.panel->findChild<QQuickItem *>("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_EQ(carded.card->property("containmentMask").value<QObject *>(), nullptr)
+    << "the mask that hides Stop was kept";
+  EXPECT_EQ(carded.panel->property("passCard").value<QObject *>(), nullptr);
+  EXPECT_TRUE(carded.plugin.pressReaches(stop)) << "Stop does not take its press";
+  int areas = 0;
+  for (QQuickItem * item : descendants(carded.card)) {
+    if (item != carded.panel && !carded.panel->isAncestorOf(item) && enabled_mouse_area(item)) {
+      ++areas;
+    }
+  }
+  EXPECT_EQ(areas, 2) << "the card's own MouseAreas were not put back";
+}
+
+// The judge itself: an item laid over Stop that takes the left button is what
+// a press reaches, and one that takes no button is not.
+TEST(PanelQml, APressReachesTheItemOnTopThatTakesIt)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  auto * stop = framed.find("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_TRUE(framed.plugin.pressReaches(stop));
+
+  QQuickItem cover;
+  cover.setParentItem(framed.window.contentItem());
+  cover.setZ(10.0);
+  cover.setSize(QSizeF(1920.0, 1080.0));
+  EXPECT_TRUE(framed.plugin.pressReaches(stop)) << "an item that takes no button took it";
+  cover.setAcceptedMouseButtons(Qt::LeftButton);
+  EXPECT_FALSE(framed.plugin.pressReaches(stop)) << "the item on top was not seen";
+  // A MouseArea whose own `enabled` is false is handed the press and lets it
+  // go by: it does not keep the press from Stop.
+  QQmlComponent area_component(&framed.engine);
+  area_component.setData(
+    "import QtQuick 2.9\nMouseArea { width: 1920; height: 1080; z: 11; enabled: false }",
+    QUrl());
+  std::unique_ptr<QObject> area_created(area_component.create(framed.context.get()));
+  auto * area = qobject_cast<QQuickItem *>(area_created.get());
+  ASSERT_NE(area, nullptr);
+  cover.setVisible(false);
+  area->setParentItem(framed.window.contentItem());
+  EXPECT_TRUE(framed.plugin.pressReaches(stop)) << "a disabled MouseArea was taken for a taker";
+  area->setProperty("enabled", true);
+  EXPECT_FALSE(framed.plugin.pressReaches(stop)) << "an enabled MouseArea on top was not seen";
+  area->setVisible(false);
+  cover.setVisible(false);
+  EXPECT_TRUE(framed.plugin.pressReaches(stop));
 }
 
 int main(int argc, char ** argv)

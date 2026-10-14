@@ -260,6 +260,15 @@ public:
   /// Move to `viewPresets[index]`; ignored for an index it does not have.
   Q_INVOKABLE void selectPreset(int index);
   Q_INVOKABLE void followRobot();
+  /// Whether a left press at the centre of `target` would be delivered to it
+  /// before any other item of its window, picked as Qt Quick 5.15 picks a
+  /// press's item (`QQuickWindowPrivate::pointerTargets`): items in reverse
+  /// paint order, a clipping item's children only inside its `contains`, and
+  /// the first visible, enabled item that contains the point and takes the
+  /// left button. `target` itself is judged by where it is, enabled or not.
+  /// True while it cannot be judged: no window, no size, or its centre outside
+  /// the window (S-02).
+  Q_INVOKABLE bool pressReaches(QQuickItem * target) const;
 
 signals:
   void viewChanged();
@@ -271,6 +280,9 @@ signals:
   void runProgressChanged();
   void fidelityChanged();
   void eventLogChanged();
+  /// gz-gui's main window that shows the panel is visible and framed: every
+  /// card is in place, so what a press reaches can be judged (S-02).
+  void windowShown();
 
 private:
   /// The QML tests' way in: they show the frame as a heard console, a
