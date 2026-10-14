@@ -39,6 +39,8 @@ Rectangle {
 
   QtObject {
     id: theme
+    // No name here starts with `on` and a capital: QML reads one as a signal
+    // handler, refuses the assignment, and the panel is never instantiated.
     // Normal: greys only.
     readonly property color background: "#ececec"
     readonly property color surface: "#f5f5f5"
@@ -46,12 +48,12 @@ Rectangle {
     readonly property color text: "#1c1c1c"
     readonly property color muted: "#5c5c5c"
     readonly property color strong: "#3a3a3a"
-    readonly property color onStrong: "#ffffff"
+    readonly property color textOnStrong: "#ffffff"
     // Abnormal only.
     readonly property color alarm: "#c62828"      // FAULT, a refusal, a view failure
     readonly property color warning: "#e65100"    // a side abnormal; a physical side commanded
     readonly property color attention: "#1565c0"  // the console asks the operator to act
-    readonly property color onColour: "#ffffff"
+    readonly property color textOnColour: "#ffffff"
   }
 
   // The program's own speed, preselected (ADR-0071 decision 2).
@@ -244,7 +246,7 @@ Rectangle {
                 Label {
                   id: badge
                   anchors.centerIn: parent
-                  color: theme.onStrong
+                  color: theme.textOnStrong
                   font.bold: true
                   textFormat: Text.PlainText
                   text: modelData + " PHYSICAL"
@@ -521,7 +523,7 @@ Rectangle {
       font.bold: true
       enabled: CellConsole.stopEnabled
       Material.background: theme.strong
-      Material.foreground: theme.onStrong
+      Material.foreground: theme.textOnStrong
       onClicked: CellConsole.stop()
     }
   }

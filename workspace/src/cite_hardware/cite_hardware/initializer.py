@@ -489,18 +489,30 @@ class Initializer(LifecycleNode):
         Every request stays pending, so whichever is answered first counts; all
         still pending are removed on return. ``resend=False`` sends once and
         waits for that answer until ``deadline``. A refusal (`ret != 0`) is final.
+
+        Nothing is sent once ``deadline`` has passed, and the vendor is said not to
+        have answered only when its first request went unanswered for a whole
+        `call_deadline_s`. A request the whole request's deadline cut short is the
+        initialization not done in time, not the vendor late: the read a homing
+        poll sends on the deadline used to be blamed on the vendor whenever its
+        answer took longer than the timer that ended the wait (T-03).
         """
         config = self._config
         assert config is not None
         client = self._vendor_clients[key]
         sent: list[Future] = []
+        first_sent_at = None
         try:
             while not client.service_is_ready():
                 if self._now() >= deadline:
                     raise InitializeFailed(f"{client.srv_name} never matched this client")
                 await self._pause(config["poll_period_s"], deadline)
             while True:
+                if self._now() >= deadline:
+                    raise InitializeFailed(self._not_done_within())
                 sent.append(client.call_async(request))
+                if first_sent_at is None:
+                    first_sent_at = self._now()
                 resend_at = deadline if not resend else min(
                     deadline, self._now() + config["call_deadline_s"]
                 )
@@ -508,6 +520,8 @@ class Initializer(LifecycleNode):
                 if answered is not None:
                     break
                 if self._now() >= deadline:
+                    if self._now() - first_sent_at < config["call_deadline_s"]:
+                        raise InitializeFailed(self._not_done_within())
                     raise InitializeFailed(f"the vendor did not answer {label} in time")
         finally:
             for future in sent:
@@ -535,13 +549,18 @@ class Initializer(LifecycleNode):
 
     async def _pause(self, seconds: float, deadline: float) -> None:
         if self._now() >= deadline:
-            raise InitializeFailed(f"not done within {self._config['deadline_s']:g} s")
+            raise InitializeFailed(self._not_done_within())
         woken = Future()
         timer = self._wake_at(woken, min(deadline, self._now() + seconds))
         try:
             await woken
         finally:
             self.destroy_timer(timer)
+
+    def _not_done_within(self) -> str:
+        config = self._config
+        assert config is not None
+        return f"not done within {config['deadline_s']:g} s"
 
     def _wake_at(self, future: Future, when: float):
         """Return a timer that completes ``future`` once ``when`` (steady seconds) passed."""

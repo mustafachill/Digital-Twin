@@ -51,6 +51,9 @@ DEADMAN = "/test/deadman_state"
 SERVICE = "/test/picker/initialize"
 #: Short, so the case that never homes ends quickly; a ceiling, not a schedule.
 DEADLINE_S = 3.0
+#: How far either side of the deadline a zero read is held; well inside
+#: `call_deadline_s`, so a held read is late for the deadline and never for itself.
+HOLD_S = 0.05
 
 PARAMETERS = {
     "service_name": SERVICE,
@@ -97,6 +100,15 @@ class TestInitializer(unittest.TestCase):
         #: While set, every zero read is answered only once this steady time
         #: has passed: the deadman's state has then aged past its bound.
         cls.hold_zero_until = None
+        #: While set, the steady time the enable arrived at; every zero read that
+        #: arrives in the last `HOLD_S` before that time plus the deadline is
+        #: answered only `HOLD_S` after it. The initializer's deadline is no later
+        #: than that: it is taken before the enable is sent.
+        cls.hold_reads_at_the_deadline = False
+        cls.enabled_at = None
+        #: One entry per zero read that reached the hook while the above is set,
+        #: so the test can wait for every held read to have been recorded.
+        cls.zero_reads_arrived = []
         cls.vendor = FakeTrackInit(cls.harness, VENDOR, on_call=cls._on_vendor_call)
         cls.track = FakeTrack(cls.harness, VENDOR)
         cls.deadman = FakeDeadman(cls.harness, DEADMAN)
@@ -111,9 +123,22 @@ class TestInitializer(unittest.TestCase):
         until = cls.hold_zero_until
         if name == FakeTrackInit.ON_ZERO and until is not None:
             Harness.wait_for(lambda: time.monotonic() > until, "the deadman state aged")
+        if cls.hold_reads_at_the_deadline:
+            if name == FakeTrackInit.ENABLE:
+                cls.enabled_at = time.monotonic()
+            elif name == FakeTrackInit.ON_ZERO and cls.enabled_at is not None:
+                cls.zero_reads_arrived.append(name)
+                deadline = cls.enabled_at + DEADLINE_S
+                if time.monotonic() >= deadline - HOLD_S:
+                    Harness.wait_for(
+                        lambda: time.monotonic() > deadline + HOLD_S, "the deadline passed"
+                    )
 
     def setUp(self):
         type(self).hold_zero_until = None
+        type(self).hold_reads_at_the_deadline = False
+        type(self).enabled_at = None
+        type(self).zero_reads_arrived = []
         self.track.position_mm = 0
         self.track.arrives = True
         self.track.answer_get.set()
@@ -273,6 +298,31 @@ class TestInitializer(unittest.TestCase):
         self.assertIn("set_linear_motor_stop sent", response.detail)
         self.harness.wait_for(lambda: self.track.stops == stops + 1, "the track stopped")
         self.assertEqual(self._sent().count(FakeTrackInit.HOME), 1)
+
+    def test_a_read_the_deadline_cuts_short_is_not_blamed_on_the_vendor(self):
+        """The homing not done in time, not the vendor late (T-03).
+
+        The zero reads at the deadline are answered after it, but well within
+        their own `call_deadline_s`. The poll that sent one used to answer
+        "the vendor did not answer get_linear_motor_on_zero in time", which is
+        what made the case above intermittent under load.
+        """
+        self.vendor.homes = False
+        type(self).hold_reads_at_the_deadline = True
+        stops = self.track.stops
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("not done within", response.detail)
+        self.assertNotIn("did not answer", response.detail)
+        self.harness.wait_for(lambda: self.track.stops == stops + 1, "the track stopped")
+        self.assertEqual(self._sent().count(FakeTrackInit.HOME), 1)
+        # A held read is recorded when its hold ends, after the answer above:
+        # waited for here, so it is not recorded into the next test's calls.
+        self.harness.wait_for(
+            lambda: self._sent().count(FakeTrackInit.ON_ZERO)
+            == len(type(self).zero_reads_arrived),
+            "every held zero read recorded",
+        )
 
     def test_each_refused_step_ends_the_initialization_there(self):
         for service in (
