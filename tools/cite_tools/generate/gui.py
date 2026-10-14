@@ -37,9 +37,10 @@ here.
 THE PLANT'S WINDOW IS THE OPERATOR WINDOW (ADR-0074). Its panel frames the 3D
 view, and its configuration drops every tool that edits the world or its run
 (the template's `console` branch); the panel's header is handed the facility's
-and the zone's labels (`facility_label`, `zone_label`) and the gz-transport
-topic the world publishes its statistics on (`world_stats_topic`), each derived
-here from L0 rather than written in the panel (P1). A counterpart's window is
+and the zone's labels (`facility_label`, `zone_label`), the gz-transport topic
+the world publishes its statistics on (`world_stats_topic`) and how long the
+header shows them as current with none heard (`world_stats_stale_after_s`), each
+stated here rather than written in the panel (P1). A counterpart's window is
 Harmonic's default, unchanged.
 
 The camera stands on the CUSTOMER side of the line: across it from the arms,
@@ -242,6 +243,18 @@ def follow_target(cell: ResolvedCell) -> str:
     return f"{first.id}{RENDERING_SCOPE}{first.axis.carriage_link}"
 
 
+def follow_label(cell: ResolvedCell) -> str:
+    """What the panel calls the node `follow_target` names: "picker carriage".
+
+    The asset's id in words, and "carriage" where the arm rides a track and
+    the carriage is what is followed. L0 gives an asset no label of its own, so
+    this is derived from the id rather than written in the panel (P1).
+    """
+    (first, *_) = cell.of_category("robot")
+    words = first.id.replace("_", " ")
+    return words if first.axis is None else f"{words} carriage"
+
+
 def heartbeat_stale_after_s(cell: ResolvedCell) -> float:
     """How long the panel lets the boundary's heartbeat go unheard (ADR-0070 item 5).
 
@@ -303,16 +316,26 @@ def world_stats_topic(cell: ResolvedCell) -> str:
     return WORLD_STATS_TOPIC.format(world=cell.zone)
 
 
+#: How long the panel's header shows sim time and RTF as current with no world
+#: statistics heard, in seconds. gz-sim 8 throttles the statistics it publishes
+#: to five a second (`SimulationRunner`, read from its source and not measured
+#: here), paused or not, so this is five of them missed in a row. A display
+#: threshold only: nothing waits for it and it gates nothing.
+WORLD_STATS_STALE_AFTER_S = 1.0
+
+
 def panel_parameters(cell: ResolvedCell) -> dict[str, object]:
     """Everything the panel is handed besides the console's names and its home view."""
     return {
         "presets": camera_presets(cell),
         "follow_target": follow_target(cell),
+        "follow_label": follow_label(cell),
         "twin_sides": " ".join(side.name for side in cell.sides),
         "heartbeat_stale_after_s": heartbeat_stale_after_s(cell),
         "facility_label": facility_label(cell),
         "zone_label": zone_label(cell),
         "world_stats_topic": world_stats_topic(cell),
+        "world_stats_stale_after_s": WORLD_STATS_STALE_AFTER_S,
     }
 
 

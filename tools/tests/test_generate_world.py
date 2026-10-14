@@ -459,9 +459,11 @@ HARMONIC_DEFAULTS = frozenset(
     }
 )
 
-#: What the operator window keeps of them (ADR-0074): the scene, the camera's
-#: controls - CameraTracking serves the panel's view buttons - and selection.
-#: Everything that edits the world or its run is gone.
+#: What the operator window keeps of them (ADR-0074): the scene and the
+#: camera's controls - CameraTracking serves the panel's view buttons.
+#: Everything that edits the world or its run is gone, and so is selection
+#: (T-06: a left click left a selection box on the scene, and nothing in the
+#: operator window selects).
 OPERATOR_WINDOW_PLUGINS = frozenset(
     {
         "MinimalScene",
@@ -469,7 +471,6 @@ OPERATOR_WINDOW_PLUGINS = frozenset(
         "InteractiveViewControl",
         "CameraTracking",
         "MarkerManager",
-        "SelectEntities",
     }
 )
 
@@ -621,6 +622,14 @@ class TestOnlyThePlantsWindowCarriesTheConsole:
         assets = tuple(bolted if a.id == arm.id else a for a in zone_cell.assets)
         cell = dataclasses.replace(zone_cell, assets=assets)
         assert gui.follow_target(cell) == arm.id
+        assert gui.follow_label(cell) == arm.id.replace("_", " ")
+
+    def test_the_followed_node_is_named_in_words(self, zone_cell) -> None:
+        # R-05: the panel says what it follows from this, never a literal.
+        (arm, *_) = zone_cell.of_category("robot")
+        assert arm.axis is not None, "the shipped arm rides a track; this test needs it to"
+        label = self._panel(zone_cell).findtext("follow_label")
+        assert label == gui.follow_label(zone_cell) == f"{arm.id.replace('_', ' ')} carriage"
 
     def test_the_panel_is_handed_the_sides_and_the_stale_threshold(self, zone_cell) -> None:
         panel = self._panel(zone_cell)
@@ -708,6 +717,10 @@ class TestThePlantsWindowIsTheOperatorWindow:
         # for the zone, and gz-sim publishes its statistics under that name.
         world_name = world_xml(zone_cell).get("name")
         assert panel.findtext("world_stats_topic") == f"/world/{world_name}/stats"
+        # R-06: how long sim time and RTF are shown as current with none heard.
+        assert float(panel.findtext("world_stats_stale_after_s")) == pytest.approx(
+            gui.WORLD_STATS_STALE_AFTER_S
+        )
 
     def test_a_zone_label_is_its_id_in_words(self, zone_cell) -> None:
         assert gui.zone_label(dataclasses.replace(zone_cell, zone="cell_b")) == "Cell B"

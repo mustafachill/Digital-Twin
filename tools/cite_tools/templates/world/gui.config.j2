@@ -6,7 +6,9 @@
      (gz-sim8, gui/gui.config) less every tool that edits the world or its run -
      Spawn, Shapes, Lights, TransformControl, CopyPaste, Screenshot, the entity
      context menu and its VisualizationCapabilities, WorldControl and
-     WorldStats - so the world cannot be edited from the operator window. Sim
+     WorldStats - so the world cannot be edited from the operator window, and
+     less SelectEntities, whose left-click selection left a box on the scene
+     that nothing in this window uses. Sim
      time and RTF are in the panel's header. The window is dark, its menus are
      hidden, and the panel hides gz-gui's title toolbar and maximizes the window
      when it is shown. The 3D view's camera_pose is derived from where L0 places
@@ -134,6 +136,7 @@
     <property key="showTitleBar" type="bool">false</property>
   </gz-gui>
 </plugin>
+{% if not console %}
 <plugin filename="SelectEntities" name="Select Entities">
   <gz-gui>
     <property key="resizable" type="bool">false</property>
@@ -143,6 +146,7 @@
     <property key="showTitleBar" type="bool">false</property>
   </gz-gui>
 </plugin>
+{% endif %}
 
 {% if not console %}
 <plugin filename="Spawn" name="Spawn Entities">
@@ -322,11 +326,13 @@
        from where L0 places this zone's assets, and the rendering node its
        "Follow robot" asks CameraTracking to follow (`follow_target`): the link
        that rides the arm's track, scoped by the arm's model name, since the
-       model's own root is welded to the world. They move the 3D view only. -->
+       model's own root is welded to the world, and the words the panel names
+       that node with (`follow_label`). They move the 3D view only. -->
 {% for key, pose in panel.presets %}
   <{{ key }}>{{ [pose.x, pose.y, pose.z, pose.roll, pose.pitch, pose.yaw] | map("m") | join(" ") }}</{{ key }}>
 {% endfor %}
   <follow_target>{{ panel.follow_target | xml }}</follow_target>
+  <follow_label>{{ panel.follow_label | xml }}</follow_label>
 
   <!-- What the panel shows of each side's connection: the sides this pair
        runs, and how long the twin boundary's heartbeat may go unheard before
@@ -336,10 +342,12 @@
   <heartbeat_stale_after_s>{{ panel.heartbeat_stale_after_s | m }}</heartbeat_stale_after_s>
 
   <!-- What the panel's header names and shows (ADR-0074): the facility and the
-       zone, and the gz-transport topic the world publishes its statistics on
-       (sim time, RTF), the world being named for the zone. Display only. -->
+       zone, the gz-transport topic the world publishes its statistics on
+       (sim time, RTF), the world being named for the zone, and how long the
+       header shows them as current with none heard. Display only. -->
   <facility_label>{{ panel.facility_label | xml }}</facility_label>
   <zone_label>{{ panel.zone_label | xml }}</zone_label>
   <world_stats_topic>{{ panel.world_stats_topic | xml }}</world_stats_topic>
+  <world_stats_stale_after_s>{{ panel.world_stats_stale_after_s | m }}</world_stats_stale_after_s>
 </plugin>
 {% endif %}

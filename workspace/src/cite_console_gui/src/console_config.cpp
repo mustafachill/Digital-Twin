@@ -41,8 +41,9 @@ std::string joined(const std::vector<std::string> & items)
 
 bool is_known(const char * name)
 {
-  for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_TARGET_KEY, TWIN_SIDES_KEY,
-      HEARTBEAT_STALE_AFTER_KEY, FACILITY_LABEL_KEY, ZONE_LABEL_KEY, WORLD_STATS_TOPIC_KEY})
+  for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_TARGET_KEY,
+      FOLLOW_LABEL_KEY, TWIN_SIDES_KEY, HEARTBEAT_STALE_AFTER_KEY, FACILITY_LABEL_KEY,
+      ZONE_LABEL_KEY, WORLD_STATS_TOPIC_KEY, WORLD_STATS_STALE_AFTER_KEY})
   {
     if (std::strcmp(name, key) == 0) {
       return true;
@@ -79,6 +80,26 @@ std::string unnamed(const char * key)
 {
   return std::string("The GUI configuration names no ") + key +
          " for this panel. Regenerate it: ./scripts/validate-model --write";
+}
+
+/// Read the `key` child of `plugin_element` as one positive, finite number of
+/// seconds into `seconds`. Returns what is wrong, or an empty string.
+std::string read_seconds(
+  const tinyxml2::XMLElement * plugin_element, const char * key, double & seconds)
+{
+  const char * text = child_text(plugin_element, key);
+  if (text == nullptr) {
+    return unnamed(key);
+  }
+  std::istringstream stream{std::string(text)};
+  stream.imbue(std::locale::classic());
+  double read = 0.0;
+  if (!(stream >> read) || !std::isfinite(read) || read <= 0.0 || !(stream >> std::ws).eof()) {
+    return std::string("The GUI configuration's ") + key + " '" + text +
+           "' is not one positive, finite number of seconds.";
+  }
+  seconds = read;
+  return "";
 }
 
 }  // namespace
@@ -181,6 +202,12 @@ std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewCo
   }
   read.follow_target = target;
 
+  const char * label = child_text(plugin_element, FOLLOW_LABEL_KEY);
+  if (blank(label)) {
+    return unnamed(FOLLOW_LABEL_KEY);
+  }
+  read.follow_label = label;
+
   const char * sides = child_text(plugin_element, TWIN_SIDES_KEY);
   if (sides != nullptr) {
     std::istringstream stream{std::string(sides)};
@@ -192,20 +219,11 @@ std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewCo
     return unnamed(TWIN_SIDES_KEY);
   }
 
-  const char * stale = child_text(plugin_element, HEARTBEAT_STALE_AFTER_KEY);
-  if (stale == nullptr) {
-    return unnamed(HEARTBEAT_STALE_AFTER_KEY);
+  const std::string stale =
+    read_seconds(plugin_element, HEARTBEAT_STALE_AFTER_KEY, read.heartbeat_stale_after_s);
+  if (!stale.empty()) {
+    return stale;
   }
-  std::istringstream stream{std::string(stale)};
-  stream.imbue(std::locale::classic());
-  double seconds = 0.0;
-  if (!(stream >> seconds) || !std::isfinite(seconds) || seconds <= 0.0 ||
-    !(stream >> std::ws).eof())
-  {
-    return std::string("The GUI configuration's ") + HEARTBEAT_STALE_AFTER_KEY + " '" + stale +
-           "' is not one positive, finite number of seconds.";
-  }
-  read.heartbeat_stale_after_s = seconds;
 
   config = std::move(read);
   return "";
@@ -224,6 +242,11 @@ std::string read_frame_config(const tinyxml2::XMLElement * plugin_element, Frame
       return unnamed(key);
     }
     *value = text;
+  }
+  const std::string stale =
+    read_seconds(plugin_element, WORLD_STATS_STALE_AFTER_KEY, read.world_stats_stale_after_s);
+  if (!stale.empty()) {
+    return stale;
   }
   config = std::move(read);
   return "";

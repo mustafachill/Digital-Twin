@@ -72,6 +72,10 @@ constexpr std::array<CameraPresetKey, 3> CAMERA_PRESET_KEYS = {{
 /// to the world, so a camera following it would never move.
 constexpr const char * FOLLOW_TARGET_KEY = "follow_target";
 
+/// What the panel calls that node, "picker carriage" (generate/gui.py
+/// `follow_label`): the middle's label says "Following <it>".
+constexpr const char * FOLLOW_LABEL_KEY = "follow_label";
+
 /// The pair's side names, space-separated, by the names TwinSides uses.
 constexpr const char * TWIN_SIDES_KEY = "twin_sides";
 
@@ -89,12 +93,17 @@ constexpr const char * ZONE_LABEL_KEY = "zone_label";
 /// time and RTF (generate/gui.py `world_stats_topic`). Display only.
 constexpr const char * WORLD_STATS_TOPIC_KEY = "world_stats_topic";
 
+/// Seconds the header shows sim time and RTF as current with no world
+/// statistics heard (generate/gui.py `WORLD_STATS_STALE_AFTER_S`). Display only.
+constexpr const char * WORLD_STATS_STALE_AFTER_KEY = "world_stats_stale_after_s";
+
 /// What the frame's header shows besides the console's state (ADR-0074).
 struct FrameConfig
 {
   std::string facility_label;
   std::string zone_label;
   std::string world_stats_topic;
+  double world_stats_stale_after_s{0.0};
 };
 
 /// The panel's views and connection display, as the configuration gives them.
@@ -103,6 +112,7 @@ struct ViewConfig
   /// Each preset's label and pose, in `CAMERA_PRESET_KEYS` order.
   std::vector<std::pair<std::string, CameraPose>> presets;
   std::string follow_target;
+  std::string follow_label;
   std::vector<std::string> twin_sides;
   double heartbeat_stale_after_s{0.0};
 };
@@ -126,15 +136,17 @@ std::string read_home_camera_pose(const tinyxml2::XMLElement * plugin_element, C
 std::string read_camera_pose(
   const tinyxml2::XMLElement * plugin_element, const char * key, CameraPose & pose);
 
-/// Fill `config` from `plugin_element`: every preset pose, the follow target,
-/// the side names (at least one) and a positive, finite stale threshold.
+/// Fill `config` from `plugin_element`: every preset pose, the follow target
+/// and its label, the side names (at least one) and a positive, finite stale
+/// threshold.
 /// Returns what is wrong, or an empty string when nothing is; on a problem
 /// `config` is left untouched.
 std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewConfig & config);
 
 /// Fill `config` from `plugin_element`: the facility and zone labels and the
-/// world statistics topic, each non-empty. Returns what is wrong, or an empty
-/// string when nothing is; on a problem `config` is left untouched.
+/// world statistics topic, each non-empty, and a positive, finite threshold
+/// for showing the statistics stale. Returns what is wrong, or an empty string
+/// when nothing is; on a problem `config` is left untouched.
 std::string read_frame_config(const tinyxml2::XMLElement * plugin_element, FrameConfig & config);
 
 }  // namespace cite_console_gui

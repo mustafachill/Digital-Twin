@@ -38,6 +38,7 @@ using cite_console_gui::CameraPose;
 using cite_console_gui::CONSOLE_KEYS;
 using cite_console_gui::ConsoleNames;
 using cite_console_gui::FACILITY_LABEL_KEY;
+using cite_console_gui::FOLLOW_LABEL_KEY;
 using cite_console_gui::FOLLOW_TARGET_KEY;
 using cite_console_gui::FrameConfig;
 using cite_console_gui::GZ_GUI_ELEMENT;
@@ -49,6 +50,7 @@ using cite_console_gui::read_home_camera_pose;
 using cite_console_gui::read_view_config;
 using cite_console_gui::TWIN_SIDES_KEY;
 using cite_console_gui::ViewConfig;
+using cite_console_gui::WORLD_STATS_STALE_AFTER_KEY;
 using cite_console_gui::WORLD_STATS_TOPIC_KEY;
 using cite_console_gui::ZONE_LABEL_KEY;
 
@@ -84,11 +86,13 @@ std::set<std::string> keys()
     all.insert(preset.key);
   }
   all.insert(FOLLOW_TARGET_KEY);
+  all.insert(FOLLOW_LABEL_KEY);
   all.insert(TWIN_SIDES_KEY);
   all.insert(HEARTBEAT_STALE_AFTER_KEY);
   all.insert(FACILITY_LABEL_KEY);
   all.insert(ZONE_LABEL_KEY);
   all.insert(WORLD_STATS_TOPIC_KEY);
+  all.insert(WORLD_STATS_STALE_AFTER_KEY);
   return all;
 }
 
@@ -104,11 +108,13 @@ const char * const ALL_VIEWS =
   "<side_camera_pose>4 2 1 0 0.26 3.14</side_camera_pose>"
   "<front_camera_pose>1 0 1 0 0.26 1.57</front_camera_pose>"
   "<follow_target>picker::picker_track_carriage</follow_target>"
+  "<follow_label>picker carriage</follow_label>"
   "<twin_sides>plant counterpart</twin_sides>"
   "<heartbeat_stale_after_s>0.5</heartbeat_stale_after_s>"
   "<facility_label>CITE</facility_label>"
   "<zone_label>Cell B</zone_label>"
-  "<world_stats_topic>/world/cell_b/stats</world_stats_topic>";
+  "<world_stats_topic>/world/cell_b/stats</world_stats_topic>"
+  "<world_stats_stale_after_s>1</world_stats_stale_after_s>";
 
 /// A panel element with every name and view, `replace` swapped for `with`.
 std::string panel_with(const std::string & replace = "", const std::string & with = "")
@@ -195,12 +201,14 @@ TEST(ConsoleConfig, TheInstalledPlantConfigurationGivesThePanelExactlyItsKeys)
       EXPECT_EQ(read_view_config(plugin, view), "") << path;
       EXPECT_EQ(view.presets.size(), CAMERA_PRESET_KEYS.size()) << path;
       EXPECT_FALSE(view.follow_target.empty()) << path;
+      EXPECT_FALSE(view.follow_label.empty()) << path;
       EXPECT_GE(view.twin_sides.size(), 1u) << path;
       EXPECT_GT(view.heartbeat_stale_after_s, 0.0) << path;
       // The header's labels and the world's statistics topic (ADR-0074).
       FrameConfig frame;
       EXPECT_EQ(read_frame_config(plugin, frame), "") << path;
       EXPECT_EQ(frame.world_stats_topic.rfind("/world/", 0), 0u) << path;
+      EXPECT_GT(frame.world_stats_stale_after_s, 0.0) << path;
     }
   }
   // Only the plant's window of a paired zone carries the panel, and L0
@@ -332,6 +340,7 @@ TEST(ViewConfig, ACompleteConfigurationIsReadInOrder)
   EXPECT_DOUBLE_EQ(view.presets[1].second.x, 4.0);
   EXPECT_DOUBLE_EQ(view.presets[2].second.pitch, 0.26);
   EXPECT_EQ(view.follow_target, "picker::picker_track_carriage");
+  EXPECT_EQ(view.follow_label, "picker carriage");
   EXPECT_EQ(view.twin_sides, (std::vector<std::string>{"plant", "counterpart"}));
   EXPECT_DOUBLE_EQ(view.heartbeat_stale_after_s, 0.5);
 }
@@ -354,6 +363,9 @@ TEST(ViewConfig, EachMissingOrMalformedValueIsNamedAndChangesNothing)
       "names no follow_target"},
     {"<follow_target>picker::picker_track_carriage</follow_target>",
       "<follow_target> </follow_target>", "follow_target"},
+    {"<follow_label>picker carriage</follow_label>", "", "names no follow_label"},
+    {"<follow_label>picker carriage</follow_label>", "<follow_label> </follow_label>",
+      "names no follow_label"},
     {"<twin_sides>plant counterpart</twin_sides>", "", "names no twin_sides"},
     {"<twin_sides>plant counterpart</twin_sides>", "<twin_sides> </twin_sides>", "twin_sides"},
     {"<heartbeat_stale_after_s>0.5</heartbeat_stale_after_s>", "",
@@ -391,6 +403,26 @@ TEST(FrameConfig, ACompleteConfigurationIsRead)
   EXPECT_EQ(frame.facility_label, "CITE");
   EXPECT_EQ(frame.zone_label, "Cell B");
   EXPECT_EQ(frame.world_stats_topic, "/world/cell_b/stats");
+  EXPECT_DOUBLE_EQ(frame.world_stats_stale_after_s, 1.0);
+}
+
+TEST(FrameConfig, AMissingOrMalformedStatsThresholdIsNamedAndChangesNothing)
+{
+  const std::string full = "<world_stats_stale_after_s>1</world_stats_stale_after_s>";
+  for (const auto & [with, named] : std::vector<std::pair<std::string, std::string>>{
+    {"", "names no world_stats_stale_after_s"},
+    {"<world_stats_stale_after_s>0</world_stats_stale_after_s>", "positive"},
+    {"<world_stats_stale_after_s>nan</world_stats_stale_after_s>", "positive"},
+    {"<world_stats_stale_after_s>1 s</world_stats_stale_after_s>", "positive"}})
+  {
+    tinyxml2::XMLDocument document;
+    document.Parse(panel_with(full, with).c_str());
+    FrameConfig frame;
+    frame.zone_label = "untouched";
+    const std::string problem = read_frame_config(document.FirstChildElement(), frame);
+    EXPECT_NE(problem.find(named), std::string::npos) << with << ": " << problem;
+    EXPECT_EQ(frame.zone_label, "untouched") << with;
+  }
 }
 
 TEST(FrameConfig, EachMissingOrBlankValueIsNamedAndChangesNothing)
