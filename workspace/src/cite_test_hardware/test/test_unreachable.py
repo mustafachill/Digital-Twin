@@ -51,6 +51,7 @@ only that nothing outside a test can name it.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import xml.etree.ElementTree as ElementTree
 
@@ -144,22 +145,63 @@ SKIPPED = (
 )
 
 
+def _is_skipped(relative: str) -> bool:
+    """Whether a path, relative to the root, is a `SKIPPED` entry or under one.
+
+    Applied to files as well as directories: in a worktree, the root's `.git` is
+    a file.
+    """
+    return any(relative == skip or relative.startswith(skip + '/') for skip in SKIPPED)
+
+
+def _is_pruned(relative_dir: str) -> bool:
+    """Whether a directory, relative to the root, is never entered.
+
+    A `SKIPPED` directory at the root, or a hidden directory at any depth:
+    caches, editor state, local agent tooling that a fresh clone does not contain
+    at all.
+    """
+    return _is_skipped(relative_dir) or any(
+        part.startswith('.') for part in relative_dir.split('/'))
+
+
 def _searchable_files():
-    """Every text file in the repository that this rule applies to."""
-    for path in REPO.rglob('*'):
-        if not path.is_file() or path.is_symlink():
-            continue
-        relative = path.relative_to(REPO).as_posix()
-        if any(relative == skip or relative.startswith(skip + '/') for skip in SKIPPED):
-            continue
-        # A hidden directory at any depth: caches, editor state, local agent
-        # tooling that a fresh clone does not contain at all.
-        if any(part.startswith('.') for part in path.relative_to(REPO).parts[:-1]):
-            continue
-        try:
-            yield relative, path.read_text(encoding='utf-8')
-        except (UnicodeDecodeError, OSError):
-            continue
+    """Every text file in the repository that this rule applies to.
+
+    The walk PRUNES what it skips instead of entering it and discarding what it
+    finds there: a local agent worktree under `.claude/` holds a full copy of the
+    repository and its build tree, and walking into it cost this test its whole
+    time budget. The files it yields are the same ones a full walk filtered by
+    `_is_pruned` would yield; `test_the_walk_prunes_what_it_skips` pins that.
+    """
+    for directory, dirnames, filenames in os.walk(REPO):
+        relative_dir = Path(directory).relative_to(REPO).as_posix()
+        prefix = '' if relative_dir == '.' else relative_dir + '/'
+        dirnames[:] = sorted(
+            name for name in dirnames if not _is_pruned(prefix + name)
+        )
+        for name in sorted(filenames):
+            path = Path(directory, name)
+            if _is_skipped(prefix + name) or path.is_symlink() or not path.is_file():
+                continue
+            try:
+                yield prefix + name, path.read_text(encoding='utf-8')
+            except (UnicodeDecodeError, OSError):
+                continue
+
+
+def test_the_walk_prunes_what_it_skips():
+    """Hidden directories and `SKIPPED` roots are pruned; everything else is entered.
+
+    Asserted against strings, so the rule does not depend on what a checkout
+    happens to contain.
+    """
+    pruned = ('.git', '.claude', '.claude/worktrees/x', 'docs/.cache',
+              'workspace/build', 'workspace/src/external/xarm', 'projects', 'legacy')
+    entered = ('docs', 'workspace/src/cite_bringup', 'workspace/src/cite_bringup/launch',
+               'workspace/builder', 'model')
+    assert [d for d in pruned if not _is_pruned(d)] == []
+    assert [d for d in entered if _is_pruned(d)] == []
 
 
 def test_the_fixture_is_named_only_where_a_test_may_name_it():
