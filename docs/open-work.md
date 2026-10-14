@@ -2064,6 +2064,19 @@ node can therefore keep a hold alive that was not released explicitly, for examp
 **The fix.** In `close()`, call `self._move_to.destroy()` and `self._grasp.destroy()` before
 `destroy_node()`. It was set aside to keep one round short.
 
+### #106 — The deadman gate dates a state from when it is received (2026-10-14)
+
+**What happens.** `DeadmanGate` (`cite_hardware/gate.py`) measures a deadman state's age from
+the moment the consuming node receives it. If that node's executor lags, a state that waited in
+its queue still counts as fresh when it is finally processed. The 0.5 s bound is then stretched
+by however long the node lagged.
+
+**What it cannot do.** It cannot hide a deadman that has stopped publishing for long.
+
+**Status.** Found while debugging a test that depended on timing, which is now fixed to wait on
+events. It is not shown to be a hazard. It is a design question for a safety review: dating
+states from their own stamp would need clocks the two sides agree on.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
