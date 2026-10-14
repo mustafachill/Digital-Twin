@@ -86,7 +86,10 @@ panel becomes a frame with these parts:
   - The Confirm band appears directly above the deck.
 
 The window's other default plugins are removed: Spawn, Shapes, Lights, TransformControl,
-CopyPaste, Screenshot, WorldControl and WorldStats. Sim time and RTF move into the header.
+CopyPaste, Screenshot, EntityContextMenu, VisualizationCapabilities, SelectEntities,
+WorldControl and WorldStats - every plugin outside the generator's operator-window set,
+which `OPERATOR_WINDOW_PLUGINS` in `tools/tests/test_generate_world.py` holds. Sim time and
+RTF move into the header.
 The theme is dark. Brand colour is used for identity only, never for state. Status colours
 keep ISA-101 meanings: grey when normal, colour only for the abnormal, and no flashing.
 

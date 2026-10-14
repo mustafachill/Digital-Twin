@@ -17,14 +17,17 @@
     Follow robot beside Reset view, and the speed floor shown beside the speed choices.
   - **Also built (ADR-0074, display only):** the world's sim time and RTF over gz transport,
     `DivergenceMetrics` as a "Twin fidelity" card ("Not measured" while a sample is not valid), a
-    running request's cycle and step from its action feedback, and the last 50 transitions of the
-    console's state. The plant's window drops gz-gui's editing tools.
+    running request's cycle and step from its action feedback, and the last transitions of the
+    console's state (`EVENT_LOG_CAPACITY` in `cite_console_gui`'s `event_log.hpp`). The plant's
+    window drops gz-gui's editing tools and its entity selection.
   - **Tests:** the button-enablement table, the connection display's rule, the ROS client, the
     camera and world-statistics clients, the frame's display rules and the generated plugin
     parameters are tested headlessly. The panel's QML is instantiated and laid out offscreen at
-    four window sizes and held to the frame's layout rules. Nothing tests the real gz-gui card:
-    the mouse pass-through to the scene, the hidden title toolbar and the maximized window rest on
-    gz-gui 8 internals and are not verified by any test (ADR-0074, "What this costs us").
+    four window sizes and held to the frame's layout rules. The mouse pass-through to the scene,
+    the hidden title toolbar and the maximized window rest on gz-gui 8 internals (ADR-0074,
+    "What this costs us"); `test_panel_in_gz_gui` holds them in gz-gui's real card and main
+    window, headlessly, and the panel undoes the pass-through itself if a press on Stop would
+    not reach Stop. A real display is still where visual quality is judged.
 
 ## What L7 may depend on
 

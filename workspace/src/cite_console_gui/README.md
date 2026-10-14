@@ -40,11 +40,17 @@ COMMAND DECK view buttons | target, speed, cycles | Start robot, Home, Start pro
 ```
 
 - **Every clickable control is in the deck** (or in the question directly above it). The
-  header, the alarm band and the rail hold none. The deck and the question never scroll; the
-  rail scrolls when the window is short, and the event log takes the room left in it.
+  header, the alarm band and the rail hold none, and no control takes keyboard focus: the
+  surface is mouse only, so a stray key cannot send a request again. The deck never scrolls.
+  The question is never taller than the room between the header (and alarm band) and the
+  deck; a longer prompt scrolls inside it, with its title, Confirm and Cancel on screen.
+- **The rail** fits all five cards at 1920×1080 without scrolling; it scrolls only when the
+  window is shorter. The Robot card shows a step in two lines at most; the event log, which
+  scrolls inside itself and takes the room left in the rail, shows each step whole.
 - **Sizes.** 1920×1080 is the primary display. At 1600 wide and above the rail is 380 px and
   the view buttons carry their labels; below that the rail is 300 px and the view buttons are
-  icons with a tooltip. Below 1280 wide the rail's cards collapse to one-line summaries and the
+  icons with a tooltip. 1280 wide is a supported size and gets that medium layout; below 1200
+  wide - under every supported size - the rail's cards collapse to one-line summaries and the
   event log is hidden. Stop is anchored to the deck's right edge on its own, so at any width
   the rest of the deck runs short, never Stop.
 - **The middle takes no input**, so the mouse orbits, pans and zooms the scene there. Each
@@ -53,35 +59,43 @@ COMMAND DECK view buttons | target, speed, cycles | Start robot, Home, Start pro
   scene is not seen by the panel, so it names the last choice, not where the camera is.
 - **Components.** `src/CellConsole.qml` is the frame; its parts are in `src/components/`
   (`Theme`, `HeaderBar`, `AlarmBand`, `StatusRail`, `StatusCard`, `ProgressRing`,
-  `ConnectionPill`, `EventLog`, `CommandDeck`, `ViewGroup`, `SegmentedSelector`,
+  `ConnectionPill`, `HeaderFigure`, `EventLog`, `CommandDeck`, `ViewGroup`, `SegmentedSelector`,
   `ConfirmBanner`, `StopButton` and small helpers), imported as `qrc:/CellConsole/components`
   so that none of them shadows the `CellConsole` context property.
 
 ### What it relies on in gz-gui, and the risk
 
 The frame works around three gz-gui 8 internals, read on gz-gui 8.4.0 with Qt 5.15 and shown
-in a spike on 2026-10-14 (ADR-0074). **A gz-gui upgrade can break any of them silently**, and
-the offscreen test cannot catch it, because the real card and window are not instantiated
-there. Re-check all three on any gz-gui version change, or fall back to ADR-0074's Option B.
+in a spike on 2026-10-14 (ADR-0074). **A gz-gui upgrade can break any of them.**
+`test_panel_in_gz_gui` loads the panel through `gz::gui::Application` into gz-gui's real
+card and main window, headlessly, and holds all three; re-check them on a real display on any
+gz-gui version change, or fall back to ADR-0074's Option B.
 
 1. **The card swallows the mouse.** gz-gui puts the panel in a card whose `Pane` and own
    `MouseArea`s take every press over the whole card. When the panel is given its parent, the
    QML sets the card's `containmentMask` to an empty item and disables the `MouseArea`s that
    are direct children of the card's `contentItem` (`passMouseThrough` in `CellConsole.qml`).
-   A parent that has no `card()` - the offscreen test's - is left alone.
+   A parent that has no `card()` - the offscreen test's - is left alone. **Stop comes first:**
+   once gz-gui's window is shown, and on every relayout after that, the plugin judges whether
+   a press at Stop's centre reaches Stop, picking the item as Qt Quick 5.15 does
+   (`pressReaches`). If it does not - a card that clipped its children would, masked, take
+   every press - the mask and the `MouseArea`s are put back, a warning is printed, and the
+   panel keeps working while the scene loses the mouse over the middle.
 2. **The title toolbar** is the main window's `ApplicationWindow.header`. The plugin hides it
    (`frame_window` in `cell_console.cpp`), and only in gz-gui's own main window.
 3. **Maximized, not fullscreen**: the plugin calls `showMaximized` on the same window, so the
    desktop's title bar and close button stay. Both 2 and 3 happen once the window that shows
    the panel is visible - on `QQuickItem::windowChanged` and `QWindow::visibleChanged`, never on
-   a timer (P4).
+   a timer (P4). The maximize is queued: gz-gui resizes the window to the configured size
+   after it adds the plugins, and a queued call runs once that is done.
 
 ### What the plant's window loses
 
 The plant's GUI configuration leaves out every gz-gui plugin that edits the world or its run:
 Spawn, Shapes, Lights, TransformControl, CopyPaste, Screenshot, the entity context menu and
-its VisualizationCapabilities, WorldControl (play, pause, step) and WorldStats. Sim time and
-RTF are in the header. A developer who needs the editing tools runs `./scripts/sim` on its
+its VisualizationCapabilities, WorldControl (play, pause, step) and WorldStats; and
+SelectEntities, whose left-click selection left a box on the scene that nothing in this
+window uses. Sim time and RTF are in the header. A developer who needs the editing tools runs `./scripts/sim` on its
 own. The counterpart's window is Harmonic's default, unchanged.
 
 ## What it shows and sends
@@ -104,7 +118,7 @@ own. The counterpart's window is Harmonic's default, unchanged.
 | Progress, outcome | The goal's feedback and the last answer's detail |
 | Cycle progress | A ring with the running request's cycle of cycles and step of steps, from its feedback (`RunProgress`, `progress_fraction`); for validate-then-run, per phase (phase 1 is one cycle) |
 | Twin fidelity | `DivergenceMetrics` on `DivergenceMetrics::TOPIC` (STATE), per asset (`fidelity_view`): **"Not measured" and no number while a sample is not valid**; "not computed" for a field the twin marks NaN; a valid comparison of two simulations is said as an instrument test, never as a fidelity result |
-| Event log | The last 50 changes of the console's state, step or last error, newest first, timed by the panel's wall clock (`EventLog`). A display, not a record of the cell |
+| Event log | The last `EVENT_LOG_CAPACITY` changes ([`event_log.hpp`](include/cite_console_gui/event_log.hpp)) of the console's state, step or last error, newest first, timed by the panel's wall clock (`EventLog`). A display, not a record of the cell |
 | Sim time, RTF | The window's own world statistics over gz transport (`WorldStatsClient`, on `world_stats_topic`); dashes until heard; "paused" when the world says so |
 | Reset view, Top, Side, Front, Follow robot | Move the 3D view's camera (see below). Move no robot |
 
@@ -226,9 +240,11 @@ nothing that was waiting.
   `generate/gui.py`. `DivergenceMetrics::TOPIC` is the contract's.
 - The home view is the plugin's `home_camera_pose` parameter: the same text the generator
   writes as the 3D view's `camera_pose`, rendered once (`gui_camera_pose`). The presets are
-  `camera_presets`, the follow target `follow_target`, the sides `twin_sides` and the stale
-  threshold `heartbeat_stale_after_s`, all derived from L0 in the same file. Tests hold the
-  installed plant configuration's values to those functions.
+  `camera_presets`, the follow target `follow_target` and its words `follow_label`, the sides
+  `twin_sides` and the stale threshold `heartbeat_stale_after_s`, all derived from L0 in the
+  same file, and `world_stats_stale_after_s`, how long the header shows sim time and RTF as
+  current with none heard (`WORLD_STATS_STALE_AFTER_S` there). Tests hold the installed plant
+  configuration's values to those functions.
 
 The panel builds no name.
 
@@ -242,8 +258,8 @@ console asking the operator to act. The brand colour (SHSU orange) is identity o
 mark, the title's accent and the focus ring - and never says anything about the cell. Every
 colour, size and duration is in one singleton, `src/components/Theme.qml`; text is WCAG AA on
 its surface. Stop is dark grey, not red: red is the physical E-stop's, and Stop is not an
-E-stop. Motion is limited to 150-200 ms colour transitions, the progress ring's movement and a
-soft pulse on a live connection's dot.
+E-stop. Motion is limited to 150-200 ms colour transitions and the progress ring's movement;
+normal is static, and nothing pulses or flashes.
 
 Type is Open Sans, which the container ships (`fonts-open-sans`); where it is absent Qt
 substitutes the default sans family. No font and no icon file is copied into the tree: the
@@ -270,9 +286,20 @@ nothing at the middle of the 3D view takes the mouse, while the header, the rail
 do; that no target is preselected and 1.0 is; that Stop's label is exact; that every console
 button is disabled with no console; and that the validate-then-run caveat, at its longest, sits
 beside its button and whole. Below those sizes it holds that Stop stays inside the window and
-clear of every other control.
+clear of every other control. With a console heard - an alarm band, the boundary and both
+sides live, a divergence sample, a long step - at 1920×1080 and 1280×720 it holds that every
+header pill keeps its status word and overlaps nothing, that the deck's controls stay whole and
+apart, and that the Robot card's step takes two lines at most; at 1920×1080, that every rail
+card fits without scrolling. It also holds that a segment always shows the plugin's
+selection, never the click; that the cycles shown are the cycles sent; that no control takes
+keyboard focus; that a long question never covers the header; where the layout steps down;
+that Stop's subtitle never breaks inside "E-stop"; that stale world statistics are said
+stale; and, with a stand-in card, that the mouse pass-through is undone when Stop would lose
+its press. `test_panel_in_gz_gui` holds the pass-through, the hidden toolbar and the maximize
+in gz-gui's own card and window.
 
-It also writes a picture of the frame at each size, with and without the question shown, to
+It also writes a picture of the frame at each size - no console, the question shown, and a
+console heard - to
 `CITE_PANEL_PNG_DIR` (default: `panel_png/` in the package's build directory). They are for a
 person to look at, not a gate.
 
@@ -294,11 +321,18 @@ person to look at, not a gate.
   next view request that succeeds clears it.
 - **No twin boundary:** the connection display shows it and every side as absent.
 - **No world statistics** (no world, or a `world_stats_topic` nobody publishes): sim time and
-  RTF show dashes. A configuration without the header's keys is said on the view's line.
+  RTF show dashes; once heard and then not for longer than `world_stats_stale_after_s`, the
+  last figures are dimmed and said "stale". A configuration without the header's keys is
+  said on the view's line.
 - **No `DivergenceMetrics`, or none valid:** the Twin fidelity card says "Not measured".
 - **A gz-gui that differs from 8.4 in the three internals above:** the scene may not get the
-  mouse through the middle, or the title toolbar may stay; the panel cannot tell, and says
+  mouse through the middle, or the title toolbar may stay. Where the pass-through would keep a
+  press from Stop, the panel undoes it and warns; anything else it cannot tell, and says
   nothing.
+- **A request the operator stopped:** its outcome says "stopped", not "refused or failed",
+  when its goal was cancelled or the console accepted a Stop while it ran and it then did not
+  complete. A new request clears the last one's outcome, and a request's progress line is
+  cleared when it ends.
 - **A target the console does not serve:** not offered, and a goal naming one is refused by
   the console (`HomeRobot.action`, `RunProgram.action`); the panel never sends an unset one.
 - **Validate then run on a deployment without the twin target:** disabled, and the panel says
