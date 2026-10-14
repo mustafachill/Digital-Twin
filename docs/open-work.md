@@ -2041,6 +2041,16 @@ cell is an educational lab, and one operator surface per pair is the operating r
   over at least 0.25 s), a creep slower than about 4 mm/s reads as stationary.
 - **A real-arm-only deployment without the simulation is not supported.** The plant always runs.
 
+### #104 — The boundary can exit on SIGSEGV at shutdown under load (2026-10-09)
+
+**What was seen.** While the debugger reproduced the belt-stop race, it ran six copies of
+`cite_twin`'s paired launch test in parallel with CPU hogs. In 2 of those 132 runs the twin
+boundary exited with -11 (SIGSEGV) at shutdown. `TestCleanShutdown.test_the_boundary_exits_cleanly`
+accepts only 0, -2 and -15, so those two runs failed.
+
+**What is not known.** It was not seen in a normal `./scripts/test` run, and it was not
+investigated. It is not the known `move_group` teardown fault. It needs its own debug task.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
