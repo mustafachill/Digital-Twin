@@ -241,7 +241,7 @@ public:
           "run_program " + std::to_string(goal->speed_scale) + " target " +
           std::to_string(goal->target) + " cycles " + std::to_string(goal->cycles));
         return accept_run ? rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE :
-        rclcpp_action::GoalResponse::REJECT;
+               rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {
         return rclcpp_action::CancelResponse::ACCEPT;
@@ -249,20 +249,20 @@ public:
       [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>> handle) {
         // Off the executor's thread, as a real server runs its goal.
         runner_ = std::thread([handle]() {
-            auto feedback = std::make_shared<RunProgram::Feedback>();
-            feedback->cycle = 2;
-            feedback->step_index = 3;
-            feedback->step_count = 7;
-            feedback->step = "Pick";
-            handle->publish_feedback(feedback);
+          auto feedback = std::make_shared<RunProgram::Feedback>();
+          feedback->cycle = 2;
+          feedback->step_index = 3;
+          feedback->step_count = 7;
+          feedback->step = "Pick";
+          handle->publish_feedback(feedback);
             // The feedback is a topic and the result a service: a result that
             // overtook it would drop it at the client, which forgets a goal
             // once it has its result. A test fake's margin, not a sequence.
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            auto result = std::make_shared<RunProgram::Result>();
-            result->success = true;
-            result->cycles_completed = 3;
-            handle->succeed(result);
+          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          auto result = std::make_shared<RunProgram::Result>();
+          result->success = true;
+          result->cycles_completed = 3;
+          handle->succeed(result);
           });
       });
     validate_then_run_ = rclcpp_action::create_server<ValidateThenRun>(

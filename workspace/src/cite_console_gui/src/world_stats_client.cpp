@@ -16,7 +16,9 @@
 
 #include <gz/msgs/world_stats.pb.h>
 
+#include <cinttypes>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <mutex>
 #include <stdexcept>
@@ -32,13 +34,15 @@ std::string format_sim_time(double seconds)
     return "--:--:--";
   }
   // Tenths, rounded down, so the shown clock never runs ahead of the world's.
-  const auto tenths = static_cast<long long>(std::floor(seconds * 10.0));
-  const long long hours = tenths / 36000;
-  const long long minutes = (tenths / 600) % 60;
-  const long long secs = (tenths / 10) % 60;
-  const long long tenth = tenths % 10;
+  const auto tenths = static_cast<std::int64_t>(std::floor(seconds * 10.0));
+  const std::int64_t hours = tenths / 36000;
+  const std::int64_t minutes = (tenths / 600) % 60;
+  const std::int64_t secs = (tenths / 10) % 60;
+  const std::int64_t tenth = tenths % 10;
   char text[48];
-  std::snprintf(text, sizeof(text), "%02lld:%02lld:%02lld.%lld", hours, minutes, secs, tenth);
+  std::snprintf(
+    text, sizeof(text), "%02" PRId64 ":%02" PRId64 ":%02" PRId64 ".%" PRId64, hours, minutes,
+    secs, tenth);
   return text;
 }
 

@@ -2,7 +2,9 @@
 
 - **Status:** `PARTIAL`. The first L7 package, `cite_console_gui`, exists
   ([ADR-0071](../adr/0071-the-first-operator-surface-is-a-panel-in-the-gazebo-window.md)). It is
-  an operator panel docked in the plant side's Gazebo window.
+  an operator panel in the plant side's Gazebo window, which it frames
+  ([ADR-0074](../adr/0074-the-operator-console-frames-the-3d-view.md)): a header, a status rail
+  and a command deck around the live 3D view, with every clickable control in the deck.
   - **Built:** a gz-gui 8 plugin `CellConsole` (C++ and QML). It sends requests to the console
     server `cell_console` and shows the server's latched `ConsoleState`, and it reads the twin's
     mode directly from `TwinMode`.
@@ -13,9 +15,16 @@
     (live, stale, not ready, not started or absent for the twin boundary and each side, from
     `TwinHeartbeat`, `TwinSides` and `TwinMode` on the plant's domain; monitoring only), Top / Side / Front view presets and
     Follow robot beside Reset view, and the speed floor shown beside the speed choices.
+  - **Also built (ADR-0074, display only):** the world's sim time and RTF over gz transport,
+    `DivergenceMetrics` as a "Twin fidelity" card ("Not measured" while a sample is not valid), a
+    running request's cycle and step from its action feedback, and the last 50 transitions of the
+    console's state. The plant's window drops gz-gui's editing tools.
   - **Tests:** the button-enablement table, the connection display's rule, the ROS client, the
-    camera client and the generated plugin parameters are tested headlessly. Nothing in CI
-    renders the panel.
+    camera and world-statistics clients, the frame's display rules and the generated plugin
+    parameters are tested headlessly. The panel's QML is instantiated and laid out offscreen at
+    four window sizes and held to the frame's layout rules. Nothing tests the real gz-gui card:
+    the mouse pass-through to the scene, the hidden title toolbar and the maximized window rest on
+    gz-gui 8 internals and are not verified by any test (ADR-0074, "What this costs us").
 
 ## What L7 may depend on
 
@@ -39,7 +48,10 @@ L2→L7 dependency.
   `GZ_SIM_SYSTEM_PLUGIN_PATH`. `./scripts/sim --pair --console` refuses to start if `CellConsole`
   does not resolve on that path.
 - **Where it appears.** The generator emits one GUI config per side, and only the plant's config
-  carries the `CellConsole` plugin block (`tools/cite_tools/generate/gui.py`).
+  carries the `CellConsole` plugin block (`tools/cite_tools/generate/gui.py`). That block anchors
+  the card to all four edges of the 3D view with a transparent background, and the plant's config
+  leaves out every plugin that edits the world or its run (ADR-0074). The counterpart's config is
+  Harmonic's default.
 - **Names.** The plugin block passes the console's names as plugin parameters, taken from the
   same function that writes the plan's `console:` block (`bringup.console_names`). The panel forms
   no name, and it takes the twin boundary's topics from the contract: `TwinMode::TOPIC`,
@@ -52,6 +64,9 @@ L2→L7 dependency.
   (`follow_target`: the track's carriage link, `<asset>::<carriage link>`, which moves with the
   arm; `/gui/follow` is deprecated in gz-gui 8.4 but `/gui/track` cannot stop following), the pair's side names and the heartbeat's stale threshold (the physical
   side's deadman timeout), each derived from L0 in `tools/cite_tools/generate/gui.py`.
+- **The header.** The plugin block also carries the facility and zone labels and the world's
+  statistics topic (`facility_label`, `zone_label`, `world_stats_topic`), derived from L0 in the
+  same file. `DivergenceMetrics::TOPIC` comes from the contract.
 - **ROS domain.** The panel runs inside `gz sim`, so it inherits the plant side's `ROS_DOMAIN_ID`.
   It holds one ROS context, on that domain only (ADR-0044's L7 clause).
 
@@ -82,3 +97,6 @@ L2→L7 dependency.
 | gz-gui does not answer `/gui/move_to/pose` or `/gui/follow` | The panel reports it on its view line, not the console's outcome line; the camera does not move |
 | A preset, the follow model, the sides or the stale threshold is missing | The panel says which; the presets, Follow robot and the connection display are not shown |
 | No twin boundary heartbeat on the plant's domain | The connection display shows the boundary and every side as absent |
+| No world statistics heard | The header shows sim time and RTF as dashes |
+| No `DivergenceMetrics` heard, or none valid | The Twin fidelity card says "Not measured" and shows no number |
+| A gz-gui version whose card or window differs from 8.4's | The mouse may not reach the scene through the middle, or the title toolbar stays; nothing is reported (ADR-0074) |

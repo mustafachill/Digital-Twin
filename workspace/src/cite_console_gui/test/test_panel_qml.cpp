@@ -369,8 +369,8 @@ TEST(PanelQml, TheFrameHoldsEveryCommandInItsDeckAtEverySize)
     // The opaque parts take it, so the wheel does not zoom the scene through
     // them: the header's and the rail's middles, and the deck's corner.
     for (const QPointF & point : {
-        QPointF(size.width / 2.0, 20.0), QPointF(rail.center().x(), rail.bottom() - 4.0),
-        QPointF(4.0, size.height - 4.0)})
+      QPointF(size.width / 2.0, 20.0), QPointF(rail.center().x(), rail.bottom() - 4.0),
+      QPointF(4.0, size.height - 4.0)})
     {
       bool taken = false;
       for (QQuickItem * item : descendants(panel)) {
