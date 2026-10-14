@@ -38,6 +38,7 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickItem>
+#include <QSizeF>
 #include <QString>
 #include <QStringList>
 #include <QtGlobal>
@@ -92,6 +93,36 @@ TEST(PanelQml, TheEmbeddedPanelInstantiatesWithoutAnyError)
   // What is queued while the item is built - bindings, the layout - runs here.
   QCoreApplication::processEvents();
   EXPECT_TRUE(warnings.isEmpty()) << warnings.join("\n").toStdString();
+}
+
+// gz-gui puts the panel's root in a card it sizes from the generated
+// `gui.config` (380x640). A root that neither fills its parent nor has an
+// implicit size is 0x0 there, and the `Layout.fillHeight` body - status,
+// selectors, every command but Stop - is laid out with no height at all.
+TEST(PanelQml, ThePanelFillsTheCardItIsPutIn)
+{
+  cite_console_gui::CellConsole plugin;
+  QQmlEngine engine;
+  QQmlContext context(engine.rootContext());
+  context.setContextProperty("CellConsole", &plugin);
+
+  QQuickItem card;
+  card.setSize(QSizeF(380.0, 640.0));
+
+  QQmlComponent component(&engine, QString(kPanel));
+  ASSERT_TRUE(component.isReady()) << describe(component.errors()).join("\n").toStdString();
+  std::unique_ptr<QObject> created(component.beginCreate(&context));
+  auto * panel = qobject_cast<QQuickItem *>(created.get());
+  ASSERT_NE(panel, nullptr) << describe(component.errors()).join("\n").toStdString();
+  panel->setParentItem(&card);
+  component.completeCreate();
+  QCoreApplication::processEvents();
+
+  EXPECT_GT(panel->width(), 0.0) << "the panel has no width in its card";
+  EXPECT_GT(panel->height(), 0.0) << "the panel has no height in its card";
+  auto * body = panel->findChild<QQuickItem *>("body");
+  ASSERT_NE(body, nullptr) << "the panel has no item named `body`";
+  EXPECT_GT(body->height(), 200.0) << "the panel's body is laid out with no room";
 }
 
 int main(int argc, char ** argv)

@@ -30,10 +30,17 @@ import QtQuick.Controls 2.2
 import QtQuick.Controls.Material 2.1
 import QtQuick.Layouts 1.3
 
+// The root fills the card gz-gui puts it in (sized by the generated
+// `gui.config`, 380x640), and has an implicit size equal to its minimums so it
+// is never 0x0 before a parent sizes it: a 0x0 root lays the `fillHeight` body
+// out with no height, and the window shows a title and nothing else.
 Rectangle {
   id: panel
+  anchors.fill: parent
   Layout.minimumWidth: 360
   Layout.minimumHeight: 600
+  implicitWidth: Layout.minimumWidth
+  implicitHeight: Layout.minimumHeight
   color: theme.background
   border.color: theme.border
 
@@ -125,6 +132,7 @@ Rectangle {
 
     ScrollView {
       id: body
+      objectName: "body"
       Layout.fillWidth: true
       Layout.fillHeight: true
       clip: true
