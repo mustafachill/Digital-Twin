@@ -75,7 +75,8 @@ GridLayout {
     enabled: CellConsole.followEnabled
     onClicked: {
       CellConsole.followRobot();
-      views.chosen("Following carriage");
+      // What is followed, in the configuration's words (R-05).
+      views.chosen("Following " + CellConsole.followLabel);
     }
   }
 }

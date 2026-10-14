@@ -182,6 +182,7 @@ Item {
       height: implicitHeight
       UiText {
         id: viewText
+        objectName: "viewText"
         anchors.centerIn: parent
         text: "View: " + frame.viewName
         size: Theme.caption + 1
@@ -214,6 +215,9 @@ Item {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: deck.top
+    height: implicitHeight
+    // Never over the header or the alarm band (S-03).
+    maximumHeight: Math.max(64, deck.y - alarm.y - alarm.height)
   }
 
   CommandDeck {

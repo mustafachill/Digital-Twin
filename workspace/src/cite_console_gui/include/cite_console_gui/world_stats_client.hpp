@@ -59,6 +59,11 @@ std::string format_sim_time(double seconds);
 /// is not one (negative, NaN or infinite).
 std::string format_real_time_factor(double factor);
 
+/// Whether the header shows the statistics as stale (R-06): some were heard,
+/// and none for longer than `stale_after_s`. Never stale before the first, nor
+/// with no threshold (0 or less). A display rule; it gates nothing.
+bool world_stats_stale(bool heard, double age_s, double stale_after_s);
+
 /// The fields the header reads, from one message.
 WorldStats world_stats_from(const gz::msgs::WorldStatistics & message);
 

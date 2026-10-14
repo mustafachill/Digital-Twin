@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // One connection as the header shows it (health.hpp): live, stale, absent,
-// not ready or not started. Monitoring only, never a safety function. A live
-// link is grey with a softly pulsing dot; an abnormal one is amber; a side
-// never started is grey and still (ISA-101).
+// not ready or not started, always in words. Monitoring only, never a safety
+// function. A live link is grey; an abnormal one is amber; nothing moves:
+// normal is static (ISA-101, ADR-0074).
 
 import QtQuick 2.9
 
@@ -23,6 +23,5 @@ StatusPill {
   property string link: "absent"
   property bool abnormal: link !== "live" && link !== "not started"
   tone: abnormal ? "warning" : "normal"
-  pulse: link === "live"
-  value: compact ? "" : link
+  value: link
 }

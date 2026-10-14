@@ -90,6 +90,16 @@ TEST(WorldStatsFormat, TheRealTimeFactorHasTwoDecimals)
   EXPECT_EQ(format_real_time_factor(std::numeric_limits<double>::quiet_NaN()), "--");
 }
 
+TEST(WorldStatsFormat, StatisticsGoStaleOnlyOnceHeardAndPastTheThreshold)
+{
+  using cite_console_gui::world_stats_stale;
+  EXPECT_FALSE(world_stats_stale(false, 100.0, 1.0)) << "stale before any was heard";
+  EXPECT_FALSE(world_stats_stale(true, 0.5, 1.0));
+  EXPECT_FALSE(world_stats_stale(true, 1.0, 1.0));
+  EXPECT_TRUE(world_stats_stale(true, 1.01, 1.0));
+  EXPECT_FALSE(world_stats_stale(true, 100.0, 0.0)) << "stale with no threshold";
+}
+
 TEST(WorldStatsFormat, TheMessageIsReadWhole)
 {
   const WorldStats stats = world_stats_from(message(12.5, 0.75, true));

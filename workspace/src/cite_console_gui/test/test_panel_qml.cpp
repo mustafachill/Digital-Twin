@@ -63,6 +63,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <utility>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,7 +94,7 @@ struct CellConsoleTestAccess
     SidesView sides;
     sides.heard = true;
     sides.running = {"plant", "counterpart"};
-    sides.commandable = {"plant"};
+    sides.commandable = {"plant", "counterpart"};
     plugin.boundary_.sides_heard(sides);
     plugin.heartbeat_present_ = true;
     plugin.heartbeat_heard_ = true;
@@ -106,6 +107,23 @@ struct CellConsoleTestAccess
     emit plugin.twinModeChanged();
     emit plugin.healthChanged();
     emit plugin.fidelityChanged();
+    emit plugin.viewChanged();
+  }
+
+  /// World statistics heard, and whether the last is older than allowed.
+  static void hear_world_stats(CellConsole & plugin, bool stale)
+  {
+    plugin.world_stats_heard_ = true;
+    plugin.world_stats_.sim_time_s = 657.5;
+    plugin.world_stats_.real_time_factor = 1.0;
+    plugin.world_stats_stale_ = stale;
+    emit plugin.worldStatsChanged();
+  }
+
+  /// What the configuration names the followed node.
+  static void name_follow(CellConsole & plugin, const std::string & label)
+  {
+    plugin.view_config_.follow_label = label;
     emit plugin.viewChanged();
   }
 };
@@ -272,9 +290,19 @@ public:
     QCoreApplication::processEvents();
   }
 
+  /// The item named `name`: by QObject child, or, for one a Repeater made,
+  /// by visual descendant.
   QQuickItem * find(const char * name) const
   {
-    return panel->findChild<QQuickItem *>(name);
+    if (auto * item = panel->findChild<QQuickItem *>(name)) {
+      return item;
+    }
+    for (QQuickItem * item : descendants(panel)) {
+      if (item->objectName() == QLatin1String(name)) {
+        return item;
+      }
+    }
+    return nullptr;
   }
 
   cite_console_gui::CellConsole plugin;
@@ -285,6 +313,18 @@ public:
   QQuickItem * panel{nullptr};
   QStringList warnings;
 };
+
+/// Where the frame's header ends, in the panel's coordinates.
+double Theme_header_bottom(QQuickItem * panel)
+{
+  for (QQuickItem * child : panel->childItems()) {
+    if (QString(child->metaObject()->className()).startsWith("HeaderBar")) {
+      return rect_in(child, panel).bottom();
+    }
+  }
+  ADD_FAILURE() << "the frame has no header";
+  return 0.0;
+}
 
 std::string size_name(const WindowSize & size)
 {
@@ -519,54 +559,6 @@ TEST(PanelQml, StopStaysOnScreenBelowTheSupportedSizes)
   }
 }
 
-// A picture of the frame at every size, for a person to look at: visual
-// quality is judged on a display, not by a test (ADR-0074). Not a gate: it
-// fails only when no picture could be written.
-TEST(PanelQml, APictureOfTheFrameIsWrittenAtEverySize)
-{
-  QString directory = qEnvironmentVariable("CITE_PANEL_PNG_DIR");
-  if (directory.isEmpty()) {
-    directory = QStringLiteral(CITE_PANEL_PNG_DEFAULT_DIR);
-  }
-  QDir().mkpath(directory);
-  for (const WindowSize & size : kSizes) {
-    for (const bool asking : {false, true}) {
-      Framed framed(size);
-      ASSERT_NE(framed.panel, nullptr);
-      if (asking) {
-        // As a console that asks and offers validate-then-run would show it.
-        framed.find("confirmation")->setVisible(true);
-        framed.find("validateThenRunCaveat")->setProperty("text", QString::fromUtf8(kCaveat));
-      }
-      QCoreApplication::processEvents();
-      // The offscreen window renders once it is exposed; a hang detector only.
-      QElapsedTimer waited;
-      waited.start();
-      while (!framed.window.isExposed() && waited.elapsed() < 5000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-      }
-      // grabToImage, not grabWindow: the software backend's offscreen window
-      // returns no image from the latter.
-      auto result = framed.panel->grabToImage();
-      ASSERT_TRUE(result) << size_name(size);
-      bool ready = false;
-      QObject::connect(result.data(), &QQuickItemGrabResult::ready, [&ready]() {ready = true;});
-      QElapsedTimer grab;
-      grab.start();
-      while (!ready && grab.elapsed() < 5000) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-      }
-      const QImage image = result->image();
-      ASSERT_FALSE(image.isNull()) << size_name(size);
-      const QString path = directory + "/panel_" + QString::fromStdString(size_name(size)) +
-        (asking ? "_question" : "") + ".png";
-      EXPECT_TRUE(image.save(path)) << path.toStdString();
-      RecordProperty(("png_" + size_name(size) + (asking ? "_question" : "")).c_str(),
-        path.toStdString());
-    }
-  }
-}
-
 namespace
 {
 
@@ -654,7 +646,8 @@ TEST(PanelQml, TheCyclesShownAreTheCyclesSent)
   ASSERT_NE(deck, nullptr);
   ASSERT_NE(input, nullptr);
   const auto shown_is_sent = [&]() {
-      return input->property("text").toString() == QString::number(deck->property("cycles").toInt());
+      return input->property("text").toString() ==
+             QString::number(deck->property("cycles").toInt());
     };
 
   input->setProperty("text", QString("3"));
@@ -689,7 +682,8 @@ namespace
 /// whose content item holds a wheel-stopping MouseArea and a right-button
 /// MouseArea under a content Rectangle that offers `card()`. `%1` is whether
 /// the Pane clips its children to its shape - GzCard's does not.
-const char kStandInCard[] = R"(
+const char kStandInCard[] =
+  R"(
 import QtQuick 2.9
 import QtQuick.Controls 2.2
 Pane {
@@ -844,6 +838,356 @@ TEST(PanelQml, APressReachesTheItemOnTopThatTakesIt)
   area->setVisible(false);
   cover.setVisible(false);
   EXPECT_TRUE(framed.plugin.pressReaches(stop));
+}
+
+namespace
+{
+
+/// A step as long as the console may say one.
+const char kLongStep[] =
+  "plant: move to blockly_04 at 0.111 of full speed, then wait for the gripper to report "
+  "closed on the work-piece before the track carries it to the belt's far end, where the "
+  "next step opens it again";
+
+/// Let the window lay out what changed: the layouts are polished before a
+/// frame is drawn, so one is drawn.
+void settle(Framed & framed)
+{
+  QCoreApplication::processEvents();
+  framed.window.grabWindow();
+  QCoreApplication::processEvents();
+}
+
+/// A console that has heard a refusal: READY, with every display the frame
+/// has filled - the alarm band (a last error), a long step, the boundary live
+/// with both sides, a divergence sample and the world's statistics.
+void hear_everything(Framed & framed)
+{
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.step = kLongStep;
+  state.last_error = "refused: the counterpart is not at the program's start";
+  cite_console_gui::CellConsoleTestAccess::hear_boundary(framed.plugin, "picker");
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  cite_console_gui::CellConsoleTestAccess::hear_world_stats(framed.plugin, false);
+  settle(framed);
+}
+
+/// Every pair of `items` that overlaps, as text.
+QStringList overlaps(const QList<QQuickItem *> & items, QQuickItem * root)
+{
+  QStringList found;
+  for (int a = 0; a < items.size(); ++a) {
+    if (!items[a]->isVisible()) {
+      continue;
+    }
+    for (int b = a + 1; b < items.size(); ++b) {
+      const QRectF overlap = rect_in(items[a], root).intersected(rect_in(items[b], root));
+      if (overlap.width() >= 0.5 && overlap.height() >= 0.5) {
+        found << items[a]->objectName() + " overlaps " + items[b]->objectName();
+      }
+    }
+  }
+  return found;
+}
+
+}  // namespace
+
+// R-04, T-04: the frame with everything heard, at the primary and the smallest
+// supported size. The header's pills each keep their status word and overlap
+// nothing; the alarm band shows below the header; the deck's controls stay
+// whole and apart; the Robot card's long step takes two lines at most.
+TEST(PanelQml, WithEverythingHeardTheHeaderAndTheDeckHoldTheirRules)
+{
+  for (const WindowSize & size : {kSizes[0], kSizes[3]}) {
+    SCOPED_TRACE(size_name(size));
+    Framed framed(size);
+    ASSERT_NE(framed.panel, nullptr);
+    hear_everything(framed);
+    QQuickItem * panel = framed.panel;
+    const QRectF window(0.0, 0.0, size.width, size.height);
+
+    // The alarm band, under the header.
+    auto * alarm = framed.find("alarmBand");
+    ASSERT_NE(alarm, nullptr);
+    EXPECT_TRUE(shown(alarm, panel)) << "a last error and no alarm band";
+    EXPECT_GE(rect_in(alarm, panel).top(), Theme_header_bottom(panel) - 0.5);
+
+    // The header: every pill shown whole, with its status word, apart.
+    QList<QQuickItem *> header_items;
+    for (const char * name : {"twinModePill", "consoleStatePill", "boundaryPill",
+        "sidePill_plant", "sidePill_counterpart", "simTimeFigure", "rtfFigure"})
+    {
+      auto * item = framed.find(name);
+      ASSERT_NE(item, nullptr) << name;
+      EXPECT_TRUE(shown(item, panel)) << name;
+      EXPECT_TRUE(window.contains(rect_in(item, panel))) << name << " leaves the window";
+      EXPECT_GE(item->width() + 0.5, item->implicitWidth()) << name << " is squeezed";
+      header_items << item;
+    }
+    EXPECT_TRUE(overlaps(header_items, panel).isEmpty())
+      << overlaps(header_items, panel).join("; ").toStdString();
+    for (const char * name : {"boundaryPill", "sidePill_plant", "sidePill_counterpart"}) {
+      EXPECT_EQ(framed.find(name)->property("value").toString().toStdString(), "live")
+        << name << " shows no status word";
+    }
+    // Named by side, never by position (R-05).
+    EXPECT_EQ(framed.find("sidePill_counterpart")->property("label").toString(),
+      QString("Counterpart"));
+
+    // The deck: every clickable whole, inside the window, apart.
+    QList<QQuickItem *> buttons;
+    for (QQuickItem * item : descendants(panel)) {
+      if (is_button(item) && shown(item, panel)) {
+        EXPECT_TRUE(window.contains(rect_in(item, panel)))
+          << item->property("text").toString().toStdString() << " leaves the window";
+        EXPECT_EQ(visible_rect(item, panel), rect_in(item, panel))
+          << item->property("text").toString().toStdString() << " is clipped";
+        buttons << item;
+      }
+    }
+    QStringList apart;
+    for (const QString & line : overlaps(buttons, panel)) {
+      apart << line;
+    }
+    // Segments and the stepper's buttons sit inside their own selector or
+    // stepper, which are not buttons, so any overlap here is two controls.
+    EXPECT_TRUE(apart.isEmpty()) << apart.join("; ").toStdString();
+
+    // The Robot card's step: two lines at most, the rest elided.
+    auto * step = framed.find("stepRow");
+    ASSERT_NE(step, nullptr);
+    auto * value = step->findChild<QQuickItem *>("fieldValue");
+    ASSERT_NE(value, nullptr);
+    EXPECT_LE(value->property("lineCount").toInt(), 2);
+    EXPECT_TRUE(value->property("truncated").toBool()) << "the long step was not cut short";
+
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
+  }
+}
+
+// T-02: at the primary display every card of the rail is on screen at once,
+// the event log included, without scrolling the rail.
+TEST(PanelQml, AtTheprimaryDisplayTheRailShowsEveryCardWithoutScrolling)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  hear_everything(framed);
+  auto * body = framed.find("body");
+  ASSERT_NE(body, nullptr);
+  const QRectF rail = rect_in(body, framed.panel);
+  for (const char * name : {"robotCard", "progressCard", "sidesCard", "fidelityCard",
+      "eventCard"})
+  {
+    auto * card = framed.find(name);
+    ASSERT_NE(card, nullptr) << name;
+    EXPECT_TRUE(shown(card, framed.panel)) << name;
+    const QRectF at = rect_in(card, framed.panel);
+    EXPECT_GE(at.top(), rail.top() - 0.5) << name;
+    EXPECT_LE(at.bottom(), rail.bottom() + 0.5)
+      << name << " ends at " << at.bottom() << ", below the rail's " << rail.bottom();
+  }
+  // The event log has rows' worth of room, and scrolls inside itself.
+  EXPECT_GE(framed.find("eventCard")->height(), 160.0);
+}
+
+// R-06: world statistics not heard for longer than the configuration allows
+// are shown as the last heard, dimmed and said "stale".
+TEST(PanelQml, StaleWorldStatisticsAreSaidStale)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  auto * figure = framed.find("simTimeFigure");
+  ASSERT_NE(figure, nullptr);
+  cite_console_gui::CellConsoleTestAccess::hear_world_stats(framed.plugin, false);
+  QCoreApplication::processEvents();
+  EXPECT_FALSE(figure->property("stale").toBool());
+  EXPECT_EQ(figure->property("note").toString(), QString());
+  cite_console_gui::CellConsoleTestAccess::hear_world_stats(framed.plugin, true);
+  QCoreApplication::processEvents();
+  EXPECT_TRUE(figure->property("stale").toBool());
+  EXPECT_EQ(figure->property("note").toString(), QString("stale"));
+  EXPECT_EQ(framed.find("rtfFigure")->property("note").toString(), QString("stale"));
+}
+
+// R-05: the view label names what Follow robot follows in the configuration's
+// words, never a literal of its own.
+TEST(PanelQml, FollowingIsNamedByTheConfiguration)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_console_gui::CellConsoleTestAccess::name_follow(framed.plugin, "picker carriage");
+  QCoreApplication::processEvents();
+  auto * follow = framed.find("followButton");
+  ASSERT_NE(follow, nullptr);
+  ASSERT_TRUE(QMetaObject::invokeMethod(follow, "clicked"));
+  QCoreApplication::processEvents();
+  EXPECT_EQ(framed.find("viewText")->property("text").toString(),
+    QString("View: Following picker carriage"));
+}
+
+// S-04: no control of the deck or the question takes keyboard focus, so a
+// stray key cannot press one again.
+TEST(PanelQml, NoControlTakesKeyboardFocus)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  framed.find("confirmation")->setVisible(true);
+  QCoreApplication::processEvents();
+  int buttons = 0;
+  for (QQuickItem * item : descendants(framed.panel)) {
+    if (is_button(item)) {
+      ++buttons;
+      EXPECT_EQ(item->property("focusPolicy").toInt(), static_cast<int>(Qt::NoFocus))
+        << "'" << item->property("text").toString().toStdString() << "' takes focus";
+    }
+  }
+  EXPECT_GE(buttons, 15);
+}
+
+// S-03: a prompt longer than the room above the deck scrolls inside the
+// question; the title and Confirm stay on screen, and the header is not
+// covered.
+TEST(PanelQml, ALongQuestionNeverCoversTheHeader)
+{
+  // 600 characters, and far more than the room above the deck holds.
+  for (const std::size_t length : {600u, 4000u}) {
+    SCOPED_TRACE(length);
+    Framed framed(kSizes[3]);
+    ASSERT_NE(framed.panel, nullptr);
+    cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+    state.state = cite_interfaces::msg::ConsoleState::AWAITING_OPERATOR;
+    state.last_error = "refused: an earlier request";
+    state.prompt = std::string(
+    "Clear the cell: nobody inside the fence, the gripper's path free, and the part on the "
+    "table where the program expects it. ");
+    while (state.prompt.size() < length) {
+      state.prompt += "Confirm only once every person is outside and the E-stop is in reach. ";
+    }
+    cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+    QCoreApplication::processEvents();
+    auto * confirmation = framed.find("confirmation");
+    ASSERT_NE(confirmation, nullptr);
+    ASSERT_TRUE(shown(confirmation, framed.panel)) << "the console asks and no question shows";
+    const QRectF question = rect_in(confirmation, framed.panel);
+    EXPECT_GE(question.top(), Theme_header_bottom(framed.panel) - 0.5)
+      << "the question covers the header";
+    EXPECT_LE(question.bottom(), rect_in(framed.find("commands"), framed.panel).top() + 0.5);
+    const QRectF window(0.0, 0.0, 1280.0, 720.0);
+    for (const char * name : {"confirmationTitle", "confirmButton", "cancelButton"}) {
+      auto * item = framed.find(name);
+      ASSERT_NE(item, nullptr) << name;
+      EXPECT_TRUE(window.contains(rect_in(item, framed.panel))) << name;
+      EXPECT_TRUE(question.contains(rect_in(item, framed.panel))) << name << " leaves the question";
+      EXPECT_EQ(visible_rect(item, framed.panel), rect_in(item, framed.panel)) << name;
+    }
+  // Below the alarm band too, which the last error shows.
+    EXPECT_GE(question.top(), rect_in(framed.find("alarmBand"), framed.panel).bottom() - 0.5);
+    auto * prompt = framed.find("confirmationPrompt");
+    ASSERT_NE(prompt, nullptr);
+    if (length > 600u) {
+      EXPECT_GT(prompt->property("contentHeight").toDouble(), prompt->height())
+        << "the longest prompt was not left to scroll";
+    } else {
+      EXPECT_LE(prompt->property("contentHeight").toDouble(), prompt->height() + 0.5)
+        << "a prompt with room enough was cut";
+    }
+  }
+}
+
+// T-03: 1280 wide is a supported size and gets the medium layout; compact is
+// for what is below every supported size.
+TEST(PanelQml, TheLayoutStepsDownBelowTheSupportedSizesOnly)
+{
+  for (const auto & [width, compact] : std::vector<std::pair<int, bool>>{
+    {1280, false}, {1264, false}, {1200, false}, {1199, true}, {1024, true}})
+  {
+    Framed framed(WindowSize{width, 720});
+    ASSERT_NE(framed.panel, nullptr);
+    EXPECT_EQ(framed.panel->property("compact").toBool(), compact) << width;
+    EXPECT_FALSE(framed.panel->property("wide").toBool()) << width;
+  }
+}
+
+// T-05: Stop's label never breaks inside "E-stop": on one line where it fits,
+// and otherwise after its comma only. The label itself is exact.
+TEST(PanelQml, StopsLabelNeverBreaksInsideEStop)
+{
+  for (const WindowSize & size :
+    {kSizes[0], kSizes[1], kSizes[2], kSizes[3], WindowSize{1024, 600}, WindowSize{800, 600}})
+  {
+    SCOPED_TRACE(size_name(size));
+    Framed framed(size);
+    ASSERT_NE(framed.panel, nullptr);
+    auto * stop = framed.find("stopButton");
+    auto * subtitle = framed.find("stopSubtitle");
+    ASSERT_NE(subtitle, nullptr);
+    EXPECT_EQ(stop->property("text").toString(), QString::fromUtf8(kStopLabel));
+    const QString shown_text = subtitle->property("text").toString();
+    EXPECT_EQ(QString(shown_text).replace("\n", " "), QString("software stop, not an E-stop"));
+    EXPECT_EQ(subtitle->property("wrapMode").toInt(), 0) << "a word wrap may break at the hyphen";
+    EXPECT_LE(subtitle->property("contentWidth").toDouble(), subtitle->width() + 0.5)
+      << "'" << shown_text.toStdString() << "' does not fit";
+    for (const QString & line : shown_text.split("\n")) {
+      EXPECT_FALSE(line.endsWith("E-")) << line.toStdString();
+    }
+  }
+}
+
+// A picture of the frame at every size, for a person to look at: visual
+// quality is judged on a display, not by a test (ADR-0074). Three of each: no
+// console, a console asking its question, and a console heard with every
+// display filled. Not a gate: it fails only when no picture could be written.
+TEST(PanelQml, APictureOfTheFrameIsWrittenAtEverySize)
+{
+  QString directory = qEnvironmentVariable("CITE_PANEL_PNG_DIR");
+  if (directory.isEmpty()) {
+    directory = QStringLiteral(CITE_PANEL_PNG_DEFAULT_DIR);
+  }
+  QDir().mkpath(directory);
+  for (const WindowSize & size : kSizes) {
+    for (const char * variant : {"", "_question", "_heard"}) {
+      Framed framed(size);
+      ASSERT_NE(framed.panel, nullptr);
+      if (std::strcmp(variant, "_question") == 0) {
+        // As a console that asks and offers validate-then-run would show it.
+        framed.find("confirmation")->setVisible(true);
+        framed.find("validateThenRunCaveat")->setProperty("text", QString::fromUtf8(kCaveat));
+      } else if (std::strcmp(variant, "_heard") == 0) {
+        hear_everything(framed);
+      }
+      // The colour transitions (Theme.fast, Theme.normal: at most 200 ms) run
+      // to their end before the picture is taken; a picture, never a gate.
+      QElapsedTimer settling;
+      settling.start();
+      while (settling.elapsed() < 400) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+      }
+      // The offscreen window renders once it is exposed; a hang detector only.
+      QElapsedTimer waited;
+      waited.start();
+      while (!framed.window.isExposed() && waited.elapsed() < 5000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+      }
+      // grabToImage, not grabWindow: the software backend's offscreen window
+      // returns no image from the latter.
+      auto result = framed.panel->grabToImage();
+      ASSERT_TRUE(result) << size_name(size);
+      bool ready = false;
+      QObject::connect(result.data(), &QQuickItemGrabResult::ready, [&ready]() {ready = true;});
+      QElapsedTimer grab;
+      grab.start();
+      while (!ready && grab.elapsed() < 5000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+      }
+      const QImage image = result->image();
+      ASSERT_FALSE(image.isNull()) << size_name(size);
+      const QString path = directory + "/panel_" + QString::fromStdString(size_name(size)) +
+        variant + ".png";
+      EXPECT_TRUE(image.save(path)) << path.toStdString();
+      RecordProperty(("png_" + size_name(size) + variant).c_str(), path.toStdString());
+    }
+  }
 }
 
 int main(int argc, char ** argv)

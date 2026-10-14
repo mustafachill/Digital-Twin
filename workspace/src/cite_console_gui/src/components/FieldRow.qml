@@ -22,6 +22,8 @@ RowLayout {
   property string value: ""
   property color valueColour: Theme.text
   property bool strong: false
+  // Lines the value may take before it is elided; unbounded by default.
+  property int maximumLineCount: 0
   Layout.fillWidth: true
   spacing: 12
   UiText {
@@ -32,10 +34,13 @@ RowLayout {
     size: Theme.caption + 1
   }
   UiText {
+    objectName: "fieldValue"
     Layout.fillWidth: true
     text: parent.value
     color: parent.valueColour
     strong: parent.strong
     wrapMode: Text.WordWrap
+    maximumLineCount: parent.maximumLineCount > 0 ? parent.maximumLineCount : 1000
+    elide: parent.maximumLineCount > 0 ? Text.ElideRight : Text.ElideNone
   }
 }

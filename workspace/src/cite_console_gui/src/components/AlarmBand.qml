@@ -21,6 +21,7 @@ import QtQuick.Layouts 1.3
 
 Rectangle {
   id: band
+  objectName: "alarmBand"
   readonly property bool shown: CellConsole.faulted || CellConsole.lastError !== ""
   visible: shown
   color: Theme.alarmFill

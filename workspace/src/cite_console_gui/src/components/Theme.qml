@@ -111,9 +111,11 @@ QtObject {
   readonly property int railWide: 380
   readonly property int railNarrow: 300
   readonly property int railCompact: 260
-  // Window widths at which the layout steps down.
+  // Window widths at which the layout steps down. 1280 is a supported size
+  // and gets the medium layout; so does a 1280-wide window less its borders.
+  // Compact is for what is below every supported size (T-03).
   readonly property int wideFrom: 1600
-  readonly property int compactBelow: 1280
+  readonly property int compactBelow: 1200
 
   // --------------------------------------------------------------- motion
   readonly property int fast: 150

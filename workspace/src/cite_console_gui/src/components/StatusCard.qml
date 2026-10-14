@@ -30,7 +30,7 @@ Rectangle {
   radius: Theme.radius
   border.width: 1
   border.color: Theme.divider
-  implicitHeight: column.implicitHeight + 2 * 14
+  implicitHeight: column.implicitHeight + 2 * 10
   Layout.fillWidth: true
 
   // A soft shadow: a darker plate below the card, no blur.
@@ -46,8 +46,8 @@ Rectangle {
   ColumnLayout {
     id: column
     anchors.fill: parent
-    anchors.margins: 14
-    spacing: 10
+    anchors.margins: 10
+    spacing: 6
 
     RowLayout {
       Layout.fillWidth: true
@@ -77,7 +77,7 @@ Rectangle {
       visible: !card.compact
       Layout.fillWidth: true
       Layout.fillHeight: true
-      spacing: 6
+      spacing: 4
     }
   }
 }

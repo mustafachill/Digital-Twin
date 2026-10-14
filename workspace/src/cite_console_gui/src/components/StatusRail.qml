@@ -14,8 +14,10 @@
 
 // The status rail (ADR-0074). INFORMATION ONLY: nothing here is clickable.
 // Cards in order of priority - the robot, the running request's progress,
-// the sides, the twin's fidelity and the event log. The rail scrolls when the
-// window is short; the event log takes the room left below the other cards.
+// the sides, the twin's fidelity and the event log. At the primary display
+// every card fits without scrolling the rail (T-02); the rail scrolls only
+// when the window is shorter. The event log takes the room left below the
+// other cards, never less than a few rows, and scrolls inside itself.
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -51,13 +53,14 @@ Rectangle {
     ColumnLayout {
       id: cards
       width: body.availableWidth
-      spacing: 12
+      spacing: 8
 
       Item { Layout.preferredHeight: 4 }
 
       // ------------------------------------------------------------- robot
       StatusCard {
         id: robotCard
+        objectName: "robotCard"
         Layout.leftMargin: 12
         Layout.rightMargin: 12
         title: "Robot"
@@ -69,7 +72,7 @@ Rectangle {
         UiText {
           Layout.fillWidth: true
           text: CellConsole.stateName
-          size: Theme.display
+          size: Theme.title + 2
           strong: true
           color: CellConsole.faulted ? Theme.alarm : CellConsole.confirmEnabled ?
             Theme.attention : !CellConsole.heard ? Theme.warning : Theme.text
@@ -94,9 +97,12 @@ Rectangle {
               "(./scripts/sim --pair --console)."
           }
         }
+        // Two lines at most; the event log carries every step whole.
         FieldRow {
+          objectName: "stepRow"
           label: "Step"
           value: CellConsole.step !== "" ? CellConsole.step : "-"
+          maximumLineCount: 2
         }
         FieldRow {
           visible: CellConsole.validationPhase !== ""
@@ -159,6 +165,7 @@ Rectangle {
       StatusCard {
         Layout.leftMargin: 12
         Layout.rightMargin: 12
+        objectName: "progressCard"
         title: "Cycle progress"
         compact: rail.compact
         summary: CellConsole.runActive ?
@@ -169,8 +176,8 @@ Rectangle {
           Layout.fillWidth: true
           spacing: 16
           ProgressRing {
-            Layout.preferredWidth: 92
-            Layout.preferredHeight: 92
+            Layout.preferredWidth: 60
+            Layout.preferredHeight: 60
             value: CellConsole.runActive ? CellConsole.runFraction : 0
             Column {
               anchors.centerIn: parent
@@ -179,7 +186,7 @@ Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: CellConsole.runActive && CellConsole.runCycles > 0 ?
                   CellConsole.runCycle + "/" + CellConsole.runCycles : "-"
-                size: Theme.title
+                size: Theme.subtitle
                 strong: true
               }
               UiText {
@@ -225,6 +232,7 @@ Rectangle {
       StatusCard {
         Layout.leftMargin: 12
         Layout.rightMargin: 12
+        objectName: "sidesCard"
         title: "Sides"
         compact: rail.compact
         summary: CellConsole.physicalCommanded ? "real arm may be commanded" :
@@ -283,6 +291,7 @@ Rectangle {
             text: "Twin boundary"
           }
           ConnectionPill {
+            implicitHeight: 22
             link: CellConsole.boundaryLink
           }
         }
@@ -300,10 +309,12 @@ Rectangle {
               }
               StatusPill {
                 visible: modelData.physical
+                implicitHeight: 22
                 dot: false
                 value: "PHYSICAL"
               }
               ConnectionPill {
+                implicitHeight: 22
                 link: modelData.link
                 abnormal: modelData.abnormal
               }
@@ -333,6 +344,7 @@ Rectangle {
       StatusCard {
         Layout.leftMargin: 12
         Layout.rightMargin: 12
+        objectName: "fidelityCard"
         title: "Twin fidelity"
         compact: rail.compact
         summary: {
@@ -401,6 +413,7 @@ Rectangle {
       // ---------------------------------------------------------- events
       StatusCard {
         id: eventCard
+        objectName: "eventCard"
         Layout.leftMargin: 12
         Layout.rightMargin: 12
         visible: !rail.compact
@@ -408,15 +421,14 @@ Rectangle {
         summary: CellConsole.eventLog.length > 0 ? CellConsole.eventLog.length + " recent" : ""
         // The room left below the other cards, but never less than a few rows.
         Layout.preferredHeight: Math.max(
-          200, body.availableHeight - (eventCard.y - cards.y) - 16)
+          160, body.availableHeight - (eventCard.y - cards.y) - 8)
         EventLog {
           Layout.fillWidth: true
           Layout.fillHeight: true
-          Layout.minimumHeight: 120
+          Layout.minimumHeight: 96
         }
       }
 
-      Item { Layout.preferredHeight: 4 }
     }
   }
 }

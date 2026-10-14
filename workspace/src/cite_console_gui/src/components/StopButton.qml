@@ -25,6 +25,8 @@ Button {
   objectName: "stopButton"
   text: "Stop — software stop, not an E-stop"
   hoverEnabled: true
+  // Mouse only, as every deck button (S-04).
+  focusPolicy: Qt.NoFocus
   font.family: Theme.fontFamily
   font.capitalization: Font.MixedCase
   topInset: 0
@@ -70,16 +72,27 @@ Button {
         font.weight: Font.Bold
         color: Theme.textOnStrong
       }
+      // The rest of the label, on one line where it fits and otherwise
+      // broken after its comma only: never inside "E-stop", which a word wrap
+      // breaks at its hyphen (T-05).
       Text {
+        id: subtitle
+        objectName: "stopSubtitle"
+        readonly property string whole: label.parts.slice(1).join(" — ")
         width: parent.width
         horizontalAlignment: Text.AlignHCenter
         visible: label.parts.length > 1
-        text: label.parts.slice(1).join(" — ")
+        text: oneLine.width <= width ? whole : whole.replace(", ", ",\n")
         textFormat: Text.PlainText
-        wrapMode: Text.WordWrap
+        wrapMode: Text.NoWrap
         font.family: Theme.fontFamily
         font.pixelSize: Theme.caption + 1
         color: Theme.textOnStrong
+        TextMetrics {
+          id: oneLine
+          font: subtitle.font
+          text: subtitle.whole
+        }
       }
     }
   }

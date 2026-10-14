@@ -13,8 +13,7 @@
 // limitations under the License.
 
 // A rounded status label. `tone` is "normal" (grey), "alarm", "warning" or
-// "attention" (Theme, ISA-101); `pulse` softly pulses its dot while the thing
-// it names is heard live - motion, not colour, and never a flash.
+// "attention" (Theme, ISA-101). Static: nothing in it moves or flashes.
 
 import QtQuick 2.9
 
@@ -24,8 +23,6 @@ Rectangle {
   property string value: ""
   property string tone: "normal"
   property bool dot: true
-  property bool pulse: false
-  property bool compact: false
 
   readonly property color toneColour: tone === "alarm" ? Theme.alarm :
     tone === "warning" ? Theme.warning : tone === "attention" ? Theme.attention :
@@ -54,13 +51,6 @@ Rectangle {
       height: 8
       radius: 4
       color: pill.toneColour
-      SequentialAnimation on opacity {
-        running: pill.pulse && pill.visible
-        loops: Animation.Infinite
-        alwaysRunToEnd: true
-        NumberAnimation { from: 1.0; to: 0.35; duration: 900; easing.type: Easing.InOutSine }
-        NumberAnimation { from: 0.35; to: 1.0; duration: 900; easing.type: Easing.InOutSine }
-      }
     }
     UiText {
       visible: pill.label !== ""

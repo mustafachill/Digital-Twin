@@ -35,6 +35,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QString>
 #include <QTemporaryDir>
 #include <QtGlobal>
@@ -58,7 +59,8 @@ char * argv_[] = {arg0_, nullptr};
 
 /// The panel alone, in the card the generated configuration describes for it,
 /// less the anchors to a 3D view this window does not have.
-const char kConfig[] = R"(<?xml version="1.0"?>
+const char kConfig[] =
+  R"(<?xml version="1.0"?>
 <window>
   <width>1920</width>
   <height>1080</height>
@@ -139,8 +141,39 @@ TEST(PanelInGzGui, ThePassThroughIsAppliedToGzGuisCardAndStopStillTakesItsPress)
   ASSERT_NE(stop, nullptr);
   ASSERT_GT(stop->width(), 0.0);
   EXPECT_TRUE(plugin->pressReaches(stop)) << "a press on Stop does not reach Stop";
-  const QPointF middle = frame->mapToItem(card, QPointF(frame->width() / 4.0, frame->height() / 2.0));
+  const QPointF middle = frame->mapToItem(card,
+    QPointF(frame->width() / 4.0, frame->height() / 2.0));
   EXPECT_FALSE(card->contains(middle)) << "gz-gui's card still takes the middle of the view";
+  window->close();
+}
+
+// R-02: the window is maximized once gz-gui has applied its configuration,
+// whose own resize (the configured 1920x1080) came after the panel was added
+// and undid a maximize made then. The title toolbar is hidden.
+TEST(PanelInGzGui, TheWindowIsMaximizedAfterGzGuiAppliesItsConfiguration)
+{
+  gz::gui::Application app(argc_, argv_);
+  app.AddPluginPath(CITE_CELL_CONSOLE_DIR);
+  QTemporaryDir directory;
+  ASSERT_TRUE(directory.isValid());
+  const std::string path = directory.filePath("panel.config").toStdString();
+  std::ofstream(path) << kConfig;
+  ASSERT_TRUE(app.LoadConfig(path));
+  auto * main = app.findChild<gz::gui::MainWindow *>();
+  ASSERT_NE(main, nullptr);
+  QQuickWindow * window = main->QuickWindow();
+  ASSERT_NE(window, nullptr);
+  window->show();
+  QCoreApplication::processEvents();
+
+  EXPECT_TRUE(window->windowStates() & Qt::WindowMaximized);
+  ASSERT_NE(window->screen(), nullptr);
+  EXPECT_EQ(window->frameGeometry().size(), window->screen()->availableGeometry().size())
+    << "the window is " << window->width() << "x" << window->height()
+    << ": the configured size was applied after the maximize, and undid it";
+  auto * header = window->property("header").value<QQuickItem *>();
+  ASSERT_NE(header, nullptr);
+  EXPECT_FALSE(header->isVisible()) << "gz-gui's title toolbar is still shown";
   window->close();
 }
 

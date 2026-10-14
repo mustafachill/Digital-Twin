@@ -39,10 +39,12 @@
 // running request's position (`RunProgress`) and the last transitions of the
 // console's state (`EventLog`).
 //
-// ONE TIMER, FOR A DISPLAY. How long ago the twin boundary's heartbeat arrived
-// is timed on this object's steady clock and re-read by a Qt timer, so that a
-// heartbeat that stops turns the display stale without anything arriving. It
-// sequences nothing and gates nothing (P4): it only repaints.
+// ONE TIMER, FOR TWO DISPLAYS. How long ago the twin boundary's heartbeat and
+// the world's statistics last arrived is timed on this object's steady clock
+// and re-read by one Qt timer, so that either stopping turns its display stale
+// without anything arriving: the connection pills, and the header's sim time
+// and RTF (R-06). It sequences nothing and gates nothing (P4): it only
+// repaints.
 //
 // Its names are this plugin's XML parameters, written by the generated GUI
 // configuration (generate/gui.py) under the keys of the plan's `console:` block.
@@ -140,6 +142,8 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(bool resetViewEnabled READ resetViewEnabled NOTIFY viewChanged)
   Q_PROPERTY(QStringList viewPresets READ viewPresets NOTIFY viewChanged)
   Q_PROPERTY(bool followEnabled READ followEnabled NOTIFY viewChanged)
+  // What "Follow robot" follows, in words (generate/gui.py `follow_label`).
+  Q_PROPERTY(QString followLabel READ followLabel NOTIFY viewChanged)
   // What is wrong with the view buttons: their configuration, or the last
   // request the window refused or did not answer. Never the console's.
   Q_PROPERTY(QString viewError READ viewError NOTIFY viewChanged)
@@ -166,6 +170,9 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(QString simTime READ simTime NOTIFY worldStatsChanged)
   Q_PROPERTY(QString realTimeFactor READ realTimeFactor NOTIFY worldStatsChanged)
   Q_PROPERTY(bool worldPaused READ worldPaused NOTIFY worldStatsChanged)
+  // None heard for longer than the configuration's `world_stats_stale_after_s`,
+  // after some had been: the figures shown are the last heard, not current.
+  Q_PROPERTY(bool worldStatsStale READ worldStatsStale NOTIFY worldStatsChanged)
   // The running request's position, from its feedback (`RunProgress`).
   Q_PROPERTY(bool runActive READ runActive NOTIFY runProgressChanged)
   Q_PROPERTY(QString runPhase READ runPhase NOTIFY runProgressChanged)
@@ -225,6 +232,7 @@ public:
   bool resetViewEnabled() const {return static_cast<bool>(camera_);}
   QStringList viewPresets() const;
   bool followEnabled() const {return camera_ && !view_config_.follow_target.empty();}
+  QString followLabel() const {return QString::fromStdString(view_config_.follow_label);}
   QString viewError() const;
   bool healthShown() const {return view_config_.heartbeat_stale_after_s > 0.0;}
   QString boundaryLink() const;
@@ -238,6 +246,7 @@ public:
   QString simTime() const;
   QString realTimeFactor() const;
   bool worldPaused() const {return world_stats_heard_ && world_stats_.paused;}
+  bool worldStatsStale() const {return world_stats_stale_;}
   bool runActive() const {return run_progress_.active;}
   QString runPhase() const {return QString::fromStdString(run_progress_.phase);}
   int runCycle() const {return static_cast<int>(run_progress_.cycle);}
@@ -304,6 +313,8 @@ private:
   HeartbeatView heartbeat_now() const;
   /// Re-read the heartbeat's age; notify only if what is shown changed.
   void refresh_health();
+  /// Re-read the world statistics' age; notify only if staleness changed.
+  void refresh_world_stats();
 
   std::unique_ptr<ConsoleClient> client_;
   std::unique_ptr<CameraClient> camera_;
@@ -328,6 +339,7 @@ private:
   bool heartbeat_present_{false};
   bool heartbeat_heard_{false};
   QElapsedTimer last_heartbeat_;
+  /// The one display timer: re-reads both ages (heartbeat, world statistics).
   QTimer health_timer_;
   /// What the health display last showed, to notify only on a change.
   Link shown_boundary_{Link::ABSENT};
@@ -337,6 +349,8 @@ private:
   std::unique_ptr<WorldStatsClient> world_stats_client_;
   WorldStats world_stats_;
   bool world_stats_heard_{false};
+  QElapsedTimer last_world_stats_;
+  bool world_stats_stale_{false};
   RunProgress run_progress_;
   /// The last sample per asset, by asset id.
   std::map<std::string, DivergenceSample> divergence_;

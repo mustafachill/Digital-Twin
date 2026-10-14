@@ -14,8 +14,10 @@
 
 // A button of the command deck. `variant` is "normal" (an action: grey, the
 // normal state) or "subdued" (the view buttons: quieter, they move no robot).
-// Its focus ring is the brand colour (identity, not state). The label wraps
-// to two lines rather than leaving the deck.
+// The label wraps to two lines rather than leaving the deck.
+//
+// MOUSE ONLY (S-04): it never takes keyboard focus, so a stray Space or Enter
+// cannot send again the request it last sent.
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -41,6 +43,7 @@ Button {
   font.pixelSize: subdued ? Theme.caption + 1 : Theme.body
   font.weight: subdued ? Font.Normal : Font.DemiBold
   hoverEnabled: true
+  focusPolicy: Qt.NoFocus
 
   ToolTip.visible: iconOnly && hovered
   ToolTip.text: text

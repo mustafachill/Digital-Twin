@@ -56,6 +56,11 @@ std::string format_real_time_factor(double factor)
   return text;
 }
 
+bool world_stats_stale(bool heard, double age_s, double stale_after_s)
+{
+  return heard && stale_after_s > 0.0 && age_s > stale_after_s;
+}
+
 WorldStats world_stats_from(const gz::msgs::WorldStatistics & message)
 {
   WorldStats stats;

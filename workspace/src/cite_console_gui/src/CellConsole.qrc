@@ -13,6 +13,7 @@
     <file>components/StatusCard.qml</file>
     <file>components/FieldRow.qml</file>
     <file>components/ProgressRing.qml</file>
+    <file>components/HeaderFigure.qml</file>
     <file>components/HeaderBar.qml</file>
     <file>components/AlarmBand.qml</file>
     <file>components/StatusRail.qml</file>

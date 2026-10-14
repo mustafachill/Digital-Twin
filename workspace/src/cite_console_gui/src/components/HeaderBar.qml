@@ -119,20 +119,23 @@ Rectangle {
       Layout.preferredHeight: 28
       color: Theme.divider
     }
+    // Each pill keeps its status word at every width (T-04): status is never
+    // colour alone. A side is named by its name, never by where it sits in
+    // the list (R-05).
     ConnectionPill {
+      objectName: "boundaryPill"
       visible: CellConsole.healthShown
       label: "Boundary"
       link: CellConsole.boundaryLink
-      compact: !header.wide
     }
     Repeater {
       model: CellConsole.healthShown ? CellConsole.sideHealth : []
       ConnectionPill {
+        objectName: "sidePill_" + modelData.name
         label: modelData.physical ? "Real arm" :
-          (index === 0 ? "Simulation" : "Simulation (" + modelData.name + ")")
+          modelData.name.charAt(0).toUpperCase() + modelData.name.slice(1)
         link: modelData.link
         abnormal: modelData.abnormal
-        compact: !header.wide
       }
     }
 
@@ -141,30 +144,27 @@ Rectangle {
       Layout.preferredHeight: 28
       color: Theme.divider
     }
-    Repeater {
-      model: [
-        {caption: "Sim time", value: CellConsole.simTime,
-          note: CellConsole.worldPaused ? "paused" : ""},
-        {caption: "RTF", value: CellConsole.realTimeFactor, note: ""},
-        {caption: "Local", value: header.clock, note: ""}
-      ]
-      Column {
-        Layout.alignment: Qt.AlignVCenter
-        spacing: 0
-        UiText {
-          text: modelData.caption.toUpperCase() +
-            (modelData.note !== "" ? " · " + modelData.note : "")
-          size: Theme.caption
-          color: Theme.muted
-          font.letterSpacing: 0.8
-        }
-        UiText {
-          text: modelData.value
-          size: Theme.subtitle
-          strong: true
-          color: Theme.text
-        }
-      }
+    // Sim time and RTF beside the wall clock. Static items, not a model built
+    // from them, so a statistics message repaints two labels and rebuilds
+    // nothing (R-06). Figures not heard for longer than the configuration
+    // allows are the last heard, not current: dimmed and said "stale".
+    HeaderFigure {
+      objectName: "simTimeFigure"
+      caption: "Sim time"
+      note: CellConsole.worldStatsStale ? "stale" : CellConsole.worldPaused ? "paused" : ""
+      value: CellConsole.simTime
+      stale: CellConsole.worldStatsStale
+    }
+    HeaderFigure {
+      objectName: "rtfFigure"
+      caption: "RTF"
+      note: CellConsole.worldStatsStale ? "stale" : ""
+      value: CellConsole.realTimeFactor
+      stale: CellConsole.worldStatsStale
+    }
+    HeaderFigure {
+      caption: "Local"
+      value: header.clock
     }
   }
 }

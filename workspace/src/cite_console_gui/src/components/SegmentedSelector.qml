@@ -60,6 +60,8 @@ Rectangle {
         enabled: selector.enabledChoices.length > index &&
           selector.enabledChoices[index] === true
         hoverEnabled: true
+        // Mouse only, as every deck button (S-04).
+        focusPolicy: Qt.NoFocus
         onClicked: selector.activated(index)
 
         background: Rectangle {

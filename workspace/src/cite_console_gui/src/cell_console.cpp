@@ -175,6 +175,8 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
             this, [this, stats]() {
               world_stats_ = stats;
               world_stats_heard_ = true;
+              world_stats_stale_ = false;
+              last_world_stats_.restart();
               emit worldStatsChanged();
             }, Qt::QueuedConnection);
         });
@@ -189,11 +191,24 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   if (!view_config_error_.isEmpty()) {
     qWarning("CellConsole: %s", qUtf8Printable(view_config_error_));
   }
-  if (healthShown()) {
-    // A repaint, at twice the rate the threshold needs to be seen crossed.
-    health_timer_.setInterval(
-      std::max(50, static_cast<int>(view_config_.heartbeat_stale_after_s * 500.0)));
-    connect(&health_timer_, &QTimer::timeout, this, [this]() {refresh_health();});
+  // A repaint, at twice the rate the shorter threshold needs to be seen
+  // crossed; a threshold the configuration does not give is not timed.
+  double shortest = 0.0;
+  for (const double threshold :
+    {view_config_.heartbeat_stale_after_s, frame_config_.world_stats_stale_after_s})
+  {
+    if (threshold > 0.0 && (shortest <= 0.0 || threshold < shortest)) {
+      shortest = threshold;
+    }
+  }
+  if (shortest > 0.0) {
+    health_timer_.setInterval(std::max(50, static_cast<int>(shortest * 500.0)));
+    connect(&health_timer_, &QTimer::timeout, this, [this]() {
+        if (healthShown()) {
+          refresh_health();
+        }
+        refresh_world_stats();
+      });
     health_timer_.start();
   }
   emit viewChanged();
@@ -472,9 +487,17 @@ void CellConsole::frame_window(QQuickWindow * window)
   } else {
     qWarning("CellConsole: gz-gui's window has no header to hide (ADR-0074)");
   }
-  // Maximized, not fullscreen: the desktop's title bar and close stay.
-  window->showMaximized();
-  emit windowShown();
+  // Maximized, not fullscreen: the desktop's title bar and close stay. Queued,
+  // not called here: the window is already visible while gz-gui loads its
+  // configuration, and `MainWindow::ApplyConfig` resizes it to the configured
+  // size after the plugins are added - after this - so a maximize made now
+  // was undone (R-02). A queued call runs once that load has returned to the
+  // event loop: an event, not a timer.
+  QMetaObject::invokeMethod(
+    this, [this, window]() {
+      window->showMaximized();
+      emit windowShown();
+    }, Qt::QueuedConnection);
 }
 
 HeartbeatView CellConsole::heartbeat_now() const
@@ -492,6 +515,18 @@ void CellConsole::refresh_health()
   if (now != shown_boundary_) {
     shown_boundary_ = now;
     emit healthChanged();
+  }
+}
+
+void CellConsole::refresh_world_stats()
+{
+  const bool stale = world_stats_stale(
+    world_stats_heard_ && last_world_stats_.isValid(),
+    static_cast<double>(last_world_stats_.elapsed()) / 1000.0,
+    frame_config_.world_stats_stale_after_s);
+  if (stale != world_stats_stale_) {
+    world_stats_stale_ = stale;
+    emit worldStatsChanged();
   }
 }
 

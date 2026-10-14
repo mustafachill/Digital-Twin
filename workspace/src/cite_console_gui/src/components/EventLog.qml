@@ -54,12 +54,17 @@ ListView {
           strong: true
           color: modelData.state === "FAULT" ? Theme.alarm : Theme.text
         }
-        UiText {
-          Layout.fillWidth: true
-          text: modelData.step
-          size: Theme.caption
-          color: Theme.textSecondary
-        }
+        Item { Layout.fillWidth: true }
+      }
+      // Whole, wrapped: the Robot card shows a step in two lines at most,
+      // and this is where it is read in full (T-02).
+      UiText {
+        Layout.fillWidth: true
+        visible: modelData.step !== ""
+        text: modelData.step
+        size: Theme.caption
+        color: Theme.textSecondary
+        wrapMode: Text.WordWrap
       }
       UiText {
         Layout.fillWidth: true
