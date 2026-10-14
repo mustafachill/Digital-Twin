@@ -2051,6 +2051,19 @@ accepts only 0, -2 and -15, so those two runs failed.
 **What is not known.** It was not seen in a normal `./scripts/test` run, and it was not
 investigated. It is not the known `move_group` teardown fault. It needs its own debug task.
 
+### #105 — Console program nodes can stay on the graph after their request (2026-10-14)
+
+**What happens.** `RosCell.close()` calls `destroy_node()` but does not destroy the cell's two
+`ActionClient`s (`_move_to` and `_grasp`). Each client keeps the node's handle alive, so the node
+stays on the graph until the cell is garbage-collected. A probe confirmed this.
+
+**Why it matters.** A run's mode hold lapses when the holding node leaves the graph. A lingering
+node can therefore keep a hold alive that was not released explicitly, for example after
+`HOLD_KEPT`.
+
+**The fix.** In `close()`, call `self._move_to.destroy()` and `self._grasp.destroy()` before
+`destroy_node()`. It was set aside to keep one round short.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
