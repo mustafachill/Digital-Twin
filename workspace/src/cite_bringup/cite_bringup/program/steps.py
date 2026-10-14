@@ -233,7 +233,9 @@ def run(
                 if on_step is not None:
                     on_step(cycle, number, len(steps), step)
                 execute(step, cell)
-        say(f"done: {done} cycle(s)")
+        # A caller that runs one cycle per invocation numbers them itself, and
+        # its request is done through the last of them, not after one (T-07).
+        say(f"done: {done} cycle(s)" if first_cycle == 1 else f"done: through cycle {cycle}")
         status = 0
     except StepFailed as failure:
         say(f"FAILED in cycle {cycle}: {failure}")

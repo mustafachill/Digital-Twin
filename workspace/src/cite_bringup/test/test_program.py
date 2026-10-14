@@ -136,7 +136,16 @@ def test_a_caller_running_one_cycle_at_a_time_numbers_them_itself(cell) -> None:
     lines: list[str] = []
     assert run(program(cell), FakeCell(), cycles=1, say=lines.append, first_cycle=3) == 0
     assert lines[0].startswith("[cycle 3, step 1/")
-    assert "done: 1 cycle(s)" in lines
+    # The caller's request is done through its third cycle, not after one
+    # (T-07: the console's step read "done: 1 cycle(s)" after a 2-cycle run).
+    assert lines[-1] == "done: through cycle 3"
+    assert "done: 1 cycle(s)" not in lines
+
+
+def test_a_run_from_the_first_cycle_says_how_many_it_did(cell) -> None:
+    lines: list[str] = []
+    assert run(program(cell), FakeCell(), cycles=2, say=lines.append) == 0
+    assert lines[-1] == "done: 2 cycle(s)"
 
 
 def test_the_first_failure_stops_the_program(cell) -> None:
