@@ -381,10 +381,10 @@ void ConsoleClient::run_program(
         return;
       }
       const bool success = result.result->success;
+      const bool stopped = !success && stopped_since(stops_at_send, result.code);
       outcome(
-        outcome_opening("Start program", success, !success && stopped_since(stops_at_send, result.code)) +
-        result.result->detail + " Cycles completed: " +
-        std::to_string(result.result->cycles_completed) + ".");
+        outcome_opening("Start program", success, stopped) + result.result->detail +
+        " Cycles completed: " + std::to_string(result.result->cycles_completed) + ".");
     };
   run_program_->async_send_goal(goal, options);
 }

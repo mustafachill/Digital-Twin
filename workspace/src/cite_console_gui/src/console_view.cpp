@@ -148,8 +148,9 @@ std::string validate_then_run_outcome(
   } else {
     where = "Refused before either phase began.";
   }
-  return outcome_opening("Validate then run", result.success, stopped) + result.detail + " " + where +
-         " Cycles completed on the twin: " + std::to_string(result.cycles_completed) + ".";
+  const std::string opening = outcome_opening("Validate then run", result.success, stopped);
+  return opening + result.detail + " " + where + " Cycles completed on the twin: " +
+         std::to_string(result.cycles_completed) + ".";
 }
 
 std::string twin_mode_name(std::uint8_t mode)

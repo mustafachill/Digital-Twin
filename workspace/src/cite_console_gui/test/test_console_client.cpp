@@ -272,6 +272,7 @@ public:
       [this, run](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>> handle) {
         // Off the executor's thread, as a real server runs its goal.
         runner_ = std::thread([this, handle, run]() {
+          await_accepted();
           auto feedback = std::make_shared<RunProgram::Feedback>();
           feedback->cycle = 2;
           feedback->step_index = 3;
@@ -313,7 +314,8 @@ public:
         return rclcpp_action::CancelResponse::ACCEPT;
       },
       [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<ValidateThenRun>> handle) {
-        runner_ = std::thread([handle]() {
+        runner_ = std::thread([this, handle]() {
+          await_accepted();
           auto validating = std::make_shared<ValidateThenRun::Feedback>();
           validating->phase = ConsoleState::PHASE_VALIDATING;
           validating->cycle = 1;
@@ -379,6 +381,19 @@ public:
     other_state_->publish(message);
   }
 
+  /// The client has said the goal was accepted: it now knows the goal, and a
+  /// feedback reaches it. One published before that is dropped by the client
+  /// (rclcpp_action forgets feedback for a goal it does not yet hold), so an
+  /// accepted goal's feedback waits for this.
+  void accepted_seen()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      accepted_seen_ = true;
+    }
+    accepted_.notify_all();
+  }
+
   std::vector<std::string> requests()
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -386,6 +401,13 @@ public:
   }
 
 private:
+  /// Bounded by SETTLE, a hang detector; ends the moment it is told.
+  void await_accepted()
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    accepted_.wait_for(lock, SETTLE, [this]() {return accepted_seen_;});
+  }
+
   void note(const std::string & request)
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -409,6 +431,8 @@ private:
   std::mutex mutex_;
   std::condition_variable stop_served_;
   bool stopped_{false};
+  std::condition_variable accepted_;
+  bool accepted_seen_{false};
   std::vector<std::string> requests_;
 };
 
@@ -811,6 +835,7 @@ TEST(ConsoleClient, ARunsFeedbackIsItsPositionAndItsEndClearsIt)
   const std::string accepted = sent_once_served(
     recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 3);}, &Recorder::progress);
   EXPECT_EQ(accepted, "Start program: accepted.");
+  console.accepted_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.outcomes.empty();}));
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
@@ -849,6 +874,7 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
     sent_once_served(
       recorder, [&]() {client.validate_then_run(0.5, 3);}, &Recorder::progress),
     "Validate then run: accepted.");
+  console.accepted_seen();
   ASSERT_TRUE(
     recorder.wait_for(
       [&]() {return !recorder.outcomes.empty() && !recorder.outcomes.back().empty();}));
@@ -903,6 +929,8 @@ TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
     before = recorder.outcomes.size();
   }
   client.run_program(1.0, ConsoleState::TARGET_SIM, 3);
+  // Its feedback is not what this test reads: let it through at once.
+  console.accepted_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.outcomes.size() >= before + 2;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
   EXPECT_EQ(recorder.outcomes[before], "") << "the last outcome was not cleared on sending";
@@ -924,6 +952,7 @@ TEST(ConsoleClient, ARunEndedByAStopIsSaidStoppedNotFailed)
       recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 2);},
       &Recorder::progress),
     "Start program: accepted.");
+  console.accepted_seen();
   client.stop();
   ASSERT_TRUE(
     recorder.wait_for(
