@@ -408,23 +408,14 @@ class TestTheWindowOpensOnTheCell:
             assert abs(x - pose.x) < forward * math.tan(half_fov), asset.id
 
     def test_the_config_keeps_harmonics_default_plugins(self, zone_cell) -> None:
-        artifact = gui.generate(zone_cell)[0]
+        # Where no operator console frames the window: an unpaired zone, and a
+        # pair's counterpart (ADR-0074 leaves that window as it was).
+        single = dataclasses.replace(zone_cell, sides=zone_cell.sides[:1])
+        artifact = gui.generate(single)[0]
         assert artifact.path == f"worlds/{zone_cell.zone}_gui.config"
         root = ElementTree.fromstring(f"<root>{artifact.content.split('?>', 1)[1]}</root>")
         names = {p.get("filename") for p in root.findall("plugin")}
-        assert {
-            "MinimalScene",
-            "GzSceneManager",
-            "InteractiveViewControl",
-            "CameraTracking",
-            "MarkerManager",
-            "SelectEntities",
-            "Spawn",
-            "VisualizationCapabilities",
-            "EntityContextMenuPlugin",
-            "WorldControl",
-            "WorldStats",
-        } <= names
+        assert names >= HARMONIC_DEFAULTS
         # Left out on purpose: docked, they kept half the window from the cell.
         assert not {"EntityTree", "ComponentInspector"} & names
         pose = gui.gui_camera_pose(zone_cell)
@@ -443,6 +434,44 @@ class TestTheWindowOpensOnTheCell:
         # And each names a file the GUI generator emits.
         emitted = {a.path for a in gui.generate(zone_cell)}
         assert {gui_config_path(zone_cell.zone, s.name) for s in zone_cell.sides} == emitted
+
+
+#: Harmonic's default GUI plugin set, as gz-sim 8's own gui.config loads it,
+#: less the two docked panels the generator leaves closed.
+HARMONIC_DEFAULTS = frozenset(
+    {
+        "MinimalScene",
+        "GzSceneManager",
+        "InteractiveViewControl",
+        "CameraTracking",
+        "MarkerManager",
+        "SelectEntities",
+        "Spawn",
+        "VisualizationCapabilities",
+        "EntityContextMenuPlugin",
+        "WorldControl",
+        "WorldStats",
+        "Shapes",
+        "Lights",
+        "TransformControl",
+        "Screenshot",
+        "CopyPaste",
+    }
+)
+
+#: What the operator window keeps of them (ADR-0074): the scene, the camera's
+#: controls - CameraTracking serves the panel's view buttons - and selection.
+#: Everything that edits the world or its run is gone.
+OPERATOR_WINDOW_PLUGINS = frozenset(
+    {
+        "MinimalScene",
+        "GzSceneManager",
+        "InteractiveViewControl",
+        "CameraTracking",
+        "MarkerManager",
+        "SelectEntities",
+    }
+)
 
 
 def _plugins(artifact) -> list[ElementTree.Element]:
@@ -471,9 +500,12 @@ class TestOnlyThePlantsWindowCarriesTheConsole:
         counterpart = self._by_side(zone_cell)[ids.COUNTERPART_SIDE]
         names = {p.get("filename") for p in _plugins(counterpart)}
         assert "CellConsole" not in names
-        # Everything else is the same window.
-        plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
-        assert names == {p.get("filename") for p in _plugins(plant)} - {"CellConsole"}
+        # The counterpart's window is Harmonic's default, byte for byte the one
+        # an unpaired zone gets (ADR-0074 leaves it unchanged).
+        assert names >= HARMONIC_DEFAULTS
+        single = dataclasses.replace(zone_cell, sides=zone_cell.sides[:1])
+        (only,) = gui.generate(single)
+        assert counterpart.content == only.content
 
     def test_the_panel_is_handed_exactly_the_plans_console_names(self, zone_cell) -> None:
         plant = self._by_side(zone_cell)[ids.PLANT_SIDE]
@@ -620,3 +652,63 @@ class TestOnlyThePlantsWindowCarriesTheConsole:
         assert not single.is_paired
         (only,) = gui.generate(single)
         assert "CellConsole" not in {p.get("filename") for p in _plugins(only)}
+
+
+class TestThePlantsWindowIsTheOperatorWindow:
+    """ADR-0074: the panel frames the 3D view, and the editing tools are gone."""
+
+    @pytest.fixture
+    def zone_cell(self, real_model: Path):
+        return resolve(load(real_model), ZONE)
+
+    def _plant(self, cell):
+        paths = {gui_config_path(cell.zone, side.name): side.name for side in cell.sides}
+        return {paths[a.path]: a for a in gui.generate(cell)}[ids.PLANT_SIDE]
+
+    def _root(self, cell) -> ElementTree.Element:
+        return ElementTree.fromstring(f"<root>{self._plant(cell).content.split('?>', 1)[1]}</root>")
+
+    def test_only_the_scene_and_camera_plugins_stay(self, zone_cell) -> None:
+        names = {p.get("filename") for p in _plugins(self._plant(zone_cell))}
+        assert names == OPERATOR_WINDOW_PLUGINS | {"CellConsole"}
+
+    def test_the_panel_fills_the_3d_view_with_a_transparent_card(self, zone_cell) -> None:
+        (panel,) = (
+            p for p in _plugins(self._plant(zone_cell)) if p.get("filename") == "CellConsole"
+        )
+        settings = panel.find("gz-gui")
+        properties = {p.get("key"): p.text for p in settings.findall("property")}
+        # No size of its own: the anchors size it.
+        assert "width" not in properties
+        assert "height" not in properties
+        assert properties["showTitleBar"] == "false"
+        assert properties["state"] == "floating"
+        assert properties["cardBackground"] == "#00000000"
+        anchors = settings.find("anchors")
+        assert anchors.get("target") == "3D View"
+        lines = {(line.get("own"), line.get("target")) for line in anchors.findall("line")}
+        assert lines == {(edge, edge) for edge in ("left", "right", "top", "bottom")}
+
+    def test_the_window_is_dark_and_its_menus_are_hidden(self, zone_cell) -> None:
+        window = self._root(zone_cell).find("window")
+        assert window.findtext("width") == "1920"
+        assert window.findtext("height") == "1080"
+        assert window.find("style").get("material_theme") == "Dark"
+        menus = window.find("menus")
+        assert menus.find("drawer").get("visible") == "false"
+        assert menus.find("plugins").get("visible") == "false"
+
+    def test_the_header_is_handed_the_zone_and_the_worlds_statistics_topic(self, zone_cell) -> None:
+        (panel,) = (
+            p for p in _plugins(self._plant(zone_cell)) if p.get("filename") == "CellConsole"
+        )
+        assert panel.findtext("facility_label") == zone_cell.facility_id.upper()
+        assert panel.findtext("zone_label") == gui.zone_label(zone_cell)
+        # The topic names the world the scene generator emits: the world is named
+        # for the zone, and gz-sim publishes its statistics under that name.
+        world_name = world_xml(zone_cell).get("name")
+        assert panel.findtext("world_stats_topic") == f"/world/{world_name}/stats"
+
+    def test_a_zone_label_is_its_id_in_words(self, zone_cell) -> None:
+        assert gui.zone_label(dataclasses.replace(zone_cell, zone="cell_b")) == "Cell B"
+        assert gui.zone_label(dataclasses.replace(zone_cell, zone="assembly")) == "Assembly"

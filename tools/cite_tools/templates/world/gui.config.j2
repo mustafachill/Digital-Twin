@@ -1,5 +1,18 @@
 <?xml version="1.0"?>
 {{ xml_banner() }}
+{% if console %}
+<!-- The operator window (ADR-0074): the plant's window of a paired zone, framed
+     by the operator console's panel. Harmonic's default GUI configuration
+     (gz-sim8, gui/gui.config) less every tool that edits the world or its run -
+     Spawn, Shapes, Lights, TransformControl, CopyPaste, Screenshot, the entity
+     context menu and its VisualizationCapabilities, WorldControl and
+     WorldStats - so the world cannot be edited from the operator window. Sim
+     time and RTF are in the panel's header. The window is dark, its menus are
+     hidden, and the panel hides gz-gui's title toolbar and maximizes the window
+     when it is shown. The 3D view's camera_pose is derived from where L0 places
+     this zone's assets (generate/gui.py). A developer who needs the editing
+     tools runs ./scripts/sim on its own. -->
+{% else %}
 <!-- Harmonic's default GUI configuration (gz-sim8, gui/gui.config), copied
      plugin for plugin so that passing this file removes nothing from the window.
      Two things differ: the 3D view's camera_pose, which the generator derives
@@ -7,6 +20,7 @@
      inspector and entity tree are not opened: docked, even collapsed, they kept
      half the window and the cell had to be framed into what was left. Both can
      still be opened from the window's plugin menu. -->
+{% endif %}
 {# The 3D view's starting pose, written ONCE: MinimalScene's `<camera_pose>` and
    the panel's `<home_camera_pose>` (its "Reset view") are this one text. #}
 {% set camera_pose = [camera.x, camera.y, camera.z, camera.roll, camera.pitch, camera.yaw] | map("m") | join(" ") %}
@@ -16,10 +30,18 @@
 
 <!-- Window -->
 <window>
+{% if console %}
+  <!-- The operator display's primary size; the panel maximizes the window. -->
+  <width>1920</width>
+  <height>1080</height>
+  <style
+    material_theme="Dark"
+{% else %}
   <width>1000</width>
   <height>845</height>
   <style
     material_theme="Light"
+{% endif %}
     material_primary="DeepOrange"
     material_accent="LightBlue"
     toolbar_color_light="#f3f3f3"
@@ -32,8 +54,13 @@
     plugin_toolbar_text_color_dark="#eeeeee"
   />
   <menus>
+{% if console %}
+    <drawer visible="false"/>
+    <plugins visible="false"/>
+{% else %}
     <drawer default="false">
     </drawer>
+{% endif %}
   </menus>
   <dialog_on_exit>true</dialog_on_exit>
 </window>
@@ -51,11 +78,17 @@
   <engine>ogre2</engine>
   <scene>scene</scene>
   <ambient_light>0.4 0.4 0.4</ambient_light>
+{% if console %}
+  <!-- The operator window's control-room background (ADR-0074). -->
+  <background_color>0.12 0.15 0.19</background_color>
+{% else %}
   <background_color>0.8 0.8 0.8</background_color>
+{% endif %}
   <camera_pose>{{ camera_pose }}</camera_pose>
 </plugin>
 
 <!-- Plugins that add functionality to the scene -->
+{% if not console %}
 <plugin filename="EntityContextMenuPlugin" name="Entity context menu">
   <gz-gui>
     <property key="state" type="string">floating</property>
@@ -64,6 +97,7 @@
     <property key="showTitleBar" type="bool">false</property>
   </gz-gui>
 </plugin>
+{% endif %}
 <plugin filename="GzSceneManager" name="Scene Manager">
   <gz-gui>
     <property key="resizable" type="bool">false</property>
@@ -110,6 +144,7 @@
   </gz-gui>
 </plugin>
 
+{% if not console %}
 <plugin filename="Spawn" name="Spawn Entities">
   <gz-gui>
     <property key="resizable" type="bool">false</property>
@@ -245,6 +280,7 @@
     <property key="cardBackground" type="string">#777777</property>
   </gz-gui>
 </plugin>
+{% endif %}
 {% if console %}
 
 <!-- The operator console's panel (ADR-0071 decision 5): `CellConsole`, from
@@ -252,21 +288,24 @@
      the plant's window of a paired zone (generate/gui.py). It holds no logic: it
      shows the console's latched state and sends requests, and every refusal is
      the console's. Each element below is one name the console serves, by the
-     key the plan's `console:` block states it under. Anchored over the scene's
-     top-right corner, and without a title bar, so that it carries no close
-     button that would take the Stop button away with it. -->
+     key the plan's `console:` block states it under. It frames the 3D view
+     (ADR-0074): anchored to all four of its edges, with a transparent card and
+     no title bar, so that it carries no close button that would take the Stop
+     button away with it; its own QML leaves the middle empty and lets the
+     mouse through there to the scene. -->
 <plugin filename="CellConsole" name="Cell console">
   <gz-gui>
     <title>Cell console</title>
     <property type="bool" key="showTitleBar">false</property>
     <property type="bool" key="resizable">false</property>
-    <property type="double" key="width">380</property>
-    <property type="double" key="height">640</property>
+    <property type="string" key="cardBackground">#00000000</property>
     <property type="double" key="z">2</property>
     <property type="string" key="state">floating</property>
     <anchors target="3D View">
+      <line own="left" target="left"/>
       <line own="right" target="right"/>
       <line own="top" target="top"/>
+      <line own="bottom" target="bottom"/>
     </anchors>
   </gz-gui>
 
@@ -295,5 +334,12 @@
        there is one). A display, never a safety function. -->
   <twin_sides>{{ panel.twin_sides | xml }}</twin_sides>
   <heartbeat_stale_after_s>{{ panel.heartbeat_stale_after_s | m }}</heartbeat_stale_after_s>
+
+  <!-- What the panel's header names and shows (ADR-0074): the facility and the
+       zone, and the gz-transport topic the world publishes its statistics on
+       (sim time, RTF), the world being named for the zone. Display only. -->
+  <facility_label>{{ panel.facility_label | xml }}</facility_label>
+  <zone_label>{{ panel.zone_label | xml }}</zone_label>
+  <world_stats_topic>{{ panel.world_stats_topic | xml }}</world_stats_topic>
 </plugin>
 {% endif %}

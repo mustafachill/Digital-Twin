@@ -29,9 +29,18 @@ boundary's heartbeat go unheard before it shows the boundary as stale
 (`heartbeat_stale_after_s`). Each is a value the panel would otherwise have to
 write as a literal (P1); none of them commands a robot.
 
-The twin-mode, twin-sides and heartbeat topics the panel also reads are not
-parameters: they are `TOPIC` constants in the contract, which the plugin reads
-from the generated message headers rather than from a second statement here.
+The twin-mode, twin-sides, heartbeat and divergence topics the panel also reads
+are not parameters: they are `TOPIC` constants in the contract, which the plugin
+reads from the generated message headers rather than from a second statement
+here.
+
+THE PLANT'S WINDOW IS THE OPERATOR WINDOW (ADR-0074). Its panel frames the 3D
+view, and its configuration drops every tool that edits the world or its run
+(the template's `console` branch); the panel's header is handed the facility's
+and the zone's labels (`facility_label`, `zone_label`) and the gz-transport
+topic the world publishes its statistics on (`world_stats_topic`), each derived
+here from L0 rather than written in the panel (P1). A counterpart's window is
+Harmonic's default, unchanged.
 
 The camera stands on the CUSTOMER side of the line: across it from the arms,
 facing them. The line runs along world X in every zone L0 declares today, so the
@@ -263,6 +272,37 @@ def panel_names(cell: ResolvedCell, side: str) -> tuple[tuple[str, str], ...]:
     return ()
 
 
+def facility_label(cell: ResolvedCell) -> str:
+    """The facility as the panel's header names it: its L0 id, in capitals ("CITE")."""
+    return cell.facility_id.upper()
+
+
+def zone_label(cell: ResolvedCell) -> str:
+    """The zone as the panel's header names it, from its L0 id: ``cell_b`` is "Cell B".
+
+    Derived rather than declared: L0's zone `name` is a description ("One-arm
+    pick-and-place cell"), not a label, and a second, hand-written label would
+    be a second statement of which zone this is.
+    """
+    return " ".join(word.capitalize() for word in cell.zone.split("_") if word)
+
+
+#: gz-sim's world statistics topic, by world name (gz-sim 8 `SimulationRunner`:
+#: `/world/<name>/stats`, gz.msgs.WorldStatistics).
+WORLD_STATS_TOPIC = "/world/{world}/stats"
+
+
+def world_stats_topic(cell: ResolvedCell) -> str:
+    """Where the panel's header reads sim time and RTF from.
+
+    The world is named for the zone (`templates/world/cell.sdf.j2`), so this is
+    the zone's world's statistics topic. It is a gz-transport name, scoped by the
+    window's `GZ_PARTITION`, which the panel inherits from the `gz sim` process
+    it runs in.
+    """
+    return WORLD_STATS_TOPIC.format(world=cell.zone)
+
+
 def panel_parameters(cell: ResolvedCell) -> dict[str, object]:
     """Everything the panel is handed besides the console's names and its home view."""
     return {
@@ -270,6 +310,9 @@ def panel_parameters(cell: ResolvedCell) -> dict[str, object]:
         "follow_target": follow_target(cell),
         "twin_sides": " ".join(side.name for side in cell.sides),
         "heartbeat_stale_after_s": heartbeat_stale_after_s(cell),
+        "facility_label": facility_label(cell),
+        "zone_label": zone_label(cell),
+        "world_stats_topic": world_stats_topic(cell),
     }
 
 

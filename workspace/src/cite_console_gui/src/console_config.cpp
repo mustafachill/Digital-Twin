@@ -42,7 +42,7 @@ std::string joined(const std::vector<std::string> & items)
 bool is_known(const char * name)
 {
   for (const char * key : {GZ_GUI_ELEMENT, HOME_CAMERA_POSE_KEY, FOLLOW_TARGET_KEY, TWIN_SIDES_KEY,
-      HEARTBEAT_STALE_AFTER_KEY})
+      HEARTBEAT_STALE_AFTER_KEY, FACILITY_LABEL_KEY, ZONE_LABEL_KEY, WORLD_STATS_TOPIC_KEY})
   {
     if (std::strcmp(name, key) == 0) {
       return true;
@@ -67,6 +67,12 @@ const char * child_text(const tinyxml2::XMLElement * plugin_element, const char 
   const tinyxml2::XMLElement * element =
     plugin_element == nullptr ? nullptr : plugin_element->FirstChildElement(key);
   return element == nullptr ? nullptr : element->GetText();
+}
+
+/// Whether `text` is null or holds nothing but whitespace.
+bool blank(const char * text)
+{
+  return text == nullptr || std::string(text).find_first_not_of(" \t\n") == std::string::npos;
 }
 
 std::string unnamed(const char * key)
@@ -170,7 +176,7 @@ std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewCo
   }
 
   const char * target = child_text(plugin_element, FOLLOW_TARGET_KEY);
-  if (target == nullptr || std::string(target).find_first_not_of(" \t\n") == std::string::npos) {
+  if (blank(target)) {
     return unnamed(FOLLOW_TARGET_KEY);
   }
   read.follow_target = target;
@@ -201,6 +207,24 @@ std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewCo
   }
   read.heartbeat_stale_after_s = seconds;
 
+  config = std::move(read);
+  return "";
+}
+
+std::string read_frame_config(const tinyxml2::XMLElement * plugin_element, FrameConfig & config)
+{
+  FrameConfig read;
+  for (const auto & [key, value] : {
+      std::pair<const char *, std::string *>{FACILITY_LABEL_KEY, &read.facility_label},
+      std::pair<const char *, std::string *>{ZONE_LABEL_KEY, &read.zone_label},
+      std::pair<const char *, std::string *>{WORLD_STATS_TOPIC_KEY, &read.world_stats_topic}})
+  {
+    const char * text = child_text(plugin_element, key);
+    if (blank(text)) {
+      return unnamed(key);
+    }
+    *value = text;
+  }
   config = std::move(read);
   return "";
 }

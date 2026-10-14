@@ -79,6 +79,24 @@ constexpr const char * TWIN_SIDES_KEY = "twin_sides";
 /// stale (generate/gui.py `heartbeat_stale_after_s`).
 constexpr const char * HEARTBEAT_STALE_AFTER_KEY = "heartbeat_stale_after_s";
 
+/// The facility as the header names it (generate/gui.py `facility_label`).
+constexpr const char * FACILITY_LABEL_KEY = "facility_label";
+
+/// The zone as the header names it (generate/gui.py `zone_label`).
+constexpr const char * ZONE_LABEL_KEY = "zone_label";
+
+/// The gz-transport topic the window's world publishes its statistics on, sim
+/// time and RTF (generate/gui.py `world_stats_topic`). Display only.
+constexpr const char * WORLD_STATS_TOPIC_KEY = "world_stats_topic";
+
+/// What the frame's header shows besides the console's state (ADR-0074).
+struct FrameConfig
+{
+  std::string facility_label;
+  std::string zone_label;
+  std::string world_stats_topic;
+};
+
 /// The panel's views and connection display, as the configuration gives them.
 struct ViewConfig
 {
@@ -113,6 +131,11 @@ std::string read_camera_pose(
 /// Returns what is wrong, or an empty string when nothing is; on a problem
 /// `config` is left untouched.
 std::string read_view_config(const tinyxml2::XMLElement * plugin_element, ViewConfig & config);
+
+/// Fill `config` from `plugin_element`: the facility and zone labels and the
+/// world statistics topic, each non-empty. Returns what is wrong, or an empty
+/// string when nothing is; on a problem `config` is left untouched.
+std::string read_frame_config(const tinyxml2::XMLElement * plugin_element, FrameConfig & config);
 
 }  // namespace cite_console_gui
 
