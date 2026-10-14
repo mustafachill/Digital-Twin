@@ -57,14 +57,59 @@
 #include <QSizeF>
 #include <QString>
 #include <QStringList>
+#include <QTest>
 #include <QtGlobal>
 
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "../src/cell_console.hpp"
+#include "cite_interfaces/msg/console_state.hpp"
+#include "cite_interfaces/msg/twin_mode.hpp"
+
+namespace cite_console_gui
+{
+
+/// What the plugin would hold once it had heard a console, the twin boundary
+/// and its divergence: set through the plugin's own handlers where it has them.
+struct CellConsoleTestAccess
+{
+  static void hear(CellConsole & plugin, const cite_interfaces::msg::ConsoleState & state)
+  {
+    plugin.apply_state(state, std::vector<std::uint8_t>(16, 7));
+  }
+
+  /// A pair whose boundary is heard live, both sides running, and one
+  /// divergence sample for `asset`.
+  static void hear_boundary(CellConsole & plugin, const std::string & asset)
+  {
+    plugin.view_config_.twin_sides = {"plant", "counterpart"};
+    plugin.view_config_.heartbeat_stale_after_s = 0.5;
+    plugin.boundary_.twin_mode_heard("SIM", true);
+    SidesView sides;
+    sides.heard = true;
+    sides.running = {"plant", "counterpart"};
+    sides.commandable = {"plant"};
+    plugin.boundary_.sides_heard(sides);
+    plugin.heartbeat_present_ = true;
+    plugin.heartbeat_heard_ = true;
+    plugin.last_heartbeat_.restart();
+    plugin.refresh_health();
+    DivergenceSample sample;
+    sample.asset_id = asset;
+    sample.valid = false;
+    plugin.divergence_[asset] = sample;
+    emit plugin.twinModeChanged();
+    emit plugin.healthChanged();
+    emit plugin.fidelityChanged();
+    emit plugin.viewChanged();
+  }
+};
+
+}  // namespace cite_console_gui
 
 namespace
 {
@@ -415,7 +460,7 @@ TEST(PanelQml, TheFrameHoldsEveryCommandInItsDeckAtEverySize)
     for (QQuickItem * item : descendants(target)) {
       if (is_button(item)) {
         ++targets;
-        EXPECT_FALSE(item->property("checked").toBool())
+        EXPECT_FALSE(item->property("selected").toBool())
           << "the target '" << item->property("text").toString().toStdString()
           << "' is preselected";
       }
@@ -427,7 +472,7 @@ TEST(PanelQml, TheFrameHoldsEveryCommandInItsDeckAtEverySize)
     ASSERT_NE(speed, nullptr) << "the panel has no item named `speedSelector`";
     QStringList checked;
     for (QQuickItem * item : descendants(speed)) {
-      if (is_button(item) && item->property("checked").toBool()) {
+      if (is_button(item) && item->property("selected").toBool()) {
         checked << item->property("text").toString();
       }
     }
@@ -519,6 +564,121 @@ TEST(PanelQml, APictureOfTheFrameIsWrittenAtEverySize)
         path.toStdString());
     }
   }
+}
+
+namespace
+{
+
+/// A left click at the centre of `item`, as the window would deliver it.
+void click(QQuickWindow & window, QQuickItem * item)
+{
+  const QPointF centre = item->mapToScene(QPointF(item->width() / 2.0, item->height() / 2.0));
+  QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, centre.toPoint());
+  QCoreApplication::processEvents();
+}
+
+/// The segments of a `SegmentedSelector`, in order.
+QList<QQuickItem *> segments(QQuickItem * selector)
+{
+  QList<QQuickItem *> found;
+  for (QQuickItem * item : descendants(selector)) {
+    if (is_button(item)) {
+      found << item;
+    }
+  }
+  return found;
+}
+
+/// A console READY to run on the simulation alone, as `cell_console` says it.
+cite_interfaces::msg::ConsoleState ready_on_the_simulation()
+{
+  cite_interfaces::msg::ConsoleState state;
+  state.state = cite_interfaces::msg::ConsoleState::READY;
+  state.robot_started = true;
+  state.plant_at_start = true;
+  state.available_targets = {cite_interfaces::msg::ConsoleState::TARGET_SIM};
+  state.startable_targets = {cite_interfaces::msg::ConsoleState::TARGET_SIM};
+  state.twin_mode = cite_interfaces::msg::TwinMode::MODE_SIM;
+  state.step = "ok";
+  return state;
+}
+
+}  // namespace
+
+// T-01: the deck shows the plugin's selection, never the click. A click on the
+// segment already selected leaves it shown selected, for the target and the
+// speed alike; the highlight follows the property, whatever was clicked.
+TEST(PanelQml, ASegmentShowsTheSelectionNotTheClick)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, ready_on_the_simulation());
+  QCoreApplication::processEvents();
+
+  for (const char * name : {"targetSelector", "speedSelector"}) {
+    SCOPED_TRACE(name);
+    auto * selector = framed.find(name);
+    ASSERT_NE(selector, nullptr);
+    const QList<QQuickItem *> choices = segments(selector);
+    ASSERT_GE(choices.size(), 2);
+    ASSERT_TRUE(choices[0]->isEnabled());
+    // The first click selects the target (never preselected); the speed is.
+    for (int again = 0; again < 3; ++again) {
+      click(framed.window, choices[0]);
+      EXPECT_EQ(selector->property("checkedIndex").toInt(), 0) << "click " << again + 1;
+      EXPECT_TRUE(choices[0]->property("selected").toBool())
+        << "the selection in force is not shown after click " << again + 1;
+    }
+    // The owner of the selection says another: the highlight follows it.
+    selector->setProperty("checkedIndex", 1);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(choices[0]->property("selected").toBool());
+    EXPECT_TRUE(choices[1]->property("selected").toBool());
+    // AbstractButton's own `checked` is never what is drawn, and never set.
+    for (QQuickItem * choice : choices) {
+      EXPECT_FALSE(choice->property("checked").toBool());
+    }
+  }
+}
+
+// R-01: the cycles field shows the number a button would send, and no other.
+// Text that is not a number in range is put back to the value at once, and a
+// number in range is the value the moment it is typed.
+TEST(PanelQml, TheCyclesShownAreTheCyclesSent)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  auto * deck = framed.find("commands");
+  auto * input = framed.find("cyclesInput");
+  ASSERT_NE(deck, nullptr);
+  ASSERT_NE(input, nullptr);
+  const auto shown_is_sent = [&]() {
+      return input->property("text").toString() == QString::number(deck->property("cycles").toInt());
+    };
+
+  input->setProperty("text", QString("3"));
+  EXPECT_EQ(deck->property("cycles").toInt(), 3);
+  for (const char * typed : {"", "0", "7", "-2", "1001", "12"}) {
+    input->setProperty("text", QString(typed));
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(shown_is_sent()) << "typed '" << typed << "': shown '"
+                                 << input->property("text").toString().toStdString()
+                                 << "', sent " << deck->property("cycles").toInt();
+  }
+  EXPECT_EQ(deck->property("cycles").toInt(), 12);
+
+  // As the operator types it: the field takes focus and its text is replaced;
+  // erasing it leaves the value shown, and a digit is taken at once.
+  input->forceActiveFocus();
+  QTest::keyClick(&framed.window, Qt::Key_Backspace);
+  QCoreApplication::processEvents();
+  EXPECT_TRUE(shown_is_sent()) << "erased: shown '"
+                               << input->property("text").toString().toStdString() << "'";
+  EXPECT_EQ(deck->property("cycles").toInt(), 12);
+  QTest::keyClick(&framed.window, Qt::Key_7);
+  QCoreApplication::processEvents();
+  EXPECT_EQ(deck->property("cycles").toInt(), 7);
+  EXPECT_TRUE(shown_is_sent());
 }
 
 int main(int argc, char ** argv)

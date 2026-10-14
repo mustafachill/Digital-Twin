@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A row of mutually exclusive choices. The choice shown checked is
+// A row of mutually exclusive choices. The choice shown selected is
 // `checkedIndex` and nothing else (-1 for none): a click only says
 // `activated(index)`, and whoever owns the selection decides. Each choice may
 // carry a second line (`sublabels`), such as why it is disabled.
+//
+// A segment's highlight is its own `selected`, never AbstractButton's
+// `checked`: in Qt 5.15 a `checked` bound true makes the button checkable, and
+// the next click toggles it and breaks the binding - the highlight went out
+// while the selection stayed in force (T-01).
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -47,11 +52,11 @@ Rectangle {
         id: segment
         readonly property string sublabel:
           selector.sublabels.length > index ? selector.sublabels[index] : ""
+        readonly property bool selected: selector.checkedIndex === index
         width: selector.segmentWidth
         height: row.height
         text: modelData
         checkable: false
-        checked: selector.checkedIndex === index
         enabled: selector.enabledChoices.length > index &&
           selector.enabledChoices[index] === true
         hoverEnabled: true
@@ -59,7 +64,7 @@ Rectangle {
 
         background: Rectangle {
           radius: Theme.radiusSmall - 2
-          color: segment.checked ? Theme.selected :
+          color: segment.selected ? Theme.selected :
             segment.down ? Theme.controlPressed :
             segment.hovered && segment.enabled ? Theme.controlHover : "transparent"
           border.width: segment.visualFocus ? 2 : 0
@@ -75,9 +80,9 @@ Rectangle {
             textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.body - 1
-            font.weight: segment.checked ? Font.DemiBold : Font.Normal
+            font.weight: segment.selected ? Font.DemiBold : Font.Normal
             elide: Text.ElideRight
-            color: segment.checked ? Theme.textOnSelected :
+            color: segment.selected ? Theme.textOnSelected :
               segment.enabled ? Theme.text : Theme.disabledText
           }
           Text {
@@ -89,7 +94,7 @@ Rectangle {
             font.family: Theme.fontFamily
             font.pixelSize: 10
             elide: Text.ElideRight
-            color: segment.checked ? Theme.textOnSelected : Theme.disabledText
+            color: segment.selected ? Theme.textOnSelected : Theme.disabledText
           }
         }
         // The column is centred in the segment, one line or two.

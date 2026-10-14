@@ -273,6 +273,10 @@ signals:
   void eventLogChanged();
 
 private:
+  /// The QML tests' way in: they show the frame as a heard console, a
+  /// connected boundary and a divergence sample would (test_panel_qml.cpp).
+  friend struct CellConsoleTestAccess;
+
   void apply_state(
     const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher);
   void forget_state();

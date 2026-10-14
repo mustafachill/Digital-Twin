@@ -14,6 +14,12 @@
 
 // How many cycles the next request carries: at least `from`, at most `to`,
 // typed or stepped.
+//
+// THE TEXT SHOWN IS THE VALUE SENT (R-01). A typed number is taken the moment
+// it is acceptable; text that is not a number in range - empty, or 0 - is put
+// back to the value at once, so the field never shows a number other than the
+// one a button would send. The text is selected when the field takes focus, so
+// typing replaces it.
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -50,6 +56,7 @@ Rectangle {
   }
   TextInput {
     id: input
+    objectName: "cyclesInput"
     anchors.left: down.right
     anchors.right: up.left
     anchors.verticalCenter: parent.verticalCenter
@@ -61,7 +68,19 @@ Rectangle {
     font.pixelSize: Theme.subtitle
     font.weight: Font.DemiBold
     validator: IntValidator { bottom: stepper.from; top: stepper.to }
-    onEditingFinished: stepper.set(parseInt(text, 10) || stepper.from)
+    onTextChanged: {
+      if (acceptableInput) {
+        stepper.value = parseInt(text, 10);
+      } else if (text !== String(stepper.value)) {
+        text = String(stepper.value);
+        selectAll();
+      }
+    }
+    onActiveFocusChanged: {
+      if (activeFocus) {
+        selectAll();
+      }
+    }
   }
   DeckButton {
     id: up
