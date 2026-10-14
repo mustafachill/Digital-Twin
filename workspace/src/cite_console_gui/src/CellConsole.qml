@@ -78,10 +78,6 @@ Rectangle {
     return index >= 0 && CellConsole.twinSpeedChoicesEnabled[index] === true;
   }
 
-  function speedLabel(scale) {
-    return scale === 1.0 ? "Original speed (1×)" : scale + "×";
-  }
-
   ColumnLayout {
     anchors.fill: parent
     anchors.margins: 12
@@ -327,106 +323,14 @@ Rectangle {
           }
         }
 
-        // ---------------------------------------------------- operator go-ahead
-        Rectangle {
-          Layout.fillWidth: true
-          visible: CellConsole.confirmEnabled
-          color: theme.surface
-          border.color: theme.attention
-          border.width: 2
-          radius: 4
-          implicitHeight: confirmColumn.implicitHeight + 16
-          ColumnLayout {
-            id: confirmColumn
-            anchors.fill: parent
-            anchors.margins: 8
-            Label {
-              text: "The console asks:"
-              font.bold: true
-              color: theme.attention
-            }
-            Label {
-              Layout.fillWidth: true
-              // Verbatim: the operator confirms exactly this text.
-              text: CellConsole.prompt
-              textFormat: Text.PlainText
-              wrapMode: Text.WordWrap
-              color: theme.text
-            }
-            RowLayout {
-              Layout.fillWidth: true
-              Button {
-                Layout.fillWidth: true
-                text: "Confirm"
-                enabled: CellConsole.confirmEnabled
-                onClicked: CellConsole.confirm()
-              }
-              Button {
-                Layout.fillWidth: true
-                text: "Cancel (Stop)"
-                onClicked: CellConsole.stop()
-              }
-            }
-          }
-        }
-
-        // -------------------------------------------------------------- requests
-        Button {
-          Layout.fillWidth: true
-          text: "Start robot"
-          enabled: CellConsole.startRobotEnabled
-          onClicked: CellConsole.startRobot()
-        }
-
-        // Where the signal goes (ADR-0072 decision 3). The selection is the
-        // plugin's (`settled_selection`): never preselected, not even when one
-        // target alone is served, and cleared whenever the served set changes
-        // or the console leaves (R-18). Each button re-binds its `checked`
-        // after a click, so the plugin's selection, not the click, is what it
-        // shows.
-        Label { text: "Target"; color: theme.muted }
-        Flow {
-          Layout.fillWidth: true
-          spacing: 2
-          Repeater {
-            model: CellConsole.targetChoices
-            RadioButton {
-              readonly property bool served: CellConsole.targetChoicesEnabled[index] === true
-              autoExclusive: false
-              text: modelData + (served || !CellConsole.heard ? "" : " (not running)")
-              checked: CellConsole.selectedTarget === index
-              enabled: served
-              onClicked: {
-                CellConsole.selectTarget(index);
-                checked = Qt.binding(function() { return CellConsole.selectedTarget === index; });
-              }
-            }
-          }
-        }
+        // What the fixed commands below need, said in words: the target hint,
+        // the speed chosen and the real arm's floor (ADR-0071 decision 2).
         Label {
+          Layout.fillWidth: true
           visible: CellConsole.heard && CellConsole.selectedTarget < 0
+          wrapMode: Text.WordWrap
           text: "Choose a target to Home or Start program."
           color: theme.muted
-        }
-
-        // The speed the next request carries, and - where the target includes
-        // the real arm - the floor below which the console refuses it
-        // (ADR-0071 decision 2). A choice, not a live override.
-        Label { text: "Speed"; color: theme.muted }
-        Flow {
-          Layout.fillWidth: true
-          spacing: 2
-          Repeater {
-            model: CellConsole.speedChoices
-            RadioButton {
-              readonly property bool allowed: CellConsole.speedChoicesEnabled[index] === true
-              text: panel.speedLabel(modelData) +
-                (allowed || !CellConsole.heard ? "" : " (below the floor)")
-              checked: panel.selectedSpeed === modelData
-              enabled: allowed
-              onClicked: panel.selectedSpeed = modelData
-            }
-          }
         }
         Label {
           Layout.fillWidth: true
@@ -445,46 +349,6 @@ Rectangle {
             (CellConsole.floorApplies ?
               "It applies to this target: slower choices are disabled." :
               "It does not apply to this target.")
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          Label { text: "Cycles"; color: theme.muted }
-          SpinBox {
-            id: cycles
-            from: 1
-            to: 1000
-            value: 1
-            editable: true
-          }
-        }
-
-        RowLayout {
-          Layout.fillWidth: true
-          Button {
-            Layout.fillWidth: true
-            text: "Home"
-            enabled: CellConsole.homeEnabled && panel.selectedSpeedAllowed
-            onClicked: CellConsole.home(panel.selectedSpeed)
-          }
-          Button {
-            Layout.fillWidth: true
-            text: "Start program"
-            enabled: CellConsole.startProgramEnabled && panel.selectedSpeedAllowed
-            onClicked: CellConsole.startProgram(panel.selectedSpeed, cycles.value)
-          }
-        }
-
-        // ------------------------------------------------- validate, then run
-        // ADR-0073: one cycle on the simulation alone and, only if it passed
-        // there in this same request, the cycles on the twin with every twin
-        // gate unchanged. It carries no target. Its label and caveat are part
-        // of decision 5: a pass is "passed in simulation", nothing more.
-        Button {
-          Layout.fillWidth: true
-          text: "Validate in simulation, then run twin"
-          enabled: CellConsole.validateThenRunEnabled && panel.selectedSpeedAllowedForTwin
-          onClicked: CellConsole.validateThenRun(panel.selectedSpeed, cycles.value)
         }
         Label {
           Layout.fillWidth: true
@@ -520,11 +384,171 @@ Rectangle {
       }
     }
 
+    // ------------------------------------------------------------- commands
+    // Outside the scrolled body, with Stop below them: every command, its
+    // target and speed, and the console's question when it asks one, are on
+    // screen in the 380x640 card without scrolling (ADR-0071 decision 5).
+    ColumnLayout {
+      id: commands
+      objectName: "commands"
+      Layout.fillWidth: true
+      spacing: 0
+
+      // ---------------------------------------------------- operator go-ahead
+      Rectangle {
+        objectName: "confirmation"
+        Layout.fillWidth: true
+        visible: CellConsole.confirmEnabled
+        color: theme.surface
+        border.color: theme.attention
+        border.width: 2
+        radius: 4
+        implicitHeight: confirmColumn.implicitHeight + 16
+        ColumnLayout {
+          id: confirmColumn
+          anchors.fill: parent
+          anchors.margins: 8
+          Label {
+            text: "The console asks:"
+            font.bold: true
+            color: theme.attention
+          }
+          Label {
+            Layout.fillWidth: true
+            // Verbatim: the operator confirms exactly this text.
+            text: CellConsole.prompt
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: theme.text
+          }
+          RowLayout {
+            Layout.fillWidth: true
+            Button {
+              Layout.fillWidth: true
+              text: "Confirm"
+              enabled: CellConsole.confirmEnabled
+              onClicked: CellConsole.confirm()
+            }
+            Button {
+              Layout.fillWidth: true
+              text: "Cancel (Stop)"
+              onClicked: CellConsole.stop()
+            }
+          }
+        }
+      }
+
+      // Where the signal goes (ADR-0072 decision 3). The selection is the
+      // plugin's (`settled_selection`): never preselected, not even when one
+      // target alone is served, and cleared whenever the served set changes
+      // or the console leaves (R-18). Each button re-binds its `checked`
+      // after a click, so the plugin's selection, not the click, is what it
+      // shows.
+      RowLayout {
+        Layout.fillWidth: true
+        spacing: 4
+        Label { text: "Target"; color: theme.muted; Layout.preferredWidth: 46 }
+        Flow {
+          Layout.fillWidth: true
+          spacing: 0
+          Repeater {
+            model: CellConsole.targetChoices
+            RadioButton {
+              readonly property bool served: CellConsole.targetChoicesEnabled[index] === true
+              autoExclusive: false
+              text: modelData + (served || !CellConsole.heard ? "" : " (not running)")
+              checked: CellConsole.selectedTarget === index
+              enabled: served
+              onClicked: {
+                CellConsole.selectTarget(index);
+                checked = Qt.binding(function() { return CellConsole.selectedTarget === index; });
+              }
+            }
+          }
+        }
+      }
+
+      // The speed the next request carries (ADR-0071 decision 2); the body
+      // says which is selected and the real arm's floor. A choice, not a live
+      // override.
+      RowLayout {
+        Layout.fillWidth: true
+        spacing: 4
+        Label { text: "Speed"; color: theme.muted; Layout.preferredWidth: 46 }
+        Flow {
+          Layout.fillWidth: true
+          spacing: 0
+          Repeater {
+            model: CellConsole.speedChoices
+            RadioButton {
+              text: modelData + "×"
+              checked: panel.selectedSpeed === modelData
+              enabled: CellConsole.speedChoicesEnabled[index] === true
+              onClicked: panel.selectedSpeed = modelData
+            }
+          }
+        }
+      }
+
+      RowLayout {
+        Layout.fillWidth: true
+        Button {
+          objectName: "startRobotButton"
+          Layout.fillWidth: true
+          Layout.preferredWidth: 1
+          text: "Start robot"
+          enabled: CellConsole.startRobotEnabled
+          onClicked: CellConsole.startRobot()
+        }
+        Button {
+          objectName: "homeButton"
+          Layout.fillWidth: true
+          Layout.preferredWidth: 1
+          text: "Home"
+          enabled: CellConsole.homeEnabled && panel.selectedSpeedAllowed
+          onClicked: CellConsole.home(panel.selectedSpeed)
+        }
+      }
+
+      RowLayout {
+        Layout.fillWidth: true
+        Button {
+          objectName: "startProgramButton"
+          Layout.fillWidth: true
+          text: "Start program"
+          enabled: CellConsole.startProgramEnabled && panel.selectedSpeedAllowed
+          onClicked: CellConsole.startProgram(panel.selectedSpeed, cycles.value)
+        }
+        Label { text: "Cycles"; color: theme.muted }
+        SpinBox {
+          id: cycles
+          Layout.preferredWidth: 120
+          from: 1
+          to: 1000
+          value: 1
+          editable: true
+        }
+      }
+
+      // ADR-0073: one cycle on the simulation alone and, only if it passed
+      // there in this same request, the cycles on the twin with every twin
+      // gate unchanged. It carries no target. Its caveat, part of decision 5,
+      // is in the body: a pass is "passed in simulation", nothing more.
+      Button {
+        objectName: "validateThenRunButton"
+        Layout.fillWidth: true
+        text: "Validate in sim, then run twin"
+        enabled: CellConsole.validateThenRunEnabled && panel.selectedSpeedAllowedForTwin
+        onClicked: CellConsole.validateThenRun(panel.selectedSpeed, cycles.value)
+      }
+    }
+
     // ---------------------------------------------------------------------- stop
     // Outside the scrolled body, so it is always on screen. A SOFTWARE stop over
     // the command path, never an E-stop: the label is part of ADR-0071 decision
     // 4. Not red: red is the physical E-stop's, and colour is for the abnormal.
     Button {
+      objectName: "stopButton"
       Layout.fillWidth: true
       Layout.preferredHeight: 64
       text: "Stop — software stop, not an E-stop"
