@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 import unittest
 
@@ -43,7 +44,7 @@ from lifecycle_msgs.msg import Transition
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vendor_fakes import FakeDeadman, FakeTrack, FakeTrackInit, Harness  # noqa: E402
+from vendor_fakes import FakeDeadman, FakeTrack, FakeTrackInit, Harness, SETTLE_S  # noqa: E402
 
 NODE = "initializer"
 VENDOR = "/test_vendor/xarm"
@@ -97,9 +98,11 @@ class TestInitializer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.harness = Harness("initializer_test")
-        #: While set, every zero read is answered only once this steady time
-        #: has passed: the deadman's state has then aged past its bound.
-        cls.hold_zero_until = None
+        #: While cleared, every zero read is held unanswered until it is set;
+        #: ``zero_read_held`` says one arrived.
+        cls.answer_zero = threading.Event()
+        cls.answer_zero.set()
+        cls.zero_read_held = threading.Event()
         #: While set, the steady time the enable arrived at; every zero read that
         #: arrives in the last `HOLD_S` before that time plus the deadline is
         #: answered only `HOLD_S` after it. The initializer's deadline is no later
@@ -120,9 +123,9 @@ class TestInitializer(unittest.TestCase):
 
     @classmethod
     def _on_vendor_call(cls, name, _request):
-        until = cls.hold_zero_until
-        if name == FakeTrackInit.ON_ZERO and until is not None:
-            Harness.wait_for(lambda: time.monotonic() > until, "the deadman state aged")
+        if name == FakeTrackInit.ON_ZERO and not cls.answer_zero.is_set():
+            cls.zero_read_held.set()
+            cls.answer_zero.wait(timeout=SETTLE_S)
         if cls.hold_reads_at_the_deadline:
             if name == FakeTrackInit.ENABLE:
                 cls.enabled_at = time.monotonic()
@@ -135,7 +138,8 @@ class TestInitializer(unittest.TestCase):
                     )
 
     def setUp(self):
-        type(self).hold_zero_until = None
+        type(self).answer_zero.set()
+        type(self).zero_read_held.clear()
         type(self).hold_reads_at_the_deadline = False
         type(self).enabled_at = None
         type(self).zero_reads_arrived = []
@@ -156,6 +160,23 @@ class TestInitializer(unittest.TestCase):
 
     def _sent(self) -> list[str]:
         return [name for name, _request in self.vendor.calls]
+
+    def _say_and_witness(self, proc_output, initializer, state: int, detail: str) -> None:
+        """Publish a deadman state and wait until the initializer logs that it received it.
+
+        Its own log line is the witness, so ``detail`` must be new to this run. A
+        closure the test only timed - a state left to age past
+        `deadman_state_max_age_s` on the test's clock - is not one the initializer
+        has seen: under load a state it received late was still fresh to it, and
+        the read released then found the gate open. The same holds for the
+        opening `setUp` publishes after a test that left the gate closed.
+        """
+        self.deadman.say(state, detail)
+        name = "AWAITING" if state == DeadmanState.STATE_AWAITING else "HEALTHY"
+        proc_output.assertWaitFor(
+            f"deadman state {name} received: {detail}", process=initializer,
+            timeout=SETTLE_S,
+        )
 
     # ------------------------------------------------------------------ #
 
@@ -243,19 +264,31 @@ class TestInitializer(unittest.TestCase):
         finally:
             self.assertTrue(self.harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
 
-    def test_the_gate_is_asked_again_immediately_before_the_homing(self):
+    def test_the_gate_is_asked_again_immediately_before_the_homing(
+        self, proc_output, initializer
+    ):
         """A gate that closed while the zero was read sends no homing (SA Low)."""
-        self.deadman.publishing.clear()
-        type(self).hold_zero_until = (
-            time.monotonic() + PARAMETERS["deadman_state_max_age_s"] + 0.1
+        self._say_and_witness(
+            proc_output, initializer, DeadmanState.STATE_HEALTHY, "open before the zero read"
         )
-        response = self._initialize()
-        self.assertFalse(response.success)
-        self.assertIn("homing stopped", response.detail)
+        type(self).answer_zero.clear()
+        self.harness.wait_for(self.client.service_is_ready, "initialize appeared")
+        future = self.client.call_async(InitializeAsset.Request())
+        self.harness.wait_for(type(self).zero_read_held.is_set, "the zero read")
+        self._say_and_witness(
+            proc_output, initializer, DeadmanState.STATE_AWAITING, "closed while the zero was read"
+        )
+        type(self).answer_zero.set()
+        self.harness.wait_for(future.done, "initialize answered")
+        self.assertFalse(future.result().success)
+        self.assertIn("homing stopped", future.result().detail)
         self.assertNotIn(FakeTrackInit.HOME, self._sent())
 
-    def test_the_gate_is_asked_again_immediately_before_the_move(self):
+    def test_the_gate_is_asked_again_immediately_before_the_move(self, proc_output, initializer):
         """A gate that closed while the position was read sends no speed and no move."""
+        self._say_and_witness(
+            proc_output, initializer, DeadmanState.STATE_HEALTHY, "open before the position read"
+        )
         self.vendor.on_zero = 1
         self.track.position_mm = 500
         self.track.answer_get.clear()
@@ -263,9 +296,10 @@ class TestInitializer(unittest.TestCase):
         self.harness.wait_for(self.client.service_is_ready, "initialize appeared")
         future = self.client.call_async(InitializeAsset.Request())
         self.harness.wait_for(lambda: self.track.gets > gets, "the position read")
-        self.deadman.publishing.clear()
-        aged = time.monotonic() + PARAMETERS["deadman_state_max_age_s"] + 0.1
-        self.harness.wait_for(lambda: time.monotonic() > aged, "the deadman state aged")
+        self._say_and_witness(
+            proc_output, initializer, DeadmanState.STATE_AWAITING,
+            "closed while the position was read",
+        )
         self.track.answer_get.set()
         self.harness.wait_for(future.done, "initialize answered")
         self.assertFalse(future.result().success)
