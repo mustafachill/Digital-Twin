@@ -170,4 +170,17 @@ std::string twin_mode_name(std::uint8_t mode)
   }
 }
 
+DivergenceSample divergence_sample_from(const cite_interfaces::msg::DivergenceMetrics & sample)
+{
+  DivergenceSample read;
+  read.asset_id = sample.asset_id;
+  read.valid = sample.valid;
+  read.joint_error_rms_rad = sample.joint_error_rms_rad;
+  read.joint_error_max_rad = sample.joint_error_max_rad;
+  read.tcp_position_error_m = sample.tcp_position_error_m;
+  read.tcp_orientation_error_rad = sample.tcp_orientation_error_rad;
+  read.far_side_physical = sample.far_side_physical;
+  return read;
+}
+
 }  // namespace cite_console_gui

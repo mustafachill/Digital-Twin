@@ -42,10 +42,12 @@
 using cite_console_gui::ConsoleCallbacks;
 using cite_console_gui::ConsoleClient;
 using cite_console_gui::ConsoleNames;
+using cite_console_gui::RunProgress;
 using cite_interfaces::action::HomeRobot;
 using cite_interfaces::action::RunProgram;
 using cite_interfaces::action::ValidateThenRun;
 using cite_interfaces::msg::ConsoleState;
+using cite_interfaces::msg::DivergenceMetrics;
 using cite_interfaces::msg::TwinHeartbeat;
 using cite_interfaces::msg::TwinMode;
 using cite_interfaces::msg::TwinSides;
@@ -112,6 +114,13 @@ public:
     callbacks.on_outcome = [this](const std::string & text) {
         record([&]() {outcomes.push_back(text);});
       };
+    callbacks.on_divergence = [this](const DivergenceMetrics & message) {
+        record([&]() {divergence.push_back(message);});
+      };
+    callbacks.on_divergence_lost = [this]() {record([&]() {++divergence_lost;});};
+    callbacks.on_run_progress = [this](const RunProgress & position) {
+        record([&]() {positions.push_back(position);});
+      };
     return callbacks;
   }
 
@@ -136,6 +145,9 @@ public:
   int sides_lost{0};
   int heartbeats{0};
   int heartbeat_lost{0};
+  std::vector<DivergenceMetrics> divergence;
+  int divergence_lost{0};
+  std::vector<RunProgress> positions;
   /// Set once the client is destroyed: nothing may be told after that.
   std::atomic<bool> closed{false};
   std::atomic<int> after_close{0};
@@ -160,7 +172,10 @@ private:
 class FakeConsole
 {
 public:
-  explicit FakeConsole(const ConsoleNames & names, bool answer_start_robot = true)
+  /// With `accept_run`, a RunProgram goal is accepted, reports one feedback
+  /// (cycle 2, step 3 of 7) and succeeds; otherwise every goal is rejected.
+  explicit FakeConsole(
+    const ConsoleNames & names, bool answer_start_robot = true, bool accept_run = false)
   : context_(std::make_shared<rclcpp::Context>())
   {
     rclcpp::InitOptions options;
@@ -220,16 +235,36 @@ public:
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<HomeRobot>>) {});
     run_ = rclcpp_action::create_server<RunProgram>(
       node_, names.run_program,
-      [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const RunProgram::Goal> goal) {
+      [this, accept_run](
+        const rclcpp_action::GoalUUID &, std::shared_ptr<const RunProgram::Goal> goal) {
         note(
           "run_program " + std::to_string(goal->speed_scale) + " target " +
           std::to_string(goal->target) + " cycles " + std::to_string(goal->cycles));
-        return rclcpp_action::GoalResponse::REJECT;
+        return accept_run ? rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE :
+        rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>>) {});
+      [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<RunProgram>> handle) {
+        // Off the executor's thread, as a real server runs its goal.
+        runner_ = std::thread([handle]() {
+            auto feedback = std::make_shared<RunProgram::Feedback>();
+            feedback->cycle = 2;
+            feedback->step_index = 3;
+            feedback->step_count = 7;
+            feedback->step = "Pick";
+            handle->publish_feedback(feedback);
+            // The feedback is a topic and the result a service: a result that
+            // overtook it would drop it at the client, which forgets a goal
+            // once it has its result. A test fake's margin, not a sequence.
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            auto result = std::make_shared<RunProgram::Result>();
+            result->success = true;
+            result->cycles_completed = 3;
+            handle->succeed(result);
+          });
+      });
     validate_then_run_ = rclcpp_action::create_server<ValidateThenRun>(
       node_, names.validate_then_run,
       [this](const rclcpp_action::GoalUUID &, std::shared_ptr<const ValidateThenRun::Goal> goal) {
@@ -251,6 +286,9 @@ public:
 
   ~FakeConsole()
   {
+    if (runner_.joinable()) {
+      runner_.join();
+    }
     context_->shutdown("the test ended");
     executor_->cancel();
     spinner_.join();
@@ -304,6 +342,7 @@ private:
   rclcpp_action::Server<ValidateThenRun>::SharedPtr validate_then_run_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread spinner_;
+  std::thread runner_;
   std::mutex mutex_;
   std::vector<std::string> requests_;
 };
@@ -325,6 +364,8 @@ public:
     mode_ = node_->create_publisher<TwinMode>(TwinMode::TOPIC, cite::qos::latched());
     sides_ = node_->create_publisher<TwinSides>(TwinSides::TOPIC, cite::qos::latched());
     heartbeat_ = node_->create_publisher<TwinHeartbeat>(TwinHeartbeat::TOPIC, cite::qos::state());
+    divergence_ = node_->create_publisher<DivergenceMetrics>(
+      DivergenceMetrics::TOPIC, cite::qos::state());
   }
 
   ~FakeBoundary() {context_->shutdown("the test ended");}
@@ -356,6 +397,18 @@ public:
   /// panel matched reaches nobody (STATE is volatile).
   std::size_t heartbeat_subscribers() const {return heartbeat_->get_subscription_count();}
 
+  /// One sample for `asset`, as the boundary publishes one per asset.
+  void publish_divergence(const std::string & asset, bool valid)
+  {
+    DivergenceMetrics message;
+    message.asset_id = asset;
+    message.valid = valid;
+    divergence_->publish(message);
+  }
+
+  std::size_t divergence_subscribers() const {return divergence_->get_subscription_count();}
+
+  void withdraw_divergence() {divergence_.reset();}
   void withdraw_mode() {mode_.reset();}
   void withdraw_sides() {sides_.reset();}
   void withdraw_heartbeat() {heartbeat_.reset();}
@@ -366,6 +419,7 @@ private:
   rclcpp::Publisher<TwinMode>::SharedPtr mode_;
   rclcpp::Publisher<TwinSides>::SharedPtr sides_;
   rclcpp::Publisher<TwinHeartbeat>::SharedPtr heartbeat_;
+  rclcpp::Publisher<DivergenceMetrics>::SharedPtr divergence_;
   std::uint64_t sequence_{0};
 };
 
@@ -644,4 +698,64 @@ TEST(ConsoleClient, TheModeIsForgottenOnlyWhenItsOwnPublisherLeaves)
   boundary.withdraw_mode();
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.modes_lost == 1;}))
     << "TwinMode's publisher left and the panel was not told";
+}
+
+TEST(ConsoleClient, EachDivergenceSampleIsHeardAndItsPublisherLeavingIsSaid)
+{
+  // The frame's "Twin fidelity" card (ADR-0074): STATE, as the boundary
+  // publishes it, so a sample sent before the panel matched reaches nobody.
+  FakeBoundary boundary;
+  Recorder recorder;
+  ConsoleClient client(names_for("divergence"), recorder.callbacks());
+  const auto deadline = std::chrono::steady_clock::now() + SETTLE;
+  while (boundary.divergence_subscribers() == 0 && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  ASSERT_GT(boundary.divergence_subscribers(), 0u);
+  boundary.publish_divergence("picker", false);
+  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.divergence.empty();}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.divergence.back().asset_id, "picker");
+    EXPECT_FALSE(recorder.divergence.back().valid);
+    EXPECT_EQ(recorder.divergence_lost, 0);
+  }
+  boundary.withdraw_divergence();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.divergence_lost == 1;}))
+    << "DivergenceMetrics' publisher left and the panel was not told";
+}
+
+TEST(ConsoleClient, ARunsFeedbackIsItsPositionAndItsEndClearsIt)
+{
+  const ConsoleNames names = names_for("run_progress");
+  FakeConsole console(names, true, true);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  // Sent once the action server is discovered; three cycles asked for.
+  const std::string accepted = sent_once_served(
+    recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 3);}, &Recorder::progress);
+  EXPECT_EQ(accepted, "Start program: accepted.");
+  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.outcomes.empty();}));
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  const RunProgress & running = recorder.positions.front();
+  EXPECT_TRUE(running.active);
+  EXPECT_EQ(running.cycle, 2u);
+  EXPECT_EQ(running.cycles, 3u);
+  EXPECT_EQ(running.step_index, 3u);
+  EXPECT_EQ(running.step_count, 7u);
+  EXPECT_FALSE(recorder.positions.back().active) << "the run ended and its position stayed";
+}
+
+TEST(ConsoleClient, ARejectedRunHasNoPosition)
+{
+  const ConsoleNames names = names_for("run_rejected");
+  FakeConsole console(names);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  sent_once_served(
+    recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 1);}, &Recorder::progress);
+  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.positions.empty();}));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  EXPECT_FALSE(recorder.positions.back().active);
 }

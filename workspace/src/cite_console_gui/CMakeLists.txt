@@ -28,12 +28,17 @@ find_package(gz_math_vendor REQUIRED)
 find_package(gz-math REQUIRED)
 
 # What the buttons may do, as a pure function of what the console last said,
-# and what the panel shows of each side's connection (health.hpp).
-# No Qt and no ROS, so the whole table is tested without a window or a graph.
+# what the panel shows of each side's connection (health.hpp), and what the
+# frame shows beside them (ADR-0074): the event log, the twin fidelity card and
+# a request's progress. No Qt and no ROS, so all of it is tested without a
+# window or a graph.
 add_library(cite_console_gui_enablement STATIC
   src/enablement.cpp
   src/selection.cpp
   src/health.cpp
+  src/event_log.cpp
+  src/fidelity.cpp
+  src/progress.cpp
 )
 target_include_directories(cite_console_gui_enablement PUBLIC include)
 set_target_properties(cite_console_gui_enablement PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -62,6 +67,16 @@ target_link_libraries(cite_console_gui_camera
 )
 set_target_properties(cite_console_gui_camera PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# The frame header's sim time and RTF: the window's world statistics over gz
+# transport (ADR-0074). No Qt and no ROS.
+add_library(cite_console_gui_world_stats STATIC src/world_stats_client.cpp)
+target_include_directories(cite_console_gui_world_stats PUBLIC include)
+target_link_libraries(cite_console_gui_world_stats
+  gz-transport::core
+  gz-msgs::core
+)
+set_target_properties(cite_console_gui_world_stats PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # The gz-gui plugin. gz-gui loads `lib<filename>.so` for a config's
 # `<plugin filename="CellConsole">`, and its QML from the embedded resource
 # `:/CellConsole/CellConsole.qml`, so the library and the resource prefix are both
@@ -75,6 +90,7 @@ set_target_properties(CellConsole PROPERTIES AUTOMOC ON AUTORCC ON)
 target_link_libraries(CellConsole
   cite_console_gui_client
   cite_console_gui_camera
+  cite_console_gui_world_stats
   cite_console_gui_enablement
   gz-gui::gz-gui
   gz-plugin::register
@@ -142,6 +158,21 @@ if(BUILD_TESTING)
     ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
   target_link_libraries(test_panel_qml CellConsole Qt5::Gui Qt5::Qml Qt5::Quick)
   set_target_properties(test_panel_qml PROPERTIES AUTOMOC ON)
+
+  # The frame's display rules (ADR-0074): the event log's ring, the twin
+  # fidelity card ("Not measured" while a sample is not valid) and a request's
+  # progress.
+  ament_add_gtest(test_event_log test/test_event_log.cpp)
+  target_link_libraries(test_event_log cite_console_gui_enablement)
+  ament_add_gtest(test_fidelity test/test_fidelity.cpp)
+  target_link_libraries(test_fidelity cite_console_gui_enablement)
+  ament_add_gtest(test_progress test/test_progress.cpp)
+  target_link_libraries(test_progress cite_console_gui_enablement)
+
+  # The header's sim time and RTF: their formatting, and the client against a
+  # fake world publishing on a partition of its own.
+  ament_add_gtest(test_world_stats_client test/test_world_stats_client.cpp TIMEOUT 60)
+  target_link_libraries(test_world_stats_client cite_console_gui_world_stats)
 
   # The ROS half against a fake console on a graph of its own (P-R02).
   ament_add_gtest(test_console_client test/test_console_client.cpp TIMEOUT 120)

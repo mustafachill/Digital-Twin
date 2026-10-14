@@ -26,6 +26,7 @@ namespace cite_console_gui
 {
 
 using cite_interfaces::msg::ConsoleState;
+using cite_interfaces::msg::DivergenceMetrics;
 using cite_interfaces::msg::TwinHeartbeat;
 using cite_interfaces::msg::TwinMode;
 using cite_interfaces::msg::TwinSides;
@@ -152,6 +153,28 @@ ConsoleClient::ConsoleClient(const ConsoleNames & names, ConsoleCallbacks callba
     },
     heartbeat_options);
 
+  // The twin's divergence samples (DivergenceMetrics.msg), for the frame's
+  // "Twin fidelity" card: STATE, the profile the boundary publishes them with
+  // (cite_twin twin_boundary). A display; never read for anything else.
+  rclcpp::SubscriptionOptions divergence_options;
+  divergence_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
+      if (divergence_heard_ && info.current_count == 0) {
+        divergence_heard_ = false;
+        if (callbacks_.on_divergence_lost) {
+          callbacks_.on_divergence_lost();
+        }
+      }
+    };
+  divergence_sub_ = node_->create_subscription<DivergenceMetrics>(
+    DivergenceMetrics::TOPIC, cite::qos::state(),
+    [this](const DivergenceMetrics & sample) {
+      divergence_heard_ = true;
+      if (callbacks_.on_divergence) {
+        callbacks_.on_divergence(sample);
+      }
+    },
+    divergence_options);
+
   start_robot_ = node_->create_client<StartRobot>(names.start_robot);
   confirm_operator_ = node_->create_client<ConfirmOperator>(names.confirm_operator);
   stop_ = node_->create_client<StopCell>(names.stop);
@@ -202,6 +225,13 @@ void ConsoleClient::progress(const std::string & text) const
 {
   if (callbacks_.on_progress) {
     callbacks_.on_progress(text);
+  }
+}
+
+void ConsoleClient::run_progress(const RunProgress & position) const
+{
+  if (callbacks_.on_run_progress) {
+    callbacks_.on_run_progress(position);
   }
 }
 
@@ -297,17 +327,28 @@ void ConsoleClient::run_program(
       progress(
         handle ? "Start program: accepted." :
         "Start program: rejected by the console (see last error).");
+      if (!handle) {
+        run_progress(RunProgress{});
+      }
     };
   options.feedback_callback =
-    [this](rclcpp_action::ClientGoalHandle<Run>::SharedPtr,
+    [this, cycles](rclcpp_action::ClientGoalHandle<Run>::SharedPtr,
     const std::shared_ptr<const Run::Feedback> feedback) {
       progress(
         "Cycle " + std::to_string(feedback->cycle) + ", step " +
         std::to_string(feedback->step_index) + " of " + std::to_string(feedback->step_count) +
         ": " + feedback->step);
+      RunProgress position;
+      position.active = true;
+      position.cycle = feedback->cycle;
+      position.cycles = cycles;
+      position.step_index = feedback->step_index;
+      position.step_count = feedback->step_count;
+      run_progress(position);
     };
   options.result_callback =
     [this](const rclcpp_action::ClientGoalHandle<Run>::WrappedResult & result) {
+      run_progress(RunProgress{});
       if (!result.result) {
         outcome("Start program: ended with no result.");
         return;
@@ -335,17 +376,32 @@ void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
       progress(
         handle ? "Validate then run: accepted." :
         "Validate then run: rejected by the console (see last error).");
+      if (!handle) {
+        run_progress(RunProgress{});
+      }
     };
   options.feedback_callback =
-    [this](rclcpp_action::ClientGoalHandle<ValidateThenRun>::SharedPtr,
+    [this, cycles](rclcpp_action::ClientGoalHandle<ValidateThenRun>::SharedPtr,
     const std::shared_ptr<const ValidateThenRun::Feedback> feedback) {
       progress(
         phase_label(feedback->phase) + " - cycle " + std::to_string(feedback->cycle) +
         ", step " + std::to_string(feedback->step_index) + " of " +
         std::to_string(feedback->step_count) + ": " + feedback->step);
+      // Phase 1 is always one cycle (ValidateThenRun.action); phase 2 runs the
+      // goal's cycles.
+      const ValidationPhase phase = validation_phase_from(feedback->phase);
+      RunProgress position;
+      position.active = true;
+      position.phase = phase_label(feedback->phase);
+      position.cycle = feedback->cycle;
+      position.cycles = phase == ValidationPhase::VALIDATING ? 1u : cycles;
+      position.step_index = feedback->step_index;
+      position.step_count = feedback->step_count;
+      run_progress(position);
     };
   options.result_callback =
     [this](const rclcpp_action::ClientGoalHandle<ValidateThenRun>::WrappedResult & result) {
+      run_progress(RunProgress{});
       if (!result.result) {
         outcome("Validate then run: ended with no result.");
         return;

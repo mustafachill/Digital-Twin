@@ -15,6 +15,9 @@
 #include "cell_console.hpp"
 
 #include <QMetaObject>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QTime>
 #include <QVariantMap>
 #include <QtGlobal>
 
@@ -27,6 +30,8 @@
 #include <utility>
 #include <vector>
 
+#include <gz/gui/Application.hh>
+#include <gz/gui/MainWindow.hh>
 #include <gz/plugin/Register.hh>
 
 #include "cite_console_gui/console_config.hpp"
@@ -47,6 +52,7 @@ CellConsole::~CellConsole()
   // starts going away; anything already queued is dropped with it by Qt. The
   // camera client's worker likewise, after at most the one call in flight.
   health_timer_.stop();
+  world_stats_client_.reset();
   client_.reset();
   camera_.reset();
 }
@@ -56,6 +62,7 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   if (this->title.empty()) {
     this->title = "Cell console";
   }
+  frame_window_when_shown();
 
   // The view buttons first, and on their own: they move no robot, so a
   // configuration whose console names are wrong still lets the operator find
@@ -88,6 +95,29 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
   const std::string config_problem = read_view_config(plugin_element, view_config_);
   if (!config_problem.empty() && view_config_error_.isEmpty()) {
     view_config_error_ = QString::fromStdString(config_problem);
+  }
+  // The header's labels and the world's statistics (ADR-0074): display only,
+  // so a problem here is said on the view's line and disables nothing.
+  const std::string frame_problem = read_frame_config(plugin_element, frame_config_);
+  if (frame_problem.empty()) {
+    try {
+      // Called on gz transport's thread, and queued onto this object's.
+      world_stats_client_ = std::make_unique<WorldStatsClient>(
+        frame_config_.world_stats_topic, [this](const WorldStats & stats) {
+          QMetaObject::invokeMethod(
+            this, [this, stats]() {
+              world_stats_ = stats;
+              world_stats_heard_ = true;
+              emit worldStatsChanged();
+            }, Qt::QueuedConnection);
+        });
+    } catch (const std::exception & error) {
+      if (view_config_error_.isEmpty()) {
+        view_config_error_ = QString("The header cannot show sim time: ") + error.what();
+      }
+    }
+  } else if (view_config_error_.isEmpty()) {
+    view_config_error_ = QString::fromStdString(frame_problem);
   }
   if (!view_config_error_.isEmpty()) {
     qWarning("CellConsole: %s", qUtf8Printable(view_config_error_));
@@ -186,6 +216,28 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
           refresh_health();
         }, Qt::QueuedConnection);
     };
+  callbacks.on_divergence = [this](const cite_interfaces::msg::DivergenceMetrics & message) {
+      const DivergenceSample sample = divergence_sample_from(message);
+      QMetaObject::invokeMethod(
+        this, [this, sample]() {
+          divergence_[sample.asset_id] = sample;
+          emit fidelityChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_divergence_lost = [this]() {
+      QMetaObject::invokeMethod(
+        this, [this]() {
+          divergence_.clear();
+          emit fidelityChanged();
+        }, Qt::QueuedConnection);
+    };
+  callbacks.on_run_progress = [this](const RunProgress & position) {
+      QMetaObject::invokeMethod(
+        this, [this, position]() {
+          run_progress_ = position;
+          emit runProgressChanged();
+        }, Qt::QueuedConnection);
+    };
   callbacks.on_progress = [this](const std::string & text) {
       const QString line = QString::fromStdString(text);
       QMetaObject::invokeMethod(this, [this, line]() {set_progress(line);}, Qt::QueuedConnection);
@@ -219,6 +271,7 @@ void CellConsole::apply_state(
   speed_scale_ = state.speed_scale;
   emit viewChanged();
   emit healthChanged();
+  log_transition();
 }
 
 void CellConsole::forget_state()
@@ -237,6 +290,123 @@ void CellConsole::forget_state()
   emit healthChanged();
   set_progress(QString());
   set_outcome(QString());
+  // The console that left can report nothing more about its request.
+  run_progress_ = RunProgress{};
+  emit runProgressChanged();
+  log_transition();
+}
+
+void CellConsole::log_transition()
+{
+  const QString now = QTime::currentTime().toString("HH:mm:ss");
+  if (event_log_.record(
+      now.toStdString(), state_name_.toStdString(), step_.toStdString(),
+      last_error_.toStdString()))
+  {
+    emit eventLogChanged();
+  }
+}
+
+QVariantList CellConsole::eventLog() const
+{
+  QVariantList rows;
+  for (const EventEntry & entry : event_log_.entries()) {
+    QVariantMap row;
+    row["time"] = QString::fromStdString(entry.time);
+    row["state"] = QString::fromStdString(entry.state);
+    row["step"] = QString::fromStdString(entry.step);
+    row["lastError"] = QString::fromStdString(entry.last_error);
+    rows << row;
+  }
+  return rows;
+}
+
+QVariantList CellConsole::fidelity() const
+{
+  QVariantList cards;
+  for (const auto & [asset, sample] : divergence_) {
+    const FidelityView view = fidelity_view(sample);
+    QVariantList rows;
+    for (const FidelityRow & figure : view.rows) {
+      QVariantMap row;
+      row["label"] = QString::fromStdString(figure.label);
+      row["value"] = QString::fromStdString(figure.value);
+      rows << row;
+    }
+    QVariantMap card;
+    card["asset"] = QString::fromStdString(asset);
+    card["measured"] = view.measured;
+    card["headline"] = QString::fromStdString(view.headline);
+    card["rows"] = rows;
+    cards << card;
+  }
+  return cards;
+}
+
+QString CellConsole::simTime() const
+{
+  return world_stats_heard_ ?
+         QString::fromStdString(format_sim_time(world_stats_.sim_time_s)) : QString("--:--:--");
+}
+
+QString CellConsole::realTimeFactor() const
+{
+  return world_stats_heard_ ?
+         QString::fromStdString(format_real_time_factor(world_stats_.real_time_factor)) :
+         QString("--");
+}
+
+void CellConsole::frame_window_when_shown()
+{
+  // The panel's item exists once gz-gui has created it from the QML, before
+  // this plugin's configuration is loaded; it reaches a window when its card is
+  // added to gz-gui's main window. Each step is an event, never a timer (P4).
+  QQuickItem * item = this->PluginItem();
+  if (item == nullptr) {
+    return;
+  }
+  if (item->window() != nullptr) {
+    frame_window(item->window());
+  }
+  connect(item, &QQuickItem::windowChanged, this, [this](QQuickWindow * window) {
+      frame_window(window);
+    });
+}
+
+void CellConsole::frame_window(QQuickWindow * window)
+{
+  if (window == nullptr || window_framed_) {
+    return;
+  }
+  // Only gz-gui's own main window, never a window a test put the panel in.
+  gz::gui::Application * app = gz::gui::App();
+  gz::gui::MainWindow * main = app == nullptr ? nullptr : app->findChild<gz::gui::MainWindow *>();
+  if (main == nullptr || main->QuickWindow() != window) {
+    return;
+  }
+  if (!window->isVisible()) {
+    if (!waiting_for_shown_) {
+      waiting_for_shown_ = true;
+      connect(
+        window, &QWindow::visibleChanged, this, [this, window](bool visible) {
+          if (visible) {
+            frame_window(window);
+          }
+        });
+    }
+    return;
+  }
+  window_framed_ = true;
+  // gz-gui's title toolbar: ApplicationWindow's `header`, a gz-gui internal
+  // (ADR-0074, "What this costs us"). Its absence is said, not fatal.
+  auto * header = window->property("header").value<QQuickItem *>();
+  if (header != nullptr) {
+    header->setVisible(false);
+  } else {
+    qWarning("CellConsole: gz-gui's window has no header to hide (ADR-0074)");
+  }
+  // Maximized, not fullscreen: the desktop's title bar and close stay.
+  window->showMaximized();
 }
 
 HeartbeatView CellConsole::heartbeat_now() const

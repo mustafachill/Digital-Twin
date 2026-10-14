@@ -27,8 +27,10 @@
 #include <vector>
 
 #include "cite_console_gui/enablement.hpp"
+#include "cite_console_gui/fidelity.hpp"
 #include "cite_interfaces/action/validate_then_run.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
+#include "cite_interfaces/msg/divergence_metrics.hpp"
 
 namespace cite_console_gui
 {
@@ -64,6 +66,9 @@ ConsoleView view_from(
 /// never "safe", "verified" or "validated for the real cell" (ADR-0073).
 std::string validate_then_run_outcome(
   const cite_interfaces::action::ValidateThenRun::Result & result);
+
+/// The fields of a DivergenceMetrics sample the "Twin fidelity" card reads.
+DivergenceSample divergence_sample_from(const cite_interfaces::msg::DivergenceMetrics & sample);
 
 /// A TwinMode.MODE_* value (or ConsoleState.TWIN_MODE_UNKNOWN) by its name.
 std::string twin_mode_name(std::uint8_t mode);

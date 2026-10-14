@@ -28,6 +28,17 @@
 // rather than the console: `CameraClient`, over gz transport, on a thread of its
 // own as well, its answer queued back the same way.
 //
+// IT FRAMES THE WINDOW (ADR-0074). The generated configuration anchors this
+// panel's card to all four edges of the 3D view; the QML draws a header, a
+// status rail and a command deck around an empty middle that lets the mouse
+// through to the scene. Once the window that shows it is visible, the plugin
+// hides gz-gui's title toolbar and maximizes the window (`frame_window`), on
+// that event and never on a timer. Beside the console it shows, for display
+// only, the world's sim time and RTF (`WorldStatsClient`, over gz transport),
+// the twin's divergence samples ("Twin fidelity", `fidelity_view`), the
+// running request's position (`RunProgress`) and the last transitions of the
+// console's state (`EventLog`).
+//
 // ONE TIMER, FOR A DISPLAY. How long ago the twin boundary's heartbeat arrived
 // is timed on this object's steady clock and re-read by a Qt timer, so that a
 // heartbeat that stops turns the display stale without anything arriving. It
@@ -42,19 +53,25 @@
 #define CELL_CONSOLE_HPP_
 
 #include <QElapsedTimer>
+#include <QQuickWindow>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
 
-#include <memory>
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <gz/gui/Plugin.hh>
 
 #include "cite_console_gui/camera_client.hpp"
+#include "cite_console_gui/event_log.hpp"
+#include "cite_console_gui/fidelity.hpp"
+#include "cite_console_gui/progress.hpp"
+#include "cite_console_gui/world_stats_client.hpp"
 #include "cite_console_gui/console_client.hpp"
 #include "cite_console_gui/console_config.hpp"
 #include "cite_console_gui/enablement.hpp"
@@ -139,6 +156,32 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(QString progress READ progress NOTIFY progressChanged)
   Q_PROPERTY(QString outcome READ outcome NOTIFY outcomeChanged)
 
+  // The frame (ADR-0074), all display. The console is serving a request.
+  Q_PROPERTY(bool busy READ busy NOTIFY viewChanged)
+  // Who the header names: the configuration's labels (generate/gui.py).
+  Q_PROPERTY(QString facilityLabel READ facilityLabel NOTIFY viewChanged)
+  Q_PROPERTY(QString zoneLabel READ zoneLabel NOTIFY viewChanged)
+  // The window's world statistics, formatted; "--" until heard.
+  Q_PROPERTY(bool worldStatsHeard READ worldStatsHeard NOTIFY worldStatsChanged)
+  Q_PROPERTY(QString simTime READ simTime NOTIFY worldStatsChanged)
+  Q_PROPERTY(QString realTimeFactor READ realTimeFactor NOTIFY worldStatsChanged)
+  Q_PROPERTY(bool worldPaused READ worldPaused NOTIFY worldStatsChanged)
+  // The running request's position, from its feedback (`RunProgress`).
+  Q_PROPERTY(bool runActive READ runActive NOTIFY runProgressChanged)
+  Q_PROPERTY(QString runPhase READ runPhase NOTIFY runProgressChanged)
+  Q_PROPERTY(int runCycle READ runCycle NOTIFY runProgressChanged)
+  Q_PROPERTY(int runCycles READ runCycles NOTIFY runProgressChanged)
+  Q_PROPERTY(int runStepIndex READ runStepIndex NOTIFY runProgressChanged)
+  Q_PROPERTY(int runStepCount READ runStepCount NOTIFY runProgressChanged)
+  Q_PROPERTY(double runFraction READ runFraction NOTIFY runProgressChanged)
+  // One map per asset the twin publishes divergence for: asset, measured,
+  // headline and rows (label, value), from `fidelity_view`. Empty while no
+  // sample is heard.
+  Q_PROPERTY(QVariantList fidelity READ fidelity NOTIFY fidelityChanged)
+  // The last transitions of the console's state, newest first: time, state,
+  // step and lastError per entry (`EventLog`).
+  Q_PROPERTY(QVariantList eventLog READ eventLog NOTIFY eventLogChanged)
+
 public:
   CellConsole();
   ~CellConsole() override;
@@ -188,6 +231,22 @@ public:
   QVariantList sideHealth() const;
   QString progress() const {return progress_;}
   QString outcome() const {return outcome_;}
+  bool busy() const {return selection_.view().heard && selection_.view().busy;}
+  QString facilityLabel() const {return QString::fromStdString(frame_config_.facility_label);}
+  QString zoneLabel() const {return QString::fromStdString(frame_config_.zone_label);}
+  bool worldStatsHeard() const {return world_stats_heard_;}
+  QString simTime() const;
+  QString realTimeFactor() const;
+  bool worldPaused() const {return world_stats_heard_ && world_stats_.paused;}
+  bool runActive() const {return run_progress_.active;}
+  QString runPhase() const {return QString::fromStdString(run_progress_.phase);}
+  int runCycle() const {return static_cast<int>(run_progress_.cycle);}
+  int runCycles() const {return static_cast<int>(run_progress_.cycles);}
+  int runStepIndex() const {return static_cast<int>(run_progress_.step_index);}
+  int runStepCount() const {return static_cast<int>(run_progress_.step_count);}
+  double runFraction() const {return progress_fraction(run_progress_);}
+  QVariantList fidelity() const;
+  QVariantList eventLog() const;
 
   /// Select `ALL_TARGETS[index]`; ignored unless the console serves it.
   Q_INVOKABLE void selectTarget(int index);
@@ -208,6 +267,10 @@ signals:
   void healthChanged();
   void progressChanged();
   void outcomeChanged();
+  void worldStatsChanged();
+  void runProgressChanged();
+  void fidelityChanged();
+  void eventLogChanged();
 
 private:
   void apply_state(
@@ -215,6 +278,12 @@ private:
   void forget_state();
   void set_progress(const QString & text);
   void set_outcome(const QString & text);
+  /// Record what the console says now in the event log, at the wall clock.
+  void log_transition();
+  /// Once the window that shows the panel is visible, hide gz-gui's title
+  /// toolbar and maximize it (ADR-0074). Acts only in gz-gui's own main window.
+  void frame_window_when_shown();
+  void frame_window(QQuickWindow * window);
   /// The heartbeat as heard now, its age read off `last_heartbeat_`.
   HeartbeatView heartbeat_now() const;
   /// Re-read the heartbeat's age; notify only if what is shown changed.
@@ -248,6 +317,16 @@ private:
   Link shown_boundary_{Link::ABSENT};
   QString progress_;
   QString outcome_;
+  FrameConfig frame_config_;
+  std::unique_ptr<WorldStatsClient> world_stats_client_;
+  WorldStats world_stats_;
+  bool world_stats_heard_{false};
+  RunProgress run_progress_;
+  /// The last sample per asset, by asset id.
+  std::map<std::string, DivergenceSample> divergence_;
+  EventLog event_log_;
+  bool window_framed_{false};
+  bool waiting_for_shown_{false};
 };
 
 }  // namespace cite_console_gui

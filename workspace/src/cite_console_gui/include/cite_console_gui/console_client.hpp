@@ -29,9 +29,10 @@
 // each one onto the Qt thread).
 //
 // NAMES ARE HANDED IN. The console's seven names come from the generated GUI
-// configuration (generate/gui.py), and the twin boundary's three - its mode,
-// its sides and its heartbeat - from the contract's own `TOPIC` constants
-// (TwinMode, TwinSides, TwinHeartbeat). This file builds no name.
+// configuration (generate/gui.py), and the twin boundary's four - its mode,
+// its sides, its heartbeat and its divergence samples - from the contract's own
+// `TOPIC` constants (TwinMode, TwinSides, TwinHeartbeat, DivergenceMetrics).
+// This file builds no name.
 //
 // No clock is read and nothing runs on a timer: the console's, the mode's, the
 // sides' and the heartbeat's going away are their subscriptions' matched events
@@ -54,6 +55,7 @@
 #include "cite_interfaces/action/run_program.hpp"
 #include "cite_interfaces/action/validate_then_run.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
+#include "cite_interfaces/msg/divergence_metrics.hpp"
 #include "cite_interfaces/msg/twin_heartbeat.hpp"
 #include "cite_interfaces/msg/twin_mode.hpp"
 #include "cite_interfaces/msg/twin_sides.hpp"
@@ -62,6 +64,8 @@
 #include "cite_interfaces/srv/stop_cell.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+
+#include "cite_console_gui/progress.hpp"
 
 namespace cite_console_gui
 {
@@ -102,8 +106,15 @@ struct ConsoleCallbacks
   std::function<void()> on_heartbeat;
   /// The heartbeat's last publisher left the graph after one had been heard.
   std::function<void()> on_heartbeat_lost;
+  /// A DivergenceMetrics sample from the twin boundary (STATE, one per asset).
+  std::function<void(const cite_interfaces::msg::DivergenceMetrics &)> on_divergence;
+  /// DivergenceMetrics' last publisher left the graph after a sample was heard.
+  std::function<void()> on_divergence_lost;
   /// A request's progress, as the operator reads it.
   std::function<void(const std::string &)> on_progress;
+  /// A RunProgram or ValidateThenRun request's position, from its feedback;
+  /// inactive once it has ended or was not accepted. Display only.
+  std::function<void(const RunProgress &)> on_run_progress;
   /// How a request ended, or why it could not be sent.
   std::function<void(const std::string &)> on_outcome;
 };
@@ -138,6 +149,7 @@ private:
   void on_state_matched(std::size_t publishers);
   void outcome(const std::string & text) const;
   void progress(const std::string & text) const;
+  void run_progress(const RunProgress & position) const;
 
   ConsoleCallbacks callbacks_;
   rclcpp::Context::SharedPtr context_;
@@ -147,6 +159,7 @@ private:
   rclcpp::Subscription<cite_interfaces::msg::TwinMode>::SharedPtr twin_mode_sub_;
   rclcpp::Subscription<cite_interfaces::msg::TwinSides>::SharedPtr twin_sides_sub_;
   rclcpp::Subscription<cite_interfaces::msg::TwinHeartbeat>::SharedPtr heartbeat_sub_;
+  rclcpp::Subscription<cite_interfaces::msg::DivergenceMetrics>::SharedPtr divergence_sub_;
   rclcpp::Client<cite_interfaces::srv::StartRobot>::SharedPtr start_robot_;
   rclcpp::Client<cite_interfaces::srv::ConfirmOperator>::SharedPtr confirm_operator_;
   rclcpp::Client<cite_interfaces::srv::StopCell>::SharedPtr stop_;
@@ -158,6 +171,7 @@ private:
   bool twin_mode_heard_{false};
   bool sides_heard_{false};
   bool heartbeat_heard_{false};
+  bool divergence_heard_{false};
   std::thread spinner_;
 };
 
