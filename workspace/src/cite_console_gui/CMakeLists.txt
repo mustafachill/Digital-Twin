@@ -132,6 +132,17 @@ if(BUILD_TESTING)
   ament_add_gtest(test_selection test/test_selection.cpp)
   target_link_libraries(test_selection cite_console_gui_client)
 
+  # The panel's QML, from the plugin library's own resource, instantiated
+  # headlessly against the real plugin object as gz-gui does (T-01): a QML
+  # error is a window with no panel and no Stop.
+  find_package(Qt5 REQUIRED COMPONENTS Gui)
+  ament_add_gtest(test_panel_qml test/test_panel_qml.cpp
+    SKIP_LINKING_MAIN_LIBRARIES
+    TIMEOUT 60
+    ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
+  target_link_libraries(test_panel_qml CellConsole Qt5::Gui Qt5::Qml Qt5::Quick)
+  set_target_properties(test_panel_qml PROPERTIES AUTOMOC ON)
+
   # The ROS half against a fake console on a graph of its own (P-R02).
   ament_add_gtest(test_console_client test/test_console_client.cpp TIMEOUT 120)
   target_link_libraries(test_console_client cite_console_gui_client)
