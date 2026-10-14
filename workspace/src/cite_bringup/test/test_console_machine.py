@@ -586,7 +586,7 @@ def test_start_program_is_refused_until_a_home_put_the_arms_at_the_start() -> No
     assert _at_start(rig.machine.snapshot())
 
 
-def test_a_stop_a_failure_and_start_robot_each_clear_at_start() -> None:
+def test_a_stop_and_a_failure_each_clear_at_start() -> None:
     rig = Rig().homed()
     rig.hold_on = ("move", "pick")
     join = rig.in_thread(lambda: rig.machine.run_program(1.0, 1, TWIN))
@@ -601,9 +601,39 @@ def test_a_stop_a_failure_and_start_robot_each_clear_at_start() -> None:
     assert not rig.machine.run_program(1.0, 1, TWIN).success
     assert not _at_start(rig.machine.snapshot())
 
-    rig = Rig().homed()
+
+def test_start_robot_leaves_a_plant_only_deployments_start_alone() -> None:
+    """Start robot initializes no simulated side, so it forgets no simulated start."""
+    rig = Rig(available=(SIM,))
+    rig.started()
+    rig.away = [None]
+    assert rig.machine.home(1.0, SIM).success
+    assert rig.machine.snapshot().plant_at_start
     assert rig.machine.start_robot().success
-    assert not _at_start(rig.machine.snapshot())
+    assert rig.machine.snapshot().plant_at_start
+
+
+def test_start_robot_forgets_only_the_physical_sides_start() -> None:
+    rig = Rig(physical=["counterpart"]).homed()
+    join = rig.in_thread(rig.machine.start_robot)
+    rig.answer()
+    assert join().success
+    snapshot = rig.machine.snapshot()
+    assert snapshot.plant_at_start and not snapshot.counterpart_at_start
+
+
+def test_a_started_robot_says_so_and_what_comes_next() -> None:
+    rig = Rig()
+    assert rig.machine.start_robot().success
+    assert rig.machine.snapshot().step == "robot started - choose a target, then Home"
+
+    rig = Rig(physical=["counterpart"])
+    join = rig.in_thread(rig.machine.start_robot)
+    rig.answer()
+    assert join().success
+    assert rig.machine.snapshot().step == (
+        "robot started (initialized: counterpart) - choose a target, then Home"
+    )
 
 
 # --- The order the library is called in ---------------------------------------

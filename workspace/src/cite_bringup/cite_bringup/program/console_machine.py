@@ -244,6 +244,12 @@ class _Observed:
             raise
 
 
+def started_step(physical: Sequence[str]) -> str:
+    """Return the step Start robot publishes once it has succeeded (ADR-0071)."""
+    initialized = f" (initialized: {', '.join(physical)})" if physical else ""
+    return f"robot started{initialized} - choose a target, then Home"
+
+
 class _NotAtStart(Exception):
     """A run measured an arm away from the program's start: refused (N-03, ADR-0073)."""
 
@@ -431,9 +437,11 @@ class ConsoleMachine:
             return Outcome(False, refusal)
         with self._lock:
             # Nothing this console placed is known any more, and nothing it
-            # knew of the arms' place either.
+            # knew of the place of the arms it initializes: only a running
+            # physical side is initialized, so only its start is forgotten.
             self._parts = set(self._simulated)
-            self._forget_the_start()
+            for side in self._physical:
+                self._at_start[side] = False
         say = self._sayer()
         try:
             say("starting the robot")
@@ -459,6 +467,7 @@ class ConsoleMachine:
             return self._fault(f"Start robot failed: {failure}", started=False)
         except Exception as error:  # noqa: BLE001 - never leave the console busy
             return self._fault(f"Start robot failed unexpectedly: {error!r}", started=False)
+        say(started_step(self._physical))
         self._end(ConsoleState.READY, started=True)
         return Outcome(True, "the robot is started; Home is accepted")
 
@@ -1083,7 +1092,7 @@ class ConsoleMachine:
         return [side for side in self._physical if side in targets.SIDES[target]]
 
     def _forget_the_start(self) -> None:
-        """Every side's start is unknown again (R-22): a stop, a fault, Start robot."""
+        """Every side's start is unknown again (R-22): a stop, a fault."""
         for side in self._at_start:
             self._at_start[side] = False
 
