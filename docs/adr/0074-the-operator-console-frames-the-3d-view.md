@@ -1,6 +1,6 @@
 # ADR-0074: The operator console frames the 3D view
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-15 (owner, on merge)
 - **Date:** 2026-10-14
 - **Deciders:** Project owner
 - **Related:** [ADR-0071](0071-the-first-operator-surface-is-a-panel-in-the-gazebo-window.md) (amended here, layout only),
