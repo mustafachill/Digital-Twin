@@ -56,10 +56,12 @@ from cite_bringup.readiness import (
     announced_boundary,
     announced_console,
     announced_side,
+    announced_window_closed,
     boundary_announcement,
     console_announcement,
     ready_announcement,
     READY_TOKEN,
+    window_closed_announcement,
 )
 import pytest
 import yaml
@@ -1140,6 +1142,89 @@ def test_the_two_tokens_are_not_one_word_in_two_places() -> None:
     assert announced_side(boundary_line) is None
     assert announced_side(side_line) == "plant"
     assert announced_boundary(boundary_line) == ZONE
+
+
+# --- A closed window is a clean end (ADR-0078 decision 3, open-work #107) -----
+
+
+def _closes_its_window(name: str, release: Path) -> pair.SideSpec:
+    """Return a side that announces, then says its window closed and exits 0.
+
+    It waits for the pair to be up first, as a side's launch outlives the join
+    before an operator closes its `gz sim` window.
+    """
+    closed = window_closed_announcement(name, ZONE)
+    return _announces(
+        name,
+        then=(
+            f"while not os.path.exists({str(release)!r}):\n    time.sleep(0.02)\n"
+            f"print({closed!r}, flush=True)\n"
+        ),
+    )
+
+
+def test_a_closed_window_ends_the_pair_cleanly(tmp_path: Path) -> None:
+    """The operator closed the window: every part reports 0, and so does the pair.
+
+    Before ADR-0078 this exact run ended with `PAIR_ENDED`, which anything
+    wrapping the console read as a part of the cell failing (open-work #107).
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the pair is up", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        [
+            _closes_its_window("plant", release),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        log=log,
+        ceiling_s=CEILING_S,
+        if_it_hangs="The closed-window line was not read as a stop.",
+    )
+    assert "the plant window was closed" in text
+    assert code == 0
+
+
+def test_a_side_that_exits_without_the_line_still_ends_the_pair_as_lost(
+    tmp_path: Path,
+) -> None:
+    """Exit 0 alone is not a closed window: the line is what says so."""
+    release = tmp_path / "joined"
+    log = _Log(marker="the pair is up", release=release)
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        [
+            _held_until("plant", release),
+            _announces("counterpart", then="time.sleep(600)\n"),
+        ],
+        log=log,
+        ceiling_s=CEILING_S,
+    )
+    assert "window was closed" not in text
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_window_closed_before_the_pair_was_up_is_not_a_clean_end() -> None:
+    """Closing the window during bring-up leaves a pair that never came up: 1."""
+    closed = window_closed_announcement("plant", ZONE)
+    code, _ = _supervise_within(
+        BACKSTOP_S,
+        [_fake_side("plant", f"print({closed!r}, flush=True)\n"), _blocks("counterpart")],
+        ceiling_s=CEILING_S,
+    )
+    assert code == 1
+
+
+def test_the_window_closed_word_is_no_readiness_word() -> None:
+    """A closed window must never be read as a side, boundary or console coming up."""
+    line = window_closed_announcement("plant", ZONE)
+    assert announced_window_closed(line) == "plant"
+    assert announced_side(line) is None
+    assert announced_boundary(line) is None
+    assert announced_console(line) is None
+    assert announced_window_closed(ready_announcement("plant", ZONE)) is None
+    # `launch` prefixes what it logs; the reader does not depend on that prefix.
+    assert announced_window_closed(f"[INFO] [launch.user]: {line}") == "plant"
 
 
 # --- Ending a pair: who is signalled, where, and in what order ----------------

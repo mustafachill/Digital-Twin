@@ -42,7 +42,7 @@ from cite_bringup.plan import (
     PLANT_SIDE,
     resolve_uri,
 )
-from cite_bringup.readiness import announced_side, READY_TOKEN
+from cite_bringup.readiness import announced_side, announced_window_closed, READY_TOKEN
 from launch import LaunchContext
 from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdown
 from launch.event_handlers import OnProcessExit
@@ -690,6 +690,84 @@ def test_only_a_window_is_given_the_gui_config(
         path = command[command.index("--gui-config") + 1]
         assert path.endswith("worlds/cell_b_gui.config")
         assert command[-1].endswith(".sdf"), "the world must stay the last argument"
+
+
+def _simulator_exit(
+    module: ModuleType,
+    context: LaunchContext,
+    returncode: int,
+    *,
+    shutting_down: bool = False,
+) -> list:
+    """What the launch does when its `gz sim` exits with ``returncode``.
+
+    ``shutting_down`` marks the launch as stopping after it was built and before
+    the exit arrives, as at a real teardown.
+    """
+    actions = module._bring_up(context)
+    simulator = next(
+        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
+    )
+    on_exit = simulator._ExecuteLocal__on_exit  # noqa: SLF001 - read only
+    assert callable(on_exit)
+    if shutting_down:
+        context._set_is_shutdown(True)
+    produced = on_exit(_Exited(returncode), context) or []
+    return produced if isinstance(produced, list) else [produced]
+
+
+def _closed_window_lines(entities: list, context: LaunchContext) -> list[str]:
+    return [
+        line
+        for entity in entities
+        if isinstance(entity, LogInfo)
+        for line in [perform_substitutions(context, list(entity.msg))]
+        if announced_window_closed(line) is not None
+    ]
+
+
+def test_a_closed_window_is_announced_and_ends_the_launch(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """ADR-0078 decision 3: a windowed `gz sim` exiting 0 is an operator's close.
+
+    The side says so on its own output, as it announces readiness, and the
+    launch still ends: the window is the cell, and nothing outlives it.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["headless"] = "false"
+    entities = _simulator_exit(module, context, 0)
+    lines = _closed_window_lines(entities, context)
+    assert [announced_window_closed(line) for line in lines] == [PLANT_SIDE]
+    assert any(isinstance(entity, Shutdown) for entity in entities)
+    # Announced before the shutdown, so the line is on the pipe before the exit.
+    kinds = _kinds(entities)
+    assert kinds.index("LogInfo") < kinds.index("Shutdown")
+
+
+@pytest.mark.parametrize(
+    ("headless", "returncode", "shutting_down"),
+    [
+        ("true", 0, False),    # no window to close
+        ("false", 1, False),   # the simulator failed
+        ("false", -11, False),  # the simulator crashed
+        ("false", 0, True),    # part of a teardown already under way
+    ],
+)
+def test_any_other_simulator_exit_ends_the_launch_without_the_announcement(
+    module: ModuleType,
+    context: LaunchContext,
+    monkeypatch,
+    headless: str,
+    returncode: int,
+    shutting_down: bool,
+) -> None:
+    """Only a windowed exit 0 outside a teardown is a close; the rest is as before."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["headless"] = headless
+    entities = _simulator_exit(module, context, returncode, shutting_down=shutting_down)
+    assert not _closed_window_lines(entities, context)
+    assert any(isinstance(entity, Shutdown) for entity in entities)
 
 
 def test_a_seed_gz_will_not_accept_is_refused(

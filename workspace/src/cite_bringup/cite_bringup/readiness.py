@@ -156,6 +156,39 @@ def announced_console(line: str) -> str | None:
     return _zone_announced(CONSOLE_TOKEN, line)
 
 
+#: The fixed word a side's launch prints when its simulator's WINDOW was closed
+#: (ADR-0078 decision 3). A fourth word for a fourth fact, and the only one that
+#: is not readiness: *the operator ended this side by closing its window*. The
+#: supervisor reads it as a stop asked for rather than a side lost, so an
+#: ordinary close is a clean end and `PAIR_ENDED` keeps meaning a participant
+#: that went away unexpectedly (open-work #107).
+WINDOW_CLOSED_TOKEN = "CITE_WINDOW_CLOSED"
+
+
+def window_closed_announcement(side: str, zone: str) -> str:
+    """Format the one line a side emits when its windowed simulator exited 0.
+
+    The side and zone are named for the reason a ready line names them: the
+    supervisor knows which participant's pipe it is reading, and the line says
+    which side the launch believes it is.
+    """
+    return f"{WINDOW_CLOSED_TOKEN} side={side} zone={zone}"
+
+
+def announced_window_closed(line: str) -> str | None:
+    """Return the side named by a window-closed line, or ``None`` if it is not one.
+
+    Substring rather than prefix matching, for the reason :func:`announced_side`
+    gives: `launch` prefixes what it logs.
+    """
+    if WINDOW_CLOSED_TOKEN not in line:
+        return None
+    for field in line.split():
+        if field.startswith("side="):
+            return field[len("side="):]
+    return None
+
+
 def _zone_announced(token: str, line: str) -> str | None:
     """Return the `zone=` field of a line carrying ``token``, or ``None``."""
     if token not in line:

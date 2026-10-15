@@ -83,7 +83,7 @@ from cite_bringup.plan import (
     require_domain,
     require_hardware_opt_in,
 )
-from cite_bringup.readiness import ready_announcement
+from cite_bringup.readiness import ready_announcement, window_closed_announcement
 # The pieces every side's launch runs, written once in `cite_bringup.side_launch`
 # (ADR-0070 item 6) and imported under the names this file has always used. The
 # ones this file does not call are re-exported for its tests, which read them
@@ -374,12 +374,35 @@ def _simulator(
         # An orphaned `gz sim` holds ports and names, and the *next* bring-up then
         # fails pointing nowhere useful. Tearing the whole launch down when the
         # simulator exits is what keeps that from happening.
-        on_exit=Shutdown(reason="the simulator exited"),
+        on_exit=_simulator_exit(plan, side, headless=headless),
         sigterm_timeout="10",
         sigkill_timeout="15",
     )
 
     return [simulator, _bridge(plan, gz_env)]
+
+
+def _simulator_exit(plan: Plan, side: str, *, headless: bool) -> callable:
+    """Tear the launch down when the simulator exits, saying so when a window closed.
+
+    ADR-0078 decision 3 (open-work #107). A windowed `gz sim` that exits 0 while
+    the launch is not already stopping is an operator closing the window, which
+    is how a console run normally ends. The side announces that on its own
+    standard output, as it announces readiness, so the pair supervisor reads a
+    stop asked for rather than a side lost. Every other exit - headless, non-zero,
+    or one that is part of a teardown already under way - tears down exactly as
+    before and announces nothing.
+    """
+
+    def on_exit(event, context: LaunchContext) -> list:
+        if not headless and event.returncode == 0 and not context.is_shutdown:
+            return [
+                LogInfo(msg=window_closed_announcement(side, plan.zone)),
+                Shutdown(reason="the simulator window was closed"),
+            ]
+        return [Shutdown(reason="the simulator exited")]
+
+    return on_exit
 
 
 #: `/clock` from Gazebo into ROS. The one bridged name that is not in the plan,

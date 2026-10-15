@@ -239,9 +239,10 @@ fi
 
 PACKAGES="$(ros2 pkg list 2>/dev/null || true)"
 if ! grep -qx 'cite_bringup' <<<"$PACKAGES"; then
-    warn "cite_bringup is not built yet — there is nothing to launch."
-    warn "Run ./scripts/build. See CLAUDE.md §2."
-    exit 0
+    # Refused, not a quiet exit 0 (ADR-0078 decision 4): a caller that waits on
+    # this command would otherwise read "nothing was launched" as a clean run.
+    die "cite_bringup is not built yet — there is nothing to launch.
+  Run ./scripts/build. See CLAUDE.md §2."
 fi
 
 if [ "$PAIR" -eq 1 ]; then

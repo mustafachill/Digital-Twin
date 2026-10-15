@@ -109,7 +109,12 @@ from cite_bringup.plan import (
     PLANT_SIDE,
     resolve_domain_id,
 )
-from cite_bringup.readiness import announced_boundary, announced_console, announced_side
+from cite_bringup.readiness import (
+    announced_boundary,
+    announced_console,
+    announced_side,
+    announced_window_closed,
+)
 
 #: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
 #: both sides are stopped and the pair exits non-zero, saying which side never
@@ -627,6 +632,10 @@ def _pump(side: _Side, events: queue.Queue, out) -> None:
 
     Which token is the participant's own, off its spec, so that this one reader
     serves a side and the boundary without knowing which it is holding.
+
+    A side whose window was closed says so on the same pipe (ADR-0078 decision
+    3), before its launch exits; that line is posted as its own event so the
+    join reads it as a stop asked for and not as a side lost (open-work #107).
     """
     assert side.process.stdout is not None
     for raw in side.process.stdout:
@@ -635,6 +644,9 @@ def _pump(side: _Side, events: queue.Queue, out) -> None:
         announced = side.spec.announcement(line)
         if announced is not None:
             events.put(("ready", side, announced))
+        closed = announced_window_closed(line)
+        if closed is not None:
+            events.put(("closed", side, closed))
     events.put(("exit", side, side.process.wait()))
 
 
@@ -997,7 +1009,8 @@ def _join(
 ) -> tuple[bool, list[_Side]]:
     """Block until the pair is complete and then until it ends.
 
-    Return whether it was asked to stop, and every participant that was started
+    Return whether it was asked to stop - by a signal, or by a closed window -
+    and every participant that was started
     — which the caller stops, sweeps and reports on, and which is why this
     returns the list rather than letting the caller rebuild it from the specs: a
     boundary that was never started is not a process to stop.
@@ -1032,6 +1045,18 @@ def _join(
         if kind == "stop":
             print(
                 f"[pair] asked to stop (signal {payload}); ending both sides",
+                file=out,
+                flush=True,
+            )
+            return True, participants
+        if kind == "closed":
+            # An operator closing a window is a stop asked for, from the window
+            # rather than from a terminal (ADR-0078 decision 3). The side named
+            # it on its own pipe before its launch exited, which is what tells
+            # this apart from a side that went away (`PAIR_ENDED`).
+            print(
+                f"[pair] the {payload} window was closed (announced by "
+                f"{side.name}); ending the pair",
                 file=out,
                 flush=True,
             )
@@ -1135,8 +1160,9 @@ def _verdict(participants: Sequence[_Side], interrupted: bool, out) -> int:
             flush=True,
         )
     if interrupted and all(participant.ready for participant in participants):
-        # The pair came up and an operator ended it. That is what asking for a
-        # pair and then stopping it looks like, and it is not a failure.
+        # The pair came up and an operator ended it - with a signal, or by
+        # closing a window (ADR-0078). That is what asking for a pair and then
+        # stopping it looks like, and it is not a failure.
         return 0
     if not all(participant.ready for participant in participants):
         return 1
