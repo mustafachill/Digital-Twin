@@ -699,7 +699,7 @@ def _simulator_exit(
     *,
     shutting_down: bool = False,
 ) -> list:
-    """What the launch does when its `gz sim` exits with ``returncode``.
+    """Return what the launch does when its `gz sim` exits with ``returncode``.
 
     ``shutting_down`` marks the launch as stopping after it was built and before
     the exit arrives, as at a real teardown.
