@@ -685,29 +685,34 @@ class _Keeper:
     it announced                             report `up`; the count of failed
                                              attempts is reset
     its ceiling expired, or it announced     stop it (`stopping`: an
-    as something it was not started as       announcement now is ignored)
-    it exited, whatever it was               sweep its group; what follows is
-                                             decided when the sweep ends
+    as something it was not started as       announcement now is ignored);
+                                             report `down` first if it was up
+    it exited, whatever it was               sweep its group, reporting `down`
+                                             first if it was up; what follows
+                                             is decided when the sweep ends
     swept, after it exited before its        report `failed`: it refused its
     robot answered, or after a misnamed      configuration, which no restart
     announcement                             changes
     swept, after it reached the robot and    one failed attempt: start it again
     did not come up                          and report `waiting` - or, at
                                              `attempts` in a row, report `failed`
-    swept, after it was up                   report `down`; start it again,
-                                             report `waiting` - or, the
+    swept, after it was up                   start it again, report
+                                             `waiting` - or, the
                                              `reconnects`-th down within
                                              `window_s`, report `failed`
     the sweep could not empty its group      report `failed`: a second driver
                                              beside a first is never started
     ======================================== ===================================
 
-    **`down` is reported only once the old group is empty**, so the boundary
-    forgets what the side said only after nothing of the old incarnation can
-    say it again. **The ceiling is per incarnation and runs from `reachable`**:
-    a side waiting for a robot that is switched off is not failing, and has
-    none. Restarting is not resuming: the side comes up whole and HELD
-    (ADR-0076).
+    **`down` is reported the moment an `up` incarnation ends or is stopped**,
+    so the boundary takes its mode off the side at once rather than after a
+    sweep that may take a minute. **`waiting` and the restart follow only once
+    the old group is empty**, so the boundary forgets what the side said again
+    at `waiting`, after nothing of the old incarnation can say it, and no
+    second driver is started beside the first. **The ceiling is per
+    incarnation and runs from `reachable`**: a side waiting for a robot that
+    is switched off is not failing, and has none. Restarting is not resuming:
+    the side comes up whole and HELD (ADR-0076).
     """
 
     def __init__(
@@ -762,31 +767,40 @@ class _Keeper:
         if self.state not in (SIDE_WAITING, SIDE_CONNECTING, SIDE_UP):
             return []
         self._misnamed = True
-        self._was = self.state
+        down = self._leave()
         self.state = _STOPPING
         self.deadline = None
-        return [(KEEP_STOP, STOP_MISNAMED)]
+        return down + [(KEEP_STOP, STOP_MISNAMED)]
 
     def expired(self, now: float) -> list[tuple[str, str]]:
         """Stop the current attempt if its ceiling has passed; its exit is then judged."""
         if self.deadline is None or now < self.deadline:
             return []
         self.deadline = None
-        self._was = self.state
+        down = self._leave()
         self.state = _STOPPING
-        return [(KEEP_STOP, STOP_CEILING)]
+        return down + [(KEEP_STOP, STOP_CEILING)]
 
     def exited(self, now: float) -> list[tuple[str, str]]:
         """Sweep the ended incarnation's group; `swept` says what follows."""
         self.deadline = None
         if self.state in (SIDE_FAILED, _SWEEPING, None):
             return []
-        if self.state != _STOPPING:
-            self._was = self.state
+        down = self._leave() if self.state != _STOPPING else []
         if self._was == SIDE_UP and not self._misnamed:
             self._downs = [t for t in self._downs if now - t < self._window_s] + [now]
         self.state = _SWEEPING
-        return [(KEEP_SWEEP, "")]
+        return down + [(KEEP_SWEEP, "")]
+
+    def _leave(self) -> list[tuple[str, str]]:
+        """Record the state the incarnation is leaving; `down` at once if it was up (S-01).
+
+        The boundary falls back to SIM and ends what is in flight on `down`, so
+        it is said when the incarnation stops being up - its exit, or the stop
+        of it - and never held until its group has been swept.
+        """
+        self._was = self.state
+        return [(KEEP_REPORT, SIDE_DOWN)] if self._was == SIDE_UP else []
 
     def swept(self) -> list[tuple[str, str]]:
         """Say what follows once the ended incarnation's group is empty."""
@@ -798,9 +812,11 @@ class _Keeper:
         if was == SIDE_UP:
             if len(self._downs) >= self._reconnects:
                 return self._failed()
+            # `down` was said when it stopped being up; the restart waits for
+            # the old group to be empty.
             self.failures = 0
             self.state = SIDE_WAITING
-            return [(KEEP_REPORT, SIDE_DOWN), (KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
+            return [(KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
         # It reached its robot (`connecting`, or stopped from there) and did
         # not come up: one failed attempt.
         self.failures += 1

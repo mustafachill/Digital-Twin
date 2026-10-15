@@ -877,11 +877,13 @@ class TwinBoundary:
         `down` for every kept side: a supervisor that is gone says nothing more,
         and a side nobody vouches for is not running.
         """
+        ever_fell = False
         try:
             for line in stream:
                 with self._lock:
                     change = self._connections.apply(line)
                     fell = change is not None and self._changed_connection(*change)
+                ever_fell = ever_fell or fell
                 if change is not None:
                     self._said_connection(*change)
                     self._after_connection(fell)
@@ -895,14 +897,25 @@ class TwinBoundary:
                 fell = False
                 for change in changes:
                     fell = self._changed_connection(*change) or fell
+                if ever_fell or fell:
+                    # S-04: once more, guarded, so a fall whose own publish
+                    # failed - or that a raise cut short - is latched anyway.
+                    self._publish_mode_guarded()
             for change in changes:
                 self._said_connection(*change)
             self._after_connection(fell)
 
     def _after_connection(self, fell: bool) -> None:
-        """Off the lock: stop the belts SIM does not command if the mode fell back."""
+        """Off the lock: if the mode fell back, stop what SIM does not command.
+
+        The belts SIM does not command, and every physical carriage (S-03), with
+        the stop a trajectory with no points sends, which is never gated.
+        """
         if fell:
             self._stop_belts_the_mode_does_not_command(TwinMode.MODE_SIM)
+            physical = [side for side in self._sides if self._is_physical(side)]
+            for topic in self._track_joint_by_topic:
+                self._hold_tracks(topic, physical)
         self._publish_sides()
 
     def _changed_connection(self, side: str, before: str, after: str) -> bool:
@@ -918,6 +931,12 @@ class TwinBoundary:
         command the next incarnation the moment an operator released it, with
         nothing measured. Entering it again is a `SetMode`, which measures.
         """
+        if before == SIDE_DOWN:
+            # `waiting` or `failed` after `down` is said once the old group is
+            # swept empty (S-01): what it said between its fall and now is
+            # forgotten too, so the next incarnation is judged on its own.
+            self._forget(side)
+            return False
         if before != SIDE_UP:
             return False
         gone = self._gone.get(side)
@@ -936,9 +955,14 @@ class TwinBoundary:
                 del self._operands[key]
             for key in [key for key in self._joints if key[0] != PLANT_SIDE]:
                 del self._joints[key]
-            self._publish_mode()
+            self._publish_mode_guarded()
+        self._forget(side)
+        return fell
+
+    def _forget(self, side: str) -> None:
+        """Forget what a kept counterpart's old incarnation said; under the lock."""
         if side != COUNTERPART_SIDE:
-            return fell
+            return
         for watch in self._physical_watches.values():
             watch.forget()
         for store in (
@@ -952,7 +976,6 @@ class TwinBoundary:
                 del store[key]
         for joint, _tolerance_m in self._physical_tracks:
             self._track_history[joint] = []
-        return fell
 
     def _said_connection(self, side: str, before: str, after: str) -> None:
         line = f"{side}: {before} -> {after} (the pair supervisor, ADR-0077)"
@@ -1077,6 +1100,17 @@ class TwinBoundary:
             self._log.warning(lapsed)
         self._publish_sides(sets_only=True)
 
+    def _publish_mode_guarded(self) -> None:
+        """`_publish_mode`, logged rather than raised (S-04).
+
+        For the fall: the mode has already moved under the lock, and a publish
+        that raised there must not cut the fall short of forgetting the side.
+        """
+        try:
+            self._publish_mode()
+        except Exception as error:  # noqa: BLE001 - the fall is applied whatever the publish does
+            self._log.error(f"the mode's fall could not be published: {error!r}")
+
     def _publish_mode(self) -> None:
         message = TwinMode()
         message.header.stamp = self._plant.node.get_clock().now().to_msg()
@@ -1198,7 +1232,7 @@ class TwinBoundary:
                 ),
             )
 
-        dispatched = self._dispatch(skill, goal_handle, chosen.sides)
+        dispatched = self._dispatch(skill, goal_handle, chosen.sides, mode, gone or {})
         if isinstance(dispatched, ResultCode):
             goal_handle.abort()
             return _uncommanded_result(skill, dispatched)
@@ -1243,7 +1277,12 @@ class TwinBoundary:
         return chosen
 
     def _dispatch(
-        self, skill: _SkillEndpoint, goal_handle, sides: tuple[str, ...]
+        self,
+        skill: _SkillEndpoint,
+        goal_handle,
+        sides: tuple[str, ...],
+        mode: int,
+        gone: Mapping[str, threading.Event],
     ) -> dict[str, Future] | ResultCode:
         """Send the goal to each side's own L3 server, on that side's context.
 
@@ -1251,6 +1290,15 @@ class TwinBoundary:
         re-stamped and not turned into anything below L3 — what crosses is the
         goal, at the action boundary, and hardware's entry point in 2.B is the
         same typed server on the same name (P2, P9).
+
+        **Sent under the lock, and only in the mode it was routed in** (S-02):
+        the wait for the servers is unbounded by the lock, and a side can go
+        away and the mode fall inside it. So every server is waited for first,
+        and then, in one acquisition, the mode and each routed side's `gone`
+        are asked again and every goal is sent - or none is, and the goal ends
+        uncommanded. `send_goal_async` does not block, and the fall takes the
+        same lock, so a goal is either sent before it (and ended by it) or
+        refused after it.
         """
         sent: dict[str, Future] = {}
         # One side's feedback reaches the operator (`_forward_feedback`): the
@@ -1270,15 +1318,37 @@ class TwinBoundary:
                         "not up rather than an ordering fault."
                     ),
                 )
-            feedback = (
-                partial(self._forward_feedback, goal_handle)
-                if side_name == speaking
-                else None
-            )
-            sent[side_name] = client.send_goal_async(
-                goal_handle.request, feedback_callback=feedback
-            )
+        with self._lock:
+            moved = self._moved_since(mode, gone)
+            if moved is not None:
+                return ResultCode(code=ResultCode.PRECONDITION_FAILED, detail=moved)
+            for side_name in sides:
+                feedback = (
+                    partial(self._forward_feedback, goal_handle)
+                    if side_name == speaking
+                    else None
+                )
+                sent[side_name] = self._clients[(side_name, skill.side_name)].send_goal_async(
+                    goal_handle.request, feedback_callback=feedback
+                )
         return sent
+
+    def _moved_since(self, mode: int, gone: Mapping[str, threading.Event]) -> str | None:
+        """Why a command routed in ``mode`` may not be sent now; under the lock (S-02)."""
+        now = self._authority.mode
+        if now != mode:
+            return (
+                f"the mode moved from {MODE_NAMES.get(mode, mode)} to "
+                f"{MODE_NAMES.get(now, now)} before the goal was sent; no side was "
+                f"commanded ({self._authority.reason})"
+            )
+        lost = sorted(side for side, event in gone.items() if event.is_set())
+        if lost:
+            return (
+                f"{', '.join(lost)} went away before the goal was sent (ADR-0077); "
+                "no side was commanded"
+            )
+        return None
 
     def _on_belt_command(self, topic: str, message: Float64) -> None:
         """Forward one belt setpoint to the sides the mode routes a command to.
@@ -1335,50 +1405,61 @@ class TwinBoundary:
         nothing, and said.
         """
         if not message.points:
-            joint = self._track_joint_by_topic[topic]
-            with self._lock:
-                heard = {
-                    side_name: self._track_positions.get((side_name, joint))
-                    for side_name in self._sides
-                }
-            for side_name, position in heard.items():
-                if position is None:
-                    if self._is_physical(side_name):
-                        # R-02: a stop reaches a physical carriage whether or not
-                        # its position was heard. Its adapter stops where the
-                        # carriage stands whatever position a hold names
-                        # (`cite_bringup.track_command`), so the zero below
-                        # moves nothing; a simulated controller would go there,
-                        # which is why only a physical side is sent one blind.
-                        self._log.warning(
-                            f"{operator_endpoint(topic)} stop: no {joint} position heard on "
-                            f"the {side_name} side; sent its physical adapter a stop anyway"
-                        )
-                        self._track_publishers[(side_name, topic)].publish(
-                            track_hold(joint, 0.0)
-                        )
-                        continue
-                    self._log.error(
-                        f"{operator_endpoint(topic)} stop: no {joint} position heard on the "
-                        f"{side_name} side, so no hold was sent there"
-                    )
-                    continue
-                self._track_publishers[(side_name, topic)].publish(
-                    track_hold(joint, position[0])
-                )
+            self._hold_tracks(topic, list(self._sides))
             return
+        # Routed and published in ONE acquisition (S-02): the fall takes the
+        # same lock, so a trajectory is either published before it - and the
+        # fall's own stop (S-03) follows it - or refused after it.
         with self._lock:
             mode = self._authority.mode
-        chosen = self._route(mode)
+            chosen = self._route(mode)
+            if chosen.accepted:
+                for side_name in chosen.sides:
+                    self._track_publishers[(side_name, topic)].publish(message)
         if not chosen.accepted:
             self._log.warning(
                 f"{operator_endpoint(topic)} dropped in {MODE_NAMES.get(mode, mode)}: "
                 f"{chosen.detail}",
                 throttle_duration_sec=5.0,
             )
-            return
-        for side_name in chosen.sides:
-            self._track_publishers[(side_name, topic)].publish(message)
+
+    def _hold_tracks(self, topic: str, sides: list[str]) -> None:
+        """Send each of ``sides`` a hold where ITS carriage stands; never gated.
+
+        A physical side never heard is sent one anyway (R-02); a simulated one
+        is sent nothing, and said.
+        """
+        joint = self._track_joint_by_topic[topic]
+        with self._lock:
+            heard = {
+                side_name: self._track_positions.get((side_name, joint))
+                for side_name in sides
+            }
+        for side_name, position in heard.items():
+            if position is None:
+                if self._is_physical(side_name):
+                    # R-02: a stop reaches a physical carriage whether or not
+                    # its position was heard. Its adapter stops where the
+                    # carriage stands whatever position a hold names
+                    # (`cite_bringup.track_command`), so the zero below
+                    # moves nothing; a simulated controller would go there,
+                    # which is why only a physical side is sent one blind.
+                    self._log.warning(
+                        f"{operator_endpoint(topic)} stop: no {joint} position heard on "
+                        f"the {side_name} side; sent its physical adapter a stop anyway"
+                    )
+                    self._track_publishers[(side_name, topic)].publish(
+                        track_hold(joint, 0.0)
+                    )
+                    continue
+                self._log.error(
+                    f"{operator_endpoint(topic)} stop: no {joint} position heard on the "
+                    f"{side_name} side, so no hold was sent there"
+                )
+                continue
+            self._track_publishers[(side_name, topic)].publish(
+                track_hold(joint, position[0])
+            )
 
     def _on_track_arrived(
         self, request: TrackArrived.Request, response: TrackArrived.Response

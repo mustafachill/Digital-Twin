@@ -117,10 +117,15 @@ class _Client:
 
 def _dispatch(sides: tuple[str, ...]) -> dict[str, _Client]:
     clients = {(side, "move_to"): _Client() for side in (PLANT_SIDE, COUNTERPART_SIDE)}
-    boundary = SimpleNamespace(_clients=clients, _forward_feedback=lambda *args: None)
+    boundary = SimpleNamespace(
+        _clients=clients,
+        _forward_feedback=lambda *args: None,
+        _lock=threading.Lock(),
+        _moved_since=lambda mode, gone: None,
+    )
     skill = SimpleNamespace(side_name="move_to")
     handle = SimpleNamespace(request=object())
-    TwinBoundary._dispatch(boundary, skill, handle, sides)
+    TwinBoundary._dispatch(boundary, skill, handle, sides, 0, {})
     return {side: clients[(side, "move_to")] for side in (PLANT_SIDE, COUNTERPART_SIDE)}
 
 

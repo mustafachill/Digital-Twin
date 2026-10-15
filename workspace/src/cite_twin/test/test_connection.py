@@ -134,7 +134,22 @@ def _kept_boundary() -> TwinBoundary:
     boundary._modes = modes
     boundary._publish_mode = lambda: modes.append(boundary._authority.mode)
     boundary._belt_publishers = {}
+    boundary._track_joint_by_topic = {TRACK_TOPIC: "picker_track_joint"}
+    boundary._track_publishers = {
+        (side, TRACK_TOPIC): _Publisher() for side in ("plant", COUNTERPART)
+    }
     return boundary
+
+
+TRACK_TOPIC = "/cite/cell_b/picker/track/joint_trajectory"
+
+
+class _Publisher:
+    def __init__(self) -> None:
+        self.sent: list = []
+
+    def publish(self, message) -> None:
+        self.sent.append(message)
 
 
 def _authority(boundary: TwinBoundary) -> ModeAuthority:
@@ -315,7 +330,8 @@ def test_a_side_lost_in_real_takes_the_mode_to_sim_and_real_is_measured_again() 
 
     boundary._read_side_states(io.StringIO(_line(SIDE_DOWN)))
     assert machine.mode == TwinMode.MODE_SIM, "the mode fell with the side"
-    assert boundary._modes == [TwinMode.MODE_SIM], "and the fall was published"
+    # Published at the fall, and once more as the reader ended (S-04).
+    assert boundary._modes == [TwinMode.MODE_SIM] * 2, "and the fall was published"
     assert "stopped being up" in machine.reason
     assert boundary._hold.held.mode == TwinMode.MODE_SIM, "the hold went with the mode"
     assert boundary._route(machine.mode).sides == ("plant",), "nothing reaches the side"
@@ -444,3 +460,146 @@ def test_a_goal_accepted_after_its_side_went_away_is_cancelled() -> None:
     late = _Handle(_Future())
     acceptance.complete(late)
     assert late.cancels == 1
+
+
+# --- Re-audit: the fall is immediate, gates what is sent after it, and stops ----
+
+
+def test_what_the_old_incarnation_said_after_down_is_forgotten_again_at_waiting() -> None:
+    """S-01: `down` comes at the exit, before the sweep; `waiting` after it forgets again."""
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    with boundary._lock:
+        boundary._changed_connection(*boundary._connections.apply(_line(SIDE_DOWN)))
+    # The old group, not yet swept, still speaks.
+    _released(boundary)
+    _heard_again(boundary)
+    with boundary._lock:
+        fell = boundary._changed_connection(*boundary._connections.apply(_line(SIDE_WAITING)))
+    assert not fell
+    assert boundary._physical_watches["picker"].deadman is None
+    assert (COUNTERPART, "picker_track_joint") not in boundary._track_positions
+    assert boundary._track_history["picker_track_joint"] == []
+
+
+class _Client:
+    def __init__(self, on_wait=None) -> None:
+        self.sent: list = []
+        self._on_wait = on_wait
+
+    def wait_for_server(self, timeout_sec: float) -> bool:
+        if self._on_wait is not None:
+            self._on_wait()
+        return True
+
+    def send_goal_async(self, goal, feedback_callback=None):
+        self.sent.append(goal)
+        return object()
+
+
+def test_a_goal_routed_in_real_is_not_sent_after_the_fall() -> None:
+    """S-02: the side goes away while the goal waits for its server: nothing is sent."""
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    gone = {COUNTERPART: boundary._gone[COUNTERPART]}
+
+    def fall() -> None:
+        with boundary._lock:
+            boundary._changed_connection(*boundary._connections.apply(_line(SIDE_DOWN)))
+
+    client = _Client(on_wait=fall)
+    boundary._clients = {(COUNTERPART, "move_to"): client}
+    refused = boundary._dispatch(
+        SimpleNamespace(side_name="move_to"),
+        SimpleNamespace(request=object()),
+        (COUNTERPART,),
+        TwinMode.MODE_REAL,
+        gone,
+    )
+    assert isinstance(refused, ResultCode), refused
+    assert refused.code == ResultCode.PRECONDITION_FAILED
+    assert "no side was commanded" in refused.detail
+    assert client.sent == [], "a goal decided under REAL was sent after the fall"
+
+
+def test_a_goal_whose_side_went_away_in_an_unchanged_mode_is_not_sent() -> None:
+    """S-02: the side's `gone` alone refuses, whatever the mode says."""
+    boundary = _kept_boundary()
+    gone = threading.Event()
+    gone.set()
+    client = _Client()
+    boundary._clients = {(COUNTERPART, "move_to"): client}
+    refused = boundary._dispatch(
+        SimpleNamespace(side_name="move_to"),
+        SimpleNamespace(request=object()),
+        (COUNTERPART,),
+        boundary._authority.mode,
+        {COUNTERPART: gone},
+    )
+    assert isinstance(refused, ResultCode) and "went away" in refused.detail
+    assert client.sent == []
+    # Nothing moved: sent.
+    boundary._gone[COUNTERPART] = threading.Event()
+    sent = boundary._dispatch(
+        SimpleNamespace(side_name="move_to"),
+        SimpleNamespace(request=object()),
+        (COUNTERPART,),
+        boundary._authority.mode,
+        {COUNTERPART: boundary._gone[COUNTERPART]},
+    )
+    assert set(sent) == {COUNTERPART} and len(client.sent) == 1
+
+
+def test_a_track_trajectory_is_not_published_to_a_side_that_fell() -> None:
+    """S-02: routed and published under the lock, so after the fall it reaches the plant only."""
+    from cite_bringup.track_command import move as track_move
+
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    with boundary._lock:
+        boundary._changed_connection(*boundary._connections.apply(_line(SIDE_DOWN)))
+    boundary._on_track_command(TRACK_TOPIC, track_move("picker_track_joint", 0.0, 0.5, 2.0))
+    assert boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent == []
+    assert len(boundary._track_publishers[("plant", TRACK_TOPIC)].sent) == 1
+
+
+def test_the_fall_stops_the_physical_carriage_and_holds_no_simulated_one() -> None:
+    """S-03: the never-gated stop reaches the physical track at the fall, off the lock."""
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    boundary._read_side_states(io.StringIO(_line(SIDE_DOWN)))
+    (hold,) = boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent
+    assert hold.points[0].positions == hold.points[-1].positions, "a hold, not a move"
+    assert boundary._track_publishers[("plant", TRACK_TOPIC)].sent == []
+    # A side lost in SIM moved no mode, and nothing is sent.
+    quiet = _kept_boundary()
+    quiet._read_side_states(io.StringIO(_line(SIDE_UP) + _line(SIDE_DOWN)))
+    assert quiet._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent == []
+
+
+def test_a_fall_whose_mode_publish_raises_is_still_applied_and_published_again() -> None:
+    """S-04: the publish is logged, the side still forgotten, and the reader republishes."""
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    attempts: list[int] = []
+
+    def publish() -> None:
+        attempts.append(boundary._authority.mode)
+        if len(attempts) == 1:
+            raise RuntimeError("injected publish")
+
+    boundary._publish_mode = publish
+    boundary._read_side_states(io.StringIO(_line(SIDE_DOWN)))
+    assert boundary._authority.mode == TwinMode.MODE_SIM
+    assert attempts == [TwinMode.MODE_SIM] * 2, "published again as the reader ended"
+    assert any("injected publish" in line for line in boundary._log.lines)
+    assert boundary._physical_watches["picker"].deadman is None, "the side was still forgotten"
+    assert len(boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent) == 1

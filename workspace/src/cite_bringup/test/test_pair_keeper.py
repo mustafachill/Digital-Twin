@@ -117,11 +117,12 @@ def test_reachable_then_ready_is_connecting_then_up_and_the_ceiling_runs_between
 
 
 SWEEP = [(pair.KEEP_SWEEP, "")]
+DOWN = [(pair.KEEP_REPORT, SIDE_DOWN)]
 RESTARTED = [(pair.KEEP_RESTART, ""), (pair.KEEP_REPORT, SIDE_WAITING)]
 FAILED = [(pair.KEEP_REPORT, SIDE_FAILED)]
 
 
-def test_an_exit_after_up_is_swept_first_then_down_a_restart_and_waiting() -> None:
+def test_an_exit_after_up_is_down_at_once_and_waiting_and_a_restart_after_the_sweep() -> None:
     keeper = _keeper()
     keeper.reachable(0.0)
     assert keeper.exited(0.0) == SWEEP
@@ -129,10 +130,11 @@ def test_an_exit_after_up_is_swept_first_then_down_a_restart_and_waiting() -> No
     keeper.reachable(0.0)
     assert keeper.failures == 1
     keeper.ready()
-    # S-04: nothing is reported until the old group is empty - `down` would
-    # let the boundary forget the side while its old processes still speak.
-    assert keeper.exited(1.0) == SWEEP
-    assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
+    # S-01 (ADR-0077): `down` at the exit, so the boundary falls to SIM now
+    # and not after a sweep of up to a minute; `waiting` and the restart only
+    # once the old group is empty, so no second driver beside the first.
+    assert keeper.exited(1.0) == DOWN + SWEEP
+    assert keeper.swept() == RESTARTED
     assert keeper.failures == 0
 
 
@@ -183,7 +185,7 @@ def test_a_group_that_never_empties_is_failed_and_never_restarted() -> None:
     keeper = _keeper()
     keeper.reachable(0.0)
     keeper.ready()
-    assert keeper.exited(0.0) == SWEEP
+    assert keeper.exited(0.0) == DOWN + SWEEP
     assert keeper.unswept() == FAILED
     assert keeper.swept() == [] and keeper.exited(1.0) == []
 
@@ -197,11 +199,11 @@ def test_reconnects_are_bounded_within_the_window() -> None:
     for now in (0.0, 10.0):
         keeper.reachable(now)
         keeper.ready()
-        keeper.exited(now)
-        assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
+        assert keeper.exited(now) == DOWN + SWEEP
+        assert keeper.swept() == RESTARTED
     keeper.reachable(20.0)
     keeper.ready()
-    keeper.exited(20.0)
+    assert keeper.exited(20.0) == DOWN + SWEEP
     assert keeper.swept() == FAILED
 
 
@@ -213,8 +215,8 @@ def test_reconnects_older_than_the_window_do_not_count() -> None:
     for now in (0.0, 150.0, 300.0, 450.0):
         keeper.reachable(now)
         keeper.ready()
-        keeper.exited(now)
-        assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
+        assert keeper.exited(now) == DOWN + SWEEP
+        assert keeper.swept() == RESTARTED
 
 
 def test_the_shipped_reconnect_bound_is_the_owners_decision() -> None:
@@ -229,6 +231,16 @@ def test_a_misnamed_announcement_stops_the_side_and_fails_it() -> None:
     keeper.reachable(0.0)
     assert keeper.misnamed() == [(pair.KEEP_STOP, pair.STOP_MISNAMED)]
     assert keeper.exited(1.0) == SWEEP
+    assert keeper.swept() == FAILED
+
+
+def test_a_side_up_and_then_misnamed_is_down_before_its_stop_and_failed_after_its_sweep() -> None:
+    """S-01: the stop of an `up` incarnation reports `down` first, not after the sweep."""
+    keeper = _keeper()
+    keeper.reachable(0.0)
+    keeper.ready()
+    assert keeper.misnamed() == DOWN + [(pair.KEEP_STOP, pair.STOP_MISNAMED)]
+    assert keeper.exited(1.0) == SWEEP, "down is said once"
     assert keeper.swept() == FAILED
 
 
@@ -555,9 +567,15 @@ def test_a_kept_group_that_never_empties_is_failed_and_not_started_again(
         boundary=_boundary(f"state={SIDE_FAILED}"),
         log=log,
     )
-    assert _states(text) == [SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_FAILED], text
+    assert _states(text) == [
+        SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_DOWN, SIDE_FAILED
+    ], text
     assert text.count("incarnation=") == 1, "never a second driver beside the first"
     assert "process group was still not empty" in text
+    # S-01: `down` reached the boundary at the exit, before the sweep gave up.
+    assert text.index(f"[pair] {COUNTERPART_SIDE}: {SIDE_DOWN}") < text.index(
+        "left processes running"
+    )
 
 
 def test_a_kept_side_announcing_as_another_is_failed_and_the_pair_goes_on(
