@@ -19,6 +19,7 @@
     zone: cell_b
     asset_id: picker
     state_topic: /cite/cell_b/picker/deadman/state
+    release_service: /cite/cell_b/picker/release
     set_state_service: /cite/cell_b/picker/picker_picker/set_state
     set_mode_service: /cite/cell_b/picker/picker_picker/set_mode
     linear_motor_stop_service: /cite/cell_b/picker/picker_picker/set_linear_motor_stop
@@ -87,3 +88,4 @@
     speed_mps: 0.1
     deadman_state_topic: /cite/cell_b/picker/deadman/state
     deadman_state_max_age_s: 0.25
+    deadman_release_service: /cite/cell_b/picker/release

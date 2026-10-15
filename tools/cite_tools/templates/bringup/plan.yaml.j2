@@ -410,6 +410,9 @@ plan:
         initialize_service: {{ manager.counterpart_physical.initialize_service }}
 {% endif %}
         deadman_state_topic: {{ manager.counterpart_physical.deadman_state_topic }}
+        # The deadman's ReleaseArm: HELD to HEALTHY, called by the initializer
+        # as its first step (ADR-0076).
+        release_service: {{ manager.counterpart_physical.release_service }}
         arm_controller_state_topic: {{ manager.counterpart_physical.arm_controller_state_topic }}
         joints: [{{ manager.counterpart_physical.joints | join(', ') }}]
 {% endif %}

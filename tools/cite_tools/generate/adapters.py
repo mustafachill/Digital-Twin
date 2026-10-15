@@ -92,6 +92,8 @@ class PhysicalSideView:
     #: The service it serves, or `None` exactly where it is.
     initialize_service: str | None
     deadman_state_topic: str
+    #: The deadman's `ReleaseArm`, its one way from HELD to HEALTHY (ADR-0076).
+    release_service: str
     #: The arm trajectory controller's state topic, published only while that
     #: controller is active: what the twin boundary reads as "the arm's
     #: controller is running on this side".
@@ -195,6 +197,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
     _refuse_controllers_that_fight(asset, side)
 
     deadman_state_topic = ids.interface(cell.zone, asset.id, ids.DEADMAN_STATE)
+    release_service = ids.interface(cell.zone, asset.id, ids.RELEASE)
     trajectory_action = controller_action(asset, "joint_trajectory_controller")
     if trajectory_action is None:
         raise PhysicalSideError(
@@ -307,6 +310,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
             ("zone", cell.zone),
             ("asset_id", asset.id),
             ("state_topic", deadman_state_topic),
+            ("release_service", release_service),
             *(
                 (parameter, _service(vendor, name, asset))
                 for parameter, name in _DEADMAN_SERVICES.items()
@@ -343,6 +347,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
                 ("speed_mps", _f(served_axis.initialize_speed_mps)),
                 ("deadman_state_topic", deadman_state_topic),
                 ("deadman_state_max_age_s", _f(timing.state_max_age_s)),
+                ("deadman_release_service", release_service),
             ),
         )
     trajectory_controller = trajectory_action.rsplit("/", 1)[0]
@@ -354,6 +359,7 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
         initializer=initializer,
         initialize_service=None if initializer is None else initialize_service,
         deadman_state_topic=deadman_state_topic,
+        release_service=release_service,
         arm_controller_state_topic=f"{trajectory_controller}/controller_state",
         joints=tuple(sorted(joints)),
     )

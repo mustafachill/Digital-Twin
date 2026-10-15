@@ -359,6 +359,9 @@ plan:
         initializer: /cite/cell_b/picker/initializer
         initialize_service: /cite/cell_b/picker/initialize
         deadman_state_topic: /cite/cell_b/picker/deadman/state
+        # The deadman's ReleaseArm: HELD to HEALTHY, called by the initializer
+        # as its first step (ADR-0076).
+        release_service: /cite/cell_b/picker/release
         arm_controller_state_topic: /cite/cell_b/picker/picker_joint_trajectory_controller/controller_state
         joints: [picker_drive_joint, picker_joint1, picker_joint2, picker_joint3, picker_joint4, picker_joint5, picker_track_joint]
       moveit:

@@ -212,6 +212,9 @@ INITIALIZER_NODE = "initializer"
 DEADMAN_STATE = "deadman/state"
 #: Where a physical arm's initializer serves `InitializeAsset`, under the asset.
 INITIALIZE = "initialize"
+#: Where a physical side's deadman serves `ReleaseArm`, under the asset it
+#: guards (ADR-0076): the one way from HELD to HEALTHY.
+RELEASE = "release"
 
 
 def scope(reserved: str, name: str) -> str:

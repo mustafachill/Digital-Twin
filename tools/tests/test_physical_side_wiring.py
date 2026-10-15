@@ -256,6 +256,17 @@ class TestEveryNodeParameterIsGenerated:
         }
         assert physical["deadman_state_topic"] == f"/cite/{ZONE}/{ARM}/{ids.DEADMAN_STATE}"
 
+    def test_the_deadman_serves_the_release_the_initializer_calls(self) -> None:
+        """ADR-0076: one generated name, served by the deadman, called by the initializer."""
+        (manager,) = plan(REAL_MODEL)["controller_managers"]
+        physical = manager["counterpart_physical"]
+        release = f"/cite/{ZONE}/{ARM}/{ids.RELEASE}"
+        assert physical["release_service"] == release
+        nodes = adapters(REAL_MODEL)
+        assert nodes[physical["deadman"]]["ros__parameters"]["release_service"] == release
+        initializer = nodes[physical["initializer"]]["ros__parameters"]
+        assert initializer["deadman_release_service"] == release
+
     def test_the_deadman_cancels_the_arm_and_the_relay_actions(self) -> None:
         (manager,) = plan(REAL_MODEL)["controller_managers"]
         deadman = adapters(REAL_MODEL)[manager["counterpart_physical"]["deadman"]]
@@ -268,9 +279,13 @@ class TestEveryNodeParameterIsGenerated:
         (manager,) = plan(REAL_MODEL)["controller_managers"]
         vendor = manager["counterpart_vendor"]
         named = set(vendor["services"].values()) | {vendor["gripper_action"]}
+        # The deadman's ReleaseArm is this side's own name, not the vendor's.
+        release = manager["counterpart_physical"]["release_service"]
         for node in adapters(REAL_MODEL).values():
             for key, value in node["ros__parameters"].items():
-                if key.endswith("_service") or key == "vendor_action_name":
+                if key in ("release_service", "deadman_release_service"):
+                    assert value == release, key
+                elif key.endswith("_service") or key == "vendor_action_name":
                     assert value in named, key
 
     def test_the_track_travel_and_speed_are_the_axis_own(self) -> None:

@@ -11,7 +11,7 @@ exists, and it is why this package sits at the bottom of the dependency graph.
 
 ## What is here
 
-28 definitions — 10 `.msg`, 10 `.srv`, 8 `.action` — listed in `CMakeLists.txt` and frozen
+29 definitions — 10 `.msg`, 11 `.srv`, 8 `.action` — listed in `CMakeLists.txt` and frozen
 against `test/interfaces.baseline`. Read the shapes with `ros2 interface show`; they are not
 restated here (P1). The conventions they follow are in
 [`docs/interfaces/README.md`](../../../docs/interfaces/README.md).

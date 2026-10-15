@@ -525,6 +525,8 @@ class PhysicalSide:
     initializer: str | None
     initialize_service: str | None
     deadman_state_topic: str
+    #: The deadman's `ReleaseArm`, its one way from HELD to HEALTHY (ADR-0076).
+    release_service: str
     #: Published by the arm trajectory controller only while it is active.
     arm_controller_state_topic: str
     #: Every joint whose state the side publishes, whichever node publishes it.
@@ -2112,6 +2114,7 @@ def _physical(entry: object | None, where: str) -> PhysicalSide | None:
     names = {
         "deadman": _require(entry, "deadman", here),
         "deadman_state_topic": _require(entry, "deadman_state_topic", here),
+        "release_service": _require(entry, "release_service", here),
         "arm_controller_state_topic": _require(entry, "arm_controller_state_topic", here),
     }
     for optional in ("track_adapter", "gripper_relay", "initializer", "initialize_service"):
@@ -2137,6 +2140,7 @@ def _physical(entry: object | None, where: str) -> PhysicalSide | None:
         initializer=names.get("initializer"),
         initialize_service=names.get("initialize_service"),
         deadman_state_topic=names["deadman_state_topic"],
+        release_service=names["release_service"],
         arm_controller_state_topic=names["arm_controller_state_topic"],
         joints=tuple(joints),
     )

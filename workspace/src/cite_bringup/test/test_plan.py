@@ -2565,6 +2565,7 @@ def test_the_generated_plan_wires_its_physical_counterpart() -> None:
     assert physical is not None
     assert physical.parameters.is_file()
     assert physical.deadman_state_topic.startswith("/cite/cell_b/picker/")
+    assert physical.release_service == "/cite/cell_b/picker/release"
     assert physical.track_adapter is not None and physical.gripper_relay is not None
     assert picker.track.joint in physical.joints
     assert picker.physical_on(PLANT_SIDE) is None
@@ -2596,12 +2597,22 @@ def test_a_physical_wiring_without_a_vendor_driver_is_refused(tmp_path: Path) ->
         load(_written(tmp_path, document))
 
 
-@pytest.mark.parametrize("field", ["deadman", "deadman_state_topic", "track_adapter"])
+@pytest.mark.parametrize(
+    "field", ["deadman", "deadman_state_topic", "track_adapter", "release_service"]
+)
 def test_a_relative_physical_side_name_is_refused(tmp_path: Path, field: str) -> None:
     document = _physical_counterpart_document()
     physical = document["plan"]["controller_managers"][0]["counterpart_physical"]
     physical[field] = physical[field].lstrip("/")
     with pytest.raises(PlanError, match="absolute"):
+        load(_written(tmp_path, document))
+
+
+def test_a_physical_side_without_a_release_service_is_refused(tmp_path: Path) -> None:
+    """ADR-0076: without it a held arm could never be released."""
+    document = _physical_counterpart_document()
+    document["plan"]["controller_managers"][0]["counterpart_physical"].pop("release_service")
+    with pytest.raises(PlanError, match="release_service"):
         load(_written(tmp_path, document))
 
 
