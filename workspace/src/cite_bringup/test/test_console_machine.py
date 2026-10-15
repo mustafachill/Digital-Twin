@@ -30,7 +30,7 @@ from cite_bringup.program.console_machine import (
     ConsoleMachine,
     home_prompt,
     PLACE_PROMPT,
-    start_prompt,
+    START_PROMPT,
     VALIDATED_PLACE_PROMPT,
 )
 from cite_bringup.program.home import StartPose
@@ -445,7 +445,9 @@ def test_a_physical_start_reads_sim_and_asks_the_operator_before_initializing() 
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
     snapshot = rig.machine.snapshot()
     # R-12: the prompt names the target and its physical side, then what to do.
-    assert snapshot.prompt.endswith(start_prompt(TWIN))
+    assert snapshot.prompt.endswith(START_PROMPT)
+    # R-04: the real arm alone is enabled; the simulation's is not named.
+    assert "the simulation's arm" not in snapshot.prompt
     assert "Target: the twin" in snapshot.prompt and "counterpart" in snapshot.prompt
     # SIM was held (S2-01); nothing has been initialized yet.
     assert rig.calls == [("hold_sim",)]
@@ -1796,8 +1798,10 @@ def test_start_robot_on_the_real_arm_asks_then_initializes_the_counterpart_alone
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
     prompt = rig.machine.snapshot().prompt
     # The prompt names the target's arms, never both arms (decision 1).
-    assert prompt.endswith(start_prompt(REAL))
-    assert "Target: the real arm" in prompt and "the real arm" in start_prompt(REAL)
+    assert prompt.endswith(START_PROMPT)
+    assert "Target: the real arm" in prompt and "enables the real arm" in START_PROMPT
+    # R-04: said once, not "starting the real arm enables the real arm".
+    assert "starting the real arm" not in prompt
     assert "both arms" not in prompt
     assert rig.initialized == []
     assert rig.machine.confirm_operator().success

@@ -88,16 +88,14 @@ from cite_bringup.program.steps import (
 from cite_interfaces.msg import ConsoleState, TwinMode
 
 
-def start_prompt(target: int) -> str:
-    """Return what the operator is asked before Start robot on ``target`` (ADR-0075).
-
-    Asked only where the target commands a physical side: the initializer may
-    home the physical track and bring the carriage to its start.
-    """
-    return (
-        f"Clear the cell: starting {targets.label(target)} enables {targets.MOVERS[target]}, "
-        "and the physical track may home and move to its start. Then confirm in the panel."
-    )
+#: What the operator is asked before Start robot (ADR-0075). Asked only where
+#: the target commands a physical side, so it names the real arm alone: the
+#: initializer enables it and may home its track and bring the carriage to the
+#: program's start. `cycle.targeted_prompt` puts the target before it.
+START_PROMPT = (
+    "Clear the cell: starting it enables the real arm, and its track may home and move to "
+    "the program's start. Then confirm in the panel."
+)
 
 
 #: What the operator is asked before a run on a physical side: the terminal's
@@ -538,7 +536,7 @@ class ConsoleMachine:
                     initialize_physical=lambda: self._initialize_physical(
                         physical, say, self.interrupted
                     ),
-                    prompt=start_prompt(target),
+                    prompt=START_PROMPT,
                     # Every running physical side: SIM is held for a
                     # Simulation start too, whatever ``_entered`` says
                     # (ADR-0075 decision 2).
