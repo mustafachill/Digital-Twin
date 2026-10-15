@@ -40,8 +40,9 @@ requested and confirmed by `lifecycle_driver.py` (ADR-0058):
    configured and activated, confirmed.
 4. **The hold gate** (`hold_gate.py`): the deadman says AWAITING or HELD,
    every vendor service the side's nodes call is served by exactly one server,
-   and a STOP sent to the vendor is acknowledged (ADR-0076 decision 6). The deadman itself offers no observable for its own first
-   acknowledged STOP, so this is the gate's own (safety re-audit L-4).
+   and a STOP sent to the vendor is acknowledged (ADR-0076 decision 6). The
+   deadman itself offers no observable for its own first acknowledged STOP,
+   so this is the gate's own (safety re-audit L-4).
 5. **The controllers**, stage by stage, and **MoveIt**; then the planning
    scene; then the skill servers and the readiness witness, which on this side
    also waits for the two actions the deadman cancels; then the token.
