@@ -43,7 +43,14 @@ from cite_bringup.program.steps import (
     StepFailed,
     track,
 )
-from cite_bringup.program.targets import ALL, label as targets_label, REAL, SIDES as TARGET_SIDES, SIM, TWIN
+from cite_bringup.program.targets import (
+    ALL,
+    label as targets_label,
+    REAL,
+    SIDES as TARGET_SIDES,
+    SIM,
+    TWIN,
+)
 from cite_interfaces.msg import ConsoleState, TwinMode
 import pytest
 

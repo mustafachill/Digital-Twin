@@ -87,7 +87,6 @@ from cite_bringup.program.steps import (
 from cite_interfaces.msg import ConsoleState, TwinMode
 
 
-
 def start_prompt(target: int) -> str:
     """Return what the operator is asked before Start robot on ``target`` (ADR-0075).
 

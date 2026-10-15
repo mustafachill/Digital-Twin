@@ -22,8 +22,9 @@ the console in `cite_bringup` because it starts the boundary, and `cite_twin`
 depends on `cite_bringup`, never the other way round.
 
 **What it covers.** The console's names and its latched state; every refusal
-before Start robot; Start robot on an all-simulated pair (nothing to initialize,
-custody read off a `RobotState` this test publishes on the plant's domain);
+before Start robot; Start robot on the twin of an all-simulated pair (nothing
+to initialize; custody read off a `RobotState` this test publishes on the
+plant's domain, and the counterpart fake latches on its own, ADR-0075);
 the speed scale and cycle count refused at the goal; and Home through the
 boundary - the start measured with `JointsAt` and `TrackArrived`, VALIDATED
 asked with the homing allowance, the first move answered by both fakes - up to
@@ -114,7 +115,7 @@ TRACK, TRACK_JOINT = _TRACK["command_topic"], _TRACK["joint"]
 ARM_JOINTS = arm_joints(CELL.arm)
 
 
-def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
+def _side(name: str, domain: int, offset: float, custody: tuple = ()) -> ExecuteProcess:
     return ExecuteProcess(
         cmd=[
             sys.executable,
@@ -126,6 +127,7 @@ def _side(name: str, domain: int, offset: float) -> ExecuteProcess:
             "--track-topic", TRACK,
             "--track-joint", TRACK_JOINT,
             "--joints", ",".join(ARM_JOINTS),
+            *custody,
         ],
         additional_env={"ROS_DOMAIN_ID": str(domain)},
         output="screen",
@@ -140,7 +142,9 @@ def generate_test_description():
     os.environ["ROS_DOMAIN_ID"] = str(PLANT_DOMAIN)
     os.environ.pop("CITE_ALLOW_HARDWARE", None)
     plant = _side("plant", PLANT_DOMAIN, 0.25)
-    counterpart = _side("counterpart", COUNTERPART_DOMAIN, 0.75)
+    # The counterpart's custody, latched on its own domain (R-01): Start robot
+    # on the twin reads the custody of both of its sides (ADR-0075).
+    counterpart = _side("counterpart", COUNTERPART_DOMAIN, 0.75, ("--custody", "empty"))
     boundary = Node(
         package="cite_twin",
         executable="twin_boundary.py",
