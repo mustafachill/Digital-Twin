@@ -342,7 +342,8 @@ TEST(ConsoleView, ADisplayedLineKeepsItsWordsAndNeverBreaksANumberFromItsUnit)
   EXPECT_EQ(
     cite_console_gui::display_text("  ok  plant: conveyor at 0 m/s"),
     "ok plant: conveyor at 0" + nbsp + "m/s");
-  EXPECT_EQ(cite_console_gui::display_text("speed 1.00 / s"), "speed 1.00" + nbsp + "/" + nbsp + "s");
+  EXPECT_EQ(cite_console_gui::display_text("speed 1.00 / s"),
+    "speed 1.00" + nbsp + "/" + nbsp + "s");
   EXPECT_EQ(cite_console_gui::display_text("0 / m/s"), "0" + nbsp + "/" + nbsp + "m/s");
   EXPECT_EQ(
     cite_console_gui::display_text("slide the track to 350 mm at -0.25 m/s"),

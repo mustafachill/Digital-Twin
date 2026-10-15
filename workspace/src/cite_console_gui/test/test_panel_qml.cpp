@@ -36,6 +36,9 @@
 // person to judge; that part is not a gate.
 
 #include <gtest/gtest.h>
+#include <gz/msgs/world_stats.pb.h>
+#include <tinyxml2.h>
+#include <unistd.h>
 
 #include <QByteArray>
 #include <QDir>
@@ -72,10 +75,7 @@
 #include <string>
 #include <vector>
 
-#include <gz/msgs/world_stats.pb.h>
 #include <gz/transport/Node.hh>
-#include <tinyxml2.h>
-#include <unistd.h>
 
 #include "../src/cell_console.hpp"
 #include "cell_console_test_access.hpp"

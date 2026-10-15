@@ -259,10 +259,10 @@ public:
         // Answered off the executor once the client has the run's result; a
         // hang detector bounds it.
         answerer_ = std::thread([this, header, response]() mutable {
-            std::unique_lock<std::mutex> lock(mutex_);
-            acknowledged_.wait_for(lock, SETTLE, [this]() {return result_seen_;});
-            lock.unlock();
-            stop_->send_response(*header, response);
+          std::unique_lock<std::mutex> lock(mutex_);
+          acknowledged_.wait_for(lock, SETTLE, [this]() {return result_seen_;});
+          lock.unlock();
+          stop_->send_response(*header, response);
           });
       });
     home_ = rclcpp_action::create_server<HomeRobot>(
@@ -309,8 +309,8 @@ public:
             lock.unlock();
             result->success = false;
             result->detail = run == RunGoal::END_WHEN_STOPPED ?
-              "Start program was stopped; nothing homes on its own" :
-              "Start program failed: the plant's arm reported a fault";
+            "Start program was stopped; nothing homes on its own" :
+            "Start program failed: the plant's arm reported a fault";
             result->cycles_completed = 0;
             handle->abort(result);
             return;
