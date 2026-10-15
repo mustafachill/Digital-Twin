@@ -370,6 +370,11 @@ class ConsoleMachine:
         #: The sides the twin called commandable when last told
         #: (`commandable_changed`), to see one cease to be.
         self._was_commandable: set[str] = set(commandable())
+        #: The physical sides that ceased to be commandable while a request
+        #: ran, since it began (S-01): the Start robot in flight does not mark
+        #: one started at its end unless its initialization ended after the
+        #: lapse. Cleared as each request begins and ends.
+        self._lapsed_in_flight: set[str] = set()
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
@@ -484,6 +489,9 @@ class ConsoleMachine:
             lapsed = (self._was_commandable - now).intersection(self._physical)
             self._was_commandable = now
             self._started_sides.difference_update(lapsed)
+            if self._busy:
+                # A Start robot in flight would re-add it at its end (S-01).
+                self._lapsed_in_flight.update(lapsed)
             if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
                 self._state = ConsoleState.NOT_STARTED
             snapshot = self._snapshot()
@@ -533,9 +541,7 @@ class ConsoleMachine:
                     say=say,
                     await_operator=self._awaiter(observed),
                     # The target's physical sides alone (ADR-0075).
-                    initialize_physical=lambda: self._initialize_physical(
-                        physical, say, self.interrupted
-                    ),
+                    initialize_physical=lambda: self._initialize(physical, say),
                     prompt=START_PROMPT,
                     # Every running physical side: SIM is held for a
                     # Simulation start too, whatever ``_entered`` says
@@ -556,6 +562,17 @@ class ConsoleMachine:
         return Outcome(
             True, f"{targets.label(target)} is started; {home_next(physical)}"
         )
+
+    def _initialize(self, physical: Sequence[str], say: Callable[[str], None]) -> None:
+        """Initialize ``physical`` for Start robot; a lapse before it ended is undone by it.
+
+        Initializing a side is what starts it again (ADR-0075 decision 2), so a
+        lapse heard while it ran no longer keeps the side out of what this
+        request starts; one heard after it does (S-01).
+        """
+        self._initialize_physical(physical, say, self.interrupted)
+        with self._lock:
+            self._lapsed_in_flight.difference_update(physical)
 
     def home(
         self,
@@ -1212,6 +1229,7 @@ class ConsoleMachine:
             if reason is not None:
                 return reason
             self._busy = True
+            self._lapsed_in_flight.clear()
             self._phase = phase
             self._state = state
             self._owner = owner
@@ -1248,7 +1266,10 @@ class ConsoleMachine:
         with self._lock:
             for side in at_start:
                 self._at_start[side] = True
-            self._started_sides.update(started)
+            # A side that lapsed while this request ran, after anything that
+            # started it again, is not started by it (S-01).
+            self._started_sides.update(set(started) - self._lapsed_in_flight)
+            self._lapsed_in_flight.clear()
             if state == ConsoleState.FAULT:
                 self._started_sides.clear()
             elif state in (ConsoleState.READY, ConsoleState.NOT_STARTED):

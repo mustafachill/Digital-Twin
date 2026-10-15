@@ -1939,6 +1939,59 @@ def test_a_side_becoming_commandable_clears_nothing() -> None:
     assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
 
 
+def test_a_lapse_during_its_own_start_after_initializing_leaves_the_side_unstarted(
+    monkeypatch,
+) -> None:
+    """S-01, ADR-0075 decision 2: a Start robot in flight never re-adds a side that lapsed.
+
+    The track ceases to be commandable after its initialization ended and
+    before the custody read: the start succeeds as before, but the real arm is
+    not started by it, and the next Start robot starts it.
+    """
+    rig = Rig(physical=["counterpart"])
+    custody = FakeCell.refuse_if_holding
+
+    def lapse_then_read(cell, sides=("plant",)) -> None:
+        if rig.initialized:
+            rig.commandable = ["plant"]
+            rig.machine.commandable_changed()
+            rig.commandable = list(SIDES)
+            rig.machine.commandable_changed()
+        custody(cell, sides)
+
+    monkeypatch.setattr(FakeCell, "refuse_if_holding", lapse_then_read)
+    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+    rig.answer()
+    assert join().success
+    snapshot = rig.machine.snapshot()
+    assert REAL not in snapshot.started_targets and not snapshot.robot_started
+    assert snapshot.state == ConsoleState.NOT_STARTED
+    refusal = rig.machine.motion_refusal(0.1, None, REAL)
+    assert refusal is not None and "Start robot" in refusal
+    # The record ends with the request: a start after it starts the side.
+    monkeypatch.setattr(FakeCell, "refuse_if_holding", custody)
+    rig.started(REAL)
+    assert rig.machine.snapshot().started_targets == (REAL,)
+
+
+def test_a_lapse_its_initialization_outlasts_does_not_keep_the_side_unstarted() -> None:
+    """S-01: initializing the side is starting it again, so a lapse before it ends is undone."""
+    rig = Rig(physical=["counterpart"])
+
+    def initialize(sides, say, interrupted) -> None:
+        rig.initialized.append(tuple(sides))
+        rig.commandable = ["plant"]
+        rig.machine.commandable_changed()
+        rig.commandable = list(SIDES)
+        rig.machine.commandable_changed()
+
+    rig.machine._initialize_physical = initialize
+    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+    rig.answer()
+    assert join().success
+    assert rig.machine.snapshot().started_targets == (REAL,)
+
+
 def test_a_fault_unstarts_every_side() -> None:
     rig = Rig(physical=["counterpart"]).started(TWIN)
     rig.away = [None]
