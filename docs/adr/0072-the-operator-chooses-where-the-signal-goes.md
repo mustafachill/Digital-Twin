@@ -1,6 +1,7 @@
 # ADR-0072: The operator chooses where the signal goes — simulation, real arm, or twin
 
 - **Status:** Proposed
+- **Amended 2026-10-15 (owner decision), decision 3:** the panel opens with **Simulation** selected whenever the simulation target is available; Real arm and Twin are never preselected. While no target is selected (for example, Simulation is not running), Start robot is disabled and the panel says "Select a target". The goals still carry an explicit target and the server still refuses one without it. Simulation never routes to the physical side, so the preselection cannot send a signal to the real arm (the concern behind safety audit R-18).
 - **Date:** 2026-10-09
 - **Deciders:** Project owner (decisions of 2026-10-09: the routing change, and that the hardware
   opt-in decides which sides start)

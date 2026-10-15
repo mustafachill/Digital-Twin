@@ -1,6 +1,7 @@
 # ADR-0073: Validate in simulation, then run the twin — one request
 
 - **Status:** Proposed
+- **Amended 2026-10-15 (owner decision), decision 5:** the panel no longer shows a caveat text beside the validate-then-run button. The outcome is still labelled "passed in simulation" and never "safe" or "verified", and the phase 2 prompt the operator confirms still says plainly that the simulation pass is not evidence of physical safety.
 - **Date:** 2026-10-09
 - **Deciders:** Project owner (decision of 2026-10-09: one button runs the program on the
   simulation first and, only if it passes, on the simulation and the real arm together)

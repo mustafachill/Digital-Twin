@@ -28,7 +28,7 @@ Fixed facts:
 - Everything ADR-0071, ADR-0072 and ADR-0073 decide about **behaviour** is unchanged. The
   panel holds no logic. Stop is labelled "software stop, not an E-stop" and is not red. The
   target is never preselected. Confirm shows the verbatim prompt. The UI never says "safe"
-  or "verified", and the validate-then-run caveat stays beside its button. There is one ROS
+  or "verified" (the caveat beside the validate-then-run button was removed by ADR-0073's 2026-10-15 amendment). There is one ROS
   context, on the plant domain. Every console button is disabled while no `ConsoleState` is
   heard.
 - The GUI config is generated (`tools/cite_tools/generate/gui.py`) and never hand-edited.
@@ -81,7 +81,7 @@ panel becomes a frame with these parts:
 - **A command deck at the bottom that holds every clickable control**, in this order:
   - the view buttons (Reset, Top, Side, Front, Follow), visually subdued;
   - target, speed and cycles;
-  - Start robot, Home, Start program, and Validate then run with its caveat;
+  - Start robot, Home, Start program, and Validate then run;
   - Stop at the far right.
   - The Confirm band appears directly above the deck.
 
