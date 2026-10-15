@@ -1781,8 +1781,9 @@ def test_start_robot_on_the_simulation_of_a_hardware_pair_asks_and_initializes_n
     outcome = rig.machine.start_robot(SIM)
     assert outcome.success, outcome.detail
     assert rig.asked() == 0 and rig.initialized == []
-    # No hold on SIM for a prompt, and custody read for the plant alone.
-    assert rig.calls == [("refuse_if_holding",), ("close",)]
+    # SIM held, as on any pair with a physical side running (decision 2, R-01),
+    # but no prompt; and custody read for the plant alone.
+    assert rig.calls == [("hold_sim",), ("refuse_if_holding",), ("close",)]
     assert rig.custody_sides == [("plant",)]
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.READY and snapshot.robot_started
