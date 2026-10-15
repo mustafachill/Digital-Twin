@@ -2077,6 +2077,42 @@ by however long the node lagged.
 events. It is not shown to be a hazard. It is a design question for a safety review: dating
 states from their own stamp would need clocks the two sides agree on.
 
+### #107 — Closing the console window ends `./scripts/console` with exit code 3 (2026-10-14)
+
+**What happens.** The normal way to end the console is to close its window and press OK. The
+pair then ends with `PAIR_ENDED` (3), which `cite_bringup/pair.py` uses for "one half of the
+pair went away", although every part reports status 0. Seen in a real-window run of the
+ADR-0074 frame; `pair.py` predates that branch.
+
+**Why it matters.** Anything that wraps the command reads an ordinary close as a failure.
+
+### #108 — The panel cannot tell a stopped request from a failed one (2026-10-14)
+
+**What happens.** The console ends a request the operator stopped and one that faulted the same
+way: the result is aborted and only its detail text differs. The panel therefore says "ended
+after a Stop request" only when a Stop was accepted before the result, and always shows the
+console's detail (ADR-0074 review, S-04 / R2-06).
+
+**The fix.** A typed end reason (completed, stopped, failed) in the `HomeRobot`, `RunProgram`
+and `ValidateThenRun` results. That is a contract change and needs an ADR.
+
+**Also deferred from the same review (S-05).** A confirmation prompt longer than its band
+scrolls, and Confirm is pressable before the operator has scrolled to its end. Prompts are
+short today; keeping them short is an operating-procedure matter until a console-side limit
+exists.
+
+### #109 — `cite_skills` planning pipeline test failed once under load (2026-10-14)
+
+**What happens.** `test_planning_pipeline.py::test_1_both_pipelines_loaded` failed once in a full
+`./scripts/test` with "query_planner_interface never answered" while other build containers
+were running on the host. A targeted rerun passed 17/17, and the next full gate passed. The
+change under test (ADR-0074) does not touch `cite_skills`, and nothing depends on
+`cite_console_gui`.
+
+**Status.** Not investigated. Under CLAUDE.md it is a finding, not a flake: the next occurrence
+should be debugged, starting from how long `move_group` takes to advertise its planner
+interface under load against the test's deadline.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
