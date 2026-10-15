@@ -14,6 +14,7 @@
 
 #include "cite_console_gui/console_view.hpp"
 
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -137,6 +138,53 @@ std::string outcome_opening(const std::string & request, bool success, bool afte
          after_stop ? ": ended after a Stop request. " : ": refused or failed. ");
 }
 
+std::string as_sentence(const std::string & text)
+{
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return "";
+  }
+  const auto last = text.find_last_not_of(" \t\r\n");
+  std::string sentence = text.substr(first, last - first + 1);
+  const char end = sentence.back();
+  if (end != '.' && end != '!' && end != '?') {
+    sentence += '.';
+  }
+  return sentence;
+}
+
+namespace
+{
+
+/// `parts` joined by one space, the empty ones left out.
+std::string joined(std::initializer_list<std::string> parts)
+{
+  std::string line;
+  for (const std::string & part : parts) {
+    const auto first = part.find_first_not_of(' ');
+    if (first == std::string::npos) {
+      continue;
+    }
+    const auto last = part.find_last_not_of(' ');
+    if (!line.empty()) {
+      line += ' ';
+    }
+    line += part.substr(first, last - first + 1);
+  }
+  return line;
+}
+
+}  // namespace
+
+std::string run_program_outcome(
+  const cite_interfaces::action::RunProgram::Result & result, bool after_stop)
+{
+  return joined(
+    {outcome_opening("Start program", result.success, after_stop), as_sentence(result.detail),
+      result.success ? std::string() :
+      "Cycles completed: " + std::to_string(result.cycles_completed) + "."});
+}
+
 std::string validate_then_run_outcome(
   const cite_interfaces::action::ValidateThenRun::Result & result, bool after_stop)
 {
@@ -150,8 +198,9 @@ std::string validate_then_run_outcome(
     where = "Refused before either phase began.";
   }
   const std::string opening = outcome_opening("Validate then run", result.success, after_stop);
-  return opening + result.detail + " " + where + " Cycles completed on the twin: " +
-         std::to_string(result.cycles_completed) + ".";
+  return joined(
+    {opening, as_sentence(result.detail), where,
+      "Cycles completed on the twin: " + std::to_string(result.cycles_completed) + "."});
 }
 
 std::string twin_mode_name(std::uint8_t mode)

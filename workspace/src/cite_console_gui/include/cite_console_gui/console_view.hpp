@@ -28,6 +28,7 @@
 
 #include "cite_console_gui/enablement.hpp"
 #include "cite_console_gui/fidelity.hpp"
+#include "cite_interfaces/action/run_program.hpp"
 #include "cite_interfaces/action/validate_then_run.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
 #include "cite_interfaces/msg/divergence_metrics.hpp"
@@ -77,6 +78,18 @@ std::string validate_then_run_outcome(
 /// aborted), so a fault that races a Stop is never relabelled a stop. The
 /// console's own detail, which does say, always follows the opening (S-04).
 std::string outcome_opening(const std::string & request, bool success, bool after_stop);
+
+/// The outcome line for a RunProgram result: the opening, the console's
+/// detail as a sentence of its own, and - for a request that did not
+/// complete - how many cycles did. A completed request's detail already
+/// names its cycles (cell_console, "<n> cycle(s) completed"), so the count
+/// is not said twice (T-02). `after_stop`: as for `outcome_opening`.
+std::string run_program_outcome(
+  const cite_interfaces::action::RunProgram::Result & result, bool after_stop = false);
+
+/// `text` as a sentence of its own: trimmed, and ended with a full stop
+/// unless it ends in one, "!" or "?". Empty for blank text.
+std::string as_sentence(const std::string & text);
 
 /// The fields of a DivergenceMetrics sample the "Twin fidelity" card reads.
 DivergenceSample divergence_sample_from(const cite_interfaces::msg::DivergenceMetrics & sample);

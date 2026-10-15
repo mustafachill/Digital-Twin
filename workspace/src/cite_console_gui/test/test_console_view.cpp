@@ -245,7 +245,7 @@ TEST(ConsoleView, AValidateThenRunRefusedBeforeEitherPhaseSaysSo)
   result.cycles_completed = 0;
   EXPECT_EQ(
     validate_then_run_outcome(result),
-    "Validate then run: refused or failed. the plant is not at the program's start "
+    "Validate then run: refused or failed. the plant is not at the program's start. "
     "Refused before either phase began. Cycles completed on the twin: 0.");
 }
 
@@ -257,7 +257,7 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
   failed.ended_in = ConsoleState::PHASE_VALIDATING;
   EXPECT_EQ(
     validate_then_run_outcome(failed),
-    "Validate then run: refused or failed. stopped Ended in: Validating in simulation. "
+    "Validate then run: refused or failed. stopped. Ended in: Validating in simulation. "
     "Cycles completed on the twin: 0.");
 
   ValidateThenRun::Result passed;
@@ -267,7 +267,7 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
   passed.cycles_completed = 2;
   EXPECT_EQ(
     validate_then_run_outcome(passed),
-    "Validate then run: done. passed in simulation; 2 cycles on the twin "
+    "Validate then run: done. passed in simulation; 2 cycles on the twin. "
     "Ended in: Running twin. Cycles completed on the twin: 2.");
 }
 
@@ -291,9 +291,47 @@ TEST(ConsoleView, ARequestThatEndedAfterAStopIsSaidSoAndNoMore)
   stopped.ended_in = ConsoleState::PHASE_VALIDATING;
   EXPECT_EQ(
     validate_then_run_outcome(stopped, true),
-    "Validate then run: ended after a Stop request. Validate then run was stopped Ended in: "
+    "Validate then run: ended after a Stop request. Validate then run was stopped. Ended in: "
     "Validating in "
     "simulation. Cycles completed on the twin: 0.");
+}
+
+TEST(ConsoleView, AStartProgramOutcomeIsSentencesAndSaysItsCountOnce)
+{
+  // T-02: the console's detail is a sentence of its own, and the count is
+  // said once - by the detail of a completed run, by the line otherwise.
+  cite_interfaces::action::RunProgram::Result done;
+  done.success = true;
+  done.detail = "Start program: 2 cycle(s) completed";
+  done.cycles_completed = 2;
+  EXPECT_EQ(
+    cite_console_gui::run_program_outcome(done),
+    "Start program: done. Start program: 2 cycle(s) completed.");
+
+  cite_interfaces::action::RunProgram::Result stopped;
+  stopped.success = false;
+  stopped.detail = "Start program was stopped; nothing homes on its own (ADR-0037)";
+  stopped.cycles_completed = 0;
+  EXPECT_EQ(
+    cite_console_gui::run_program_outcome(stopped, true),
+    "Start program: ended after a Stop request. Start program was stopped; nothing homes on "
+    "its own (ADR-0037). Cycles completed: 0.");
+
+  // A detail that ends its own sentence is not given a second full stop, and
+  // no detail leaves no stray space.
+  cite_interfaces::action::RunProgram::Result failed;
+  failed.success = false;
+  failed.detail = "  Start program failed: the arm faulted.  ";
+  failed.cycles_completed = 1;
+  EXPECT_EQ(
+    cite_console_gui::run_program_outcome(failed),
+    "Start program: refused or failed. Start program failed: the arm faulted. "
+    "Cycles completed: 1.");
+  cite_interfaces::action::RunProgram::Result bare;
+  bare.success = true;
+  EXPECT_EQ(cite_console_gui::run_program_outcome(bare), "Start program: done.");
+  EXPECT_EQ(cite_console_gui::as_sentence(" \t "), "");
+  EXPECT_EQ(cite_console_gui::as_sentence("Is it?"), "Is it?");
 }
 
 TEST(ConsoleView, AValidateThenRunPhaseTheContractDoesNotProduceIsNotARefusal)

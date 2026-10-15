@@ -380,11 +380,10 @@ void ConsoleClient::run_program(
         outcome("Start program: ended with no result.");
         return;
       }
-      const bool success = result.result->success;
-      const bool stopped = !success && stopped_since(stops_at_send, result.code);
       outcome(
-        outcome_opening("Start program", success, stopped) + result.result->detail +
-        " Cycles completed: " + std::to_string(result.result->cycles_completed) + ".");
+        run_program_outcome(
+          *result.result,
+          !result.result->success && stopped_since(stops_at_send, result.code)));
     };
   run_program_->async_send_goal(goal, options);
 }

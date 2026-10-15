@@ -958,7 +958,7 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
   EXPECT_EQ(recorder.progress.back(), "") << "the progress line outlived its request";
   EXPECT_EQ(
     recorder.outcomes.back(),
-    "Validate then run: done. passed in simulation (1 cycle), then 3 cycle(s) on the twin "
+    "Validate then run: done. passed in simulation (1 cycle), then 3 cycle(s) on the twin. "
     "Ended in: Running twin. Cycles completed on the twin: 3.");
 }
 
@@ -1043,7 +1043,7 @@ TEST(ConsoleClient, ARunThatEndedAfterAStopIsSaidSoNotFailed)
   EXPECT_EQ(
     run_then_stop(console, recorder, client),
     "Start program: ended after a Stop request. Start program was stopped; nothing homes on "
-    "its own Cycles completed: 0.");
+    "its own. Cycles completed: 0.");
 }
 
 TEST(ConsoleClient, AFaultThatRacesAStopIsNeverRelabelledStopped)
@@ -1059,7 +1059,7 @@ TEST(ConsoleClient, AFaultThatRacesAStopIsNeverRelabelledStopped)
   EXPECT_EQ(
     outcome,
     "Start program: ended after a Stop request. Start program failed: the plant's arm "
-    "reported a fault Cycles completed: 0.");
+    "reported a fault. Cycles completed: 0.");
   EXPECT_EQ(outcome.find("stopped"), std::string::npos) << outcome;
 }
 
@@ -1086,6 +1086,6 @@ TEST(ConsoleClient, AResultBeforeTheStopsAnswerClaimsNoStop)
   std::lock_guard<std::mutex> lock(recorder.mutex);
   EXPECT_EQ(
     first_outcome(recorder, "Start program:"),
-    "Start program: refused or failed. Start program was stopped; nothing homes on its own "
+    "Start program: refused or failed. Start program was stopped; nothing homes on its own. "
     "Cycles completed: 0.");
 }
