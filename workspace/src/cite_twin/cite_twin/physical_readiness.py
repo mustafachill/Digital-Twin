@@ -14,15 +14,16 @@
 
 """Whether a physical side may be commanded yet (ADR-0070 item 6, task item 4).
 
-A physical side announces ready while its arm is still HELD: the deadman keeps
-the arm at the vendor's STOP until the twin boundary's first heartbeat, and the
-vendor plugin reactivates its controllers only once the deadman has enabled the
-arm. So between "the pair is up" and "a command would move both arms" there is
-a state the boundary has to wait out, and this module is what decides it is
-over. The boundary refuses a mode that would command the side until it is - so
-a program's `SetMode(VALIDATED)` is refused, and re-asked, rather than its
-first goal reaching an arm that is held, or a track whose joint nobody is
-publishing.
+A physical side announces ready while its arm is still held: the deadman keeps
+the arm at the vendor's STOP through the twin boundary's first heartbeat and
+after it (HELD), until an operator's Start robot, Home or program homing
+releases it through the asset's initializer (ADR-0076), and the vendor plugin
+reactivates its controllers only once the deadman has enabled the arm. So
+between "the pair is up" and "a command would move both arms" there is a state
+the boundary has to wait out, and this module is what decides it is over. The
+boundary refuses a mode that would command the side until it is - so a
+program's `SetMode(VALIDATED)` is refused, and re-asked, rather than its first
+goal reaching an arm that is held, or a track whose joint nobody is publishing.
 
 Three facts, each read on the physical side's own domain, each fresh within the
 plan's `state_max_age_s` on the boundary's steady clock:
@@ -95,6 +96,9 @@ class PhysicalSideWatch:
         if not deadman_permits_motion(self.deadman):
             if self.deadman.state == DeadmanState.STATE_HEALTHY:
                 return f"{self.asset}: the deadman has not yet enabled the arm"
+            if self.deadman.state == DeadmanState.STATE_HELD:
+                # ADR-0076: not a fault, and nothing clears it by itself.
+                return f"{self.asset}: the real arm is held until Start robot"
             return (
                 f"{self.asset}: the deadman holds the arm "
                 f"(state {self.deadman.state}: {self.deadman.detail})"

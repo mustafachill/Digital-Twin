@@ -60,6 +60,7 @@ def _ready_watch(now: float = 10.0) -> PhysicalSideWatch:
     [
         (DeadmanState.STATE_INACTIVE, False),
         (DeadmanState.STATE_AWAITING, False),
+        (DeadmanState.STATE_HELD, False),
         (DeadmanState.STATE_HEALTHY, True),
         (DeadmanState.STATE_TRIPPED, False),
     ],
@@ -74,6 +75,13 @@ def test_healthy_is_not_enough_until_the_arm_is_enabled() -> None:
     watch = _ready_watch()
     watch.heard_deadman(_state(DeadmanState.STATE_HEALTHY, arm_enabled=False), 10.0)
     assert "not yet enabled the arm" in watch.unready(10.0)
+
+
+def test_a_held_arm_is_said_held_until_start_robot() -> None:
+    """ADR-0076: a fresh heartbeat holds; the reason names the operator's action."""
+    watch = _ready_watch()
+    watch.heard_deadman(_state(DeadmanState.STATE_HELD), 10.0)
+    assert watch.unready(10.0) == "picker: the real arm is held until Start robot"
 
 
 def test_a_side_that_said_nothing_is_not_ready() -> None:
