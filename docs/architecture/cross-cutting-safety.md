@@ -47,11 +47,13 @@
   - **A heartbeat holds; only the operator releases**
     ([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)). The first
     heartbeat moves AWAITING to HELD, where the arm stays at STOP and motion is refused. Its
-    `ReleaseArm` service is the one way from HELD to HEALTHY, and the asset's initializer is its
-    one caller, as the first step of `InitializeAsset`: so the arm is released only by Start
-    robot after the operator's go-ahead, `./scripts/home`, or the homing of
-    `./scripts/program`. Every new deadman starts held, so a side restarted under a beating
-    boundary never enables its arm by itself.
+    `ReleaseArm` service is the one way from HELD to HEALTHY. The arm is released by any
+    `ReleaseArm` call on the side's domain once the side is ready (a STOP the vendor
+    acknowledged since activation, and every action the deadman cancels served, so the side's
+    controllers are up); the operator routes are the only callers in the tree: the asset's
+    initializer, as the first step of `InitializeAsset`, for Start robot after the operator's
+    go-ahead, `./scripts/home`, or the homing of `./scripts/program`. Every new deadman starts
+    held, so a side restarted under a beating boundary never enables its arm by itself.
   - It enables the arm only on the HELD to HEALTHY edge, atomically with respect to a trip.
   - It trips, in HELD as in HEALTHY, on a heartbeat timeout, on a lost publisher, or on the
     vendor driver disappearing or restarting (in HELD, once the driver has been served).

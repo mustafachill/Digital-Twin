@@ -7,13 +7,17 @@
 # place the deadman enables the arm (set_mode, then set_state 0); whether that
 # enable was acknowledged is read on DeadmanState.arm_enabled, not here.
 #
-# Called by the asset's initializer as its first step (InitializeAsset.srv), so
-# the arm is released only by an operator's command: the console's Start robot
-# after the go-ahead, `./scripts/home`, or the homing of `./scripts/program`.
+# Released by any ReleaseArm call on the side's domain once the side is ready;
+# the operator routes are the only callers in the tree: the asset's initializer
+# calls it as its first step (InitializeAsset.srv), for the console's Start
+# robot after the go-ahead, `./scripts/home`, or the homing of
+# `./scripts/program`.
 #
 # Refused, with the reason in `detail`, in every state but HELD: INACTIVE,
 # AWAITING (no heartbeat yet), HEALTHY (already released) and TRIPPED. Refused
-# too while the vendor driver's set_state is not served exactly once.
+# too in HELD until the side is ready: the vendor driver's set_state served
+# exactly once, a STOP it acknowledged since the deadman's activation, and every
+# action the deadman cancels served exactly once (the side's controllers up).
 #
 # Served by the deadman under `/cite/<zone>/<asset>/release`, the name its
 # generated parameters state (`release_service`). Not a safety function: the

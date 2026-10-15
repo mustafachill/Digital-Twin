@@ -65,15 +65,19 @@ one place allowed to enable the arm. Rejected.
 ## Consequences
 
 ### What this gets us
-- No arm is enabled without an operator action. A reconnect never enables the arm by itself.
+- No arm is enabled by a heartbeat or a reconnect. The arm is released by any `ReleaseArm`
+  call on the side's domain once the side is ready (the vendor has acknowledged a STOP since
+  the deadman's activation, and every action the deadman cancels is served, so the side's
+  controllers are up); the operator routes are the only callers in the tree. A reconnect never
+  enables the arm by itself.
 - A restarted side behaves exactly like a fresh one.
 
 ### What this costs us
 - A contract change: `DeadmanState` gains a state, a new `ReleaseArm.srv`, a generated service
   name, and the initializer's sequence.
-- The vendor plugin still sets START on each activation. The deadman reverts it within one
-  tick, so the motors are briefly energized, holding position with no motion commanded, at
-  every connect. The owner accepted this on 2026-10-15 rather than patching the vendor.
+- The vendor plugin still runs clean_error + START on each activation. The deadman reverts it
+  within one tick, so the motors are briefly energized, holding position with no motion
+  commanded, at every connect. The owner accepted this on 2026-10-15 rather than patching the vendor.
 - Any terminal path that commands a physical side without initializing it first is now refused
   as held. That fails safe, but it is a behaviour change.
 

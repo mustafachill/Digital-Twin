@@ -293,6 +293,10 @@ class FakeArmState:
         #: ``release`` is set: a vendor that does not answer.
         self.hold_next = threading.Event()
         self.release = threading.Event()
+        #: While set, no set_state is answered until ``speak`` is set, and then
+        #: with a failure: a stale endpoint of a driver that crashed (S-02).
+        self.silent = threading.Event()
+        self.speak = threading.Event()
         self._lock = threading.Lock()
         self._services = [
             harness.node.create_service(
@@ -313,6 +317,10 @@ class FakeArmState:
     def _on_set_state(self, request, response):
         if self._on_call is not None:
             self._on_call("set_state", request.data)
+        if self.silent.is_set():
+            self.speak.wait()
+            response.ret = 1
+            return response
         with self._lock:
             hold = self.hold_next.is_set()
             self.hold_next.clear()

@@ -143,14 +143,117 @@ def _concurrently(action) -> threading.Thread:
 def _release(node) -> None:
     """Heartbeat to HELD, then the operator's release to HEALTHY (ADR-0076).
 
-    The graph is not this test's: the vendor's set_state counts as served once.
+    The graph is not this test's: the vendor's set_state and every action the
+    deadman cancels count as served once. The STOPs sent so far are answered
+    with success, as a live vendor answers them, so the side is ready (S-01).
     """
     node.count_services = lambda _name: 1
+    acknowledged = SetInt16.Response()
+    acknowledged.ret = 0
+    for future in node._set_state.futures:
+        if not future.done():
+            future.set_result(acknowledged)
     node._on_heartbeat(TwinHeartbeat(zone="cell_b", boundary_id="b", sequence=1))
     assert node._liveness.state == HELD
     assert not node._set_mode.futures, "a heartbeat never enables"
     response = node._on_release_arm(ReleaseArm.Request(), ReleaseArm.Response())
     assert response.success, response.detail
+
+
+def _held(node, log: list) -> None:
+    """Bring a configured deadman to HELD, every vendor call recorded and unanswered."""
+    node._set_state = FakeClient("set_state", log)
+    node._set_mode = FakeClient("set_mode", log)
+    node._linear_stop = FakeClient("set_linear_motor_stop", log)
+    node._cancels = []
+    # One boundary on the topic: the graph is not this test's.
+    node.count_publishers = lambda _topic: 1
+    node.on_activate(None)
+    node._on_heartbeat(TwinHeartbeat(zone="cell_b", boundary_id="b", sequence=1))
+    assert node._liveness.state == HELD
+
+
+def _acknowledge(node, ret: int = 0) -> None:
+    """Answer every STOP still unanswered with ``ret``."""
+    response = SetInt16.Response()
+    response.ret = ret
+    for future in node._set_state.futures:
+        if not future.done():
+            future.set_result(response)
+
+
+def test_a_stale_vendor_endpoint_is_never_the_vendor_seen():
+    """S-02: a count of one that answers nothing does not arm HELD's vendor-loss trip."""
+    node = _build(Deadman, "deadman")
+    try:
+        node.count_services = lambda _name: 1
+        _held(node, [])
+        node._last_fresh_ns = node._steady.now().nanoseconds
+        node._tick()
+        assert not node._vendor_seen, "seen on the graph count alone"
+        _acknowledge(node, ret=1)
+        node._tick()
+        assert not node._vendor_seen, "seen on a STOP the vendor refused"
+        # The stale endpoint expires: nothing trips, for nothing was seen.
+        node.count_services = lambda _name: 0
+        node._last_fresh_ns = node._steady.now().nanoseconds
+        node._tick()
+        assert node._liveness.state == HELD
+        # A live driver answers a STOP while it is the one server: seen, and
+        # from then on its loss trips.
+        node.count_services = lambda _name: 1
+        node._last_fresh_ns = node._steady.now().nanoseconds
+        node._tick()
+        _acknowledge(node)
+        node._tick()
+        assert node._vendor_seen
+        node.count_services = lambda _name: 0
+        node._last_fresh_ns = node._steady.now().nanoseconds
+        node._tick()
+        assert node._liveness.state == TRIPPED
+    finally:
+        node.destroy_node()
+
+
+def test_a_stop_answered_before_this_activation_is_not_this_ones():
+    """S-02: an answer to a STOP sent before activation does not make the side ready."""
+    node = _build(Deadman, "deadman")
+    try:
+        log: list = []
+        node._set_state = FakeClient("set_state", log)
+        node._hold_stopped()
+        early = list(node._set_state.futures)
+        node.count_services = lambda _name: 1
+        _held(node, log)
+        response = SetInt16.Response()
+        response.ret = 0
+        early[0].set_result(response)
+        assert not node._stop_acknowledged
+    finally:
+        node.destroy_node()
+
+
+def test_a_release_waits_for_an_acknowledged_stop_and_the_controllers():
+    """S-01: refused in HELD until a STOP is acknowledged and every cancelled action is served."""
+    node = _build(Deadman, "deadman")
+    try:
+        served = {"actions": 0}
+        node.count_services = lambda name: (
+            served["actions"] if name.endswith("/_action/cancel_goal") else 1
+        )
+        _held(node, [])
+        refused = node._on_release_arm(ReleaseArm.Request(), ReleaseArm.Response())
+        assert not refused.success and "acknowledged no STOP" in refused.detail
+        _acknowledge(node)
+        refused = node._on_release_arm(ReleaseArm.Request(), ReleaseArm.Response())
+        assert not refused.success and "controllers are not up" in refused.detail
+        assert node._liveness.state == HELD and not node._set_mode.futures
+        served["actions"] = 1
+        released = node._on_release_arm(ReleaseArm.Request(), ReleaseArm.Response())
+        assert released.success, released.detail
+        assert node._liveness.state == HEALTHY
+    finally:
+        node.destroy_node()
 
 
 def test_a_trip_between_the_start_decision_and_its_send_is_never_followed_by_start():

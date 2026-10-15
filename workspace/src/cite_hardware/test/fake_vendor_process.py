@@ -20,7 +20,9 @@ cannot be withdrawn mid-test (see `vendor_fakes.FakeTrack`). A vendor driver
 that goes away and comes back — `ros2_control_node` restarting — is a PROCESS
 that ends and starts again, so this is one: started and ended with a signal by
 the test, it serves the two services under ``argv[1]`` and prints every call it
-receives as ``call <service> <value>`` on its own line.
+receives as ``call <service> <value>`` on its own line. With ``silent`` as
+``argv[2]`` it answers no `set_state` at all: the stale endpoint of a driver
+that crashed, which the graph still counts (S-02).
 """
 
 from __future__ import annotations
@@ -49,11 +51,13 @@ def main() -> int:
     namespace = sys.argv[1]
     rclpy.init()
     node = Node("fake_vendor")
-    FakeArmState(
+    arm = FakeArmState(
         _Host(node),
         namespace,
         on_call=lambda service, value: print(f"call {service} {value}", flush=True),
     )
+    if sys.argv[2:] == ["silent"]:
+        arm.silent.set()
     print("serving", flush=True)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
@@ -62,6 +66,8 @@ def main() -> int:
     except (ExternalShutdownException, KeyboardInterrupt):
         pass
     finally:
+        # A silent answer waits on this; it is never sent, the context being down.
+        arm.speak.set()
         executor.shutdown()
         node.destroy_node()
         rclpy.try_shutdown()

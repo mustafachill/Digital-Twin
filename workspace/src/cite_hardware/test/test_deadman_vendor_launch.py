@@ -18,8 +18,13 @@ The vendor's `ros2_control_node` restarting is a fault: its plugin's
 `on_activate` cleans the error, enables motion and STARTS the arm by itself
 (`uf_robot_system_hardware.cpp:248-254`). So while HEALTHY, and while HELD once
 the driver has been served (ADR-0076), the vendor's `set_state` must be served
-by exactly one server. Before the driver is first served, HELD waits for it: a
-side started under a beating boundary is HELD before its driver exists. The
+by exactly one server. Before the driver is first SEEN - a STOP it acknowledged
+while it was the one server (S-02) - HELD waits for it: a side started under a
+beating boundary is HELD before its driver exists, and a stale endpoint of a
+crashed driver, which the graph counts but which answers nothing, is not seen.
+A release is refused until the side is ready (S-01): a STOP acknowledged, and
+the actions the deadman cancels served - here a gripper action the test serves
+only partway through, standing in for controllers not yet spawned. The
 vendor here is a process of its own (`fake_vendor_process.py`), ended with
 SIGINT and started again, because a driver going away is a process going away.
 A trip ends the deadman's process (ADR-0076 decision 5); the launch respawns it,
@@ -49,13 +54,14 @@ import pytest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from vendor_fakes import FakeBoundary, Harness, SETTLE_S  # noqa: E402
+from vendor_fakes import FakeBoundary, FakeGripper, Harness, SETTLE_S  # noqa: E402
 
 NODE = "deadman_vendor"
 ZONE = "test_vendor_zone"
 VENDOR = "/test_restarting_vendor/xarm"
 STATE_TOPIC = "/test/deadman_vendor_state"
 RELEASE = "/test/deadman_vendor/release"
+GRIPPER_ACTION = "/test/deadman_vendor/gripper_cmd"
 RESPAWN_DELAY_S = 1.0
 TIMEOUT_S = 0.5
 STOP, START = 4, 0
@@ -72,7 +78,7 @@ PARAMETERS = {
     "set_mode_service": f"{VENDOR}/set_mode",
     "enable_mode": 1,
     "linear_motor_stop_service": f"{VENDOR}/set_linear_motor_stop",
-    "cancel_actions": ["/test/deadman_vendor/gripper_cmd"],
+    "cancel_actions": [GRIPPER_ACTION],
 }
 
 
@@ -97,11 +103,11 @@ def generate_test_description():
 class VendorProcess:
     """One fake vendor driver process, and the calls it printed."""
 
-    def __init__(self) -> None:
+    def __init__(self, *mode: str) -> None:
         self.calls: list[tuple[str, int]] = []
         self.serving = threading.Event()
         self._process = subprocess.Popen(
-            [sys.executable, os.path.join(HERE, "fake_vendor_process.py"), VENDOR],
+            [sys.executable, os.path.join(HERE, "fake_vendor_process.py"), VENDOR, *mode],
             stdout=subprocess.PIPE,
             text=True,
         )
@@ -141,8 +147,8 @@ class TestDeadmanVendor(unittest.TestCase):
             vendor.end()
         cls.harness.close()
 
-    def _vendor(self) -> VendorProcess:
-        vendor = VendorProcess()
+    def _vendor(self, *mode: str) -> VendorProcess:
+        vendor = VendorProcess(*mode)
         self.vendors.append(vendor)
         self.harness.wait_for(vendor.serving.is_set, "the fake vendor serving")
         return vendor
@@ -160,9 +166,23 @@ class TestDeadmanVendor(unittest.TestCase):
     def _release(self) -> ReleaseArm.Response:
         return self.harness.call(self.release_client, ReleaseArm.Request(), "release answered")
 
+    def _release_when_acknowledged(self) -> ReleaseArm.Response:
+        """Release once the new deadman's first STOP is acknowledged (S-01).
+
+        A release asked the instant HELD is heard may race the answer to the
+        activation's STOP; that refusal, and only that one, is asked again.
+        """
+        def settled():
+            answer = self._release()
+            if answer.success or "acknowledged no STOP" not in answer.detail:
+                return answer
+            return None
+
+        return self.harness.wait_for(settled, "a release past the first acknowledged STOP")
+
     def _released_and_enabled(self, vendor: VendorProcess, what: str) -> None:
         self._state_is(DeadmanState.STATE_HELD, f"HELD {what}")
-        response = self._release()
+        response = self._release_when_acknowledged()
         self.assertTrue(response.success, response.detail)
         self._state_is(DeadmanState.STATE_HEALTHY, f"HEALTHY {what}")
         self.harness.wait_for(
@@ -199,11 +219,50 @@ class TestDeadmanVendor(unittest.TestCase):
         self.assertFalse(refused.success)
         self.assertIn("served by 0 server(s)", refused.detail)
 
-        # The driver appears; released, enabled through it.
+        # S-02: a stale endpoint - counted on the graph, answering nothing -
+        # is not the driver seen. No release while it stands, and its going
+        # away trips nothing.
+        stale = self._vendor("silent")
+        self._servers(1, "the stale endpoint counted")
+        harness.wait_for(
+            lambda: ("set_state", STOP) in stale.calls, "set_state(4) at the stale endpoint"
+        )
+        refused = self._release()
+        self.assertFalse(refused.success)
+        self.assertIn("acknowledged no STOP", refused.detail)
+        stale.end()
+        self._servers(0, "the stale endpoint gone")
+        harness.hold_for(
+            lambda: self.states[-1].state != DeadmanState.STATE_HELD,
+            "a trip on a stale endpoint going away",
+            4 * TIMEOUT_S,
+        )
+
+        # The driver appears and acknowledges a STOP; still no release while
+        # the side's controllers are not up (S-01): an action the deadman
+        # cancels is not served.
         first = self._vendor()
         self._servers(1, "one vendor server seen")
         harness.wait_for(
             lambda: ("set_state", STOP) in first.calls, "set_state(4) at the first vendor"
+        )
+
+        def refused_for_the_controllers():
+            answer = self._release()
+            return answer if "controllers are not up" in answer.detail else None
+
+        refused = harness.wait_for(
+            refused_for_the_controllers, "a release refused for the controllers alone"
+        )
+        self.assertFalse(refused.success)
+        self.assertIn(GRIPPER_ACTION, refused.detail)
+        self.assertNotIn(("set_mode", 1), first.calls, "an enable on a refused release")
+
+        # The controllers come up; released, enabled through the driver.
+        self.gripper = FakeGripper(harness, GRIPPER_ACTION)
+        harness.wait_for(
+            lambda: harness.node.count_services(f"{GRIPPER_ACTION}/_action/cancel_goal") == 1,
+            "the gripper action served",
         )
         self._released_and_enabled(first, "with one vendor")
 

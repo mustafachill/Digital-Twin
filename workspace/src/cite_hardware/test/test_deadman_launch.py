@@ -158,6 +158,20 @@ class TestDeadman(unittest.TestCase):
     def _release(self) -> ReleaseArm.Response:
         return self.harness.call(self.release_client, ReleaseArm.Request(), "release answered")
 
+    def _release_when_acknowledged(self) -> ReleaseArm.Response:
+        """Release once the new deadman's first STOP is acknowledged (S-01).
+
+        A release asked the instant HELD is heard may race the answer to the
+        activation's STOP; that refusal, and only that one, is asked again.
+        """
+        def settled():
+            answer = self._release()
+            if answer.success or "acknowledged no STOP" not in answer.detail:
+                return answer
+            return None
+
+        return self.harness.wait_for(settled, "a release past the first acknowledged STOP")
+
     def _hold_a_gripper_goal(self):
         self.gripper.hold_again()
         self.harness.wait_for(self.gripper_client.server_is_ready, "the fake gripper served")
@@ -184,7 +198,7 @@ class TestDeadman(unittest.TestCase):
     def _released_and_enabled(self, what: str) -> None:
         self._state_is(HELD, f"HELD {what}")
         modes = len(self.arm.modes)
-        response = self._release()
+        response = self._release_when_acknowledged()
         self.assertTrue(response.success, response.detail)
         self._state_is(HEALTHY, f"HEALTHY on the release {what}")
         self._enabled(modes, f"the arm enabled on the release {what}")
@@ -318,6 +332,13 @@ class TestDeadman(unittest.TestCase):
         tripped = self._state_is(TRIPPED, "TRIPPED from HELD on a heartbeat loss")
         self.assertIn("no heartbeat within", tripped.detail)
         self._ended_by_the_trip(proc_info, deadman, "with every STOP refused")
+        # S-03: an unacknowledged trip says the arm may still be enabled.
+        proc_output.assertWaitFor(
+            expected_output=(
+                "the arm may remain enabled; check it in UFACTORY Studio before the next start"
+            ),
+            timeout=SETTLE_S,
+        )
         self.arm.failures = 0
         self.assertEqual(len(self.arm.modes), modes, "an enable from HELD")
 
@@ -330,7 +351,7 @@ class TestDeadman(unittest.TestCase):
         self._state_is(HELD, "HELD for the retried enable")
         modes = len(self.arm.modes)
         self.arm.mode_failures = 3
-        self.assertTrue(self._release().success)
+        self.assertTrue(self._release_when_acknowledged().success)
         self._state_is(HEALTHY, "HEALTHY on the release")
         self._enabled(modes + 3, "the arm enabled again after refused set_modes")
         self.assertGreaterEqual(len(self.arm.modes), modes + 4, "set_mode retried")
@@ -383,7 +404,7 @@ class TestDeadman(unittest.TestCase):
         self.arm.mode_release.clear()
         self.arm.mode_held.clear()
         self.arm.hold_mode.set()
-        self.assertTrue(self._release().success)
+        self.assertTrue(self._release_when_acknowledged().success)
         self._state_is(HEALTHY, "HEALTHY with set_mode held")
         harness.wait_for(self.arm.mode_held.is_set, "set_mode held at the vendor")
         # Counted before the trip: HEALTHY sends no STOP, and the process may

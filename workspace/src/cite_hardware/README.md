@@ -37,8 +37,10 @@ every state but HEALTHY, so a re-enable from UFACTORY Studio, the pendant or ano
 undone within one tick; and, while tripped, a cancel of every goal on the arm's
 `FollowJointTrajectory` action. The vendor plugin streams nothing while the arm is in state 4
 (`uf_robot_system_hardware.cpp:339-344`, `:464-502`). The first heartbeat moves AWAITING to
-HELD, not HEALTHY (ADR-0076): the arm stays at STOP until `ReleaseArm`, which only the
-initializer calls, as the first step of `InitializeAsset`. Only the transition HELD -> HEALTHY
+HELD, not HEALTHY (ADR-0076): the arm stays at STOP until `ReleaseArm`, served to any client
+on the side's domain once the side is ready (a STOP the vendor acknowledged since activation,
+and every action the deadman cancels served); the initializer is its only caller in the tree,
+as the first step of `InitializeAsset`. Only the transition HELD -> HEALTHY
 enables the arm, with the vendor plugin's own sequence (`set_mode` with its streaming mode,
 then `set_state(0)`), and the plugin then reactivates the controllers itself (`:345-350`).
 `DeadmanState.state` HEALTHY says motion is permitted; `arm_enabled` says the deadman's

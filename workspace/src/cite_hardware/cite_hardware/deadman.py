@@ -48,12 +48,21 @@ every connect rather than patch the vendor (ADR-0076, "What this costs us").
 heartbeat of its zone's boundary moves AWAITING to HELD, not HEALTHY: the
 boundary is followed and its loss trips, and the arm stays at STOP. The
 `ReleaseArm` service this node serves (`release_service`) is the one way from
-HELD to HEALTHY. The asset's initializer calls it as its first step, so the
-arm is released only by an operator's command: the console's Start robot
-after the go-ahead, `./scripts/home`, or the homing of `./scripts/program`. A
-release is refused in every other state, and while the vendor's `set_state`
-is not served exactly once. A side started while the boundary is already
-beating therefore comes up HELD, and a reconnect never enables the arm.
+HELD to HEALTHY. The arm is released by any `ReleaseArm` call on the side's
+domain once the side is ready; the operator routes are the only callers in
+the tree: the asset's initializer calls it as its first step, on the console's
+Start robot after the go-ahead, `./scripts/home`, or the homing of
+`./scripts/program`. A release is refused in every other state, and in HELD
+until the side is READY (S-01): the vendor's `set_state` served exactly once,
+a STOP the vendor answered with success since this activation, and every
+action in `cancel_actions` - the arm trajectory controller's and the gripper
+relay's - served exactly once. The trajectory controller's action exists only
+once the side's controllers are spawned, which the side's launch does after
+its hold gate; it stays served while the vendor plugin keeps the controllers
+inactive under STOP. So the initializer, which serves before the hold gate
+and the controllers, cannot release an arm whose side is still coming up. A
+side started while the boundary is already beating therefore comes up HELD,
+and a reconnect never enables the arm.
 
 **Only HEALTHY enables.** On HELD -> HEALTHY the deadman calls the vendor's
 `set_mode` with the plugin's streaming mode, then, once that answered success
@@ -102,18 +111,26 @@ everything it depends on (the hold gate's STOP among them) instead of trusting
 a driver that may have restarted under it. Where nothing restarts the side —
 `./scripts/program`, a scenario, a pair without the console's keeper — the trip
 already ended every motion, and the side ending now ends the pair as well.
+When no STOP sent at or after the trip was acknowledged, the side ends all the
+same and says that the arm may remain enabled (S-03): it is to be checked in
+UFACTORY Studio before the next start.
 
 **The vendor driver going away trips it.** While HEALTHY, and while HELD once
-the driver has been served exactly once since activation, the vendor's
-`set_state` service must be served by exactly one server: none is a driver
-that went away, two is one that restarted before the old one's discovery lease
-expired. Either way the driver's `on_activate` has cleaned the error, enabled
-motion and STARTED the arm by itself (`:248-254`), which nothing here asked
-for. HELD waits to see the driver first because the deadman starts before the
-driver's controller manager: a side started under a boundary already beating
-reaches HELD while no driver exists yet. Seen on the tick: an outage shorter
-than one `tick_period_s` with no overlap is not seen, and a driver restart
-takes seconds.
+the driver has been SEEN since activation, the vendor's `set_state` service
+must be served by exactly one server: none is a driver that went away, two is
+one that restarted before the old one's discovery lease expired. Either way
+the driver's `on_activate` has cleaned the error, enabled motion and STARTED
+the arm by itself (`:248-254`), which nothing here asked for. HELD waits to see
+the driver first because the deadman starts before the driver's controller
+manager: a side started under a boundary already beating reaches HELD while no
+driver exists yet. SEEN means a STOP sent since this activation was answered
+with success while the service had exactly one server (S-02): a count of one
+alone would be satisfied by the stale endpoint of a crashed driver, whose
+expiry would then trip a side that never had a live driver, and every restart
+of that side would energize the arm again (the plugin's `clean_error` and
+START on activation). Seen on the tick: an outage shorter than one
+`tick_period_s` with no overlap is not seen, and a driver restart takes
+seconds.
 
 **Latched.** A trip is never cleared by heartbeats resuming. The relays read
 the published `DeadmanState`, republished on every tick, and refuse motion in
@@ -298,8 +315,15 @@ class Deadman(LifecycleNode):
         #: time before which it is not tried again (HW-S-04).
         self._enable_backoff: tuple[int, int] | None = None
         self._release_server = None
-        #: Whether the vendor's set_state was served exactly once since the
-        #: last activation: from then on, HELD trips on losing it.
+        #: Bumped on every activation, so a STOP answered for an earlier one
+        #: is not taken as this one's.
+        self._activation = 0
+        #: Whether a STOP sent since the last activation was answered with
+        #: success: the vendor driver is live, not a stale endpoint (S-02).
+        self._stop_acknowledged = False
+        #: Whether the vendor was SEEN since the last activation: a STOP
+        #: acknowledged while set_state had exactly one server. From then on,
+        #: HELD trips on losing it (S-02).
         self._vendor_seen = False
         #: Steady-clock time of this process's first trip, nanoseconds; the
         #: process ends soon after it (ADR-0076 decision 5).
@@ -403,6 +427,8 @@ class Deadman(LifecycleNode):
         with self._lock:
             self._liveness.activate()
             self._epoch += 1
+            self._activation += 1
+            self._stop_acknowledged = False
             self._vendor_seen = False
         # The vendor plugin's own activation sets START; this undoes it at once.
         self._hold_stopped()
@@ -528,15 +554,17 @@ class Deadman(LifecycleNode):
             response.detail = "release refused: the deadman is not configured"
             return response
         vendors = self.count_services(config["set_state_service"])
+        unserved = [
+            action
+            for action in config["cancel_actions"]
+            if self.count_services(f"{action}/_action/cancel_goal") != 1
+        ]
         with self._lock:
-            if liveness.state == HELD and vendors != 1:
-                outcome = Outcome(
-                    accepted=False,
-                    reason=(
-                        f"release refused: {config['set_state_service']} is served by "
-                        f"{vendors} server(s), and the arm is enabled through exactly one"
-                    ),
-                )
+            unready = None
+            if liveness.state == HELD:
+                unready = self._release_unready(vendors, unserved)
+            if unready is not None:
+                outcome = Outcome(accepted=False, reason=f"release refused: {unready}")
             else:
                 outcome = liveness.release()
             if outcome.accepted:
@@ -552,6 +580,26 @@ class Deadman(LifecycleNode):
         # The one place the arm is enabled: the HELD -> HEALTHY edge.
         self._enable(epoch)
         return response
+
+    def _release_unready(self, vendors: int, unserved: list[str]) -> str | None:
+        """Why a HELD side is not ready to be released (S-01), or None; under the lock."""
+        assert self._config is not None
+        if vendors != 1:
+            return (
+                f"{self._config['set_state_service']} is served by {vendors} server(s), and "
+                "the arm is enabled through exactly one"
+            )
+        if not self._stop_acknowledged:
+            return (
+                "the vendor has acknowledged no STOP since this deadman was activated, so "
+                "the arm is not known to be held by a live driver"
+            )
+        if unserved:
+            return (
+                f"the side's controllers are not up: {', '.join(unserved)} is not served by "
+                "exactly one server"
+            )
+        return None
 
     def _on_matched(self, status) -> None:
         if status.current_count > 0 or self._liveness is None:
@@ -573,7 +621,7 @@ class Deadman(LifecycleNode):
         outcome = None
         vendors = self.count_services(config["set_state_service"])
         with self._lock:
-            if vendors == 1:
+            if vendors == 1 and self._stop_acknowledged:
                 self._vendor_seen = True
             if liveness.state in FOLLOWING:
                 if now - self._last_fresh_ns > config["timeout_s"] * 1e9:
@@ -613,7 +661,8 @@ class Deadman(LifecycleNode):
             self._enable(epoch)
         if tripped_at is not None and now - tripped_at >= config["call_deadline_s"] * 1e9:
             self._end_after_trip(
-                f"no set_state(4) acknowledged within {config['call_deadline_s']:g} s of the trip"
+                f"no set_state(4) acknowledged within {config['call_deadline_s']:g} s of the trip",
+                acknowledged=False,
             )
         self._publish_state(log=False)
 
@@ -641,7 +690,22 @@ class Deadman(LifecycleNode):
         with self._lock:
             if self._liveness is not None and self._liveness.state == HEALTHY:
                 return
-            self._call("set_state(4)", self._set_state, request, then=then)
+            activation = self._activation
+
+            def answered(response) -> None:
+                self._stop_answered(activation, response)
+                if then is not None:
+                    then(response)
+
+            self._call("set_state(4)", self._set_state, request, then=answered)
+
+    def _stop_answered(self, activation: int, response) -> None:
+        """Record a STOP the vendor answered with success in this activation (S-02)."""
+        if response is None or getattr(response, "ret", None) != 0:
+            return
+        with self._lock:
+            if self._activation == activation and activation > 0:
+                self._stop_acknowledged = True
 
     def _issue_trip_stops(self) -> None:
         self._hold_stopped(then=self._trip_stop_answered)
@@ -656,13 +720,22 @@ class Deadman(LifecycleNode):
         if response is not None and getattr(response, "ret", None) == 0:
             self._end_after_trip("set_state(4) acknowledged after the trip")
 
-    def _end_after_trip(self, why: str) -> None:
-        """Ask `process.run` to end this process, once (ADR-0076 decision 5)."""
+    def _end_after_trip(self, why: str, acknowledged: bool = True) -> None:
+        """Ask `process.run` to end this process, once (ADR-0076 decision 5).
+
+        ``acknowledged`` False: no STOP sent at or after the trip was answered
+        with success, so the arm may still be enabled, and that is said (S-03).
+        """
         with self._lock:
             if self._end_requested or self._tripped_at_ns is None:
                 return
             self._end_requested = True
             end = self._end_process
+        if not acknowledged:
+            self.get_logger().error(
+                "no STOP was acknowledged after the trip: the arm may remain enabled; "
+                "check it in UFACTORY Studio before the next start"
+            )
         self.get_logger().error(
             f"ending this side after the trip ({why}): the deadman exits with code "
             f"{EXIT_TRIPPED}, and a side started again comes up held"
