@@ -228,8 +228,8 @@ CITE_ALLOW_HARDWARE=1 ./scripts/console    # both sides: the simulation and the 
 ([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)). Without it the plant
 starts alone and prints `real arm not started: CITE_ALLOW_HARDWARE is not 1; simulation target
 only`; the boundary opens nothing on the counterpart's domain and refuses every mode but `SIM`,
-even with `force`. With it both sides start, as before. The panel shows in the top-right corner of
-the plant's 3D view. **Nothing moves until a button is pressed.**
+even with `force`. With it both sides start, as before. The panel frames the plant's 3D view, with
+every button in the bottom deck ([ADR-0074](../adr/0074-the-operator-console-frames-the-3d-view.md)). **Nothing moves until a button is pressed.**
 
 **The target selector** chooses where the signal goes: **Simulation** (`SIM`, the plant alone),
 **Real arm** (`REAL`, the physical counterpart alone) or **Twin** (`VALIDATED`, both). Only the
