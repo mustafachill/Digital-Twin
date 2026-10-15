@@ -660,7 +660,7 @@ def test_a_started_robot_says_so_and_what_comes_next() -> None:
     assert join().success
     assert rig.machine.snapshot().step == (
         "robot started for the twin (simulation and real arm) (initialized: counterpart) - "
-        "Home with this target"
+        "Home with this target once the twin calls counterpart commandable"
     )
 
 
@@ -1875,7 +1875,9 @@ def test_a_target_offered_before_its_track_is_zeroed_accepts_start_robot_alone()
     assert rig.machine.snapshot().available_targets == (SIM, REAL, TWIN)
     rig.started(TWIN)
     rig.speeds.clear()
-    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+    # Started is started AND commandable (decision 2): the deck still asks for
+    # Start robot on the real arm and the twin.
+    assert rig.machine.snapshot().started_targets == (SIM,)
     for target in (REAL, TWIN):
         refusal = rig.machine.motion_refusal(0.1, None, target)
         assert refusal is not None and "not ready to be commanded" in refusal
@@ -1887,7 +1889,48 @@ def test_a_target_offered_before_its_track_is_zeroed_accepts_start_robot_alone()
     assert rig.machine.motion_refusal(0.1, None, SIM) is None
     # Once the twin calls the track commandable, Home is accepted.
     rig.commandable = list(SIDES)
+    rig.machine.commandable_changed()
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
     assert rig.machine.motion_refusal(0.1, None, TWIN) is None
+
+
+def test_a_physical_side_that_ceases_to_be_commandable_is_no_longer_started() -> None:
+    """ADR-0075 decision 2: a side that recovers must be started again."""
+    rig = Rig(physical=["counterpart"]).started(TWIN)
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+    rig.commandable = ["plant"]
+    rig.machine.commandable_changed()
+    snapshot = rig.snapshots[-1]
+    assert snapshot.started_targets == (SIM,) and snapshot.robot_started
+    assert snapshot.state == ConsoleState.READY
+    # Recovered: commandable again, but not started until Start robot says so.
+    rig.commandable = list(SIDES)
+    rig.machine.commandable_changed()
+    assert rig.machine.snapshot().started_targets == (SIM,)
+    for target in (REAL, TWIN):
+        refusal = rig.machine.motion_refusal(0.1, None, target)
+        assert refusal is not None and "is not started (counterpart)" in refusal
+    assert rig.machine.motion_refusal(0.1, None, SIM) is None
+    rig.started(REAL)
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+
+
+def test_a_lapse_of_the_only_started_side_leaves_the_console_not_started() -> None:
+    rig = Rig(physical=["counterpart"]).started(REAL)
+    rig.commandable = ["plant"]
+    rig.machine.commandable_changed()
+    snapshot = rig.snapshots[-1]
+    assert snapshot.state == ConsoleState.NOT_STARTED and not snapshot.robot_started
+    assert snapshot.started_targets == ()
+
+
+def test_a_side_becoming_commandable_clears_nothing() -> None:
+    """Only a true-to-false change clears a started flag: a start whose track
+    the twin calls commandable late stays started once it is."""
+    rig = Rig(physical=["counterpart"], commandable=("plant",)).started(TWIN)
+    rig.commandable = list(SIDES)
+    rig.machine.commandable_changed()
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
 
 
 def test_a_fault_unstarts_every_side() -> None:
@@ -1987,6 +2030,9 @@ def test_a_stopped_real_start_leaves_the_simulation_started() -> None:
 
 
 def test_started_targets_are_only_the_offered_ones() -> None:
+    # Defensive (R-05): `_snapshot` derives started_targets from the offered
+    # targets, and with SIM the only one offered nothing else can be started,
+    # so this holds the derivation's shape rather than a refusal it could miss.
     rig = Rig(available=(SIM,)).started(SIM)
     assert rig.machine.snapshot().started_targets == (SIM,)
 

@@ -159,14 +159,17 @@ in the attention colour (ISA-101), not the alarm's. Every Start robot request an
 and Start program goal names its target explicitly, and the console refuses one without it.
 
 The deck follows the target (ADR-0075). Start robot starts only the selected target's sides,
-and the console publishes which targets are started (`started_targets`); the panel restates no
-side map. Home and Start program are enabled only for a started target. While the selected
+and the console publishes which targets are started (`started_targets`: Start robot started
+every side, and the twin calls each commandable now; a physical side that ceases to be
+commandable must be started again); the panel restates no side map. Home and Start program are
+enabled only for a started target. While the selected
 target is served but not started (`start_hint_shown`), the deck says "Start robot for this
 target" in the same place and colour as "Select a target". After starting Simulation,
 selecting Twin enables Start robot again and disables Home until Twin is started; back on
 Simulation, Home is offered again. Start robot stays enabled on a started target, to start it
 again. Real arm and Twin may be selected before the physical track has found its zero: Start
-robot is then the only request the console accepts for them.
+robot is then the only request the console accepts for them, and they are not listed as started
+until the twin calls the track commandable.
 
 When the panel drops an operator's Real arm or Twin pick, its event log says so: "Target
 selection dropped", with "Console changed: now Simulation" (or "now none")

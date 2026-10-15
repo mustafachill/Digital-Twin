@@ -118,8 +118,8 @@ struct ConsoleView
   /// cannot read is still a change (R-18).
   std::set<std::uint8_t> served_values;
   /// ConsoleState.started_targets, as targets this panel recognises: Start
-  /// robot started every side of each, so Home and Start program may be sent
-  /// for it (ADR-0075 decision 5).
+  /// robot started every side of each and the twin calls each commandable, so
+  /// Home and Start program may be sent for it (ADR-0075 decisions 2 and 5).
   std::set<Target> started_targets;
   /// ConsoleState.startable_targets, as targets this panel recognises: every
   /// side of each is at the program's start, so Start program may be sent.

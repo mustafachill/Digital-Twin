@@ -269,7 +269,18 @@ class _Observed:
 def started_step(target: int, physical: Sequence[str]) -> str:
     """Return the step Start robot on ``target`` publishes once it has succeeded (ADR-0075)."""
     initialized = f" (initialized: {', '.join(physical)})" if physical else ""
-    return f"robot started for {targets.label(target)}{initialized} - Home with this target"
+    return f"robot started for {targets.label(target)}{initialized} - {home_next(physical)}"
+
+
+def home_next(physical: Sequence[str]) -> str:
+    """Say when Home with a just-started target is accepted (ADR-0075 decision 2).
+
+    A physical side is commandable only once the twin says so (decision 4), so
+    for one the claim waits on that.
+    """
+    if not physical:
+        return "Home with this target"
+    return f"Home with this target once the twin calls {', '.join(physical)} commandable"
 
 
 class _NotAtStart(Exception):
@@ -355,8 +366,12 @@ class ConsoleMachine:
         self._stop = threading.Event()
         self._state = ConsoleState.NOT_STARTED
         #: The sides Start robot started and nothing has undone since
-        #: (ADR-0075): a FAULT clears every one, a Start robot its target's.
+        #: (ADR-0075): a FAULT clears every one, a Start robot its target's,
+        #: and a physical side ceasing to be commandable its own.
         self._started_sides: set[str] = set()
+        #: The sides the twin called commandable when last told
+        #: (`commandable_changed`), to see one cease to be.
+        self._was_commandable: set[str] = set(commandable())
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
@@ -458,6 +473,24 @@ class ConsoleMachine:
             snapshot = self._snapshot()
         self._on_change(snapshot)
 
+    def commandable_changed(self) -> None:
+        """Take the twin's new commandable sides, and publish the state again (R-19).
+
+        ADR-0075 decision 2: a running physical side that was commandable and
+        is no longer has its started flag cleared, so a side that recovers is
+        started again before Home or Start program is accepted for it. An idle
+        READY console with no side left started is NOT_STARTED.
+        """
+        with self._lock:
+            now = set(self._commandable())
+            lapsed = (self._was_commandable - now).intersection(self._physical)
+            self._was_commandable = now
+            self._started_sides.difference_update(lapsed)
+            if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
+                self._state = ConsoleState.NOT_STARTED
+            snapshot = self._snapshot()
+        self._on_change(snapshot)
+
     # ------------------------------------------------------------ requests
 
     def start_robot(self, target: int) -> Outcome:
@@ -523,7 +556,7 @@ class ConsoleMachine:
         say(started_step(target, physical))
         self._end(ConsoleState.READY, started=sides)
         return Outcome(
-            True, f"{targets.label(target)} is started; Home with this target is accepted"
+            True, f"{targets.label(target)} is started; {home_next(physical)}"
         )
 
     def home(
@@ -1408,6 +1441,7 @@ class ConsoleMachine:
     def _snapshot(self) -> Snapshot:
         self._sequence += 1
         available = tuple(self._available())
+        commandable = self._commandable()
         return Snapshot(
             sequence=self._sequence,
             state=self._state,
@@ -1429,11 +1463,14 @@ class ConsoleMachine:
             speed_scale=self._speed,
             minimum_speed_scale=self._minimum_speed_scale,
             # Derived here, from the one target table, so no panel restates
-            # which sides a target commands (ADR-0075).
+            # which sides a target commands: started AND commandable (ADR-0075
+            # decision 2), so a target whose track has not found its zero
+            # still asks for Start robot.
             started_targets=tuple(
                 target
                 for target in available
                 if all(side in self._started_sides for side in targets.SIDES[target])
+                and not targets.not_commandable(target, commandable)
             ),
             # Derived here, as the targets are, so no panel restates the rule.
             validate_then_run_offered=targets.TWIN in available,

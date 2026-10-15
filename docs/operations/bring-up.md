@@ -242,8 +242,10 @@ The target is sent with every Start robot, Home and Start program
 ([ADR-0075](../adr/0075-start-robot-and-home-act-on-the-selected-target.md)). **Start robot starts
 only the selected target's sides**: Simulation starts the plant and never touches the real arm;
 Real arm and Twin ask the operator to confirm before the track may move, then initialize the real
-arm. Home and Start program are enabled only for a target Start robot has started; while the
-selected target is not started the deck says "Start robot for this target". So after starting
+arm. Home and Start program are enabled only for a target the console lists as started: Start
+robot has started its every side and the twin calls each commandable (a real arm whose track has
+not found its zero, or that ceases to be commandable, must be started again); while the selected
+target is not started the deck says "Start robot for this target". So after starting
 Simulation, selecting Twin enables Start robot again and disables Home until Twin is started.
 Real arm and Twin can be selected before the physical track has found its zero; Start robot is then
 the only request the console accepts for them. Each side's "at the
@@ -254,7 +256,7 @@ side.
 | Button | What it does | Enabled when |
 |---|---|---|
 | **Start robot** | Starts the selected target's sides only. When the target includes the real arm: holds the twin in SIM at the boundary, asks the operator to confirm the cell is clear (the track may home and move to its start; the prompt names the target's arms), then initializes the real arm as UFACTORY Studio does. On Simulation, or on an all-simulated pair, it only checks custody. It never leaves SIM. | No request is running and a target the console serves is selected, started or not (the server also refuses while a terminal program client is on the graph) |
-| **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm; the prompt names the target's arms) and brings them there, then measures again. It initializes only the target's real arm. | The selected target is started, the console is READY, and the real arm's track, if the target includes it, has found its zero |
+| **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm; the prompt names the target's arms) and brings them there, then measures again. It initializes only the target's real arm. | The console lists the selected target as started (which needs the real arm's track, if the target includes it, to be commandable) and is READY |
 | **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
 

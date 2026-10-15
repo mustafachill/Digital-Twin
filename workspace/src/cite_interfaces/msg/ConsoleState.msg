@@ -19,7 +19,7 @@ uint8 NOT_STARTED=0       # no side is started; only Start robot is accepted
 uint8 STARTING=1          # Start robot in progress: the target's physical arm
                           # initialized, the custody of the target's sides read
 uint8 READY=2             # at least one side started, and idle; Home and Start
-                          # program are accepted for a target in started_targets
+                          # program are accepted only for a target in started_targets
 uint8 HOMING=3            # Home in progress
 uint8 AWAITING_OPERATOR=4 # waiting for ConfirmOperator: the operator does what `prompt`
                           # says (clear the cell; place the part by hand). Asked only
@@ -80,10 +80,13 @@ uint8[] startable_targets   # those of available_targets every side of which is 
                             # (`cite_bringup.program.targets`), so no panel restates
                             # which sides a target commands
 uint8[] started_targets     # those of available_targets every side of which Start
-                            # robot started and nothing has undone since (ADR-0075):
-                            # the targets Home and Start program are accepted for.
-                            # Derived by the console from its one target table, so
-                            # no panel restates which sides a target commands
+                            # robot started and nothing has undone since, and the
+                            # twin calls commandable now (ADR-0075 decision 2): the
+                            # only targets Home and Start program may be accepted for.
+                            # A physical side that ceases to be commandable is no
+                            # longer started. Derived by the console from its one
+                            # target table, so no panel restates which sides a
+                            # target commands
 uint8[] floored_targets     # those of available_targets that command a physical side:
                             # the targets `minimum_speed_scale` applies to. A goal for
                             # any other target is accepted at any scale in (0, 1]

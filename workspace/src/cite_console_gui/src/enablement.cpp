@@ -25,7 +25,8 @@ bool served(const ConsoleView & view, Target target)
   return target != Target::NONE && view.available_targets.count(target) == 1;
 }
 
-/// The console says Start robot started every side of `target` (ADR-0075).
+/// The console says Start robot started every side of `target`, and each is
+/// commandable now (ADR-0075 decision 2).
 bool started(const ConsoleView & view, Target target)
 {
   return target != Target::NONE && view.started_targets.count(target) == 1;

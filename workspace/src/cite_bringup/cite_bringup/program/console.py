@@ -550,14 +550,18 @@ class CellConsole(LifecycleNode):
             self._publish(machine.snapshot())
 
     def _on_twin_sides(self, message: TwinSides) -> None:
-        """Keep what the twin says may be commanded now, and publish the state again (R-19)."""
+        """Keep what the twin says may be commanded now, and publish the state again (R-19).
+
+        The machine is told, so a physical side that ceased to be commandable
+        is no longer started (ADR-0075 decision 2); it publishes the state.
+        """
         with self._sides_lock:
             self._commandable = tuple(
                 side for side in message.commandable if side in self._running
             )
         machine = self._machine
         if machine is not None:
-            self._publish(machine.snapshot())
+            machine.commandable_changed()
 
     def _available(self) -> list[int]:
         """Return the targets this deployment offers: every side running (ADR-0075)."""
