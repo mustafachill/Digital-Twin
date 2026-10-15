@@ -2113,6 +2113,22 @@ change under test (ADR-0074) does not touch `cite_skills`, and nothing depends o
 should be debugged, starting from how long `move_group` takes to advertise its planner
 interface under load against the test's deadline.
 
+### #110 — Two narrow ways a lapsed physical side can stay started (2026-10-15)
+
+**What happens.** ADR-0075 decision 2 says a physical side that stops being commandable must be
+started again. Two windows remain, both found by the safety re-audit of that change:
+- A lapse heard between the initializer's last vendor check and its return is forgotten with
+  the lapses heard during initialization (`console_machine.py`, `_initialize`).
+- The console's `TwinSides` subscription keeps one message, so a short lapse and its recovery
+  arriving while the callback is busy merge into one message that shows no lapse.
+
+**Why it is low.** While the side is not commandable its targets stay out of `started_targets`,
+and every later motion still needs the operator's go-ahead under a SIM hold and the twin's
+readiness check. A track that lost its zero never becomes commandable again by itself.
+
+**The fix.** Forget only lapses heard before the initializer's own final measurement, and give
+the subscription a deeper history or have the twin latch a lapse counter.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:
