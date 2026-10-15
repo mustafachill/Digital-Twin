@@ -11,8 +11,8 @@
   alone, `REAL` to the counterpart alone, `VALIDATED` to both); a mode hold
   (`/cite/twin/hold_mode`) that refuses another client's mode change while a run holds it; a
   per-side custody verdict (`/cite/twin/holding`) and a latched `TwinSides` on
-  `/cite/twin/sides` (running, physical, commandable and stationary sides); the belt and track
-  routes below; and a
+  `/cite/twin/sides` (expected, running, connecting, failed, physical, commandable, stationary
+  and held sides); the belt and track routes below; and a
   per-asset `DivergenceMetrics` publisher on `/cite/twin/divergence`. Each rule is held by a
   test in that package; `cite_twin/test/test_twin_boundary_paired_launch.py` runs each side as
   its own process on its own `ROS_DOMAIN_ID` and sends a goal across.
@@ -63,6 +63,18 @@
   boundary on `--sides plant` ([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)):
   no counterpart context, no heartbeat on its domain, and every mode but `SIM` refused even with
   `force`. `./scripts/program` is still refused before it brings anything up.
+  **A physical counterpart that comes and goes**
+  ([ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md)): the
+  operator console's pair with the opt-in starts the boundary with `--side-states stdin`. The
+  pair supervisor keeps the physical side and writes each change of its state
+  (`waiting`, `connecting`, `up`, `down`, `failed`) on the boundary's standard input; the end of
+  that input is `down`. `TwinSides.running` is the sides **up now** (it meant "started" before;
+  without the flag the two are the same), `expected` the declared ones, and `physical` is of
+  `expected`. A side that is not up is refused as a route, refused by the mode authority as not
+  ready, and forgotten: its deadman, joints and carriage must be heard again from its new
+  processes. A goal in flight to it ends as `HARDWARE_FAULT` when it goes away, rather than
+  waiting for a server that is gone. Tested against a fake counterpart killed and restarted
+  (`cite_twin/test/test_twin_boundary_hot_plug_launch.py`), never against the arm.
   **Not built:** an automated gate. **Nothing in CI brings a boundary up** — CI drives the
   plant alone (`bringup`, `program_cycle`) — because `launch_test` holds one context on one
   domain, so a paired scenario cannot take today's shape; that is ADR-0057's unmet promotion

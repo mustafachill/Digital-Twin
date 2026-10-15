@@ -12,7 +12,9 @@
     telemetry view. ADR-0018 still makes no commitment to that stack.
   - **Also built:** the validate-then-run button
     ([ADR-0073](../adr/0073-validate-in-simulation-then-run-the-twin.md)), a connection display
-    (live, stale, not ready, not started or absent for the twin boundary and each side, from
+    (live, stale, not ready, not started or absent for the twin boundary and each side, and for
+    the console's kept real arm waiting for robot, connecting, held, disconnected or failed
+    ([ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md)), from
     `TwinHeartbeat`, `TwinSides` and `TwinMode` on the plant's domain; monitoring only), Top / Side / Front view presets and
     Follow robot beside Reset view, and the speed floor shown beside the speed choices.
   - **Also built (ADR-0074, display only):** the world's sim time and RTF over gz transport,

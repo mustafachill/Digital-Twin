@@ -210,7 +210,13 @@ pure function, and `BoundaryState` in the same header holds what it is applied t
   the panel started, and **absent** if it was and has gone. A running side is stale while
   the boundary's heartbeat is late, and **not ready** while the boundary does not list it
   as `commandable` (connected and on time, but not commandable), with `TwinSides.detail` as
-  the reason; live otherwise. Freshness and readiness are kept apart: not ready is never
+  the reason; live otherwise. A running side the boundary lists as `held` is **connected,
+  held - press Start robot** (normal: ADR-0076's arm until the operator starts it).
+  A side `TwinSides` lists as `expected` and not running is the operator console's kept real
+  arm ([ADR-0077](../../../docs/adr/0077-the-operator-console-keeps-the-physical-counterpart.md)):
+  **waiting for robot** (normal) until it has run, **connecting** while its side comes up,
+  **disconnected, reconnecting** (abnormal) once it ran, and **failed** (abnormal) when it is
+  not retried. Freshness and readiness are kept apart: not ready is never
   shown as stale. A live physical side also shows whether the boundary lists it as
   stationary.
 

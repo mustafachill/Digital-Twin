@@ -103,6 +103,7 @@
   naming that side; and a structural test that the supervisor's import graph does not reach
   `rclpy`. **One side is not evidence for any of them** — this record's whole content is a
   claim about two processes.
+- **Amended 2026-10-15 by [ADR-0077](0077-the-operator-console-keeps-the-physical-counterpart.md) (Proposed):** clause 4's failure table gains a case: an operator console's pair (`--hot-plug`) KEEPS its physical counterpart. It is started with the plant and not joined on; its exit does not end the pair; it is swept and started again whole, at most `KEPT_ATTEMPTS` times in a row for attempts that reached the robot, and is reported rather than graded. Every other pair keeps the table as written.
 - **Date:** 2026-08-30
 - **Deciders:** Docs-writer agent, on the deferral
   [ADR-0044](0044-one-ros-domain-per-side-identical-names.md) states under *What this record

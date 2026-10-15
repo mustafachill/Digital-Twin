@@ -240,6 +240,22 @@ only`; the boundary opens nothing on the counterpart's domain and refuses every 
 even with `force`. With it both sides start, as before. The panel frames the plant's 3D view, with
 every button in the bottom deck ([ADR-0074](../adr/0074-the-operator-console-frames-the-3d-view.md)). **Nothing moves until a button is pressed.**
 
+**The real arm connects when it is there and survives being lost**
+([ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md)). With the
+opt-in, the console's pair starts the physical side at once and does not wait for it: the app
+opens with Simulation ready whether or not the robot is on. The side's first process, the reach
+gate, asks the arm's report port (30001) once a second and starts nothing else until it
+answers. The panel shows the real arm as **waiting for robot**, then **connecting**, then
+**connected, held - press Start robot**; Real arm and Twin become selectable once it is
+connected. If the side goes down (a pulled cable, a deadman trip), the panel shows
+**disconnected, reconnecting**, Real arm and Twin disappear, the selection falls back to
+Simulation, and the supervisor sweeps the side and starts it again; it comes back held, and
+Home and Start program are refused until Start robot. A side that reaches the robot and fails to
+come up three times in a row, or that refuses its configuration (an unset or malformed
+`CITE_XARM_IP`), is shown **failed** and is not retried until the app is restarted. Only the
+console's pair keeps its side; `./scripts/program` and every scenario still end when a side
+ends.
+
 **The target selector** chooses where the signal goes: **Simulation** (`SIM`, the plant alone),
 **Real arm** (`REAL`, the physical counterpart alone) or **Twin** (`VALIDATED`, both). Only the
 targets the running deployment can serve are offered. **Simulation is preselected** whenever it is
@@ -314,6 +330,26 @@ targets on the physical arm; the first is the supervised physical run. **The pan
 `--speed-scale` argument and preselects 1.0:** before the first Home, select **0.1×** in the speed
 selector, with the owner at the hardware E-stop, as in "First motion, always: two stages".
 
+#### The hot-plug procedure on the physical arm (not yet run)
+
+Supervised by the owner, at the hardware E-stop, with UFACTORY Studio open to watch the arm's
+state. Each step's expected result is what ADR-0077 and ADR-0076 decide; **none of it has been
+observed on the arm yet**, and the time the vendor takes to notice a pulled cable is not
+measured (open-work #93).
+
+1. Robot switched off. Open the control center (`CITE_ALLOW_HARDWARE=1` in `.env`). Expect:
+   the app opens, Simulation is offered and selected, the panel shows **Real arm: waiting for
+   robot**, and Real arm and Twin are not offered.
+2. Switch the robot on. Expect **connecting**, then **connected, held - press Start robot**;
+   Real arm and Twin become selectable; Studio shows the arm at STOP.
+3. Select Real arm and press Start robot; confirm the prompt. Expect: the arm is enabled and
+   the track finds its zero. Then Home at **0.1×**.
+4. Pull the robot's network cable. Expect **disconnected, reconnecting**, the app still up,
+   the selection back on Simulation. Record how long the panel took to change.
+5. Plug the cable back in. Expect the side to reconnect by itself and come back **held**;
+   Home on Real arm is refused until Start robot is pressed again.
+6. Close the window. Expect a clean exit.
+
 ### Reaching one side
 
 A shell is on the plant's domain by default — `./scripts/doctor` prints it — so a bare
@@ -351,6 +387,7 @@ by the pair supervisor stopping it leaves its exit status as `launch` gives it, 
 | `[pair] X never announced readiness and never exited` | the ceiling. Not a slow side: every bring-up step either completes or fails, so a side in neither state is waiting on something that will not arrive |
 | `[pair] X announced readiness as 'Y'` | that launch was given the wrong `side:=`. The pair is not what it says it is |
 | a side ends after the pair is up | the pair ends. A half-pair answers some interfaces and not others, and anything asserting against a pair could pass on one side alone |
+| `[pair] counterpart: <state> (kept, ADR-0077)` | the operator console's pair keeps its physical side: its exit does not end the pair, and the supervisor starts it again (ADR-0077). `failed` means it is not retried in this run |
 
 **A pair is not a fidelity measurement, and 2.A produces none.** Both sides run the same L0
 model and the same solver, so any agreement between them is agreement of a thing with itself.

@@ -70,6 +70,10 @@ Rejected.
      at once.
    - Every other pair, including `./scripts/program`, scenarios and CI, is unchanged. A side
      exit there still ends the pair (ADR-0072 decision 4).
+   - *Implementation note (2026-10-15):* the pair supervisor runs the side with the launch
+     argument `wait_for_robot:=true`; a physical side NOT kept still gives up after the reach
+     gate's own ceiling (`reach_gate.REACH_CEILING_S`), so a terminal run against a robot that
+     is off ends at once, as it did when the vendor driver crashed.
 3. **The side waits for the robot.** The first process of the physical side is a reach gate.
    It retries a TCP connect to the arm's report port at a stated period; this is a necessary
    poll, because there is no event for a host starting to listen. It never prints the address.
@@ -82,6 +86,10 @@ Rejected.
    - The mode authority is unchanged: while the counterpart is absent or held, REAL and
      VALIDATED are refused by measurement.
    - Goals in flight to a side that went away end; they never hang.
+   - *Implementation note (2026-10-15):* `TwinSides` also gained `failed` (declared sides not
+     retried) and `held` (running sides whose deadman holds the arm, ADR-0076), so the panel
+     shows both without matching `detail` text. A goal in flight to a side that went away
+     ends as `HARDWARE_FAULT`.
 5. **The console offers what is up** (amends ADR-0075 decision 4). `available_targets` and
    `counterpart_running` follow the sides up now. A physical side that leaves loses its
    started flag. A connected but held side accepts Start robot, which releases it

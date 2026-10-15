@@ -30,6 +30,7 @@
   **Promotion is not a claim that any number is a fidelity number** — see *What this record
   does not claim*, which is a permanent clause and not a status caveat.
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** decision 2's `SIM` and `REAL` rows now route goals, track and belt commands to the side they name (`SIM` to the plant alone, `REAL` to the counterpart alone). The table below is kept as written.
+- **Amended 2026-10-15 by [ADR-0077](0077-the-operator-console-keeps-the-physical-counterpart.md) (Proposed), decision 4:** which sides EXIST is still fixed at start; whether a declared physical counterpart is UP is a runtime fact the pair supervisor reports on the boundary's stdin (`--side-states stdin`) and the boundary measures. `TwinSides.running` lists the sides up now. No mode, route or side is created or instantiated by it.
 - **Date:** 2026-08-31
 - **Deciders:** Docs-writer agent, from the three deferrals that name L5 by name:
   [ADR-0041](0041-virtual-counterpart-is-a-second-full-simulation.md)'s `SHADOW` fork,

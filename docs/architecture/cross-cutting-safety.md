@@ -41,6 +41,14 @@
 
   Its readiness token means *held*, not enabled. Any of these processes exiting brings the
   whole side down, and nothing on the side respawns.
+  **Amended by [ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md):**
+  the first process is now a reach gate (`reach_gate.py`) that waits for the robot to answer on
+  its report port before the deadman and the vendor driver start. Inside a launch nothing still
+  respawns. What may start a side again is the pair supervisor of an operator console's pair
+  (`--hot-plug`), and only the whole launch: after the side exited, once its old process group
+  is swept, and at most `KEPT_ATTEMPTS` times in a row for attempts that reached the robot and
+  did not come up. A restarted side comes up HELD (ADR-0076), so nothing moves without a new
+  Start robot and the operator's go-ahead. Every other pair still ends when a side ends.
   **The deadman** (`cite_hardware/deadman.py`) watches the twin boundary's `TwinHeartbeat`. The
   heartbeat carries the boundary's id; a second id or a second publisher trips it.
   - It holds the arm through the vendor's own state: a STOP on every tick unless HEALTHY.

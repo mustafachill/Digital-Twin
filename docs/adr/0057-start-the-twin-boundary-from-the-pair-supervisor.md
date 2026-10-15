@@ -7,6 +7,7 @@
   reason charter §2's discipline is to re-run rather than to re-read. See
   *Implemented — 2026-09-18* below for what each clause rests on.
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** without the hardware opt-in the pair starts the plant alone, with the boundary on `--sides plant` and the console; a plant-only pair is a supported deployment, not a half-pair. A pair started with both sides still ends when either exits.
+- **Amended 2026-10-15 by [ADR-0077](0077-the-operator-console-keeps-the-physical-counterpart.md) (Proposed):** for an operator console's pair the supervisor starts the boundary without waiting for the physical counterpart, and hands it `--side-states stdin`, on which it writes that side's state. Still a fact the supervisor holds, not a decision about what crosses.
 - **Date:** 2026-09-17
 - **Deciders:** Project owner, who chose this shape over two alternatives on 2026-09-17;
   drafted by the orchestrator against a measurement taken the same day.
