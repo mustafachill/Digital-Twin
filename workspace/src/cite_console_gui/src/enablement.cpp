@@ -86,7 +86,7 @@ bool target_hint_shown(const ConsoleView & view, Target selected)
 
 bool start_hint_shown(const ConsoleView & view, Target selected)
 {
-  return view.heard && served(view, selected) && !started(view, selected);
+  return view.heard && !view.busy && served(view, selected) && !started(view, selected);
 }
 
 bool counterpart_running(const ConsoleView & view)

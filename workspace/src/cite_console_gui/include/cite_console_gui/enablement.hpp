@@ -221,6 +221,7 @@ Target settled_selection(const ConsoleView & before, const ConsoleView & now, Ta
 bool target_hint_shown(const ConsoleView & view, Target selected);
 
 /// Whether the panel says "Start robot for this target": a console is heard,
+/// idle (not while a request, Start robot itself included, is in progress),
 /// it serves the selected target, and it does not say that target is started,
 /// so Home and Start program wait for Start robot on it (ADR-0075 decision 5).
 /// Never shown with `target_hint_shown`, whose place it takes.

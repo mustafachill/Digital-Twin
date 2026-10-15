@@ -354,6 +354,12 @@ TEST(Enablement, TheStartHintNeedsAServedSelectionNotStarted)
   EXPECT_FALSE(start_hint_shown(view(Phase::READY, true, false, PLANT_ONLY), Target::TWIN));
   // No console: nothing.
   EXPECT_FALSE(start_hint_shown(ConsoleView{}, Target::SIM));
+  // Not while a request runs: Start robot in progress, or waiting for the
+  // operator's go-ahead, is not asking for another Start robot (R-03).
+  for (const Phase phase : {Phase::STARTING, Phase::AWAITING_OPERATOR}) {
+    EXPECT_FALSE(start_hint_shown(view(phase, false, true), Target::SIM)) << phase_name(phase);
+    EXPECT_FALSE(start_hint_shown(view(phase, false, true), Target::TWIN)) << phase_name(phase);
+  }
   for (const Phase phase : ALL_PHASES) {
     for (const Target selected : SELECTIONS) {
       const ConsoleView v = view(phase, false);
