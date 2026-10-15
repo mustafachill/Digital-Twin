@@ -171,8 +171,6 @@ if(BUILD_TESTING)
     ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=0.5)
   target_link_libraries(test_panel_in_gz_gui CellConsole gz-gui::gz-gui Qt5::Gui Qt5::Quick Qt5::Test)
   set_target_properties(test_panel_in_gz_gui PROPERTIES AUTOMOC ON)
-  target_compile_definitions(test_panel_in_gz_gui PRIVATE
-    CITE_CELL_CONSOLE_DIR="$<TARGET_FILE_DIR:CellConsole>")
 
   # The frame's display rules (ADR-0074): the event log's ring, the twin
   # fidelity card ("Not measured" while a sample is not valid) and a request's

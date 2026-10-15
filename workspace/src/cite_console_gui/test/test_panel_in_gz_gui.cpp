@@ -31,6 +31,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QEventLoop>
 #include <QList>
 #include <QPointF>
@@ -42,6 +43,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QtGlobal>
+
+#include <dlfcn.h>
 
 #include <fstream>
 #include <memory>
@@ -83,6 +86,21 @@ const char kConfig[] =
 </plugin>
 )";
 
+/// The directory of the libCellConsole.so this process linked. gz-gui must
+/// load that very file: another copy - the installed one, when the
+/// workspace is not built with --symlink-install - is a second library that
+/// gz-gui fails to load next to the first (R2-04).
+std::string linked_plugin_dir()
+{
+  Dl_info info;
+  if (dladdr(&cite_console_gui::CellConsole::staticMetaObject, &info) == 0 ||
+    info.dli_fname == nullptr)
+  {
+    return "";
+  }
+  return QFileInfo(QString::fromLocal8Bit(info.dli_fname)).absolutePath().toStdString();
+}
+
 /// Whether `item` is a MouseArea that handles a press (its own `enabled`).
 bool enabled_mouse_area(const QQuickItem * item)
 {
@@ -95,7 +113,7 @@ bool enabled_mouse_area(const QQuickItem * item)
 TEST(PanelInGzGui, ThePassThroughIsAppliedToGzGuisCardAndStopStillTakesItsPress)
 {
   gz::gui::Application app(argc_, argv_);
-  app.AddPluginPath(CITE_CELL_CONSOLE_DIR);
+  app.AddPluginPath(linked_plugin_dir());
   QTemporaryDir directory;
   ASSERT_TRUE(directory.isValid());
   const std::string path = directory.filePath("panel.config").toStdString();
@@ -193,7 +211,7 @@ TEST(PanelInGzGui, ThePassThroughIsAppliedToGzGuisCardAndStopStillTakesItsPress)
 TEST(PanelInGzGui, TheWindowIsMaximizedAfterGzGuiAppliesItsConfiguration)
 {
   gz::gui::Application app(argc_, argv_);
-  app.AddPluginPath(CITE_CELL_CONSOLE_DIR);
+  app.AddPluginPath(linked_plugin_dir());
   QTemporaryDir directory;
   ASSERT_TRUE(directory.isValid());
   const std::string path = directory.filePath("panel.config").toStdString();
