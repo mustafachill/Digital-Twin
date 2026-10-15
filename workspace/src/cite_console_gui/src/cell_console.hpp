@@ -189,7 +189,7 @@ class CellConsole : public gz::gui::Plugin
   // sample is heard.
   Q_PROPERTY(QVariantList fidelity READ fidelity NOTIFY fidelityChanged)
   // The last transitions of the console's state, newest first: time, state,
-  // step and lastError per entry (`EventLog`).
+  // step and lastError per entry (`EventLog`), each as `display_text` shows it.
   Q_PROPERTY(QVariantList eventLog READ eventLog NOTIFY eventLogChanged)
 
 public:

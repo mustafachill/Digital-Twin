@@ -402,8 +402,10 @@ QVariantList CellConsole::eventLog() const
     QVariantMap row;
     row["time"] = QString::fromStdString(entry.time);
     row["state"] = QString::fromStdString(entry.state);
-    row["step"] = QString::fromStdString(entry.step);
-    row["lastError"] = QString::fromStdString(entry.last_error);
+    // As the Robot card shows a line (`display_text`); the log holds what
+    // the console said.
+    row["step"] = QString::fromStdString(display_text(entry.step));
+    row["lastError"] = QString::fromStdString(display_text(entry.last_error));
     rows << row;
   }
   return rows;

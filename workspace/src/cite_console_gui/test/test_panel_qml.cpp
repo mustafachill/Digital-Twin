@@ -1293,6 +1293,34 @@ TEST(PanelQml, TheRobotCardShowsAStepWithoutStraySpacesOrALoneUnit)
     QString::fromUtf8("ok plant: conveyor at 0\u00a0m/s"));
 }
 
+// The event log shows a step and a last error as the Robot card shows a
+// line (`display_text`): no stray spaces, no unit alone.
+TEST(PanelQml, TheEventLogShowsItsLinesAsTheRobotCardDoes)
+{
+  Framed framed(kSizes[3]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.step = "  ok  plant: transfer_belt at 0 m/s";
+  state.last_error = "  the belt  stalled at 0.2 m/s ";
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  settle(framed);
+  const QVariantList rows = framed.plugin.eventLog();
+  ASSERT_FALSE(rows.isEmpty());
+  const QVariantMap newest = rows.front().toMap();
+  EXPECT_EQ(
+    newest["step"].toString(), QString::fromUtf8("ok plant: transfer_belt at 0\u00a0m/s"));
+  EXPECT_EQ(
+    newest["lastError"].toString(), QString::fromUtf8("the belt stalled at 0.2\u00a0m/s"));
+  // And that is the text on screen.
+  bool shown_step = false;
+  for (QQuickItem * item : descendants(framed.find("eventCard"))) {
+    if (item->property("text").toString() == newest["step"].toString()) {
+      shown_step = true;
+    }
+  }
+  EXPECT_TRUE(shown_step) << "the event log does not show the step as displayed";
+}
+
 // R-05: the view label names what Follow robot follows in the configuration's
 // words, never a literal of its own.
 TEST(PanelQml, FollowingIsNamedByTheConfiguration)
