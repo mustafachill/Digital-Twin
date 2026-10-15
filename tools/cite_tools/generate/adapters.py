@@ -344,6 +344,8 @@ def physical_side(cell: ResolvedCell, asset: ResolvedAsset, side: str) -> Physic
                 ("position_scale", _f(served_axis.position_scale)),
                 ("start_position_m", _f(start_m)),
                 ("start_tolerance_m", _f(axis.goal_tolerance_m)),
+                # The travel the start move refuses a reading outside (S-02).
+                ("stroke_m", _f(axis.stroke_m)),
                 ("speed_mps", _f(served_axis.initialize_speed_mps)),
                 ("deadman_state_topic", deadman_state_topic),
                 ("deadman_state_max_age_s", _f(timing.state_max_age_s)),

@@ -35,7 +35,10 @@ starts it (ADR-0076):
    The deadman refuses the release until the side is ready (S-01), and serves
    it to any client on the side's domain once it is. A failure after the
    release says that the arm was released and may be enabled (S-04): nothing
-   here holds it again;
+   here holds it again. So does a failure once a `ReleaseArm` request was
+   SENT and its outcome is not known (S-03): its answer lost or late, or a
+   resend refused while the deadman does not say HEALTHY - a request sent can
+   still release the arm after this node stopped waiting for it;
 1. `set_linear_motor_enable(1)`;
 2. `set_gripper_enable(1)`;
 3. `get_linear_motor_on_zero`, and ONLY where it reads 0:
@@ -44,10 +47,14 @@ starts it (ADR-0076):
    `poll_period_s` until it says 1;
 5. `get_linear_motor_pos`, and ONLY where the carriage is not within
    `start_tolerance_m` of `start_position_m` (the program's first track
-   target, generated from the program): `set_linear_motor_speed(speed_mps)`,
-   then `set_linear_motor_pos(start, wait=false, auto_enable=false)`, sent
-   once and never re-sent, then `get_linear_motor_pos` read every
-   `poll_period_s` until the carriage is within the tolerance. `on_zero == 1`
+   target, generated from the program): first refused, with nothing sent,
+   where that reading maps outside the travel `[-start_tolerance_m,
+   stroke_m + start_tolerance_m]` (S-02: a carriage the vendor reads off its
+   travel is not one this node knows how to move); otherwise
+   `set_linear_motor_speed(speed_mps)`, then
+   `set_linear_motor_pos(start, wait=false, auto_enable=false)`, sent once and
+   never re-sent, then `get_linear_motor_pos` read every `poll_period_s` until
+   the carriage is within the tolerance. `on_zero == 1`
    says the track has FOUND its zero, not that the carriage stands there, and
    a carriage away from the plant's cannot be brought to it by the twin's own
    track step, which is a move of no length on the plant.
@@ -173,6 +180,13 @@ SPECS: tuple[Spec, ...] = (
         "start_tolerance_m",
         Parameter.Type.DOUBLE,
         "how close to start_position_m counts as there: the track's goal tolerance, metres",
+        positive=True,
+    ),
+    Spec(
+        "stroke_m",
+        Parameter.Type.DOUBLE,
+        "the track's travel from its zero, metres: a reading outside it, by more than "
+        "start_tolerance_m, refuses the move to the start",
         positive=True,
     ),
     Spec(
@@ -419,15 +433,26 @@ class Initializer(LifecycleNode):
                 f"({state.detail}); only a HELD arm is released"
             )
         self.get_logger().warning("the deadman holds the arm: releasing it")
-        answer = await self._ask(
-            "deadman_release_service", ReleaseArm.Request(), "ReleaseArm", deadline,
-            judge=False,
-        )
+        sent: list[None] = []
+        try:
+            answer = await self._ask(
+                "deadman_release_service", ReleaseArm.Request(), "ReleaseArm", deadline,
+                judge=False, on_send=lambda: sent.append(None),
+            )
+        except InitializeFailed as failure:
+            if not sent:
+                raise
+            # S-03: a request sent may still release the arm after this wait.
+            raise InitializeFailed(f"{failure}; {RELEASED_MAY_BE_ENABLED}") from failure
         if not answer.success:
             # A resend refused because an earlier request released the arm.
             now = gate.fresh_state()
             if now is None or now.state != HEALTHY:
-                raise InitializeFailed(f"the deadman refused the release: {answer.detail}")
+                refused = f"the deadman refused the release: {answer.detail}"
+                if len(sent) > 1:
+                    # S-03: an earlier request may have released it all the same.
+                    refused = f"{refused}; {RELEASED_MAY_BE_ENABLED}"
+                raise InitializeFailed(refused)
         while True:
             now = gate.fresh_state()
             if now is not None and now.state == HEALTHY and now.arm_enabled:
@@ -451,8 +476,16 @@ class Initializer(LifecycleNode):
         config = self._config
         assert config is not None
         start = config["start_position_m"]
-        if await self._at_start(deadline):
+        position = await self._position(deadline)
+        if self._within_start(position):
             return f"the carriage is at the start ({start * 1000:.1f} mm), not moved"
+        low = -config["start_tolerance_m"]
+        high = config["stroke_m"] + config["start_tolerance_m"]
+        if not low <= position <= high:
+            raise InitializeFailed(
+                f"move to the start refused: the carriage reads {position * 1000:.1f} mm, "
+                f"outside the travel [{low * 1000:.1f}, {high * 1000:.1f}] mm; nothing sent"
+            )
         speed = self._vendor_speed()
         self.get_logger().warning(f"bringing the carriage to the start ({start * 1000:.1f} mm)")
         self._check_motion_permitted("move to the start")
@@ -486,13 +519,21 @@ class Initializer(LifecycleNode):
             raise InitializeFailed(f"move to the start refused: {refusal}") from refusal
 
     async def _at_start(self, deadline: float) -> bool:
+        return self._within_start(await self._position(deadline))
+
+    async def _position(self, deadline: float) -> float:
+        """Read the carriage's position from the vendor, in metres."""
         config = self._config
         assert config is not None
         answer = await self._ask(
             "linear_motor_get_position_service", GetInt16.Request(), "get_linear_motor_pos",
             deadline,
         )
-        position = from_vendor_position(answer.data, config["position_scale"])
+        return from_vendor_position(answer.data, config["position_scale"])
+
+    def _within_start(self, position: float) -> bool:
+        config = self._config
+        assert config is not None
         return abs(position - config["start_position_m"]) <= config["start_tolerance_m"]
 
     def _check_motion_permitted(self, what: str) -> None:
@@ -569,6 +610,7 @@ class Initializer(LifecycleNode):
         deadline: float,
         resend: bool = True,
         judge: bool = True,
+        on_send: Callable[[], None] | None = None,
     ):
         """Send once matched; send again at every `call_deadline_s` until one is answered.
 
@@ -576,7 +618,8 @@ class Initializer(LifecycleNode):
         still pending are removed on return. ``resend=False`` sends once and
         waits for that answer until ``deadline``. A refusal (`ret != 0`) is final.
         ``judge=False`` returns the answer as it came, for a caller whose
-        response has no vendor `ret`.
+        response has no vendor `ret`. ``on_send`` is called each time a request
+        is sent, so a caller knows whether one left this node.
 
         Nothing is sent once ``deadline`` has passed, and the vendor is said not to
         have answered only when its first request went unanswered for a whole
@@ -599,6 +642,8 @@ class Initializer(LifecycleNode):
                 if self._now() >= deadline:
                     raise InitializeFailed(self._not_done_within())
                 sent.append(client.call_async(request))
+                if on_send is not None:
+                    on_send()
                 if first_sent_at is None:
                     first_sent_at = self._now()
                 resend_at = deadline if not resend else min(

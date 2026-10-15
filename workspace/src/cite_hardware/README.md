@@ -109,11 +109,15 @@ reads 1. Then, because `on_zero` says the track has found its zero and not that 
 stands there, `get_linear_motor_pos`, and only where the carriage is not within
 `start_tolerance_m` of `start_position_m` (the program's first track target, generated from the
 program), `set_linear_motor_speed(speed_mps)` and `set_linear_motor_pos` (no wait, no
-auto-enable; sent once) followed by position reads until it is. Before any of it (step 0,
+auto-enable; sent once) followed by position reads until it is - unless that first reading maps
+outside `[-start_tolerance_m, stroke_m + start_tolerance_m]`, which fails the request with
+nothing sent (S-02). Before any of it (step 0,
 ADR-0076) it reads the deadman's state: HELD, it calls the deadman's `ReleaseArm`
 (`deadman_release_service`) and waits within `deadline_s` for HEALTHY with `arm_enabled`;
 HEALTHY already, it releases nothing; any other state fails the request naming it, with nothing
-sent to the vendor. It does nothing until asked,
+sent to the vendor. Every failure once a `ReleaseArm` request was sent, its answer lost or a
+resend refused included, says the arm was released and may be enabled (S-03, S-04). It does
+nothing until asked,
 refuses while inactive or while the deadman is not HEALTHY after step 0, asks the gate again immediately
 before sending a homing or a move, and answers `success: false` naming the step and the
 vendor's code on any refusal. A homing or move that is refused, loses the deadman's gate, sees

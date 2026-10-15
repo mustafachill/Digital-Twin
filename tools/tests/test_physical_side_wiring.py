@@ -478,6 +478,7 @@ class TestTheInitializerIsWiredFromL0:
         assert section["start_position_m"] == pytest.approx(first["position_m"])
         track = manager["track"]
         assert section["start_tolerance_m"] == pytest.approx(track["goal_tolerance_m"])
+        assert section["stroke_m"] == pytest.approx(track["stroke_m"])
         assert section["speed_mps"] == pytest.approx(0.1)
         assert section["position_scale"] == pytest.approx(1000.0)
         prefix = f"/cite/{ZONE}/{ARM}/{ARM}_{ARM}/"

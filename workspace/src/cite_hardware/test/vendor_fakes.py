@@ -55,6 +55,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.task import Future
 from xarm_msgs.srv import (
     Call,
     GetFloat32,
@@ -429,8 +430,12 @@ class FakeDeadman:
     With ``release_service`` it also serves `ReleaseArm` (ADR-0076), doing what
     ``on_release`` says: "enable" - HELD becomes HEALTHY and, one republish
     later, `arm_enabled`; "never_enable" - HEALTHY, and the enable never
-    acknowledged; "refuse" - refused, the state unchanged. A release outside
-    HELD is refused, as the real one's is. ``releases`` counts the requests.
+    acknowledged; "refuse" - refused, the state unchanged; "unanswered" - as
+    "enable", and no request is answered until `answer_releases`; "first_late" -
+    released, the state no longer published, and only the FIRST request held
+    unanswered until `answer_releases`, so a resend is refused (S-03). A
+    release outside HELD is refused, as the real one's is. ``releases`` counts
+    the requests. A held answer awaits a future: it blocks no executor thread.
     """
 
     PERIOD_S = 0.05
@@ -444,6 +449,8 @@ class FakeDeadman:
         self.on_release = "enable"
         #: Set when a release asked for the arm enabled on the next republish.
         self._enable_next = False
+        #: The answers held by "unanswered" and "first_late".
+        self._held_answers: list[Future] = []
         #: Cleared to make this deadman HANG: alive on the graph, silent.
         self.publishing = threading.Event()
         self.publishing.set()
@@ -462,22 +469,38 @@ class FakeDeadman:
             self._enable_next = False
         self.publisher.publish(self.message)
 
-    def _on_release(self, _request, response):
+    def answer_releases(self) -> None:
+        """Let every held `ReleaseArm` answer go."""
+        with self._lock:
+            held, self._held_answers = self._held_answers, []
+        for future in held:
+            if not future.done():
+                future.set_result(True)
+
+    async def _on_release(self, _request, response):
+        hold = None
         with self._lock:
             self.releases += 1
             held = (
                 self.message is not None and self.message.state == DeadmanState.STATE_HELD
             )
+            if self.on_release == "unanswered" or (held and self.on_release == "first_late"):
+                hold = Future()
+                self._held_answers.append(hold)
             if not held or self.on_release == "refuse":
                 response.success = False
                 response.detail = "release refused by the fake"
-                return response
-            self.message = DeadmanState(
-                state=DeadmanState.STATE_HEALTHY, detail="released by the fake"
-            )
-            self._enable_next = self.on_release == "enable"
-        response.success = True
-        response.detail = "released by the fake"
+            else:
+                if self.on_release == "first_late":
+                    self.publishing.clear()
+                self.message = DeadmanState(
+                    state=DeadmanState.STATE_HEALTHY, detail="released by the fake"
+                )
+                self._enable_next = self.on_release in ("enable", "unanswered")
+                response.success = True
+                response.detail = "released by the fake"
+        if hold is not None:
+            await hold
         return response
 
     def _republish(self) -> None:

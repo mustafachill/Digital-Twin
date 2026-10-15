@@ -70,6 +70,7 @@ PARAMETERS = {
     "position_scale": 1000.0,
     "start_position_m": 0.0,
     "start_tolerance_m": 0.001,
+    "stroke_m": 0.7,
     "speed_mps": 0.1,
     "poll_period_s": 0.05,
     "call_deadline_s": 0.25,
@@ -150,6 +151,7 @@ class TestInitializer(unittest.TestCase):
         self.track.answer_get.set()
         self.track.set_requests.clear()
         self.track.speeds.clear()
+        self.deadman.answer_releases()
         self.deadman.publishing.set()
         self.deadman.on_release = "enable"
         self.deadman.say(DeadmanState.STATE_HEALTHY, "healthy", arm_enabled=True)
@@ -224,6 +226,30 @@ class TestInitializer(unittest.TestCase):
         self.assertEqual(self.track.calls[-1], "set")
         self.assertIn("brought to the start", response.detail)
         self.assertEqual(self.track.position_mm, 0)
+
+    def test_a_carriage_read_off_its_travel_is_refused_and_never_moved(self):
+        """S-02: a reading outside [-tolerance, stroke + tolerance] sends no move."""
+        self.vendor.on_zero = 1
+        for position_mm in (702, -2):
+            with self.subTest(position_mm=position_mm):
+                self.track.position_mm = position_mm
+                stops = self.track.stops
+                response = self._initialize()
+                self.assertFalse(response.success)
+                self.assertIn("move to the start refused", response.detail)
+                self.assertIn(f"reads {position_mm:.1f} mm", response.detail)
+                self.assertIn("outside the travel [-1.0, 701.0] mm", response.detail)
+                self.assertEqual(self.track.speeds, [], "no speed written")
+                self.assertEqual(self.track.set_requests, [], "no move sent")
+                self.assertEqual(self.track.stops, stops, "nothing moving to stop")
+
+    def test_a_carriage_at_the_edge_of_its_travel_is_brought_to_the_start(self):
+        self.vendor.on_zero = 1
+        self.track.position_mm = 701
+        response = self._initialize()
+        self.assertTrue(response.success, response.detail)
+        (move,) = self.track.set_requests
+        self.assertEqual(move.pos, 0)
 
     def test_a_move_to_the_start_that_never_arrives_stops_the_track(self):
         self.vendor.on_zero = 1
@@ -428,6 +454,27 @@ class TestInitializer(unittest.TestCase):
         self.assertFalse(response.success)
         self.assertIn(f"refused {FakeTrackInit.ENABLE}", response.detail)
         self.assertIn("the arm was released and may be enabled", response.detail)
+
+    def test_a_release_whose_answer_never_comes_says_the_arm_may_be_enabled(self):
+        """S-03: a request sent may release the arm after the wait for it ended."""
+        self._held()
+        self.deadman.on_release = "unanswered"
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("did not answer ReleaseArm", response.detail)
+        self.assertIn("the arm was released and may be enabled", response.detail)
+        self.assertEqual(self._sent(), [])
+
+    def test_a_refused_resend_while_the_state_is_unknown_says_the_arm_may_be_enabled(self):
+        """S-03: the first request released the arm; its answer is late, the resend refused."""
+        self._held()
+        self.deadman.on_release = "first_late"
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("refused the release", response.detail)
+        self.assertIn("the arm was released and may be enabled", response.detail)
+        self.assertGreater(self.deadman.releases, 1, "the request was sent again")
+        self.assertEqual(self._sent(), [])
 
     def test_a_release_never_enabled_fails_at_the_deadline(self):
         self._held()

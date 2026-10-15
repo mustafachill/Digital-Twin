@@ -83,6 +83,7 @@ GOOD = {
         "position_scale": 1000.0,
         "start_position_m": 0.0,
         "start_tolerance_m": 0.001,
+        "stroke_m": 0.7,
         "speed_mps": 0.1,
         "poll_period_s": 0.1,
         "call_deadline_s": 0.25,
