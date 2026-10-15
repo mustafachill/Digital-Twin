@@ -300,10 +300,6 @@ public:
           feedback->step_count = 7;
           feedback->step = "Pick";
           handle->publish_feedback(feedback);
-            // The feedback is a topic and the result a service: a result that
-            // overtook it would drop it at the client, which forgets a goal
-            // once it has its result. A test fake's margin, not a sequence.
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
           auto result = std::make_shared<RunProgram::Result>();
           if (run == RunGoal::END_WHEN_STOPPED || run == RunGoal::FAIL_WHEN_STOPPED) {
             // Held until the client has seen its Stop accepted; a hang
@@ -330,6 +326,11 @@ public:
             handle->abort(result);
             return;
           }
+          // The feedback is a topic and the result a service: a result that
+          // overtook it would drop it at the client, which forgets a goal
+          // once it has its result. So the result waits for the client to
+          // have seen the feedback.
+          await_feedback_seen(1);
           result->success = true;
           result->cycles_completed = 3;
           handle->succeed(result);
@@ -358,9 +359,9 @@ public:
           validating->step_count = 5;
           validating->step = "Pick";
           handle->publish_feedback(validating);
-          // As for RunProgram: a test fake's margin between a topic and a
-          // service, so that neither feedback is overtaken.
-          std::this_thread::sleep_for(std::chrono::milliseconds(300));
+          // As for RunProgram: each feedback is seen by the client before
+          // what follows it is sent, so that neither is overtaken.
+          await_feedback_seen(1);
           auto running = std::make_shared<ValidateThenRun::Feedback>();
           running->phase = ConsoleState::PHASE_RUNNING;
           running->cycle = 2;
@@ -368,7 +369,7 @@ public:
           running->step_count = 5;
           running->step = "Place";
           handle->publish_feedback(running);
-          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          await_feedback_seen(2);
           auto result = std::make_shared<ValidateThenRun::Result>();
           result->success = true;
           result->detail = "passed in simulation (1 cycle), then 3 cycle(s) on the twin";
@@ -432,6 +433,17 @@ public:
     accepted_.notify_all();
   }
 
+  /// The client has seen one more of the goal's feedback; what follows a
+  /// feedback waits for this (`await_feedback_seen`).
+  void feedback_seen()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      ++feedback_seen_;
+    }
+    acknowledged_.notify_all();
+  }
+
   /// The client has seen the console accept its Stop.
   void stop_seen() {acknowledge(stop_seen_);}
 
@@ -450,6 +462,14 @@ private:
   {
     std::unique_lock<std::mutex> lock(mutex_);
     accepted_.wait_for(lock, SETTLE, [this]() {return accepted_seen_;});
+  }
+
+  /// Bounded by SETTLE, a hang detector; ends once the client has seen
+  /// `count` feedback.
+  void await_feedback_seen(int count)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    acknowledged_.wait_for(lock, SETTLE, [this, count]() {return feedback_seen_ >= count;});
   }
 
   void acknowledge(bool & flag)
@@ -490,6 +510,7 @@ private:
   std::condition_variable acknowledged_;
   bool stop_seen_{false};
   bool result_seen_{false};
+  int feedback_seen_{0};
   std::vector<std::string> requests_;
 };
 
@@ -893,6 +914,8 @@ TEST(ConsoleClient, ARunsFeedbackIsItsPositionAndItsEndClearsIt)
     recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 3);}, &Recorder::progress);
   EXPECT_EQ(accepted, "Start program: accepted.");
   console.accepted_seen();
+  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.positions.empty();}));
+  console.feedback_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.outcomes.empty();}));
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
@@ -932,6 +955,10 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
       recorder, [&]() {client.validate_then_run(0.5, 3);}, &Recorder::progress),
     "Validate then run: accepted.");
   console.accepted_seen();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 1;}));
+  console.feedback_seen();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
+  console.feedback_seen();
   ASSERT_TRUE(
     recorder.wait_for(
       [&]() {return !recorder.outcomes.empty() && !recorder.outcomes.back().empty();}));
@@ -988,6 +1015,7 @@ TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
   client.run_program(1.0, ConsoleState::TARGET_SIM, 3);
   // Its feedback is not what this test reads: let it through at once.
   console.accepted_seen();
+  console.feedback_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.outcomes.size() >= before + 2;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
   EXPECT_EQ(recorder.outcomes[before], "") << "the last outcome was not cleared on sending";
