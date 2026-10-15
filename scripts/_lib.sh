@@ -289,28 +289,35 @@ cite_build_inputs_fingerprint() {
     } | cksum | awk '{print $1}'
 }
 
-# record_build_inputs [scoped]
-#
-# `scoped` is a build that selected packages: it says nothing about the ones it
-# skipped, so it removes the source stamp below rather than writing one, and the
-# next `--if-stale` builds.
 record_build_inputs() {
-    local stamp sources
+    local stamp
     stamp="$(cite_build_stamp_path)"
-    sources="$(cite_build_sources_stamp_path)"
     [ -d "$(dirname "$stamp")" ] || return 0
     cite_build_inputs_fingerprint > "$stamp" 2>/dev/null || true
-    if [ "${1:-}" = scoped ]; then
-        rm -f "$sources"
-    else
-        cite_build_sources_fingerprint > "$sources" 2>/dev/null || true
-    fi
+}
+
+# forget_build_sources — remove the source stamp below. `./scripts/build` does
+# this as it STARTS, so a build that fails, is interrupted, or selects packages
+# (and so says nothing about the ones it skipped) leaves no stamp behind, and the
+# next `--if-stale` builds.
+forget_build_sources() {
+    rm -f "$(cite_build_sources_stamp_path)"
+}
+
+# record_build_sources <fingerprint> — write the source stamp, after a full build
+# succeeded. The fingerprint is the one taken BEFORE that build started, so an
+# edit made while it ran is not vouched for by it: the next `--if-stale` builds.
+record_build_sources() {
+    local sources
+    sources="$(cite_build_sources_stamp_path)"
+    [ -d "$(dirname "$sources")" ] || return 0
+    printf '%s\n' "$1" > "$sources" 2>/dev/null || true
 }
 
 # -----------------------------------------------------------------------------
 # Whether a build is needed at all — `./scripts/build --if-stale` (ADR-0078).
 #
-# A second fingerprint, over EVERY first-party source file rather than the
+# A second fingerprint, over EVERY input the build installs rather than the
 # configure-time inputs above, because the question is different. The gates ask
 # "can I trust this tree's configuration?" and must not fire on every edit; the
 # one-click control center asks "has anything changed since the last good build?"
@@ -318,12 +325,51 @@ record_build_inputs() {
 # above — content, relative paths, no timestamps — and recorded by the same
 # successful build, next to the first stamp in the same volume.
 #
-# Excluded: vendor source under external/ (imported by vcstool, built but never
-# edited here) and what Python leaves behind in a source tree (__pycache__,
-# *.pyc, .pytest_cache, *.egg-info), none of which is an input.
+# The inputs, each named relative to the repository root:
+#   * every first-party file under workspace/src, less what Python leaves behind
+#     in a source tree (__pycache__, *.pyc, .pytest_cache, *.egg-info);
+#   * the vendor source under workspace/src/external, which is built too: per git
+#     repository there (submodules included), its HEAD, a hash of `git diff HEAD`
+#     (the applied patches and any local edit) and its untracked file list —
+#     never a walk of the whole vendor tree. A repository git cannot read is
+#     fingerprinted by content instead, so an unreadable one is never "unchanged";
+#   * external/cite.repos and external/patches/, which decide that vendor source;
+#   * assets/meshes, which cite_description installs from outside its package
+#     (its CMakeLists.txt, ADR-0012).
 # -----------------------------------------------------------------------------
 cite_build_sources_stamp_path() {
     printf '%s' "${REPO_ROOT}/workspace/build/.cite-build-sources"
+}
+
+# _cite_tree_checksums <directory> [find predicates...] — one `cksum` line per
+# file under <directory>, relative names, sorted. Nothing for a missing one.
+_cite_tree_checksums() {
+    local dir="$1"; shift
+    [ -d "$dir" ] || return 0
+    (
+        cd "$dir" || exit 1
+        find . "$@" -type f -print0 2>/dev/null \
+            | LC_ALL=C sort -z \
+            | xargs -0 -r cksum
+    )
+}
+
+# _cite_vendor_state <external dir> — HEAD, diff and untracked list per git
+# repository under workspace/src/external.
+_cite_vendor_state() {
+    local ext="$1" marker repo state
+    [ -d "$ext" ] || return 0
+    while IFS= read -r marker; do
+        repo="$(dirname "$marker")"
+        printf 'repo %s\n' "${repo#"$ext"/}"
+        if state="$(git -C "$repo" rev-parse HEAD 2>/dev/null)"; then
+            printf 'head %s\n' "$state"
+            printf 'diff %s\n' "$(git -C "$repo" diff --no-ext-diff --binary HEAD 2>/dev/null | cksum)"
+            printf 'untracked %s\n' "$(git -C "$repo" ls-files --others --exclude-standard 2>/dev/null | cksum)"
+        else
+            _cite_tree_checksums "$repo" -name .git -prune -o
+        fi
+    done < <(find "$ext" -name .git -prune -print 2>/dev/null | LC_ALL=C sort)
 }
 
 cite_build_sources_fingerprint() {
@@ -332,27 +378,35 @@ cite_build_sources_fingerprint() {
         printf 'no-source'
         return 0
     fi
-    # Run from inside src so that cksum prints relative names: the same tree is
-    # /workspace in the container and a home directory on the host. A renamed or
-    # added file changes the name column, so it is a change too.
-    (
-        cd "$src" || exit 1
-        find . -path ./external -prune -o \
-               \( -name __pycache__ -o -name .pytest_cache -o -name '*.egg-info' \) -prune -o \
-               -type f -not -name '*.pyc' -print0 2>/dev/null \
-            | LC_ALL=C sort -z \
-            | xargs -0 -r cksum
-    ) | cksum | awk '{print $1}'
+    # Relative names throughout: the same tree is /workspace in the container
+    # and a home directory on the host. A renamed or added file changes the name
+    # column, so it is a change too.
+    {
+        printf '== workspace/src\n'
+        _cite_tree_checksums "$src" -path ./external -prune -o \
+            \( -name __pycache__ -o -name .pytest_cache -o -name '*.egg-info' \) -prune -o \
+            -not -name '*.pyc'
+        printf '== workspace/src/external\n'
+        _cite_vendor_state "${src}/external"
+        printf '== external/cite.repos\n'
+        [ -f "${REPO_ROOT}/external/cite.repos" ] && cksum < "${REPO_ROOT}/external/cite.repos"
+        printf '== external/patches\n'
+        _cite_tree_checksums "${REPO_ROOT}/external/patches"
+        printf '== assets/meshes\n'
+        _cite_tree_checksums "${REPO_ROOT}/assets/meshes"
+    } | cksum | awk '{print $1}'
 }
 
-# build_is_current — true when a successful ./scripts/build recorded BOTH stamps
-# and neither differs from the source tree now. Never fatal: an unstamped tree is
-# simply "not current", which means build.
+# build_is_current — true when a successful ./scripts/build recorded BOTH stamps,
+# neither differs from the source tree now, and the install tree it built is
+# there (its setup.bash, not the directory: on a Docker host workspace/install
+# is a mount point that exists empty). Never fatal: an unstamped tree is simply
+# "not current", which means build.
 build_is_current() {
     local inputs sources
     inputs="$(cite_build_stamp_path)"
     sources="$(cite_build_sources_stamp_path)"
-    [ -d "${REPO_ROOT}/workspace/install" ] || return 1
+    [ -f "${REPO_ROOT}/workspace/install/setup.bash" ] || return 1
     [ -f "$inputs" ] && [ -f "$sources" ] || return 1
     [ "$(cat "$inputs" 2>/dev/null)" = "$(cite_build_inputs_fingerprint)" ] || return 1
     [ "$(cat "$sources" 2>/dev/null)" = "$(cite_build_sources_fingerprint)" ] || return 1
@@ -1243,7 +1297,13 @@ exec_in_container() {
     if grep -qx "$service" <<<"$running"; then
         compose exec -T ${env_args[@]+"${env_args[@]}"} "$service" "$@"
     else
-        compose run --rm ${env_args[@]+"${env_args[@]}"} "$service" "$@"
+        # A control-center run labels its own container, so its stop reaches that
+        # container and no other (stop_console_container, ADR-0078).
+        local label_args=()
+        if [ -n "${CITE_CONSOLE_RUN:-}" ]; then
+            label_args=(--label "${CITE_CONSOLE_RUN_LABEL}=${CITE_CONSOLE_RUN}")
+        fi
+        compose run --rm ${label_args[@]+"${label_args[@]}"} ${env_args[@]+"${env_args[@]}"} "$service" "$@"
     fi
     exit $?
 }
@@ -1490,21 +1550,81 @@ Docker said: ${error}"
     esac
 }
 
-# stop_console_container — ask this checkout's running `gui` container(s) to
-# stop the way Ctrl-C in a terminal does: SIGINT to the container, which tini
-# hands to the pair supervisor, which tears the pair down in order. The compose
-# client in between is NOT signalled: without a terminal it leaves on a signal
-# and stops reading the container, and the teardown would then run unwatched
-# and unlogged. Fails when there is no such container, so the caller can fall
-# back to signalling the client.
+# The compose label that names ONE control-center run's container (ADR-0078).
+# `exec_in_container` puts it on the container `compose run` starts when
+# CITE_CONSOLE_RUN is set, which scripts/control-center does for the console and
+# for nothing else.
+CITE_CONSOLE_RUN_LABEL="org.cite.console-run"
+
+# console_containers_running — print the ids of this checkout's running `gui`
+# containers, whoever started them. The control center refuses to start while
+# there is one: the console would otherwise `compose exec` into it, and the
+# container that run's stop has to reach would be somebody else's.
+console_containers_running() {
+    docker ps -q \
+        --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+        --filter "label=com.docker.compose.service=gui" 2>/dev/null || true
+}
+
+# stop_console_container <run id> — ask THIS run's container to stop the way
+# Ctrl-C in a terminal does: SIGINT to the container, which tini hands to the
+# pair supervisor, which tears the pair down in order. Found by the run's own
+# label, never by service, so another console or `./scripts/sim` window of the
+# same checkout is not touched. The compose client in between is NOT signalled:
+# without a terminal it leaves on a signal and stops reading the container, and
+# the teardown would then run unwatched and unlogged. Fails when there is no
+# such container, so the caller can fall back to signalling the client.
 stop_console_container() {
-    local ids
+    local run="${1:-}" ids
+    [ -n "$run" ] || return 1
     ids="$(docker ps -q \
         --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
-        --filter "label=com.docker.compose.service=gui" 2>/dev/null || true)"
+        --filter "label=${CITE_CONSOLE_RUN_LABEL}=${run}" 2>/dev/null || true)"
     [ -n "$ids" ] || return 1
     # shellcheck disable=SC2086  # one id per word, deliberately split
     docker kill --signal INT $ids >/dev/null
+}
+
+# control_center_forward <signal number> — what scripts/control-center does on
+# HUP, INT or TERM. Reads CC_RUN (this run's label value) and CC_CONSOLE_PID
+# (the console's process group leader, empty before it is started); sets
+# CC_SIGNALLED. The stop is sent FIRST and only then logged, so a log that
+# cannot be written cannot keep the stop from going out.
+CC_SIGNALLED=""
+CC_CONSOLE_PID=""
+CC_RUN=""
+control_center_forward() {
+    # shellcheck disable=SC2034  # read by scripts/control-center
+    CC_SIGNALLED="$1"
+    if [ -n "$CC_CONSOLE_PID" ]; then
+        stop_console_container "$CC_RUN" \
+            || kill -s INT -- "-${CC_CONSOLE_PID}" 2>/dev/null || true
+    fi
+    info "Asked to stop (signal $1); the console was told to stop." 2>/dev/null || true
+}
+
+# control_center_wait <pid> — wait for the console and set CC_STATUS to ITS exit
+# status. A trapped signal interrupts `wait` with 128+n while the console is
+# still tearing down, so `wait` is repeated until the process is gone.
+CC_STATUS=""
+control_center_wait() {
+    local pid="$1"
+    while :; do
+        wait "$pid"
+        # shellcheck disable=SC2034  # read by scripts/control-center
+        CC_STATUS=$?
+        kill -0 "$pid" 2>/dev/null || break
+    done
+}
+
+# control_center_needs_bootstrap <image present: 0|1> — true when
+# ./scripts/bootstrap must run first: the image is missing, or the vendor source
+# it imports into workspace/src/external is (a fresh clone has the image's
+# Dockerfile but no xarm_ros2, and the build would fail on it).
+control_center_needs_bootstrap() {
+    [ "$1" = 1 ] || return 0
+    [ -n "$(find "${REPO_ROOT}/workspace/src/external" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ] || return 0
+    return 1
 }
 
 # control_center_outcome <exit status> — the sentence an operator is shown for
@@ -1513,7 +1633,7 @@ stop_console_container() {
 control_center_outcome() {
     case "$1" in
         0|129|130|143) ;;
-        1) printf '%s\n' "The control center could not start." ;;
+        1) printf '%s\n' "The control center closed or failed before the cell was up." ;;
         3) printf '%s\n' "A part of the cell stopped unexpectedly." ;;
         *) printf '%s\n' "The control center ended with exit code $1." ;;
     esac
@@ -1531,13 +1651,30 @@ prune_logs() {
                  | LC_ALL=C sort -r | tail -n +"$((keep + 1))")
 }
 
-# desktop_entry <absolute launcher path> — the menu entry install-launcher writes.
-# A path with a space in it is quoted, as the Desktop Entry specification asks.
-desktop_entry() {
-    local exec="$1"
-    case "$exec" in
-        *" "*) exec="\"${exec}\"" ;;
+# desktop_exec_value <path> — <path> as the value of a desktop entry's Exec key.
+# The Desktop Entry specification escapes in two layers: an argument holding a
+# reserved character is double-quoted with ", `, $ and \ backslash-escaped
+# inside the quotes, a literal % is written %% (it starts a field code), and the
+# whole value is then a string, whose own escape doubles every backslash.
+desktop_exec_value() {
+    local path="$1" bs="\\"
+    path="${path//%/%%}"
+    case "$path" in
+        *[[:space:]\"\'\\\>\<~\|\&\;\$\*\?\#\(\)\`]*)
+            path="${path//"$bs"/"$bs$bs"}"
+            path="${path//\"/"$bs"\"}"
+            path="${path//\`/"$bs"\`}"
+            path="${path//\$/"$bs"\$}"
+            path="\"${path}\""
+            ;;
     esac
+    printf '%s' "${path//"$bs"/"$bs$bs"}"
+}
+
+# desktop_entry <absolute launcher path> — the menu entry install-launcher writes.
+desktop_entry() {
+    local exec
+    exec="$(desktop_exec_value "$1")"
     cat <<EOF_ENTRY
 [Desktop Entry]
 Type=Application

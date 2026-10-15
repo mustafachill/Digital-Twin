@@ -28,6 +28,15 @@ if [ "$IF_STALE" -eq 1 ] && build_is_current; then
     exit 0
 fi
 
+# Whatever happens next, the source stamp no longer vouches for this tree; only a
+# full build that succeeds writes it again, with the fingerprint taken here,
+# before colcon reads a single file (ADR-0078).
+forget_build_sources
+SOURCES_FINGERPRINT=""
+if [ "$#" -eq 0 ]; then
+    SOURCES_FINGERPRINT="$(cite_build_sources_fingerprint)"
+fi
+
 cd "${REPO_ROOT}/workspace" || die "workspace/ not found"
 
 if [ ! -d src ] || [ -z "$(ls -A src 2>/dev/null)" ]; then
@@ -114,10 +123,9 @@ fi
 # Recorded only on success, and only here. This is what lets ./scripts/lint and
 # ./scripts/test tell "clean" from "answering out of a stale tree" — see the
 # build-freshness block in scripts/_lib.sh for the two incidents that cost.
-if [ "$#" -eq 0 ]; then
-    record_build_inputs
-else
-    record_build_inputs scoped
+record_build_inputs
+if [ -n "$SOURCES_FINGERPRINT" ]; then
+    record_build_sources "$SOURCES_FINGERPRINT"
 fi
 
 ok "Build complete. Overlay: workspace/install/setup.bash"

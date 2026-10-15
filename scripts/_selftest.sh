@@ -1691,8 +1691,8 @@ expect_fail "the control center and the launcher installer never run sudo" cc_ru
 expect_eq "a clean end says nothing"           ""  "$(control_center_outcome 0)"
 expect_eq "Ctrl-C says nothing"                ""  "$(control_center_outcome 130)"
 expect_eq "SIGTERM says nothing"               ""  "$(control_center_outcome 143)"
-expect_eq "1 is a start that did not happen" \
-          "The control center could not start." "$(control_center_outcome 1)"
+expect_eq "1 is a start that did not happen, or a window closed during bring-up" \
+          "The control center closed or failed before the cell was up." "$(control_center_outcome 1)"
 expect_eq "3 (PAIR_ENDED) is a part of the cell lost" \
           "A part of the cell stopped unexpectedly." "$(control_center_outcome 3)"
 expect_eq "any other status is named" \
@@ -1714,9 +1714,13 @@ expect_ok   "and a file that is not a control-center log is left alone" \
 
 # build_is_current: both stamps, against a scratch tree.
 cc_current() { REPO_ROOT="$1" build_is_current; }
-cc_record() { REPO_ROOT="$1" record_build_inputs "${2:-}"; }
+cc_record() {  # a full build that succeeded: both stamps, the sources one as taken
+    REPO_ROOT="$1" record_build_inputs
+    REPO_ROOT="$1" record_build_sources "$(REPO_ROOT="$1" cite_build_sources_fingerprint)"
+}
 CC_ROOT="${CC_TMP}/repo"
 mkdir -p "${CC_ROOT}/workspace/src/pkg/pkg" "${CC_ROOT}/workspace/build" "${CC_ROOT}/workspace/install"
+: > "${CC_ROOT}/workspace/install/setup.bash"
 printf '<package><name>pkg</name></package>\n' > "${CC_ROOT}/workspace/src/pkg/package.xml"
 printf 'x = 1\n' > "${CC_ROOT}/workspace/src/pkg/pkg/node.py"
 expect_fail "an unstamped tree is not current" cc_current "$CC_ROOT"
@@ -1725,20 +1729,69 @@ expect_ok   "a tree stamped by a full build is current" cc_current "$CC_ROOT"
 printf 'x = 2\n' > "${CC_ROOT}/workspace/src/pkg/pkg/node.py"
 expect_fail "an edited source file makes it stale" cc_current "$CC_ROOT"
 cc_record "$CC_ROOT"
-mkdir -p "${CC_ROOT}/workspace/src/pkg/pkg/__pycache__" "${CC_ROOT}/workspace/src/external/vendor"
+mkdir -p "${CC_ROOT}/workspace/src/pkg/pkg/__pycache__"
 : > "${CC_ROOT}/workspace/src/pkg/pkg/__pycache__/node.cpython-312.pyc"
-printf 'vendor\n' > "${CC_ROOT}/workspace/src/external/vendor/file.cpp"
-expect_ok   "bytecode and vendor source under external/ are not inputs" cc_current "$CC_ROOT"
+expect_ok   "bytecode is not an input" cc_current "$CC_ROOT"
 printf 'y = 1\n' > "${CC_ROOT}/workspace/src/pkg/pkg/other.py"
 expect_fail "an added source file makes it stale" cc_current "$CC_ROOT"
-cc_record "$CC_ROOT" scoped
-expect_fail "a build that selected packages does not vouch for the rest" cc_current "$CC_ROOT"
 cc_record "$CC_ROOT"
+REPO_ROOT="$CC_ROOT" forget_build_sources
+expect_fail "a build that started and did not finish leaves the tree stale" cc_current "$CC_ROOT"
+cc_record "$CC_ROOT"
+
+# What the build installs from outside first-party workspace/src.
+CC_VENDOR="${CC_ROOT}/workspace/src/external/vendor"
+mkdir -p "$CC_VENDOR" "${CC_ROOT}/external/patches" "${CC_ROOT}/assets/meshes"
+printf 'repositories: {}\n' > "${CC_ROOT}/external/cite.repos"
+printf 'patch 1\n' > "${CC_ROOT}/external/patches/01.patch"
+printf 'mesh\n' > "${CC_ROOT}/assets/meshes/link.stl"
+if have git; then
+    git -C "$CC_VENDOR" init -q
+    printf 'int a;\n' > "${CC_VENDOR}/file.cpp"
+    git -C "$CC_VENDOR" add file.cpp
+    git -C "$CC_VENDOR" -c user.name=t -c user.email=t@t commit -q -m one
+fi
+cc_record "$CC_ROOT"
+expect_ok   "a stamped tree with vendor source is current" cc_current "$CC_ROOT"
+cc_stale_after() {  # cc_stale_after <command...> — true when the edit makes it stale
+    cc_record "$CC_ROOT"
+    "$@"
+    ! cc_current "$CC_ROOT"
+}
+expect_ok "an edited patch file makes it stale" \
+          cc_stale_after eval "printf 'patch 2\n' > '${CC_ROOT}/external/patches/01.patch'"
+expect_ok "an added patch file makes it stale" \
+          cc_stale_after eval ": > '${CC_ROOT}/external/patches/02.patch'"
+expect_ok "an edited vcs manifest makes it stale" \
+          cc_stale_after eval "printf 'repositories: {x: 1}\n' > '${CC_ROOT}/external/cite.repos'"
+expect_ok "an edited mesh makes it stale" \
+          cc_stale_after eval "printf 'mesh 2\n' > '${CC_ROOT}/assets/meshes/link.stl'"
+if have git; then
+    expect_ok "an edit to vendor source (a patch applied) makes it stale" \
+              cc_stale_after eval "printf 'int b;\n' > '${CC_VENDOR}/file.cpp'"
+    expect_ok "a new vendor commit makes it stale" \
+              cc_stale_after eval "git -C '${CC_VENDOR}' -c user.name=t -c user.email=t@t commit -q -am two"
+    expect_ok "an untracked vendor file makes it stale" \
+              cc_stale_after eval ": > '${CC_VENDOR}/new.cpp'"
+fi
+cc_record "$CC_ROOT"
+rm -f "${CC_ROOT}/workspace/install/setup.bash"
+expect_fail "an install tree with no setup.bash is not current, whatever the stamps say" \
+            cc_current "$CC_ROOT"
 rm -rf "${CC_ROOT}/workspace/install"
-expect_fail "no install tree is not current, whatever the stamps say" cc_current "$CC_ROOT"
+expect_fail "no install tree is not current" cc_current "$CC_ROOT"
 expect_eq "the source fingerprint does not depend on where the tree is" \
           "$(REPO_ROOT="$CC_ROOT" cite_build_sources_fingerprint)" \
           "$(cp -r "$CC_ROOT" "${CC_TMP}/elsewhere" && REPO_ROOT="${CC_TMP}/elsewhere" cite_build_sources_fingerprint)"
+# The stamp is removed as the build starts, and the fingerprint it writes on
+# success is the one taken before colcon ran.
+cc_build_order() {
+    awk '/^forget_build_sources/ {f=NR} /SOURCES_FINGERPRINT="\$\(cite_build_sources_fingerprint\)"/ {p=NR}
+         /^colcon build/ {c=NR} /record_build_sources "\$SOURCES_FINGERPRINT"/ {r=NR}
+         END {exit !(f && p && c && r && f < c && p < c && c < r)}' "${REPO_ROOT}/scripts/build"
+}
+expect_ok   "scripts/build forgets the stamp and fingerprints before colcon, records after" \
+            cc_build_order
 expect_ok   "scripts/build takes --if-stale and asks build_is_current" \
             grep -q 'build_is_current' "${REPO_ROOT}/scripts/build"
 
@@ -1763,10 +1816,23 @@ expect_ok "the desktop entry is filed under Development and Engineering" \
           grep -qx 'Categories=Development;Engineering;' <<<"$CC_ENTRY"
 expect_ok "a launcher path with a space is quoted" \
           grep -qx 'Exec="/opt/a b/cite-control-center"' <(desktop_entry "/opt/a b/cite-control-center")
+expect_eq "a % in the launcher path is written %%" \
+          '/opt/100%%/cite-control-center' "$(desktop_exec_value '/opt/100%/cite-control-center')"
+# shellcheck disable=SC2016  # literal $, as a path would carry it
+expect_eq "a \$ is quoted and escaped in both layers" \
+          '"/opt/a\\$b/cite-control-center"' "$(desktop_exec_value '/opt/a$b/cite-control-center')"
+expect_eq "a \" is quoted and escaped in both layers" \
+          '"/opt/a\\"b/cite-control-center"' "$(desktop_exec_value '/opt/a"b/cite-control-center')"
+expect_eq "a backslash becomes four" \
+          '"/opt/a\\\\b/cite-control-center"' "$(desktop_exec_value '/opt/a\b/cite-control-center')"
 if have desktop-file-validate; then
     printf '%s\n' "$CC_ENTRY" > "${CC_TMP}/cite-control-center.desktop"
     expect_ok "desktop-file-validate accepts the entry" \
               desktop-file-validate "${CC_TMP}/cite-control-center.desktop"
+    # shellcheck disable=SC2016  # literal $, as a path would carry it
+    desktop_entry '/opt/a b$c"d%e/cite-control-center' > "${CC_TMP}/cite-control-center-odd.desktop"
+    expect_ok "and one whose path needs every escape" \
+              desktop-file-validate "${CC_TMP}/cite-control-center-odd.desktop"
 fi
 cc_install() {  # cc_install <args...> — the installer against a scratch home
     HOME="${CC_TMP}/home" XDG_DATA_HOME="${CC_TMP}/home/.local/share" \
@@ -1790,6 +1856,152 @@ for cc_exe in cite-control-center scripts/control-center scripts/install-launche
 done
 expect_ok "the root wrapper only runs scripts/control-center" \
           grep -q 'exec .*scripts/control-center" "\$@"' "${REPO_ROOT}/cite-control-center"
+# The control center's stop path, with `docker` stubbed.
+CC_DOCKER_LOG="${CC_TMP}/docker.log"
+cc_docker_stub() {  # docker as a function: logs its arguments, answers `ps` from CC_PS
+    printf '%s\n' "$*" >> "$CC_DOCKER_LOG"
+    case "$1" in
+        ps) if [ -n "${CC_PS:-}" ]; then printf '%s\n' "$CC_PS"; fi ;;
+    esac
+    return 0
+}
+cc_stop() {  # cc_stop <ps answer> <run id> — stop_console_container with the stub
+    local rc=0
+    : > "$CC_DOCKER_LOG"
+    CC_PS="$1"
+    docker() { cc_docker_stub "$@"; }
+    stop_console_container "$2" || rc=$?
+    unset -f docker
+    return "$rc"
+}
+expect_fail "stop_console_container fails when this run has no container" cc_stop "" cc-1
+expect_fail "and when no run id is given, rather than matching every container" cc_stop "abc" ""
+expect_ok   "stop_console_container signals this run's container" cc_stop "abc123" cc-1
+expect_ok   "found by this run's label" \
+            grep -q "label=${CITE_CONSOLE_RUN_LABEL}=cc-1" "$CC_DOCKER_LOG"
+expect_fail "and not by the gui service, which another window of this checkout shares" \
+            grep -q "label=com.docker.compose.service=gui" "$CC_DOCKER_LOG"
+expect_ok   "with SIGINT, the way Ctrl-C reaches the supervisor" \
+            grep -qx "kill --signal INT abc123" "$CC_DOCKER_LOG"
+# shellcheck disable=SC2016  # the text searched for, not an expansion
+expect_ok   "exec_in_container labels the container a console run starts" \
+            grep -qF 'label_args=(--label "${CITE_CONSOLE_RUN_LABEL}=${CITE_CONSOLE_RUN}")' \
+            "${REPO_ROOT}/scripts/_lib.sh"
+# shellcheck disable=SC2016
+expect_ok   "and the control center starts the console with its run id" \
+            grep -qF 'CITE_CONSOLE_RUN="$CC_RUN" ./scripts/console' "${REPO_ROOT}/scripts/control-center"
+expect_ok   "the control center refuses while another gui container of this checkout runs" \
+            grep -q 'console_containers_running' "${REPO_ROOT}/scripts/control-center"
+
+# control_center_forward: this run's container first, the console's group as a
+# fallback, nothing before the console exists.
+cc_spinner() {  # a process group leader that exits 42 on SIGINT, once its trap is set
+    local ready="${CC_TMP}/spinner-ready" n=0
+    rm -f "$ready"
+    set -m
+    bash -c 'trap "exit 42" INT; : > "$1"; while :; do sleep 0.05; done' _ "$ready" &
+    CC_SPINNER=$!
+    set +m
+    while [ ! -e "$ready" ] && [ "$n" -lt 200 ]; do sleep 0.01; n=$((n + 1)); done
+}
+cc_reap_spinner() {  # never leave it running, whatever the test concluded
+    kill -s KILL -- "-${CC_SPINNER}" 2>/dev/null || true
+}
+cc_forward_falls_back() {
+    local status=0
+    cc_spinner
+    stop_console_container() { return 1; }
+    CC_CONSOLE_PID="$CC_SPINNER" CC_RUN="cc-1"
+    control_center_forward 2 >/dev/null 2>&1
+    ( sleep 5; cc_reap_spinner ) &
+    wait "$CC_SPINNER" || status=$?
+    kill "$!" 2>/dev/null || true
+    local recorded="$CC_SIGNALLED"
+    unset -f stop_console_container
+    # shellcheck source=scripts/_lib.sh
+    source "${REPO_ROOT}/scripts/_lib.sh"
+    [ "$status" -eq 42 ] && [ "$recorded" = 2 ]
+}
+expect_ok   "with no container, forward sends SIGINT to the console's process group" \
+            cc_forward_falls_back
+cc_forward_container_first() {
+    local alive=0
+    rm -f "${CC_TMP}/stopped"
+    cc_spinner
+    stop_console_container() { printf '%s' "$1" > "${CC_TMP}/stopped"; }
+    CC_CONSOLE_PID="$CC_SPINNER" CC_RUN="cc-7"
+    control_center_forward 15 >/dev/null 2>&1
+    if kill -0 "$CC_SPINNER" 2>/dev/null; then alive=1; fi
+    cc_reap_spinner
+    wait "$CC_SPINNER" 2>/dev/null || true
+    unset -f stop_console_container
+    # shellcheck source=scripts/_lib.sh
+    source "${REPO_ROOT}/scripts/_lib.sh"
+    [ "$alive" -eq 1 ] && [ "$(cat "${CC_TMP}/stopped")" = cc-7 ]
+}
+expect_ok   "with a container, forward signals this run's and leaves the group alone" \
+            cc_forward_container_first
+cc_forward_before_start() {
+    rm -f "${CC_TMP}/signalled-early"
+    stop_console_container() { : > "${CC_TMP}/signalled-early"; }
+    CC_CONSOLE_PID="" CC_RUN="cc-1"
+    control_center_forward 1 >/dev/null 2>&1
+    unset -f stop_console_container
+    local recorded="$CC_SIGNALLED"
+    # shellcheck source=scripts/_lib.sh
+    source "${REPO_ROOT}/scripts/_lib.sh"
+    [ ! -e "${CC_TMP}/signalled-early" ] && [ "$recorded" = 1 ]
+}
+expect_ok   "a stop before the console started is recorded and sends nothing" cc_forward_before_start
+cc_forward_sends_before_logging() {
+    awk '/^control_center_forward\(\)/ {in_f=1}
+         in_f && /stop_console_container/ && !s {s=NR}
+         in_f && /info / && !i {i=NR}
+         in_f && /^}/ {exit}
+         END {exit !(s && i && s < i)}' "${REPO_ROOT}/scripts/_lib.sh"
+}
+expect_ok   "forward sends the stop before it logs about it" cc_forward_sends_before_logging
+
+# control_center_wait: a trapped signal does not end the wait early.
+cc_wait_outlives_a_signal() {
+    local me
+    me="$(exec sh -c 'echo $PPID')"
+    trap ':' USR1
+    bash -c 'sleep 0.4; exit 7' &
+    local pid=$!
+    ( sleep 0.1; kill -s USR1 "$me" ) &
+    control_center_wait "$pid"
+    trap - USR1
+    wait 2>/dev/null || true
+    [ "$CC_STATUS" = 7 ]
+}
+expect_ok   "control_center_wait returns the console's own status across a trapped signal" \
+            cc_wait_outlives_a_signal
+
+# The logger survives the signals that stop the console.
+expect_ok   "the log's tee ignores INT, HUP, TERM and PIPE" \
+            grep -qF "exec > >(trap '' INT HUP TERM PIPE; exec tee -i --output-error=warn -a" \
+            "${REPO_ROOT}/scripts/control-center"
+cc_traps_before_console() {
+    awk '/^trap .control_center_forward 2. INT/ {t=NR}
+         /\.\/scripts\/console "\$@"/ && !c {c=NR}
+         END {exit !(t && c && t < c)}' "${REPO_ROOT}/scripts/control-center"
+}
+expect_ok   "the stop traps are set before the console starts" cc_traps_before_console
+expect_ok   "dialogs are shown without Pango markup" \
+            grep -q -- '--no-markup' "${REPO_ROOT}/scripts/control-center"
+expect_ok   "the minimal PATH includes /snap/bin" \
+            grep -q ':/snap/bin"' "${REPO_ROOT}/scripts/control-center"
+
+# Bootstrap runs on what is actually missing.
+cc_needs_bootstrap() { REPO_ROOT="$1" control_center_needs_bootstrap "$2"; }
+CC_BOOT="${CC_TMP}/boot"
+mkdir -p "${CC_BOOT}/workspace/src"
+expect_ok   "a missing image needs bootstrap" cc_needs_bootstrap "$CC_BOOT" 0
+expect_ok   "missing vendor source needs bootstrap, image or not" cc_needs_bootstrap "$CC_BOOT" 1
+mkdir -p "${CC_BOOT}/workspace/src/external/xarm_ros2"
+expect_fail "the image and the vendor source present need nothing" cc_needs_bootstrap "$CC_BOOT" 1
+expect_ok   "but a missing image still does" cc_needs_bootstrap "$CC_BOOT" 0
 rm -rf "$CC_TMP"
 
 # -----------------------------------------------------------------------------

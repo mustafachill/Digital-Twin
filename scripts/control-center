@@ -4,8 +4,9 @@
 #   ./scripts/control-center              what the desktop icon runs
 #   ./cite-control-center                 the same, from the repository root
 #
-# In order: log, one instance, Docker access, X access for this user only, the
-# image, the build (only if a source changed), then ./scripts/console. Any
+# In order: one instance, log, Docker access, X access for this user only, the
+# image and vendor source, the build (only if an input changed), no other
+# simulation window of this checkout, then ./scripts/console. Any
 # argument is handed to ./scripts/console unchanged. An end other than a clean
 # one is shown in a dialog that names the log.
 #
@@ -15,7 +16,7 @@
 # Logs: ${XDG_STATE_HOME:-~/.local/state}/cite-digital-twin/logs/ (newest 20 kept,
 # latest.log points at the newest).
 
-PATH="${PATH:+${PATH}:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PATH="${PATH:+${PATH}:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 export PATH
 
 case "${1:-}" in
@@ -40,7 +41,9 @@ tell() {  # tell error|warning|info <message>
     local kind="$1" message="$2"
     printf '%s: %s\n' "$kind" "$message" >&2
     if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v zenity >/dev/null 2>&1; then
-        zenity "--${kind}" --title="$APP_TITLE" --no-wrap --text="$message" >/dev/null 2>&1 && return 0
+        # --no-markup: a message carries paths and Docker's own words, and a
+        # stray & or < in them would otherwise be Pango markup.
+        zenity "--${kind}" --title="$APP_TITLE" --no-wrap --no-markup --text="$message" >/dev/null 2>&1 && return 0
     fi
     if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
         notify-send -a "$APP_TITLE" -h string:desktop-entry:cite-control-center "$APP_TITLE" "$message" >/dev/null 2>&1 || true
@@ -66,9 +69,16 @@ fi
 # --- The log -----------------------------------------------------------------
 # Everything from here on, this script's and every child's, goes to the log as
 # well as to any terminal. tee does not keep the lock open (9>&-).
+#
+# The logger must outlive the stop it records. It shares this script's process
+# group, so a Ctrl-C in a terminal reaches it too, and a closed terminal hangs
+# it up: a tee that died there left this script writing into a broken pipe, and
+# the SIGPIPE killed the script before it forwarded the stop. So tee ignores
+# INT, HUP, TERM and PIPE, and a terminal it can no longer write to costs a
+# warning, not the log (--output-error=warn).
 mkdir -p "$LOG_DIR" || { tell error "Cannot create the log directory ${LOG_DIR}."; exit 1; }
 LOG_FILE="${LOG_DIR}/control-center-$(date -u +%Y%m%dT%H%M%SZ).log"
-exec > >(exec tee -a "$LOG_FILE" 9>&-) 2>&1
+exec > >(trap '' INT HUP TERM PIPE; exec tee -i --output-error=warn -a "$LOG_FILE" 9>&-) 2>&1
 ln -sfn "$(basename "$LOG_FILE")" "${LOG_DIR}/latest.log"
 
 # Sourced after the redirect, so _lib.sh sees a pipe and writes no colour codes
@@ -113,10 +123,12 @@ if xhost_grant_needed "$OPERATOR" <<<"$XHOST_LISTING"; then
     info "Granted X access to ${OPERATOR} for this run."
 fi
 
-# --- The image, then the build -------------------------------------------------
-if ! cite_image_present; then
-    progress "Preparing the container image. The first run takes a while."
-    ./scripts/bootstrap 9>&- || fail "Preparing the container image failed (./scripts/bootstrap)."
+# --- The image and the vendor source, then the build ---------------------------
+IMAGE_PRESENT=0
+cite_image_present && IMAGE_PRESENT=1
+if control_center_needs_bootstrap "$IMAGE_PRESENT"; then
+    progress "Preparing the container image and the vendor source. The first run takes a while."
+    ./scripts/bootstrap 9>&- || fail "Preparing the environment failed (./scripts/bootstrap)."
 fi
 
 progress "Checking the build; it is rebuilt only if a source changed."
@@ -124,41 +136,47 @@ progress "Checking the build; it is rebuilt only if a source changed."
 
 # --- The console ---------------------------------------------------------------
 # A stop (HUP, INT or TERM to this script) is handed to the console the way
-# Ctrl-C in a terminal hands it: SIGINT into the container, to the supervisor,
-# which tears the pair down in order while the compose client keeps streaming
-# that teardown into the log and then returns the supervisor's own status
-# (stop_console_container). Before the container exists there is nothing in it
-# to stop, so the console's own process group is sent SIGINT instead; it is
-# started as its own job (set -m) so that group exists and is not born with
-# SIGINT ignored. Standard input is /dev/null, as it is from a desktop entry: a
-# background job that reads a terminal is stopped (SIGTTIN), and nothing here
-# takes input.
-SIGNALLED=""
-# shellcheck disable=SC2329  # invoked by the signal traps below
-forward() {  # forward <received signal number>
-    SIGNALLED="$1"
-    info "Asked to stop (signal $1); stopping the console."
-    stop_console_container || kill -s INT -- "-${CONSOLE_PID}" 2>/dev/null || true
-}
+# Ctrl-C in a terminal hands it: SIGINT into THIS run's container - labelled with
+# CITE_CONSOLE_RUN by `exec_in_container` - to the supervisor, which tears the
+# pair down in order while the compose client keeps streaming that teardown into
+# the log and then returns the supervisor's own status (stop_console_container).
+# Before the container exists there is nothing in it to stop, so the console's
+# own process group is sent SIGINT instead; it is started as its own job (set -m)
+# so that group exists and is not born with SIGINT ignored. The traps are set
+# BEFORE it starts, so a stop that arrives in between is not lost: it is
+# recorded, and the console is then not started at all. Standard input is
+# /dev/null, as it is from a desktop entry: a background job that reads a
+# terminal is stopped (SIGTTIN), and nothing here takes input.
+#
+# One console per checkout: another `gui` container of this checkout (a console
+# or a `./scripts/sim` window started by hand) would be reused through
+# `compose exec`, and a stop would then have no container of this run's own to
+# reach. Refused, with what to do (ADR-0078).
+OTHERS="$(console_containers_running)"
+[ -z "$OTHERS" ] || fail "A simulation window of this checkout is already running (container ${OTHERS//$'\n'/, }).
+Close it, or stop it with Ctrl-C where it was started, then start the control center again."
+
+CC_RUN="cc-$$-$(date -u +%Y%m%dT%H%M%SZ)"
+trap 'control_center_forward 1' HUP
+trap 'control_center_forward 2' INT
+trap 'control_center_forward 15' TERM
+[ -z "$CC_SIGNALLED" ] || exit $((128 + CC_SIGNALLED))
 progress "Starting the operator console."
 set -m
-./scripts/console "$@" </dev/null 9>&- &
-CONSOLE_PID=$!
+CITE_CONSOLE_RUN="$CC_RUN" ./scripts/console "$@" </dev/null 9>&- &
+CC_CONSOLE_PID=$!
 set +m
-trap 'forward 1' HUP
-trap 'forward 2' INT
-trap 'forward 15' TERM
+# A stop that arrived after the check above and before the console had a pid
+# was recorded with nothing to send it to; send it now.
+[ -z "$CC_SIGNALLED" ] || control_center_forward "$CC_SIGNALLED"
 
 set +e
-while :; do
-    wait "$CONSOLE_PID"
-    STATUS=$?
-    kill -0 "$CONSOLE_PID" 2>/dev/null || break
-done
+control_center_wait "$CC_CONSOLE_PID"
+STATUS="$CC_STATUS"
 set -e
 
-if [ -n "$SIGNALLED" ]; then
-    STATUS=$((128 + SIGNALLED))
+if [ -n "$CC_SIGNALLED" ]; then
+    STATUS=$((128 + CC_SIGNALLED))
 fi
 
 MESSAGE="$(control_center_outcome "$STATUS")"

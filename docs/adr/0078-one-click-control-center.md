@@ -28,9 +28,14 @@ The owner wants the control center started by double-clicking an icon.
    - checks Docker access and says what to do, without ever running `sudo`;
    - grants X access to the same user only (`xhost +SI:localuser:$USER`), and revokes it on exit
      if it added it;
-   - bootstraps the image if it is missing;
-   - builds only if the sources changed (`./scripts/build --if-stale`);
-   - runs `./scripts/console`;
+   - bootstraps if the image or the imported vendor source is missing;
+   - builds only if an input changed (`./scripts/build --if-stale`): first-party source, the
+     vendor source's HEAD and local diff, `external/cite.repos`, `external/patches/` and
+     `assets/meshes`;
+   - refuses to start while another simulation window of the same checkout runs, because the
+     console would attach to that container and a stop could then not tell the two apart;
+   - runs `./scripts/console` in a container labelled with this run's id, and on HUP, INT or
+     TERM sends SIGINT to that container alone;
    - reports any exit other than a clean one in a dialog that names the log.
 2. **`scripts/install-launcher` installs the icon.** It installs a desktop entry and an icon
    drawn for this project into the user's menu, and with `--desktop` onto the desktop.
