@@ -1,6 +1,7 @@
 # ADR-0071: The first operator surface is a panel in the Gazebo window
 
 - **Status:** Proposed
+- **Amended 2026-10-15 by [ADR-0075](0075-start-robot-and-home-act-on-the-selected-target.md):** "nothing before Start robot" holds per target: Home and Start program need their target started.
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** Home and Start program carry an explicit target (simulation, real arm or twin); "at the start" is per side; the console takes a mode hold for each run and reads custody through L5 (`/cite/twin/holding`), so it no longer reads another domain for custody.
 - **Amended 2026-10-09:** the panel gains **Reset view**, which returns the 3D view's camera, zoom included, to the generated starting pose through gz-gui's `/gui/move_to/pose`. It moves no robot, so it does not depend on the console. It adds gz-transport, gz-msgs and gz-math (vendor packages) to the panel's dependencies.
 - **Amended 2026-10-09 (panel features):** Top, Side and Front views and Follow robot (the track carriage) beside Reset view, none depending on the console; a connection display read from `TwinHeartbeat`, `TwinSides` and `TwinMode` on the plant's domain, labelled monitoring only; the speed floor shown; ISA-101 colours (grey when normal, colour only for the abnormal; Stop dark grey so it is not read as an E-stop); and the validate-then-run button of [ADR-0073](0073-validate-in-simulation-then-run-the-twin.md).
