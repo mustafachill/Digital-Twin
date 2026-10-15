@@ -300,9 +300,10 @@ class ConsoleMachine:
     twin at ``speed`` that raises `Interrupted` once ``interrupted()`` is true,
     and ``speed`` None for a cell that is never handed a step; the caller
     closes it. ``physical`` is the DECLARED physical sides
-    (`targets.running_physical` of the pair's `--sides`, R-16), up or not. ``initialize_physical(sides, say,
-    interrupted)`` is `home.initialize` for ``sides``, which are always the
-    running physical sides of ONE request's target (ADR-0075).
+    (`targets.running_physical` of the pair's `--sides`, R-16), up or not.
+    ``initialize_physical(sides, say, interrupted)`` is `home.initialize` for
+    ``sides``, which are always the physical sides of ONE request's target
+    (ADR-0075).
     ``place_parts(sides, may_hold, say, interrupted)`` puts a work-piece on
     every simulated side of ``sides`` (`program.part`), clearing the sides in
     ``may_hold`` first. ``set_belts(running, say, interrupted,

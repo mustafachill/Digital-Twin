@@ -54,9 +54,9 @@ import unittest
 from ament_index_python.packages import get_package_prefix
 from cite_bringup.plan import COUNTERPART_SIDE, default_plan_path, load, resolve_domain_id
 from cite_bringup.readiness import (
-    side_state_line,
     SIDE_CONNECTING,
     SIDE_DOWN,
+    side_state_line,
     SIDE_UP,
     SIDE_WAITING,
 )

@@ -30,7 +30,8 @@ the two equal rather than either restating the other unchecked.
 It also says which targets a running deployment can serve: a target is offered
 - selectable, and accepted by Start robot - when every side it commands is UP
 NOW (`TwinSides.running`; ADR-0075 decision 4 as ADR-0077 amends it: an
-operator console's pair keeps its physical counterpart, which comes and goes). Whether a side may be
+operator console's pair keeps its physical counterpart, which comes and goes).
+Whether a side may be
 COMMANDED now is a separate question - a simulated side always, a physical side
 only while the twin boundary judges it ready by measurement
 (`TwinSides.commandable`, R-19) - which Home and Start program ask

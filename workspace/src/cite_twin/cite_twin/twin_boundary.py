@@ -2214,7 +2214,7 @@ def _wait(
 
 
 def _lost(side_name: str, when: str) -> _SideOutcome:
-    """The outcome of a goal whose side went away ``when`` (ADR-0077)."""
+    """Return the outcome of a goal whose side went away ``when`` (ADR-0077)."""
     return _SideOutcome(
         code=ResultCode(
             code=ResultCode.HARDWARE_FAULT,

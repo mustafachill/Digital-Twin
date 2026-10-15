@@ -299,7 +299,7 @@ def test_the_deadman_is_started_once_the_robot_answered_and_driven_alone(
     (reached,) = [a for a in actions if _executable(a) == "reach_gate.py"]
     assert _releasing(actions, context, "deadman.py") is reached
     assert _releasing(actions, context, "lifecycle_driver.py") is reached
-    released = dict((id(t), e) for t, e in _gated(actions, context))[id(reached)]
+    released = {id(t): e for t, e in _gated(actions, context)}[id(reached)]
     drivers = [e for e in released if _executable(e) == "lifecycle_driver.py"]
     physical = _plan().controller_managers[0].physical_on(COUNTERPART_SIDE)
     assert drivers[0]._Node__arguments == ["--node", physical.deadman]  # noqa: SLF001

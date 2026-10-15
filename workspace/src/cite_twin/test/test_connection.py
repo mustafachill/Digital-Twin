@@ -30,10 +30,10 @@ import time
 from types import SimpleNamespace
 
 from cite_bringup.readiness import (
-    side_state_line,
     SIDE_CONNECTING,
     SIDE_DOWN,
     SIDE_FAILED,
+    side_state_line,
     SIDE_UP,
     SIDE_WAITING,
 )
@@ -64,7 +64,9 @@ def test_a_kept_side_is_waiting_until_told_and_a_side_not_kept_is_always_up() ->
 
 def test_each_line_moves_the_state_and_a_repeat_or_a_half_line_moves_nothing() -> None:
     connections = Connections([COUNTERPART])
-    assert connections.apply(_line(SIDE_CONNECTING)) == (COUNTERPART, SIDE_WAITING, SIDE_CONNECTING)
+    assert connections.apply(_line(SIDE_CONNECTING)) == (
+        COUNTERPART, SIDE_WAITING, SIDE_CONNECTING
+    )
     assert connections.connecting() == (COUNTERPART,)
     assert connections.apply(_line(SIDE_CONNECTING)) is None
     assert connections.apply("CITE_SIDE_STATE side=counterpart") is None
@@ -99,7 +101,7 @@ class _Log:
 
 
 def _kept_boundary() -> TwinBoundary:
-    """A boundary whose physical counterpart is kept, ready by measurement, and not yet up."""
+    """Build a boundary whose physical counterpart is kept, ready by measurement, and not up."""
     boundary = _boundary_with_carriages(0.0, 0.0)
     boundary._lock = threading.Lock()
     boundary._sides = {"plant": None, COUNTERPART: None}

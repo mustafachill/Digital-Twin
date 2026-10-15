@@ -27,7 +27,6 @@ node, and nothing reaches a robot.
 from __future__ import annotations
 
 import io
-import os
 from pathlib import Path
 import re
 import sys
@@ -227,7 +226,7 @@ def _plant() -> pair.SideSpec:
 
 
 def _boundary(stop_on: str, count: int = 1, then: Path | None = None) -> pair.SideSpec:
-    """A boundary that prints each state line it reads, and exits on the ``count``-th ``stop_on``.
+    """Return a boundary printing each state line it reads, ending on the ``count``-th ``stop_on``.
 
     With ``then``, it exits only once that file also exists.
     """
@@ -271,7 +270,7 @@ def _console(release: Path | None = None) -> pair.SideSpec:
 
 
 def _kept(tmp_path: Path, behaviours: list[str]) -> pair.SideSpec:
-    """A kept side whose Nth incarnation does ``behaviours[N]``.
+    """Return a kept side whose Nth incarnation does ``behaviours[N]``.
 
     Every incarnation first prints its number and pid. Behaviours:
     `silent` waits for ever; `refuse` exits 2 at once; `hang` reaches its robot
@@ -345,7 +344,7 @@ def _supervise(specs, *, boundary, console=None, log=None, **kwargs) -> tuple[in
 
 
 def _states(text: str) -> list[str]:
-    """The states the fake boundary received, in order.
+    """Return the states the fake boundary received, in order.
 
     Read with a pattern rather than line by line: the supervisor's own lines and
     a participant's forwarded ones are printed from different threads, and a

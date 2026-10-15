@@ -225,7 +225,6 @@ STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
 
 
-
 #: `--sides`: the plant alone, or every side the plan declares (ADR-0072). The
 #: boundary takes the same two words (`cite_twin.twin_boundary.SIDES_CHOICES`),
 #: and `test_pair.py` holds the two equal; neither package imports the other's.

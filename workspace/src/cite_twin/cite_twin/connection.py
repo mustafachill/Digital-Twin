@@ -70,7 +70,7 @@ class Connections:
         return tuple(self._state)
 
     def state(self, side: str) -> str | None:
-        """The kept side's state, or None for a side that is not kept."""
+        """Return the kept side's state, or None for a side that is not kept."""
         return self._state.get(side)
 
     def up(self, side: str) -> bool:
@@ -90,7 +90,7 @@ class Connections:
         return side, before, state
 
     def end_of_input(self) -> list[tuple[str, str, str]]:
-        """The supervisor is gone: every kept side not already failed is `down`."""
+        """Mark every kept side not already failed `down`: the supervisor is gone."""
         changed = []
         for side, before in self._state.items():
             if before in (SIDE_DOWN, SIDE_FAILED):
