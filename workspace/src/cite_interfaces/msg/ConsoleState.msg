@@ -15,10 +15,11 @@
 # the twin and holds the track; a gripper motion already in progress on a
 # physical side is NOT stopped by a cancel (ADR-0070 item 4) and runs to its end.
 
-uint8 NOT_STARTED=0       # Start robot has not succeeded; only Start robot is accepted
-uint8 STARTING=1          # Start robot in progress: physical arms initialized, the
-                          # plant's custody read
-uint8 READY=2             # started and idle; Home and Start program are accepted
+uint8 NOT_STARTED=0       # no side is started; only Start robot is accepted
+uint8 STARTING=1          # Start robot in progress: the target's physical arm
+                          # initialized, the custody of the target's sides read
+uint8 READY=2             # at least one side started, and idle; Home and Start
+                          # program are accepted for a target in started_targets
 uint8 HOMING=3            # Home in progress
 uint8 AWAITING_OPERATOR=4 # waiting for ConfirmOperator: the operator does what `prompt`
                           # says (clear the cell; place the part by hand). Asked only
@@ -30,13 +31,15 @@ uint8 STOPPING=6          # a Stop or a cancel was accepted; the goal in flight 
                           # FAULT, the twin is being asked for SIM again. Never a homing
                           # move (ADR-0037)
 uint8 FAULT=7             # the last request failed, or a stop could not be confirmed;
-                          # `last_error` says why. Start robot is the way back to READY
+                          # `last_error` says why. Every side is unstarted again;
+                          # Start robot is the way back to READY
 
 uint8 TWIN_MODE_UNKNOWN=255  # no TwinMode heard on its topic yet
 
-# WHERE THE SIGNAL GOES (ADR-0072). Sent by the operator with every HomeRobot and
-# RunProgram goal (`target`), never defaulted: 0 is unset and REJECTED. Stated
-# here once; the goals refer to these values. The console maps each to a twin
+# WHERE THE SIGNAL GOES (ADR-0072, ADR-0075). Sent by the operator with every
+# StartRobot request and every HomeRobot and RunProgram goal (`target`), never
+# defaulted: 0 is unset and REJECTED. Stated here once; the requests refer to
+# these values. The console maps each to a twin
 # mode in one place (`cite_bringup.program.targets`).
 uint8 TARGET_SIM=1   # the simulation (the plant) only: the twin in SIM
 uint8 TARGET_REAL=2  # the real arm (the counterpart) only: the twin in REAL
@@ -55,7 +58,8 @@ uint8 PHASE_RUNNING=2     # phase 2: the twin, after phase 1 passed in simulatio
 builtin_interfaces/Time stamp
 
 uint8 state                 # one of the constants above
-bool robot_started          # Start robot succeeded and nothing since has undone it
+bool robot_started          # Start robot succeeded for at least one side and nothing
+                            # since has undone it (ADR-0075)
 bool busy                   # a request is in progress
 bool plant_at_start         # the plant's arm was brought to, or ended a full cycle at,
                             # the program's start, and nothing has moved it since as far
@@ -64,14 +68,22 @@ bool counterpart_at_start   # the same, for the counterpart's arm. Start program
                             # refused unless every side of its target is at the start
 uint8[] available_targets   # the TARGET_* the running deployment can serve: [TARGET_SIM]
                             # when only the plant runs, all three when both sides run
-                            # and the real arm is ready. A goal naming any other target
-                            # is rejected
+                            # (ADR-0075 decision 4). A request naming any other target
+                            # is rejected. A physical side that has not found its zero
+                            # still offers its targets, and accepts Start robot alone:
+                            # Home and Start program are refused until the twin calls
+                            # it commandable (TwinSides.commandable)
 uint8[] startable_targets   # those of available_targets every side of which is at the
                             # program's start as the console knows it: the targets
                             # Start program is accepted for now (Home first otherwise).
                             # Derived by the console from its one target table
                             # (`cite_bringup.program.targets`), so no panel restates
                             # which sides a target commands
+uint8[] started_targets     # those of available_targets every side of which Start
+                            # robot started and nothing has undone since (ADR-0075):
+                            # the targets Home and Start program are accepted for.
+                            # Derived by the console from its one target table, so
+                            # no panel restates which sides a target commands
 uint8[] floored_targets     # those of available_targets that command a physical side:
                             # the targets `minimum_speed_scale` applies to. A goal for
                             # any other target is accepted at any scale in (0, 1]
@@ -92,6 +104,7 @@ bool validate_then_run_offered  # ValidateThenRun is accepted on this deployment
                                 # TARGET_TWIN is in available_targets (ADR-0073
                                 # decision 6). Derived by the console, so no panel
                                 # restates the rule; a request also needs
-                                # TARGET_TWIN in startable_targets
+                                # TARGET_TWIN in started_targets and in
+                                # startable_targets
 uint8 phase                 # PHASE_* of the ValidateThenRun request in progress;
                             # PHASE_NONE for any other request, or none

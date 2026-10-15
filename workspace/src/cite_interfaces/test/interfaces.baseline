@@ -22,6 +22,7 @@ msg/ConsoleState.msg
   bool counterpart_at_start
   uint8[] available_targets
   uint8[] startable_targets
+  uint8[] started_targets
   uint8[] floored_targets
   bool counterpart_running
   string step
@@ -201,6 +202,7 @@ srv/SetMode.srv
   ResultCode result
   uint8 current_mode
 srv/StartRobot.srv
+  uint8 target
   ---
   bool success
   string detail

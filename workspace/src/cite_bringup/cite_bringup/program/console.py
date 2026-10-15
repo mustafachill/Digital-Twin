@@ -185,7 +185,8 @@ class CellConsole(LifecycleNode):
         self._sides_lock = threading.Lock()
         #: The sides a mode may command now, as the twin last said (`TwinSides`,
         #: R-19); until it is heard, the running simulated sides and no
-        #: physical one - a physical side is offered only by measurement.
+        #: physical one - a physical side is commanded only by measurement
+        #: (Home and Start program refuse it until then; ADR-0075 decision 4).
         self._commandable: tuple[str, ...] = ()
         self._machine: ConsoleMachine | None = None
         #: The long requests' handlers, and the action servers' every callback:
@@ -239,8 +240,15 @@ class CellConsole(LifecycleNode):
             start=start,
             steps=steps,
             make_cell=self._make_cell,
-            initialize_physical=lambda say, interrupted: initialize(
-                plan, physical, say, interrupted=interrupted, stop_deadline=self._stop_deadline
+            # Bound per request to the sides the machine names: the running
+            # physical sides of that request's target, never every running
+            # physical side (ADR-0075).
+            initialize_physical=lambda sides, say, interrupted: initialize(
+                plan,
+                [side for side in sides if side in physical],
+                say,
+                interrupted=interrupted,
+                stop_deadline=self._stop_deadline,
             ),
             place_parts=lambda sides, may_hold, say, interrupted: place_on_simulated_sides(
                 plan.zone, may_hold, say, interrupted, only=sides
@@ -257,6 +265,7 @@ class CellConsole(LifecycleNode):
                 match_ceiling_s=MATCH_CEILING_S if ceiling is None else ceiling,
             ),
             available=self._available,
+            commandable=self._commandable_now,
             heard_twin_mode=self._heard_twin_mode,
             terminal_client=self._terminal_client,
             # The command line's own rule, floor included (SA-S-07), on the
@@ -422,7 +431,7 @@ class CellConsole(LifecycleNode):
     # ------------------------------------------------------------- handlers
 
     def _on_start_robot(self, request, response):
-        outcome = self._machine.start_robot()
+        outcome = self._machine.start_robot(request.target)
         response.success, response.detail = outcome.success, outcome.detail
         return response
 
@@ -541,7 +550,7 @@ class CellConsole(LifecycleNode):
             self._publish(machine.snapshot())
 
     def _on_twin_sides(self, message: TwinSides) -> None:
-        """Keep what the twin says may be commanded now, and publish what that offers (R-19)."""
+        """Keep what the twin says may be commanded now, and publish the state again (R-19)."""
         with self._sides_lock:
             self._commandable = tuple(
                 side for side in message.commandable if side in self._running
@@ -551,10 +560,13 @@ class CellConsole(LifecycleNode):
             self._publish(machine.snapshot())
 
     def _available(self) -> list[int]:
-        """Return the targets this deployment offers now: every side running and commandable."""
+        """Return the targets this deployment offers: every side running (ADR-0075)."""
+        return targets.available(self._running)
+
+    def _commandable_now(self) -> tuple[str, ...]:
+        """Return the running sides the twin last said may be commanded now (R-19)."""
         with self._sides_lock:
-            commandable = self._commandable
-        return targets.available(self._running, commandable)
+            return self._commandable
 
     def _terminal_client(self) -> str | None:
         """Name the terminal program client on this domain's graph, or None (S-01).
@@ -601,6 +613,7 @@ class CellConsole(LifecycleNode):
                 available_targets=list(snapshot.available_targets),
                 startable_targets=list(snapshot.startable_targets),
                 floored_targets=list(snapshot.floored_targets),
+                started_targets=list(snapshot.started_targets),
                 counterpart_running=COUNTERPART_SIDE in self._running,
                 step=snapshot.step,
                 prompt=snapshot.prompt,

@@ -260,11 +260,20 @@ class TestTheConsole(unittest.TestCase):
         self.assertFalse(self._call(self.confirm_operator, ConfirmOperator.Request()).success)
         self.assertFalse(self._call(self.stop, StopCell.Request()).success)
 
-        # Start robot: nothing physical to initialize; custody read, empty.
+        # ADR-0075: Start robot names its target, never defaulted.
         response = self._call(self.start_robot, StartRobot.Request())
+        self.assertFalse(response.success)
+        self.assertIn("no target was sent", response.detail)
+        # Start robot on the twin: nothing physical to initialize; custody read, empty.
+        response = self._call(self.start_robot, StartRobot.Request(target=TWIN))
         self.assertTrue(response.success, response.detail)
         ready = self._state(ConsoleState.READY, "READY after Start robot")
         self.assertTrue(ready.robot_started)
+        # Every side the twin commands is started, so every target is.
+        self.assertEqual(
+            list(ready.started_targets),
+            [ConsoleState.TARGET_SIM, ConsoleState.TARGET_REAL, ConsoleState.TARGET_TWIN],
+        )
         # Not at the program's start until a Home says so: Start program is refused.
         self.assertFalse(ready.plant_at_start or ready.counterpart_at_start)
         # ADR-0072: both sides run and are simulated, so every target is offered.

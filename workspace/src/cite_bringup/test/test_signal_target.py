@@ -91,21 +91,32 @@ def test_only_twin_asks_the_homing_allowance() -> None:
 
 
 @pytest.mark.parametrize(
-    ("running", "commandable", "offered"),
+    ("running", "offered"),
     [
         # A pair started with the plant alone offers the simulation, and only it.
-        (("plant",), ("plant",), [SIM]),
-        # Both sides running and ready: all three.
-        (("plant", "counterpart"), ("plant", "counterpart"), [SIM, REAL, TWIN]),
-        # R-19: a physical side running but not measured ready offers no target
-        # that commands it.
-        (("plant", "counterpart"), ("plant",), [SIM]),
-        # A side the twin calls commandable but this deployment did not start.
-        (("plant",), ("plant", "counterpart"), [SIM]),
+        (("plant",), [SIM]),
+        # Both sides running: all three, whether or not the physical one has
+        # found its zero (ADR-0075 decision 4).
+        (("plant", "counterpart"), [SIM, REAL, TWIN]),
     ],
 )
-def test_what_a_deployment_offers(running, commandable, offered) -> None:
-    assert targets.available(running, commandable) == offered
+def test_what_a_deployment_offers(running, offered) -> None:
+    assert targets.available(running) == offered
+
+
+@pytest.mark.parametrize(
+    ("target", "commandable", "unready"),
+    [
+        (SIM, ("plant",), []),
+        # R-19: a physical side running but not measured ready is named, so
+        # Home and Start program are refused for every target that commands it.
+        (REAL, ("plant",), ["counterpart"]),
+        (TWIN, ("plant",), ["counterpart"]),
+        (TWIN, ("plant", "counterpart"), []),
+    ],
+)
+def test_what_is_not_commandable_is_said_per_target(target, commandable, unready) -> None:
+    assert targets.not_commandable(target, commandable) == unready
 
 
 @pytest.mark.parametrize(
@@ -721,3 +732,44 @@ def test_a_real_home_with_the_carriage_away_after_initializing_says_what_to_do()
     assert "initialized, and its carriage is still not at the program's start" in text
     assert "Run Start robot again" in text and "Nothing was moved" in text
     assert [call[0] for call in calls] == ["initialize", "measure"]
+
+
+def _start(target: int, physical, log) -> None:
+    cycle.start_robot(
+        Cell(log),
+        target=target,
+        physical=physical,
+        say=lambda text: log.append(("said", text)),
+        await_operator=lambda prompt: log.append(("asked", prompt)) or "",
+        initialize_physical=lambda: log.append(("initialize",)),
+        prompt="START?",
+    )
+
+
+def test_a_simulation_start_asks_no_one_and_initializes_nothing() -> None:
+    """ADR-0075 decision 1: custody of the plant alone, and the mode never left."""
+    log: list = []
+    _start(SIM, [], log)
+    names = _names(log)
+    assert "asked" not in names and "hold_sim" not in names and "initialize" not in names
+    assert "enter_target" not in names
+    assert ("refuse_if_holding", ("plant",)) in log
+
+
+def test_a_real_start_asks_in_sim_then_initializes_and_reads_the_real_arms_custody() -> None:
+    log: list = []
+    _start(REAL, ["counterpart"], log)
+    names = _names(log)
+    assert names.index("hold_sim") < names.index("asked") < names.index("initialize")
+    assert names.index("initialize") < names.index("refuse_if_holding")
+    (asked,) = [entry[1] for entry in log if entry[0] == "asked"]
+    assert "Target: the real arm" in asked and asked.endswith("START?")
+    assert ("refuse_if_holding", ("counterpart",)) in log
+    # Start robot never leaves SIM.
+    assert "enter_target" not in names and names[-1] == "release_hold"
+
+
+def test_a_twin_start_reads_custody_on_both_sides() -> None:
+    log: list = []
+    _start(TWIN, ["counterpart"], log)
+    assert ("refuse_if_holding", ("plant", "counterpart")) in log

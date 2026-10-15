@@ -14,10 +14,10 @@
 
 """Where the signal goes: the simulation, the real arm, or the twin (ADR-0072).
 
-The operator picks a target with every Home and Start program
-(`ConsoleState.TARGET_*`): the server never defaults a target; the panel may
-preselect SIM (ADR-0072 amendment 2026-10-15). This module is the ONE place a target is
-turned into the twin mode it is run in and the sides it commands:
+The operator picks a target with every Start robot, Home and Start program
+(`ConsoleState.TARGET_*`, ADR-0075): the server never defaults a target; the
+panel may preselect SIM (ADR-0072 amendment 2026-10-15). This module is the
+ONE place a target is turned into the twin mode it is run in and the sides it commands:
 
     simulation  -> SIM        -> the plant
     real arm    -> REAL       -> the counterpart
@@ -28,9 +28,13 @@ cannot import `cite_twin` (it depends on this one), so `cite_twin`'s tests hold
 the two equal rather than either restating the other unchecked.
 
 It also says which targets a running deployment can serve: a target is offered
-only when every side it commands RUNS (the pair supervisor's `--sides`) and is
-COMMANDABLE now - a simulated side always, a physical side only while the twin
-boundary judges it ready by measurement (`TwinSides.commandable`, R-19).
+- selectable, and accepted by Start robot - when every side it commands RUNS
+(the pair supervisor's `--sides`; ADR-0075 decision 4). Whether a side may be
+COMMANDED now is a separate question - a simulated side always, a physical side
+only while the twin boundary judges it ready by measurement
+(`TwinSides.commandable`, R-19) - which Home and Start program ask
+(`not_commandable`): a physical track that has not found its zero accepts Start
+robot, the request that zeroes it, and nothing else.
 """
 
 from __future__ import annotations
@@ -56,6 +60,13 @@ LABELS = {SIM: "the simulation", REAL: "the real arm", TWIN: "the twin (simulati
 
 #: The target's arms, as the subject of a sentence about where they are.
 ARMS = {SIM: "the simulation's arm is", REAL: "the real arm is", TWIN: "both arms are"}
+
+#: The target's arms, as the subject of a sentence about what they will do.
+MOVERS = {
+    SIM: "the simulation's arm",
+    REAL: "the real arm",
+    TWIN: "both arms (the simulation's and the real one)",
+}
 
 #: The twin mode each target is run in.
 MODES = {SIM: TwinMode.MODE_SIM, REAL: TwinMode.MODE_REAL, TWIN: TwinMode.MODE_VALIDATED}
@@ -86,13 +97,19 @@ def running_physical(plan: Plan, running: Collection[str]) -> list[str]:
     return [side for side in physical_sides(plan) if side in running]
 
 
-def available(running: Collection[str], commandable: Collection[str]) -> list[int]:
-    """Return the targets every side of which runs and is commandable now, in panel order."""
-    return [
-        target
-        for target in ALL
-        if all(side in running and side in commandable for side in SIDES[target])
-    ]
+def available(running: Collection[str]) -> list[int]:
+    """Return the targets every side of which runs, in panel order (ADR-0075 decision 4).
+
+    Commandability is not asked here: a physical side that has not found its
+    zero still offers its targets, so Start robot - the request that zeroes
+    it - can be sent to them. Home and Start program ask `not_commandable`.
+    """
+    return [target for target in ALL if all(side in running for side in SIDES[target])]
+
+
+def not_commandable(target: int, commandable: Collection[str]) -> list[str]:
+    """Return the sides of ``target`` the twin does not call commandable now (R-19)."""
+    return [side for side in SIDES.get(target, ()) if side not in commandable]
 
 
 def refusal(target: int, offered: Sequence[int]) -> str | None:
@@ -100,9 +117,8 @@ def refusal(target: int, offered: Sequence[int]) -> str | None:
 
     0 is unset and the server never reads it as a default (the panel may
     preselect SIM, ADR-0072 amendment 2026-10-15); a value no constant names is
-    refused by its number; a target the deployment does not offer now - its
-    sides are not running, or a physical one is not ready - is refused naming
-    what is offered.
+    refused by its number; a target the deployment does not offer - a side it
+    commands does not run - is refused naming what is offered.
     """
     if target == 0:
         return (
@@ -114,7 +130,7 @@ def refusal(target: int, offered: Sequence[int]) -> str | None:
     if target not in offered:
         named = ", ".join(LABELS[item] for item in offered) or "nothing"
         return (
-            f"{LABELS[target]} is not offered now: a side it commands does not run, or is "
-            f"not ready to be commanded. Offered: {named}"
+            f"{LABELS[target]} is not offered now: a side it commands does not run. "
+            f"Offered: {named}"
         )
     return None

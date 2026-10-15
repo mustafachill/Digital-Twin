@@ -28,9 +28,9 @@ import time
 
 from cite_bringup.program.console_machine import (
     ConsoleMachine,
-    HOME_PROMPT,
+    home_prompt,
     PLACE_PROMPT,
-    START_PROMPT,
+    start_prompt,
     VALIDATED_PLACE_PROMPT,
 )
 from cite_bringup.program.home import StartPose
@@ -43,7 +43,7 @@ from cite_bringup.program.steps import (
     StepFailed,
     track,
 )
-from cite_bringup.program.targets import ALL, SIM, TWIN
+from cite_bringup.program.targets import ALL, label as targets_label, REAL, SIDES as TARGET_SIDES, SIM, TWIN
 from cite_interfaces.msg import ConsoleState, TwinMode
 import pytest
 
@@ -189,10 +189,15 @@ class Rig:
         check_scale=speed_scale,
         minimum=0.0,
         available=ALL,
+        commandable=SIDES,
     ) -> None:
         self.calls: list[tuple] = []
         #: What the deployment offers now (`targets.available`).
         self.available = list(available)
+        #: What the twin calls commandable now (`TwinSides.commandable`).
+        self.commandable = list(commandable)
+        #: The sides each initialization was asked for (ADR-0075).
+        self.initialized: list[tuple] = []
         #: Which target each target-aware call was asked with, and which sides
         #: were measured and had their custody read.
         self.targets_seen: list[tuple] = []
@@ -240,11 +245,11 @@ class Rig:
             start=START,
             steps=PROGRAM,
             make_cell=self._make_cell,
-            initialize_physical=initialize
-            or (lambda say, interrupted: self.calls.append(("initialize",))),
+            initialize_physical=initialize or self._initialize,
             place_parts=self._place_parts,
             set_belts=self._set_belts,
             available=lambda: self.available,
+            commandable=lambda: self.commandable,
             heard_twin_mode=lambda: self.heard,
             terminal_client=lambda: self.terminal,
             check_scale=lambda scale, target: (
@@ -254,6 +259,10 @@ class Rig:
             on_change=self._on_change,
             log=lambda text: None,
         )
+
+    def _initialize(self, sides, say, interrupted) -> None:
+        self.calls.append(("initialize",))
+        self.initialized.append(tuple(sides))
 
     def _make_cell(self, speed, interrupted) -> FakeCell:
         self.speeds.append(speed)
@@ -295,14 +304,18 @@ class Rig:
         outcome = self.machine.confirm_operator()
         assert outcome.success, outcome.detail
 
-    def started(self) -> "Rig":
-        if self.machine.physical:
-            join = self.in_thread(self.machine.start_robot)
+    def started(self, target: int | None = None) -> "Rig":
+        """Start ``target``: the twin where it is offered, else the first target offered."""
+        if target is None:
+            target = TWIN if TWIN in self.available else self.available[0]
+        if any(side in self.machine.physical for side in TARGET_SIDES[target]):
+            join = self.in_thread(lambda: self.machine.start_robot(target))
             self.answer()
             assert join().success
         else:
-            assert self.machine.start_robot().success
+            assert self.machine.start_robot(target).success
         self.calls.clear()
+        self.initialized.clear()
         return self
 
     def homed(self) -> "Rig":
@@ -361,12 +374,14 @@ def test_nothing_but_start_robot_is_accepted_before_it_succeeds() -> None:
     assert rig.machine.snapshot().state == ConsoleState.NOT_STARTED
 
 
-def test_start_robot_on_a_simulated_pair_initializes_then_reads_custody() -> None:
+def test_start_robot_on_a_simulated_pair_reads_custody_and_initializes_nothing() -> None:
     rig = Rig()
-    outcome = rig.machine.start_robot()
+    outcome = rig.machine.start_robot(TWIN)
     assert outcome.success
-    # No question on an all-simulated pair, and no mode read.
-    assert rig.calls == [("initialize",), ("refuse_if_holding",), ("close",)]
+    # No question on an all-simulated pair, no mode read, and no physical side
+    # to initialize (ADR-0075).
+    assert rig.calls == [("refuse_if_holding",), ("close",)]
+    assert rig.custody_sides == [("plant", "counterpart")]
     assert rig.asked() == 0
     # Start robot's cell is never handed a step: it is built with no scale.
     assert rig.speeds == [None]
@@ -378,7 +393,7 @@ def test_start_robot_on_a_simulated_pair_initializes_then_reads_custody() -> Non
 
 def test_a_failed_start_is_a_fault_and_the_robot_is_not_started() -> None:
     rig = Rig(holding=True)
-    outcome = rig.machine.start_robot()
+    outcome = rig.machine.start_robot(TWIN)
     assert not outcome.success
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.FAULT
@@ -409,7 +424,7 @@ def test_one_request_at_a_time() -> None:
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
     assert "in progress" in rig.machine.motion_refusal(0.5, None, TWIN)
     assert not rig.machine.home(0.5, TWIN).success
-    assert not rig.machine.start_robot().success
+    assert not rig.machine.start_robot(TWIN).success
     assert rig.machine.stop().success
     join()
 
@@ -419,10 +434,12 @@ def test_one_request_at_a_time() -> None:
 
 def test_a_physical_start_reads_sim_and_asks_the_operator_before_initializing() -> None:
     rig = Rig(physical=["counterpart"])
-    join = rig.in_thread(rig.machine.start_robot)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
     snapshot = rig.machine.snapshot()
-    assert snapshot.prompt == START_PROMPT
+    # R-12: the prompt names the target and its physical side, then what to do.
+    assert snapshot.prompt.endswith(start_prompt(TWIN))
+    assert "Target: the twin" in snapshot.prompt and "counterpart" in snapshot.prompt
     # SIM was held (S2-01); nothing has been initialized yet.
     assert rig.calls == [("hold_sim",)]
     assert rig.machine.confirm_operator().success
@@ -442,7 +459,7 @@ def test_a_physical_start_reads_sim_and_asks_the_operator_before_initializing() 
 def test_a_physical_start_is_refused_when_the_twin_is_not_in_sim() -> None:
     rig = Rig(physical=["counterpart"])
     rig.mode = TwinMode.MODE_VALIDATED
-    outcome = rig.machine.start_robot()
+    outcome = rig.machine.start_robot(TWIN)
     assert not outcome.success
     assert rig.asked() == 0
     assert ("initialize",) not in rig.calls
@@ -485,7 +502,7 @@ def test_a_commanding_mode_this_console_did_not_enter_refuses_every_request() ->
         rig.heard = mode
         assert "did not ask for" in rig.machine.motion_refusal(0.1, None, TWIN)
         assert "did not ask for" in rig.machine.motion_refusal(0.1, 1, TWIN)
-        assert not rig.machine.start_robot().success
+        assert not rig.machine.start_robot(TWIN).success
         assert not rig.machine.home(0.1, TWIN).success
         assert not rig.machine.run_program(0.1, 1, TWIN).success
     assert rig.speeds == []
@@ -503,7 +520,7 @@ def test_a_commanding_mode_on_an_all_simulated_pair_refuses_nothing() -> None:
 def test_a_stop_during_start_robot_stays_stopping_until_the_initializer_ends() -> None:
     reached, ended = threading.Event(), threading.Event()
 
-    def initialize(say, interrupted) -> None:
+    def initialize(sides, say, interrupted) -> None:
         reached.set()
         deadline = time.monotonic() + SETTLE_S
         while not interrupted():
@@ -514,8 +531,9 @@ def test_a_stop_during_start_robot_stays_stopping_until_the_initializer_ends() -
         assert ended.wait(SETTLE_S)
         raise Interrupted("stopped")
 
-    rig = Rig(initialize=initialize)
-    join = rig.in_thread(rig.machine.start_robot)
+    rig = Rig(physical=["counterpart"], initialize=initialize)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
+    rig.answer()
     assert reached.wait(SETTLE_S)
     assert rig.machine.stop().success
     time.sleep(0.05)
@@ -609,13 +627,13 @@ def test_start_robot_leaves_a_plant_only_deployments_start_alone() -> None:
     rig.away = [None]
     assert rig.machine.home(1.0, SIM).success
     assert rig.machine.snapshot().plant_at_start
-    assert rig.machine.start_robot().success
+    assert rig.machine.start_robot(SIM).success
     assert rig.machine.snapshot().plant_at_start
 
 
 def test_start_robot_forgets_only_the_physical_sides_start() -> None:
     rig = Rig(physical=["counterpart"]).homed()
-    join = rig.in_thread(rig.machine.start_robot)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
     rig.answer()
     assert join().success
     snapshot = rig.machine.snapshot()
@@ -624,15 +642,18 @@ def test_start_robot_forgets_only_the_physical_sides_start() -> None:
 
 def test_a_started_robot_says_so_and_what_comes_next() -> None:
     rig = Rig()
-    assert rig.machine.start_robot().success
-    assert rig.machine.snapshot().step == "robot started - choose a target, then Home"
+    assert rig.machine.start_robot(TWIN).success
+    assert rig.machine.snapshot().step == (
+        "robot started for the twin (simulation and real arm) - Home with this target"
+    )
 
     rig = Rig(physical=["counterpart"])
-    join = rig.in_thread(rig.machine.start_robot)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
     rig.answer()
     assert join().success
     assert rig.machine.snapshot().step == (
-        "robot started (initialized: counterpart) - choose a target, then Home"
+        "robot started for the twin (simulation and real arm) (initialized: counterpart) - "
+        "Home with this target"
     )
 
 
@@ -714,7 +735,7 @@ def test_a_physical_home_asks_the_operator_then_returns_to_sim() -> None:
     rig.away = [None]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
     rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
-    assert rig.machine.snapshot().prompt.endswith(HOME_PROMPT)
+    assert rig.machine.snapshot().prompt.endswith(home_prompt(TWIN))
     assert rig.calls[-1] == ("carriage_refusal", True)
     assert rig.machine.confirm_operator().success
     assert join().success
@@ -927,9 +948,11 @@ def test_a_failed_step_is_a_fault_and_nothing_homes() -> None:
     after = rig.calls[rig.calls.index(("move", "place")) + 1:]
     assert ("cancel",) in after and ("belts", False) in after
     assert [call for call in after if call[0] in ("move", "track", "grip")] == []
-    # A FAULT is left by Start robot and by nothing else.
-    assert "FAULT" in rig.machine.motion_refusal(1.0, None, TWIN)
-    assert rig.machine.start_robot().success
+    # A FAULT is left by Start robot and by nothing else: it unstarted every
+    # side (ADR-0075).
+    assert "Start robot" in rig.machine.motion_refusal(1.0, None, TWIN)
+    assert rig.machine.snapshot().started_targets == ()
+    assert rig.machine.start_robot(TWIN).success
     assert rig.machine.snapshot().state == ConsoleState.READY
 
 
@@ -961,7 +984,7 @@ def test_a_belt_that_does_not_confirm_its_stop_is_a_fault() -> None:
 def test_a_stop_during_start_robot_leaves_it_not_started() -> None:
     reached = threading.Event()
 
-    def initialize(say, interrupted) -> None:
+    def initialize(sides, say, interrupted) -> None:
         reached.set()
         deadline = time.monotonic() + SETTLE_S
         while not interrupted():
@@ -969,8 +992,9 @@ def test_a_stop_during_start_robot_leaves_it_not_started() -> None:
             time.sleep(0.005)
         raise Interrupted("stopped")
 
-    rig = Rig(initialize=initialize)
-    join = rig.in_thread(rig.machine.start_robot)
+    rig = Rig(physical=["counterpart"], initialize=initialize)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
+    rig.answer()
     assert reached.wait(SETTLE_S)
     assert rig.machine.stop().success
     assert not join().success
@@ -1008,7 +1032,7 @@ def test_stop_in_a_fault_with_the_twin_out_of_sim_asks_for_sim_again() -> None:
 
 def test_stop_in_a_fault_on_an_all_simulated_pair_does_nothing() -> None:
     rig = Rig(holding=True)
-    rig.machine.start_robot()
+    rig.machine.start_robot(TWIN)
     rig.heard = TwinMode.MODE_VALIDATED
     rig.calls.clear()
     assert not rig.machine.stop().success
@@ -1115,7 +1139,7 @@ def test_once_shutdown_began_every_request_is_refused() -> None:
     join()
     assert not rig.machine.snapshot().busy
     for outcome in (
-        rig.machine.start_robot(),
+        rig.machine.start_robot(TWIN),
         rig.machine.home(0.1, TWIN),
         rig.machine.run_program(0.1, 1, TWIN),
         rig.machine.confirm_operator(),
@@ -1166,7 +1190,7 @@ def test_the_node_never_publishes_an_older_snapshot_after_a_newer_one() -> None:
     node.get_clock = lambda: Clock()
     rig = Rig()
     older = rig.machine.snapshot()
-    rig.machine.start_robot()
+    rig.machine.start_robot(TWIN)
     newer = rig.machine.snapshot()
     node._publish(newer)
     node._publish(older)
@@ -1301,7 +1325,7 @@ def test_every_mode_but_sim_this_console_did_not_enter_refuses(mode: int) -> Non
     rig.heard = mode
     refusal = rig.machine.motion_refusal(0.1, 1, TWIN)
     assert refusal is not None and "did not ask for" in refusal
-    assert not rig.machine.start_robot().success
+    assert not rig.machine.start_robot(TWIN).success
     assert rig.speeds == []
 
 
@@ -1327,7 +1351,7 @@ def test_a_refused_goal_is_published_as_last_error_and_changes_no_state() -> Non
     assert published.last_error == f"refused: {refusal}"
     assert published.state == ConsoleState.NOT_STARTED and not published.busy
     # The next request that begins clears it, as any error.
-    assert rig.machine.start_robot().success
+    assert rig.machine.start_robot(TWIN).success
     assert rig.machine.snapshot().last_error == ""
 
 
@@ -1344,7 +1368,7 @@ def test_every_refused_request_publishes_its_reason() -> None:
         assert snapshot.last_error == f"refused: {outcome.detail}"
         assert snapshot.state == ConsoleState.NOT_STARTED
     rig.terminal = "/fixed_program"
-    outcome = rig.machine.start_robot()
+    outcome = rig.machine.start_robot(TWIN)
     assert not outcome.success
     assert rig.machine.snapshot().last_error == f"refused: {outcome.detail}"
 
@@ -1357,7 +1381,7 @@ def test_a_refusal_in_fault_keeps_the_fault_cause() -> None:
     cause = rig.machine.snapshot().last_error
     assert rig.machine.snapshot().state == ConsoleState.FAULT and "move place" in cause
     rig.terminal = "/fixed_program"
-    outcome = rig.machine.start_robot()
+    outcome = rig.machine.start_robot(TWIN)
     assert not outcome.success
     published = rig.snapshots[-1]
     assert published.state == ConsoleState.FAULT
@@ -1367,7 +1391,7 @@ def test_a_refusal_in_fault_keeps_the_fault_cause() -> None:
     assert rig.snapshots[-1].last_error == f"refused: again (fault: {cause})"
     # Leaving FAULT drops it: a refusal in READY carries none.
     rig.terminal = None
-    assert rig.machine.start_robot().success
+    assert rig.machine.start_robot(TWIN).success
     assert not rig.machine.confirm_operator().success
     assert "fault:" not in rig.machine.snapshot().last_error
 
@@ -1384,7 +1408,7 @@ def test_a_terminal_client_on_the_graph_refuses_every_motion_request() -> None:
     for outcome in (
         rig.machine.home(1.0, TWIN),
         rig.machine.run_program(1.0, 1, TWIN),
-        rig.machine.start_robot(),
+        rig.machine.start_robot(TWIN),
     ):
         assert not outcome.success and "terminal program client" in outcome.detail
     # Refused before anything was touched.
@@ -1739,3 +1763,195 @@ def test_an_all_simulated_pair_runs_both_phases_without_a_prompt() -> None:
     assert outcome.cycles_completed == 2
     assert rig.asked() == 0
     assert rig.moves() == ["pick", "place"] * 3
+
+
+# --- ADR-0075: Start robot and Home act on the selected target ----------------
+
+
+def test_start_robot_on_the_simulation_of_a_hardware_pair_asks_and_initializes_nothing() -> None:
+    """Decision 1: a simulation start never touches the real arm."""
+    rig = Rig(physical=["counterpart"])
+    outcome = rig.machine.start_robot(SIM)
+    assert outcome.success, outcome.detail
+    assert rig.asked() == 0 and rig.initialized == []
+    # No hold on SIM for a prompt, and custody read for the plant alone.
+    assert rig.calls == [("refuse_if_holding",), ("close",)]
+    assert rig.custody_sides == [("plant",)]
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and snapshot.robot_started
+    assert snapshot.started_targets == (SIM,)
+
+
+def test_start_robot_on_the_real_arm_asks_then_initializes_the_counterpart_alone() -> None:
+    rig = Rig(physical=["counterpart"])
+    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
+    prompt = rig.machine.snapshot().prompt
+    # The prompt names the target's arms, never both arms (decision 1).
+    assert prompt.endswith(start_prompt(REAL))
+    assert "Target: the real arm" in prompt and "the real arm" in start_prompt(REAL)
+    assert "both arms" not in prompt
+    assert rig.initialized == []
+    assert rig.machine.confirm_operator().success
+    assert join().success
+    assert rig.initialized == [("counterpart",)]
+    assert rig.custody_sides == [("counterpart",)]
+    assert rig.machine.snapshot().started_targets == (REAL,)
+
+
+def test_start_robot_on_the_twin_starts_both_sides() -> None:
+    rig = Rig(physical=["counterpart"])
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
+    rig.answer()
+    assert join().success
+    assert rig.initialized == [("counterpart",)]
+    assert rig.custody_sides == [("plant", "counterpart")]
+    # Every available target whose sides are all started.
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+
+
+def test_start_robot_needs_an_offered_target_and_never_defaults_one() -> None:
+    rig = Rig(physical=["counterpart"], available=(SIM,))
+    for target, words in ((0, "no target was sent"), (9, "is not a target"),
+                          (REAL, "is not offered now")):
+        outcome = rig.machine.start_robot(target)
+        assert not outcome.success and words in outcome.detail
+    assert rig.calls == [] and rig.speeds == []
+    assert rig.machine.snapshot().state == ConsoleState.NOT_STARTED
+
+
+def test_home_and_start_program_need_their_target_started() -> None:
+    """Decision 3: a goal for a target not in started_targets is refused, naming Start robot."""
+    rig = Rig(physical=["counterpart"]).started(SIM)
+    rig.speeds.clear()
+    for target in (REAL, TWIN):
+        refusal = rig.machine.motion_refusal(0.1, None, target)
+        assert refusal is not None and "Start robot with this target" in refusal
+        assert targets_label(target) in refusal
+        assert not rig.machine.home(0.1, target).success
+        assert not rig.machine.run_program(0.1, 1, target).success
+    assert rig.calls == [] and rig.speeds == []
+    # The started target is accepted.
+    assert rig.machine.motion_refusal(1.0, None, SIM) is None
+    rig.away = [None]
+    assert rig.machine.home(1.0, SIM).success
+    assert rig.initialized == [] and rig.asked() == 0
+
+
+def test_a_home_on_the_real_arm_names_it_and_initializes_it_alone() -> None:
+    rig = Rig(physical=["counterpart"]).started(REAL)
+    rig.away = [None]
+    join = rig.in_thread(lambda: rig.machine.home(0.1, REAL))
+    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
+    prompt = rig.machine.snapshot().prompt
+    assert prompt.endswith(home_prompt(REAL))
+    assert "the real arm will move" in prompt and "both arms" not in prompt
+    assert rig.machine.confirm_operator().success
+    assert join().success
+    assert rig.initialized == [("counterpart",)]
+    assert rig.measured_sides == [("counterpart",)]
+
+
+def test_validate_then_run_needs_the_twin_started() -> None:
+    rig = Rig(physical=["counterpart"]).started(SIM)
+    rig.speeds.clear()
+    refusal = rig.machine.validation_refusal(0.1, 1)
+    assert refusal is not None and "Start robot with this target" in refusal
+    assert not rig.machine.validate_then_run(0.1, 1).success
+    assert rig.speeds == []
+
+
+def test_a_target_offered_before_its_track_is_zeroed_accepts_start_robot_alone() -> None:
+    """Decision 4: offered is not commandable; no motion is asked of an unzeroed track."""
+    rig = Rig(physical=["counterpart"], commandable=("plant",))
+    assert rig.machine.snapshot().available_targets == (SIM, REAL, TWIN)
+    rig.started(TWIN)
+    rig.speeds.clear()
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+    for target in (REAL, TWIN):
+        refusal = rig.machine.motion_refusal(0.1, None, target)
+        assert refusal is not None and "not ready to be commanded" in refusal
+        assert not rig.machine.home(0.1, target).success
+        assert not rig.machine.run_program(0.1, 1, target).success
+    assert "not ready to be commanded" in rig.machine.validation_refusal(0.1, 1)
+    assert rig.calls == [] and rig.speeds == []
+    # The simulation is commandable all the while.
+    assert rig.machine.motion_refusal(0.1, None, SIM) is None
+    # Once the twin calls the track commandable, Home is accepted.
+    rig.commandable = list(SIDES)
+    assert rig.machine.motion_refusal(0.1, None, TWIN) is None
+
+
+def test_a_fault_unstarts_every_side() -> None:
+    rig = Rig(physical=["counterpart"]).started(TWIN)
+    rig.away = [None]
+    rig.left = [False]
+    join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
+    rig.answer()
+    join()
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.FAULT
+    assert snapshot.started_targets == () and not snapshot.robot_started
+    # Start robot on the simulation is a way back, and starts it alone.
+    rig.heard = TwinMode.MODE_SIM
+    assert rig.machine.start_robot(SIM).success
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and snapshot.started_targets == (SIM,)
+
+
+def test_a_stopped_start_unstarts_its_target_and_leaves_the_others_started() -> None:
+    reached = threading.Event()
+
+    def initialize(sides, say, interrupted) -> None:
+        reached.set()
+        deadline = time.monotonic() + SETTLE_S
+        while not interrupted():
+            assert time.monotonic() < deadline, "the initialization was never stopped"
+            time.sleep(0.005)
+        raise Interrupted("stopped")
+
+    rig = Rig(physical=["counterpart"], initialize=initialize).started(SIM)
+    join = rig.in_thread(lambda: rig.machine.start_robot(TWIN))
+    rig.answer()
+    assert reached.wait(SETTLE_S)
+    # While the twin starts again, its sides are not started.
+    assert rig.machine.snapshot().started_targets == ()
+    assert rig.machine.stop().success
+    assert not join().success
+    snapshot = rig.machine.snapshot()
+    # The plant was cleared by the new Start robot on it, exactly as the one
+    # flag was: the stop leaves nothing started, so nothing is accepted.
+    assert snapshot.state == ConsoleState.NOT_STARTED and not snapshot.robot_started
+
+
+def test_a_stopped_real_start_leaves_the_simulation_started() -> None:
+    reached = threading.Event()
+
+    def initialize(sides, say, interrupted) -> None:
+        reached.set()
+        deadline = time.monotonic() + SETTLE_S
+        while not interrupted():
+            assert time.monotonic() < deadline, "the initialization was never stopped"
+            time.sleep(0.005)
+        raise Interrupted("stopped")
+
+    rig = Rig(physical=["counterpart"], initialize=initialize).started(SIM)
+    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+    rig.answer()
+    assert reached.wait(SETTLE_S)
+    assert rig.machine.stop().success
+    assert not join().success
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and snapshot.started_targets == (SIM,)
+
+
+def test_started_targets_are_only_the_offered_ones() -> None:
+    rig = Rig(available=(SIM,)).started(SIM)
+    assert rig.machine.snapshot().started_targets == (SIM,)
+
+
+def test_start_robot_resets_the_tables_of_its_targets_simulated_sides_alone() -> None:
+    rig = Rig()
+    rig.machine._parts.clear()  # as if a run had cleared and spawned nothing
+    rig.started(SIM)
+    assert rig.machine._parts == {"plant"}

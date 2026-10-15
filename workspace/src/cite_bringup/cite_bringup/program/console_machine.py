@@ -19,19 +19,24 @@ the operator's go-ahead and Stop; this class decides every one of them. Home
 and Start program each name a TARGET (ADR-0072, `program.targets`) - the
 simulation, the real arm or the twin - which is never defaulted and must be one
 the running deployment offers now; every gate below that concerns a physical
-side applies when the target commands one, and only then. It
-holds the refusals - nothing before Start robot, one request at a time, a speed
-scale sent with every goal and never defaulted (`sides.required_speed_scale`'s
-rule, floor included, where a side is physical), Start program only with both
-arms known to be at the program's start, the go-ahead only while it is asked for
+side applies when the target commands one, and only then. Start robot names a
+target too, and starts that target's sides alone (ADR-0075): "started" is kept
+per side, and Home and Start program are accepted only for a target every side
+of which is started. It holds the refusals - nothing for a target before
+Start robot for it, one request at a time, a speed scale sent with every goal
+and never defaulted (`sides.required_speed_scale`'s rule, floor included, where
+a side is physical), Start program only with every arm of its target known to
+be at the program's start, the go-ahead only while it is asked for
 and only while the twin is heard in SIM, nothing while the twin is in any
 mode but SIM that this console did not enter, and nothing once the process is
 closing - and it runs the program's ONE sequencer, `program.cycle`, the same
 `python3 -m cite_bringup.program` and `program.home` run:
 
-* **Start robot**: `cycle.start_robot` - on a physical side the twin's mode read
-  as SIM and the operator asked to clear the cell (the initializer may home the
-  track), then `home.initialize` on every physical side, then custody.
+* **Start robot**: `cycle.start_robot` on the target's sides - where the target
+  commands a physical side the twin's mode read as SIM and the operator asked
+  to clear the cell (the initializer may home the track), then `home.initialize`
+  on that side alone; then the custody of the target's sides. A simulation
+  start asks nothing and initializes nothing.
 * **Home**: `cycle.home` - on a physical side SIM read, the operator asked to
   clear the cell, `home.bring_to_start` through the twin, then SIM again.
 * **Start program**, per cycle: a work-piece on every simulated side's table
@@ -64,7 +69,7 @@ the node calls them from handlers in a callback group of their own.
 
 from __future__ import annotations
 
-from collections.abc import Callable, MutableSet, Sequence
+from collections.abc import Callable, Collection, MutableSet, Sequence
 from dataclasses import dataclass, field
 import threading
 import time
@@ -81,12 +86,19 @@ from cite_bringup.program.steps import (
 )
 from cite_interfaces.msg import ConsoleState, TwinMode
 
-#: What the operator is asked before Start robot on a physical side: the
-#: initializer may home the physical track and bring the carriage to its start.
-START_PROMPT = (
-    "Clear the cell: starting the robot enables it, and the physical track may home and "
-    "move to its start. Then confirm in the panel."
-)
+
+
+def start_prompt(target: int) -> str:
+    """Return what the operator is asked before Start robot on ``target`` (ADR-0075).
+
+    Asked only where the target commands a physical side: the initializer may
+    home the physical track and bring the carriage to its start.
+    """
+    return (
+        f"Clear the cell: starting {targets.label(target)} enables {targets.MOVERS[target]}, "
+        "and the physical track may home and move to its start. Then confirm in the panel."
+    )
+
 
 #: What the operator is asked before a run on a physical side: the terminal's
 #: `operator.PLACE_PROMPT`, answered in the panel instead.
@@ -100,12 +112,18 @@ VALIDATED_PLACE_PROMPT = (
     f"cycle is safe. {PLACE_PROMPT}"
 )
 
-#: What the operator is asked before a home on a physical side:
-#: `home.HOME_PROMPT`, answered in the panel instead.
-HOME_PROMPT = (
-    "Clear the cell: the track may home and move to its start, and both arms will move. "
-    "Then confirm in the panel."
-)
+
+def home_prompt(target: int) -> str:
+    """Return what the operator is asked before a home on ``target`` (ADR-0075).
+
+    `home.HOME_PROMPT`, answered in the panel instead, naming the arms of the
+    target rather than both arms whatever it is.
+    """
+    return (
+        "Clear the cell: the track may home and move to its start, and "
+        f"{targets.MOVERS[target]} will move. Then confirm in the panel."
+    )
+
 
 #: Each state's name, for the refusals and the log.
 STATE_NAMES = {
@@ -139,6 +157,7 @@ class Snapshot:
 
     sequence: int
     state: int
+    #: At least one side is started (ADR-0075).
     robot_started: bool
     busy: bool
     #: Per side: brought to, or ended a full cycle at, the program's start, and
@@ -159,6 +178,9 @@ class Snapshot:
     last_error: str
     speed_scale: float
     minimum_speed_scale: float
+    #: Those of the available targets every side of which is started
+    #: (ADR-0075): the targets Home and Start program are accepted for.
+    started_targets: tuple[int, ...] = ()
     #: Whether ValidateThenRun is offered: the twin target is (ADR-0073).
     validate_then_run_offered: bool = False
     #: `ConsoleState.PHASE_*` of the validate-then-run request in progress.
@@ -244,10 +266,10 @@ class _Observed:
             raise
 
 
-def started_step(physical: Sequence[str]) -> str:
-    """Return the step Start robot publishes once it has succeeded (ADR-0071)."""
+def started_step(target: int, physical: Sequence[str]) -> str:
+    """Return the step Start robot on ``target`` publishes once it has succeeded (ADR-0075)."""
     initialized = f" (initialized: {', '.join(physical)})" if physical else ""
-    return f"robot started{initialized} - choose a target, then Home"
+    return f"robot started for {targets.label(target)}{initialized} - Home with this target"
 
 
 class _NotAtStart(Exception):
@@ -261,8 +283,9 @@ class ConsoleMachine:
     twin at ``speed`` that raises `Interrupted` once ``interrupted()`` is true,
     and ``speed`` None for a cell that is never handed a step; the caller
     closes it. ``physical`` is the RUNNING physical sides
-    (`targets.running_physical`, R-16). ``initialize_physical(say,
-    interrupted)`` is `home.initialize` for those sides.
+    (`targets.running_physical`, R-16). ``initialize_physical(sides, say,
+    interrupted)`` is `home.initialize` for ``sides``, which are always the
+    running physical sides of ONE request's target (ADR-0075).
     ``place_parts(sides, may_hold, say, interrupted)`` puts a work-piece on
     every simulated side of ``sides`` (`program.part`), clearing the sides in
     ``may_hold`` first. ``set_belts(running, say, interrupted,
@@ -271,8 +294,10 @@ class ConsoleMachine:
     returns a goal's scale or raises `ValueError` (`sides.required_speed_scale`
     for the target's sides, R-25), and ``minimum_speed_scale`` is the floor it
     applies to a target with a physical side, 0 for none. ``available()`` is
-    the targets the running deployment offers now (`targets.available`, read
-    from the twin's `TwinSides`, R-19).
+    the targets the running deployment offers (`targets.available`: every
+    side running, ADR-0075 decision 4), and ``commandable()`` the sides the
+    twin says may be commanded now (`TwinSides.commandable`, R-19): Home and
+    Start program are refused for a target with a side outside it.
     ``heard_twin_mode`` is the twin's mode as last heard on its topic, None
     before any. ``terminal_client`` says which terminal program client is on
     the graph, None for none: while one is, every request but the return to
@@ -289,7 +314,9 @@ class ConsoleMachine:
         start: StartPose,
         steps: Sequence[Step],
         make_cell: Callable[[float | None, Callable[[], bool]], object],
-        initialize_physical: Callable[[Callable[[str], None], Callable[[], bool]], None],
+        initialize_physical: Callable[
+            [Sequence[str], Callable[[str], None], Callable[[], bool]], None
+        ],
         place_parts: Callable[
             [Sequence[str], MutableSet[str], Callable[[str], None], Callable[[], bool]], None
         ],
@@ -297,6 +324,7 @@ class ConsoleMachine:
             [bool, Callable[[str], None], Callable[[], bool] | None, float | None], bool
         ],
         available: Callable[[], Sequence[int]],
+        commandable: Callable[[], Collection[str]],
         heard_twin_mode: Callable[[], int | None] = lambda: None,
         terminal_client: Callable[[], str | None] = lambda: None,
         check_scale: Callable[[float, int], float] = lambda scale, target: speed_scale(scale),
@@ -314,6 +342,7 @@ class ConsoleMachine:
         self._place_parts = place_parts
         self._set_belts = set_belts
         self._available = available
+        self._commandable = commandable
         self._heard_twin_mode = heard_twin_mode
         self._terminal_client = terminal_client
         self._check_scale = check_scale
@@ -325,7 +354,9 @@ class ConsoleMachine:
         self._changed = threading.Condition(self._lock)
         self._stop = threading.Event()
         self._state = ConsoleState.NOT_STARTED
-        self._started = False
+        #: The sides Start robot started and nothing has undone since
+        #: (ADR-0075): a FAULT clears every one, a Start robot its target's.
+        self._started_sides: set[str] = set()
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
@@ -429,47 +460,67 @@ class ConsoleMachine:
 
     # ------------------------------------------------------------ requests
 
-    def start_robot(self) -> Outcome:
-        """Enable the robot: SIM and the cell cleared on a physical side, initialize, custody."""
-        refusal = self._begin(ConsoleState.STARTING, self._refusal, 0.0)
+    def start_robot(self, target: int) -> Outcome:
+        """Start ``target``'s sides alone: SIM and the cell cleared, initialize, custody.
+
+        ADR-0075 decision 1. The target is never defaulted and must be offered
+        (`targets.refusal`). A target with no physical side asks nothing and
+        initializes nothing; one with a physical side reads the twin's mode as
+        SIM, asks the operator's go-ahead with a prompt naming the target, and
+        initializes that side alone. Start robot never leaves SIM.
+        """
+        refusal = self._begin(
+            ConsoleState.STARTING,
+            lambda: targets.refusal(target, list(self._available())),
+            0.0,
+        )
         if refusal is not None:
             self.record_refusal(refusal)
             return Outcome(False, refusal)
+        sides = targets.SIDES[target]
+        physical = self._physical_in(target)
         with self._lock:
-            # Nothing this console placed is known any more, and nothing it
-            # knew of the place of the arms it initializes: only a running
-            # physical side is initialized, so only its start is forgotten.
-            self._parts = set(self._simulated)
-            for side in self._physical:
+            # A new Start robot on a side clears its started flag until it
+            # succeeds (ADR-0075 decision 2). Nothing this console placed on
+            # the target's simulated sides is known any more, and nothing of
+            # the place of the arm it initializes: only that one's start is
+            # forgotten.
+            self._started_sides.difference_update(sides)
+            self._parts.update(side for side in sides if side in self._simulated)
+            for side in physical:
                 self._at_start[side] = False
         say = self._sayer()
         try:
-            say("starting the robot")
+            say(f"starting the robot for {targets.label(target)}")
             cell = self._make_cell(None, self.interrupted)
             observed = _Observed(cell, self._set_entered)
             try:
                 cycle.start_robot(
                     observed,
-                    physical=self._physical,
+                    target=target,
+                    physical=physical,
                     say=say,
                     await_operator=self._awaiter(observed),
+                    # The target's physical sides alone (ADR-0075).
                     initialize_physical=lambda: self._initialize_physical(
-                        say, self.interrupted
+                        physical, say, self.interrupted
                     ),
-                    prompt=START_PROMPT,
+                    prompt=start_prompt(target),
                 )
             finally:
                 cell.close()
         except Interrupted:
-            self._end(ConsoleState.NOT_STARTED, started=False)
-            return Outcome(False, "stopped before the robot was started")
+            self._end(ConsoleState.NOT_STARTED)
+            return Outcome(False, f"stopped before {targets.label(target)} was started")
         except StepFailed as failure:
-            return self._fault(f"Start robot failed: {failure}", started=False)
+            return self._fault(f"Start robot failed: {failure}")
         except Exception as error:  # noqa: BLE001 - never leave the console busy
-            return self._fault(f"Start robot failed unexpectedly: {error!r}", started=False)
-        say(started_step(self._physical))
-        self._end(ConsoleState.READY, started=True)
-        return Outcome(True, "the robot is started; Home is accepted")
+            return self._fault(f"Start robot failed unexpectedly: {error!r}")
+        say(started_step(target, physical))
+        self._end(ConsoleState.READY, started=sides)
+        return Outcome(
+            True, f"{targets.label(target)} is started; Home with this target is accepted"
+        )
 
     def home(
         self,
@@ -516,11 +567,11 @@ class ConsoleMachine:
                     # Only a target with a physical side initializes one; the
                     # simulation calls no vendor service at all (R-03).
                     initialize_physical=(
-                        (lambda: self._initialize_physical(say, self.interrupted))
+                        (lambda: self._initialize_physical(physical, say, self.interrupted))
                         if physical
                         else (lambda: None)
                     ),
-                    prompt=HOME_PROMPT,
+                    prompt=home_prompt(target),
                 )
             finally:
                 cell.close()
@@ -955,8 +1006,22 @@ class ConsoleMachine:
             )
         if cycles is not None and cycles < 1:
             return f"cycles must be at least 1, not {cycles}; 0 is not read as 'forever'"
-        if not self._started:
-            return "Start robot has not succeeded, so nothing else is accepted"
+        unstarted = [side for side in targets.SIDES[target] if side not in self._started_sides]
+        if unstarted:
+            return (
+                f"{targets.label(target)} is not started ({', '.join(unstarted)}): Start robot "
+                "with this target first; nothing else is accepted for it (ADR-0075)"
+            )
+        # Offered is not commandable (ADR-0075 decision 4): a physical track
+        # that has not found its zero accepts Start robot alone, the request
+        # that zeroes it. No motion is asked of it before (R-19).
+        unready = targets.not_commandable(target, self._commandable())
+        if unready:
+            return (
+                f"{targets.label(target)} is not ready to be commanded: the twin does not call "
+                f"{', '.join(unready)} commandable (a physical track that has not found its "
+                "zero). Start robot with this target initializes it"
+            )
         refusal = self._refusal()
         if refusal is not None:
             return refusal
@@ -982,7 +1047,7 @@ class ConsoleMachine:
             return (
                 "Validate then run needs the twin: it runs on the simulation, then on the "
                 "simulation and the real arm together, and the twin is not offered now (both "
-                "sides must run and the real arm be ready; ADR-0073)"
+                "sides must run; ADR-0073)"
             )
         return self._motion_refusal(scale, cycles, targets.TWIN)
 
@@ -1135,13 +1200,24 @@ class ConsoleMachine:
         self,
         state: int,
         *,
-        started: bool | None = None,
+        started: Sequence[str] = (),
         error: str = "",
         at_start: Sequence[str] = (),
     ) -> None:
+        """Release the request in ``state``; ``started`` names the sides it started.
+
+        An idle console is READY while any side is started and NOT_STARTED
+        while none is, whichever of the two is asked (ADR-0075 decision 2); a
+        FAULT clears every side's started flag, as it cleared the one flag.
+        """
         with self._lock:
             for side in at_start:
                 self._at_start[side] = True
+            self._started_sides.update(started)
+            if state == ConsoleState.FAULT:
+                self._started_sides.clear()
+            elif state in (ConsoleState.READY, ConsoleState.NOT_STARTED):
+                state = ConsoleState.READY if self._started_sides else ConsoleState.NOT_STARTED
             self._state = state
             self._busy = False
             self._phase = ConsoleState.PHASE_NONE
@@ -1150,17 +1226,15 @@ class ConsoleMachine:
             self._prompt = ""
             self._error = error
             self._fault_cause = error if state == ConsoleState.FAULT else ""
-            if started is not None:
-                self._started = started
             self._changed.notify_all()
             snapshot = self._snapshot()
         self._on_change(snapshot)
 
-    def _fault(self, error: str, started: bool | None = None) -> Outcome:
+    def _fault(self, error: str) -> Outcome:
         self._log(f"FAULT: {error}")
         with self._lock:
             self._forget_the_start()
-        self._end(ConsoleState.FAULT, started=started, error=error)
+        self._end(ConsoleState.FAULT, error=error)
         return Outcome(False, error)
 
     def _finish(
@@ -1333,7 +1407,7 @@ class ConsoleMachine:
         return Snapshot(
             sequence=self._sequence,
             state=self._state,
-            robot_started=self._started,
+            robot_started=bool(self._started_sides),
             busy=self._busy,
             plant_at_start=self._at_start[PLANT_SIDE],
             counterpart_at_start=self._at_start[COUNTERPART_SIDE],
@@ -1350,6 +1424,13 @@ class ConsoleMachine:
             last_error=self._error,
             speed_scale=self._speed,
             minimum_speed_scale=self._minimum_speed_scale,
+            # Derived here, from the one target table, so no panel restates
+            # which sides a target commands (ADR-0075).
+            started_targets=tuple(
+                target
+                for target in available
+                if all(side in self._started_sides for side in targets.SIDES[target])
+            ),
             # Derived here, as the targets are, so no panel restates the rule.
             validate_then_run_offered=targets.TWIN in available,
             phase=self._phase,

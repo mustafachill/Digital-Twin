@@ -39,8 +39,9 @@ commands, which is what every operator gate below keys on.
   was not confirmed (S2-04), and by the console once per request.
 * `home`: the same gate with the home prompt, `home.bring_to_start` on the
   target's sides, and SIM again for any target but the simulation.
-* `start_robot`: the gate without a carriage check - nothing has initialized the
-  track yet - then every RUNNING physical arm's initialization, then custody.
+* `start_robot`: on its target's sides alone (ADR-0075), the gate without a
+  carriage check - nothing has initialized the track yet - then the target's
+  physical arm's initialization, then the custody of the target's sides.
 
 A simulation target asks no one anything and tells no one the cell is safe to
 enter (R-13): it initializes nothing and calls no vendor service (R-03), and it
@@ -120,28 +121,39 @@ class Homing:
 def start_robot(
     cell,
     *,
+    target: int,
     physical: Sequence[str],
     say: Callable[[str], None],
     await_operator: Callable[[str], str],
     initialize_physical: Callable[[], None],
     prompt: str,
 ) -> None:
-    """Enable the robot: on a physical side, SIM held and the cell cleared first.
+    """Enable ``target``'s arms: on a physical side, SIM held and the cell cleared first.
 
-    The initializer may home the physical track and bring the carriage to the
+    ``physical`` is the running physical sides THE TARGET commands (ADR-0075):
+    a simulation start asks no one anything and initializes nothing. The
+    initializer may home the physical track and bring the carriage to the
     program's start, so on a physical side it runs only once the twin is HELD
-    in SIM (`hold_sim`, S2-01) and the operator has confirmed ``prompt``
-    (ADR-0071); the hold is kept until the request ends. The carriage is not
-    judged first: initializing is what gives it a position. Then custody.
-    Raises `StepFailed` or `KeyboardInterrupt`; leaves the twin's mode alone.
+    in SIM (`hold_sim`, S2-01) and the operator has confirmed ``prompt``, which
+    names the target (ADR-0071, R-12); the hold is kept until the request
+    ends. The carriage is not judged first: initializing is what gives it a
+    position. Then the custody of the target's sides. Raises `StepFailed` or
+    `KeyboardInterrupt`; leaves the twin's mode alone - Start robot never
+    leaves SIM.
     """
     try:
         if physical:
             confirm_operator(
-                cell.hold_sim(), physical, None, say, await_operator, lambda: None, prompt=prompt
+                cell.hold_sim(),
+                physical,
+                None,
+                say,
+                await_operator,
+                lambda: None,
+                prompt=targeted_prompt(prompt, target, physical),
             )
-        initialize_physical()
-        cell.refuse_if_holding()
+            initialize_physical()
+        cell.refuse_if_holding(targets.SIDES[target])
     finally:
         # The mode was never changed here, so SIM stands: the hold is let go.
         cell.release_hold()
