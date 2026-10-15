@@ -21,7 +21,8 @@
 // `gz sim` does, so the card is gz-gui's real one: the pass-through is applied
 // to it, and a press at Stop's centre is still Stop's.
 //
-// Headless (`offscreen` platform, `software` Quick backend). The configuration
+// Headless (`offscreen` platform, `software` Quick backend, half scale so that
+// the maximized window holds the whole frame). The configuration
 // carries the panel and nothing else: no 3D view to render, and no console,
 // camera or world names, so the panel joins neither ROS nor gz transport.
 
@@ -33,11 +34,13 @@
 #include <QEventLoop>
 #include <QList>
 #include <QPointF>
+#include <QRectF>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QString>
 #include <QTemporaryDir>
+#include <QTest>
 #include <QtGlobal>
 
 #include <fstream>
@@ -49,6 +52,8 @@
 #include <gz/gui/Plugin.hh>
 
 #include "../src/cell_console.hpp"
+#include "cell_console_test_access.hpp"
+#include "cite_interfaces/msg/console_state.hpp"
 
 namespace
 {
@@ -137,13 +142,48 @@ TEST(PanelInGzGui, ThePassThroughIsAppliedToGzGuisCardAndStopStillTakesItsPress)
   EXPECT_EQ(areas, 2) << "gz-gui's card is not built as the frame expects (GzCard.qml)";
 
   // Stop takes a press at its centre, and the card no longer takes the middle.
+  // Inside the window: one outside it cannot be pressed at all (S-03).
   auto * stop = frame->findChild<QQuickItem *>("stopButton");
   ASSERT_NE(stop, nullptr);
   ASSERT_GT(stop->width(), 0.0);
+  ASSERT_TRUE(
+    QRectF(0.0, 0.0, window->width(), window->height()).contains(
+      stop->mapRectToScene(QRectF(0.0, 0.0, stop->width(), stop->height()))))
+    << "Stop is outside the " << window->width() << "x" << window->height() << " window";
   EXPECT_TRUE(plugin->pressReaches(stop)) << "a press on Stop does not reach Stop";
   const QPointF middle = frame->mapToItem(card,
     QPointF(frame->width() / 4.0, frame->height() / 2.0));
   EXPECT_FALSE(card->contains(middle)) << "gz-gui's card still takes the middle of the view";
+
+  // S-01: the judge's answer held against Qt's own delivery, in gz-gui's real
+  // window. A console running a request enables Stop; a real click at its
+  // centre reaches the plugin's stop().
+  using cite_console_gui::CellConsoleTestAccess;
+  cite_interfaces::msg::ConsoleState running;
+  running.state = cite_interfaces::msg::ConsoleState::RUNNING;
+  running.busy = true;
+  running.robot_started = true;
+  CellConsoleTestAccess::hear(*plugin, running);
+  QCoreApplication::processEvents();
+  ASSERT_TRUE(stop->isEnabled());
+  const QPointF stop_centre =
+    stop->mapToScene(QPointF(stop->width() / 2.0, stop->height() / 2.0));
+  QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, stop_centre.toPoint());
+  QCoreApplication::processEvents();
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(*plugin), 1u)
+    << "a real press on Stop did not reach the plugin's stop()";
+  // A real press in the middle of the view is taken by no item of the card.
+  const QPointF middle_in_scene = frame->mapToScene(
+    QPointF(frame->width() / 4.0, frame->height() / 2.0));
+  QTest::mousePress(window, Qt::LeftButton, Qt::NoModifier, middle_in_scene.toPoint());
+  QCoreApplication::processEvents();
+  QQuickItem * grabber = window->mouseGrabberItem();
+  EXPECT_TRUE(grabber == nullptr || (grabber != card && !card->isAncestorOf(grabber)))
+    << "a press in the middle of the view was taken by the panel's card: "
+    << grabber->metaObject()->className();
+  QTest::mouseRelease(window, Qt::LeftButton, Qt::NoModifier, middle_in_scene.toPoint());
+  QCoreApplication::processEvents();
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(*plugin), 1u);
   window->close();
 }
 
@@ -184,6 +224,12 @@ int main(int argc, char ** argv)
   }
   if (qEnvironmentVariableIsEmpty("QT_QUICK_BACKEND")) {
     qputenv("QT_QUICK_BACKEND", QByteArray("software"));
+  }
+  // The offscreen platform's one screen is 800x600, smaller than the frame's
+  // minimum (1024x600): maximized there, the window would leave Stop outside
+  // it. At half scale the screen is 1600x1200 in the window's own units.
+  if (qEnvironmentVariableIsEmpty("QT_SCALE_FACTOR")) {
+    qputenv("QT_SCALE_FACTOR", QByteArray("0.5"));
   }
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

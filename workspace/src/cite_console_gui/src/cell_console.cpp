@@ -688,6 +688,7 @@ void CellConsole::validateThenRun(double speed_scale, int cycles)
 
 void CellConsole::stop()
 {
+  ++stops_pressed_;
   // Sent whenever there is a client, enabled or not: Stop is also the cancel
   // of the operator's confirmation, and a refused Stop costs a refusal.
   if (client_) {
@@ -697,6 +698,7 @@ void CellConsole::stop()
 
 void CellConsole::confirm()
 {
+  ++confirms_pressed_;
   if (client_ && selection_.buttons().confirm) {
     client_->confirm_operator();
   }

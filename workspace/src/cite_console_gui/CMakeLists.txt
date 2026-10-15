@@ -168,8 +168,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_panel_in_gz_gui test/test_panel_in_gz_gui.cpp
     SKIP_LINKING_MAIN_LIBRARIES
     TIMEOUT 60
-    ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software)
-  target_link_libraries(test_panel_in_gz_gui CellConsole gz-gui::gz-gui Qt5::Gui Qt5::Quick)
+    ENV QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=0.5)
+  target_link_libraries(test_panel_in_gz_gui CellConsole gz-gui::gz-gui Qt5::Gui Qt5::Quick Qt5::Test)
   set_target_properties(test_panel_in_gz_gui PROPERTIES AUTOMOC ON)
   target_compile_definitions(test_panel_in_gz_gui PRIVATE
     CITE_CELL_CONSOLE_DIR="$<TARGET_FILE_DIR:CellConsole>")

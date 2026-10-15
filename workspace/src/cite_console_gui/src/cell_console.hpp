@@ -61,6 +61,7 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -295,7 +296,8 @@ signals:
 
 private:
   /// The QML tests' way in: they show the frame as a heard console, a
-  /// connected boundary and a divergence sample would (test_panel_qml.cpp).
+  /// connected boundary and a divergence sample would
+  /// (test/cell_console_test_access.hpp).
   friend struct CellConsoleTestAccess;
 
   void apply_state(
@@ -357,6 +359,10 @@ private:
   EventLog event_log_;
   bool window_framed_{false};
   bool waiting_for_shown_{false};
+  /// How many times `stop()` and `confirm()` were called, client or not: what
+  /// a test reads to know that a real press reached the plugin (S-01).
+  std::size_t stops_pressed_{0};
+  std::size_t confirms_pressed_{0};
 };
 
 }  // namespace cite_console_gui

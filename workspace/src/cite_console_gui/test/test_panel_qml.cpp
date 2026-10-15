@@ -69,66 +69,10 @@
 #include <vector>
 
 #include "../src/cell_console.hpp"
+#include "cell_console_test_access.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
 #include "cite_interfaces/msg/twin_mode.hpp"
 
-namespace cite_console_gui
-{
-
-/// What the plugin would hold once it had heard a console, the twin boundary
-/// and its divergence: set through the plugin's own handlers where it has them.
-struct CellConsoleTestAccess
-{
-  static void hear(CellConsole & plugin, const cite_interfaces::msg::ConsoleState & state)
-  {
-    plugin.apply_state(state, std::vector<std::uint8_t>(16, 7));
-  }
-
-  /// A pair whose boundary is heard live, both sides running, and one
-  /// divergence sample for `asset`.
-  static void hear_boundary(CellConsole & plugin, const std::string & asset)
-  {
-    plugin.view_config_.twin_sides = {"plant", "counterpart"};
-    plugin.view_config_.heartbeat_stale_after_s = 0.5;
-    plugin.boundary_.twin_mode_heard("SIM", true);
-    SidesView sides;
-    sides.heard = true;
-    sides.running = {"plant", "counterpart"};
-    sides.commandable = {"plant", "counterpart"};
-    plugin.boundary_.sides_heard(sides);
-    plugin.heartbeat_present_ = true;
-    plugin.heartbeat_heard_ = true;
-    plugin.last_heartbeat_.restart();
-    plugin.refresh_health();
-    DivergenceSample sample;
-    sample.asset_id = asset;
-    sample.valid = false;
-    plugin.divergence_[asset] = sample;
-    emit plugin.twinModeChanged();
-    emit plugin.healthChanged();
-    emit plugin.fidelityChanged();
-    emit plugin.viewChanged();
-  }
-
-  /// World statistics heard, and whether the last is older than allowed.
-  static void hear_world_stats(CellConsole & plugin, bool stale)
-  {
-    plugin.world_stats_heard_ = true;
-    plugin.world_stats_.sim_time_s = 657.5;
-    plugin.world_stats_.real_time_factor = 1.0;
-    plugin.world_stats_stale_ = stale;
-    emit plugin.worldStatsChanged();
-  }
-
-  /// What the configuration names the followed node.
-  static void name_follow(CellConsole & plugin, const std::string & label)
-  {
-    plugin.view_config_.follow_label = label;
-    emit plugin.viewChanged();
-  }
-};
-
-}  // namespace cite_console_gui
 
 namespace
 {
@@ -724,6 +668,20 @@ public:
     }
     card->setParentItem(window.contentItem());
     card->setSize(QSizeF(1920.0, 1080.0));
+    // The 3D view under the card: what takes a press the panel lets through.
+    QQmlComponent scene_component(&engine);
+    scene_component.setData(
+      "import QtQuick 2.9\nMouseArea { property int presses: 0; onPressed: presses++ }",
+      QUrl());
+    scene_created.reset(scene_component.create(context.get()));
+    scene = qobject_cast<QQuickItem *>(scene_created.get());
+    if (scene == nullptr) {
+      ADD_FAILURE() << describe(scene_component.errors()).join("\n").toStdString();
+      return;
+    }
+    scene->setParentItem(window.contentItem());
+    scene->setZ(-1.0);
+    scene->setSize(QSizeF(1920.0, 1080.0));
     window.show();
     QCoreApplication::processEvents();
 
@@ -748,10 +706,29 @@ public:
   std::unique_ptr<QQmlContext> context;
   QQuickWindow window;
   std::unique_ptr<QObject> card_created;
+  std::unique_ptr<QObject> scene_created;
   std::unique_ptr<QObject> created;
   QQuickItem * card{nullptr};
+  QQuickItem * scene{nullptr};
   QQuickItem * panel{nullptr};
 };
+
+/// A console running a request: Stop is enabled.
+cite_interfaces::msg::ConsoleState running_a_request()
+{
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.state = cite_interfaces::msg::ConsoleState::RUNNING;
+  state.busy = true;
+  return state;
+}
+
+/// A left click in the middle of the 3D view, as the window delivers it.
+void click_the_middle(QQuickWindow & window, QQuickItem * panel)
+{
+  const QPointF middle = panel->mapToScene(QPointF(panel->width() / 4.0, panel->height() / 2.0));
+  QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier, middle.toPoint());
+  QCoreApplication::processEvents();
+}
 
 /// Whether `item` is a MouseArea that handles a press: MouseArea's own
 /// `enabled`, which shadows the item's.
@@ -780,6 +757,23 @@ TEST(PanelQml, InACardLikeGzGuisStopTakesItsPressAndTheMiddleIsPassedThrough)
       EXPECT_FALSE(enabled_mouse_area(item)) << "a card MouseArea still takes the mouse";
     }
   }
+
+  // S-01: what the judge said, held against Qt's own delivery. A real click
+  // at Stop's centre, through the window, reaches the plugin's stop(); one in
+  // the middle of the view reaches the scene under the card and no panel item.
+  using cite_console_gui::CellConsoleTestAccess;
+  CellConsoleTestAccess::hear(carded.plugin, running_a_request());
+  QCoreApplication::processEvents();
+  ASSERT_TRUE(stop->isEnabled());
+  EXPECT_TRUE(carded.plugin.pressReaches(stop));
+  click(carded.window, stop);
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(carded.plugin), 1u)
+    << "a real press on Stop did not reach the plugin's stop()";
+  EXPECT_EQ(carded.scene->property("presses").toInt(), 0) << "Stop's press reached the scene";
+  click_the_middle(carded.window, carded.panel);
+  EXPECT_EQ(carded.scene->property("presses").toInt(), 1)
+    << "a press in the middle of the view did not reach the scene";
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(carded.plugin), 1u);
 }
 
 // S-02: a card that clips its children to its shape takes, once masked, every
@@ -802,6 +796,15 @@ TEST(PanelQml, InACardThatWouldHideStopThePassThroughIsUndone)
     }
   }
   EXPECT_EQ(areas, 2) << "the card's own MouseAreas were not put back";
+
+  // S-01: after the undo a real click on Stop reaches the plugin's stop().
+  using cite_console_gui::CellConsoleTestAccess;
+  CellConsoleTestAccess::hear(carded.plugin, running_a_request());
+  QCoreApplication::processEvents();
+  ASSERT_TRUE(stop->isEnabled());
+  click(carded.window, stop);
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(carded.plugin), 1u)
+    << "a real press on Stop did not reach the plugin's stop() after the undo";
 }
 
 // The judge itself: an item laid over Stop that takes the left button is what
