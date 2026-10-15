@@ -123,7 +123,6 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(bool stopEnabled READ stopEnabled NOTIFY viewChanged)
   Q_PROPERTY(bool confirmEnabled READ confirmEnabled NOTIFY viewChanged)
   Q_PROPERTY(bool validateThenRunEnabled READ validateThenRunEnabled NOTIFY viewChanged)
-  Q_PROPERTY(bool validateThenRunOffered READ validateThenRunOffered NOTIFY viewChanged)
   Q_PROPERTY(QVariantList speedChoices READ speedChoices CONSTANT)
   Q_PROPERTY(QVariantList speedChoicesEnabled READ speedChoicesEnabled NOTIFY viewChanged)
   // The same choices for the twin target, whose floor ValidateThenRun applies
@@ -137,6 +136,9 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(QStringList targetChoices READ targetChoices CONSTANT)
   Q_PROPERTY(QVariantList targetChoicesEnabled READ targetChoicesEnabled NOTIFY viewChanged)
   Q_PROPERTY(int selectedTarget READ selectedTarget NOTIFY viewChanged)
+  // No target is selected while a console is heard: the deck says "Select a
+  // target" (`target_hint_shown`, ADR-0072 decision 3 as amended 2026-10-15).
+  Q_PROPERTY(bool targetHintShown READ targetHintShown NOTIFY viewChanged)
 
   // The view buttons (ADR-0071): the 3D view's camera, moved by the window's
   // CameraTracking. Enabled whenever the configuration gave the panel what each
@@ -224,10 +226,6 @@ public:
   bool stopEnabled() const {return selection_.buttons().stop;}
   bool confirmEnabled() const {return selection_.buttons().confirm;}
   bool validateThenRunEnabled() const {return selection_.buttons().validate_then_run;}
-  bool validateThenRunOffered() const
-  {
-    return selection_.view().heard && selection_.view().validate_then_run_offered;
-  }
   QVariantList speedChoices() const;
   QVariantList speedChoicesEnabled() const;
   QVariantList twinSpeedChoicesEnabled() const;
@@ -235,6 +233,10 @@ public:
   QStringList targetChoices() const;
   QVariantList targetChoicesEnabled() const;
   int selectedTarget() const;
+  bool targetHintShown() const
+  {
+    return target_hint_shown(selection_.view(), selection_.selected());
+  }
   bool resetViewEnabled() const {return static_cast<bool>(camera_);}
   QStringList viewPresets() const;
   bool followEnabled() const {return camera_ && !view_config_.follow_target.empty();}

@@ -14,8 +14,8 @@
 
 // The command deck (ADR-0074): EVERY clickable control of the window, in one
 // place and never scrolled. Left to right - the view buttons (subdued), the
-// target, speed and cycles, the actions with the validate-then-run caveat
-// beside its button, and Stop at the far right.
+// target (with "Select a target" while none is), speed and cycles, the
+// actions, and Stop at the far right.
 //
 // Layout only. Every "enabled" below is a property the plugin computes with
 // `enabled_for`, and every button calls the plugin, which asks the console.
@@ -116,18 +116,34 @@ Rectangle {
     ColumnLayout {
       Layout.alignment: Qt.AlignTop
       spacing: 6
-      GroupTitle { text: "Setup" }
+      RowLayout {
+        spacing: 10
+        GroupTitle { text: "Setup" }
+        // No target selected while a console is heard (`target_hint_shown`):
+        // Start robot, Home and Start program wait for one (ADR-0072 decision
+        // 3, amended 2026-10-15). Text, not a control; the attention colour,
+        // never the alarm's (ISA-101).
+        UiText {
+          objectName: "targetHint"
+          visible: CellConsole.targetHintShown
+          text: "Select a target"
+          size: Theme.caption
+          strong: true
+          color: Theme.attention
+        }
+      }
       GridLayout {
         columns: 2
         rowSpacing: 8
         columnSpacing: 10
 
         UiText { text: "Target"; color: Theme.muted; size: Theme.caption + 1 }
-        // Where the signal goes (ADR-0072 decision 3). The selection is the
-        // plugin's (`settled_selection`): never preselected, not even when one
-        // target alone is served, and cleared whenever the served set changes
-        // or the console leaves (R-18). The selector shows the plugin's
-        // selection, never the click.
+        // Where the signal goes (ADR-0072 decision 3, amended 2026-10-15). The
+        // selection is the plugin's (`settled_selection`): Simulation where it
+        // is served, the real arm and the twin never preselected, an
+        // operator's pick dropped whenever the served set changes or the
+        // console leaves (R-18). The selector shows the plugin's selection,
+        // never the click.
         SegmentedSelector {
           objectName: "targetSelector"
           segmentWidth: deck.wide ? 98 : deck.compact ? 76 : 88
@@ -228,35 +244,17 @@ Rectangle {
 
         // ADR-0073: one cycle on the simulation alone and, only if it passed
         // there in this same request, the cycles on the twin with every twin
-        // gate unchanged. It carries no target. Its caveat, part of decision
-        // 5, is beside it: a pass is "passed in simulation", nothing more.
+        // gate unchanged. It carries no target. No caveat text beside it
+        // (decision 5, amended 2026-10-15): the outcome still says "passed in
+        // simulation", never "safe" or "verified", and the twin's own prompt
+        // says the pass is no evidence of physical safety. It takes the row.
         DeckButton {
           objectName: "validateThenRunButton"
           Layout.fillWidth: true
-          Layout.preferredWidth: 1
-          Layout.alignment: Qt.AlignTop
+          Layout.columnSpan: 3
           text: "Validate in sim, then run twin"
           enabled: CellConsole.validateThenRunEnabled && deck.selectedSpeedAllowedForTwin
           onClicked: CellConsole.validateThenRun(deck.selectedSpeed, deck.cycles)
-        }
-        UiText {
-          objectName: "validateThenRunCaveat"
-          Layout.fillWidth: true
-          Layout.columnSpan: 2
-          Layout.preferredWidth: 2
-          Layout.alignment: Qt.AlignTop
-          wrapMode: Text.WordWrap
-          maximumLineCount: 6
-          elide: Text.ElideRight
-          size: Theme.caption
-          color: Theme.textSecondary
-          text: !CellConsole.heard ? "" :
-            !CellConsole.validateThenRunOffered ?
-              "Offered only when the twin target runs (both sides, the real arm ready)." :
-              "Passing in simulation is not evidence that the real arm's cycle is safe: " +
-              "every twin gate still applies. One cycle on the simulation first; the twin " +
-              "runs only if it passed there. Needs both arms at the start and a speed at " +
-              "or above the real arm floor."
         }
       }
     }

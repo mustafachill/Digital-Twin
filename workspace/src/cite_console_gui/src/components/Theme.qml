@@ -104,10 +104,6 @@ QtObject {
   // --------------------------------------------------------------- layout
   readonly property int headerHeight: 64
   readonly property int deckHeight: 180
-  // Where the window is tall enough, the deck takes a little more, so the
-  // validate-then-run caveat has room beside its button.
-  readonly property int deckHeightTall: 196
-  readonly property int tallFrom: 900
   readonly property int railWide: 380
   readonly property int railNarrow: 300
   readonly property int railCompact: 260

@@ -276,7 +276,7 @@ Item {
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    height: frame.height >= Theme.tallFrom ? Theme.deckHeightTall : Theme.deckHeight
+    height: Theme.deckHeight
     wide: frame.wide
     compact: frame.compact
     onViewChosen: frame.viewName = name

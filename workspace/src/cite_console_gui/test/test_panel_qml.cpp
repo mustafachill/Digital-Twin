@@ -150,13 +150,6 @@ const char * const kDeckButtons[] = {
 
 const char kStopLabel[] = "Stop — software stop, not an E-stop";
 
-/// The validate-then-run caveat as an offered console shows it: its longest.
-const char kCaveat[] =
-  "Passing in simulation is not evidence that the real arm's cycle is safe: "
-  "every twin gate still applies. One cycle on the simulation first; the twin "
-  "runs only if it passed there. Needs both arms at the start and a speed at "
-  "or above the real arm floor.";
-
 bool is_button(const QQuickItem * item)
 {
   for (const QMetaObject * meta = item->metaObject(); meta != nullptr;
@@ -423,31 +416,18 @@ TEST(PanelQml, TheFrameHoldsEveryCommandInItsDeckAtEverySize)
                          << "), over the frame";
     }
 
-    // The validate-then-run caveat at its longest, as an offered console says
-    // it: beside its button, inside the deck (ADR-0073 decision 5).
-    auto * caveat = framed.find("validateThenRunCaveat");
-    ASSERT_NE(caveat, nullptr) << "the panel has no item named `validateThenRunCaveat`";
-    caveat->setProperty("text", QString::fromUtf8(kCaveat));
-    QCoreApplication::processEvents();
-    const QRectF deck_rect = rect_in(commands, panel);
-    const QRectF caveat_rect = rect_in(caveat, panel);
-    EXPECT_TRUE(deck_rect.contains(caveat_rect))
-      << "the caveat at " << describe(caveat_rect) << " leaves the deck at "
-      << describe(deck_rect);
-    // Fewer lines than it may show: a caveat at its maximum may be cut short.
-    EXPECT_LT(
-      caveat->property("lineCount").toInt(), caveat->property("maximumLineCount").toInt())
-      << "the caveat is cut short";
-    const QRectF validate = rect_in(framed.find("validateThenRunButton"), panel);
-    EXPECT_LT(std::abs(caveat_rect.top() - validate.top()), 1.0)
-      << "the caveat is not beside its button";
+    // No caveat text beside Validate then run (ADR-0073 decision 5, amended
+    // 2026-10-15).
+    EXPECT_EQ(framed.find("validateThenRunCaveat"), nullptr) << "the caveat is back";
 
     // Stop: its label exactly (ADR-0071 decision 4).
     auto * stop = framed.find("stopButton");
     ASSERT_NE(stop, nullptr);
     EXPECT_EQ(stop->property("text").toString(), QString::fromUtf8(kStopLabel));
 
-    // The target: never preselected (ADR-0072 decision 3, R-18).
+    // The target: with no console heard, nothing to select and nothing
+    // selected; the hint is for a heard console only (ADR-0072 decision 3).
+    EXPECT_FALSE(framed.find("targetHint")->isVisible()) << "a hint with no console";
     auto * target = framed.find("targetSelector");
     ASSERT_NE(target, nullptr) << "the panel has no item named `targetSelector`";
     int targets = 0;
@@ -456,7 +436,7 @@ TEST(PanelQml, TheFrameHoldsEveryCommandInItsDeckAtEverySize)
         ++targets;
         EXPECT_FALSE(item->property("selected").toBool())
           << "the target '" << item->property("text").toString().toStdString()
-          << "' is preselected";
+          << "' is selected with no console";
       }
     }
     EXPECT_EQ(targets, 3);
@@ -568,7 +548,8 @@ TEST(PanelQml, ASegmentShowsTheSelectionNotTheClick)
     const QList<QQuickItem *> choices = segments(selector);
     ASSERT_GE(choices.size(), 2);
     ASSERT_TRUE(choices[0]->isEnabled());
-    // The first click selects the target (never preselected); the speed is.
+    // The simulation and the program's speed are preselected; a click on
+    // the segment already selected leaves it so.
     for (int again = 0; again < 3; ++again) {
       click(framed.window, choices[0]);
       EXPECT_EQ(selector->property("checkedIndex").toInt(), 0) << "click " << again + 1;
@@ -584,6 +565,95 @@ TEST(PanelQml, ASegmentShowsTheSelectionNotTheClick)
     for (QQuickItem * choice : choices) {
       EXPECT_FALSE(choice->property("checked").toBool());
     }
+  }
+}
+
+namespace
+{
+
+/// Whether the target segment named `label` is shown selected.
+bool target_shown_selected(Framed & framed, const char * label)
+{
+  for (QQuickItem * item : segments(framed.find("targetSelector"))) {
+    if (item->property("text").toString() == QLatin1String(label)) {
+      return item->property("selected").toBool();
+    }
+  }
+  ADD_FAILURE() << "no target segment '" << label << "'";
+  return false;
+}
+
+}  // namespace
+
+// ADR-0072 decision 3, amended 2026-10-15: where the console serves the
+// simulation, the panel opens with it selected, and never the real arm or
+// the twin; the operator is not asked to pick and Start robot may be sent.
+TEST(PanelQml, WithTheSimulationServedItIsSelectedAndNothingElse)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.available_targets = {
+    cite_interfaces::msg::ConsoleState::TARGET_SIM, cite_interfaces::msg::ConsoleState::TARGET_REAL,
+    cite_interfaces::msg::ConsoleState::TARGET_TWIN};
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  QCoreApplication::processEvents();
+
+  EXPECT_EQ(framed.find("targetSelector")->property("checkedIndex").toInt(), 0);
+  EXPECT_TRUE(target_shown_selected(framed, "Simulation"));
+  EXPECT_FALSE(target_shown_selected(framed, "Real arm"));
+  EXPECT_FALSE(target_shown_selected(framed, "Twin"));
+  EXPECT_TRUE(framed.find("startRobotButton")->isEnabled());
+  EXPECT_FALSE(framed.find("targetHint")->isVisible()) << "the hint with a target selected";
+  EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
+}
+
+// Without the simulation nothing is preselected: Start robot waits, and the
+// deck says "Select a target", inside the deck and near the selector, at
+// every size. A pick takes the hint away.
+TEST(PanelQml, WithoutTheSimulationTheDeckAsksForATargetUntilOneIsPicked)
+{
+  for (const WindowSize & size : kSizes) {
+    SCOPED_TRACE(size_name(size));
+    Framed framed(size);
+    ASSERT_NE(framed.panel, nullptr);
+    cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+    state.state = cite_interfaces::msg::ConsoleState::NOT_STARTED;
+    state.robot_started = false;
+    state.available_targets = {cite_interfaces::msg::ConsoleState::TARGET_REAL};
+    state.startable_targets = {};
+    cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+    QCoreApplication::processEvents();
+
+    auto * hint = framed.find("targetHint");
+    auto * commands = framed.find("commands");
+    auto * selector = framed.find("targetSelector");
+    ASSERT_NE(hint, nullptr) << "the panel has no item named `targetHint`";
+    EXPECT_EQ(selector->property("checkedIndex").toInt(), -1);
+    for (const char * label : {"Simulation", "Real arm", "Twin"}) {
+      EXPECT_FALSE(target_shown_selected(framed, label)) << label << " is preselected";
+    }
+    EXPECT_FALSE(framed.find("startRobotButton")->isEnabled())
+      << "Start robot is enabled with no target";
+    EXPECT_TRUE(shown(hint, framed.panel)) << "no hint with no target";
+    EXPECT_EQ(hint->property("text").toString(), QString("Select a target"));
+    const QRectF hint_rect = rect_in(hint, framed.panel);
+    EXPECT_TRUE(commands->isAncestorOf(hint)) << "the hint is not in the deck";
+    EXPECT_TRUE(rect_in(commands, framed.panel).contains(hint_rect))
+      << "the hint at " << describe(hint_rect) << " leaves the deck";
+    EXPECT_EQ(visible_rect(hint, framed.panel), hint_rect) << "the hint is clipped";
+    EXPECT_LE(hint->property("contentWidth").toDouble(), hint->width() + 0.5)
+      << "the hint is cut short";
+    const QRectF selector_rect = rect_in(selector, framed.panel);
+    EXPECT_LE(hint_rect.bottom(), selector_rect.top() + 0.5) << "the hint is not above the target";
+    EXPECT_LT(selector_rect.top() - hint_rect.bottom(), 24.0) << "the hint is far from the target";
+
+    // The operator picks the real arm: the hint goes, Start robot may be sent.
+    click(framed.window, segments(selector)[1]);
+    EXPECT_EQ(selector->property("checkedIndex").toInt(), 1);
+    EXPECT_FALSE(hint->isVisible()) << "the hint stays with a target selected";
+    EXPECT_TRUE(framed.find("startRobotButton")->isEnabled());
+    EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
   }
 }
 
@@ -1573,7 +1643,6 @@ TEST(PanelQml, APictureOfTheFrameIsWrittenAtEverySize)
       if (std::strcmp(variant, "_question") == 0) {
         // As a console that asks and offers validate-then-run would show it.
         framed.find("confirmation")->setVisible(true);
-        framed.find("validateThenRunCaveat")->setProperty("text", QString::fromUtf8(kCaveat));
       } else if (std::strcmp(variant, "_heard") == 0) {
         hear_everything(framed);
       }
