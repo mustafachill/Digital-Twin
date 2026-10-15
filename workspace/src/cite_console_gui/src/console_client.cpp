@@ -39,7 +39,7 @@ namespace
 
 std::string answered(const std::string & request, bool success, const std::string & detail)
 {
-  return outcome_opening(request, success, false) + detail;
+  return outcome_opening(request, success, false) + outcome_detail(request, detail);
 }
 
 /// A ValidateThenRun phase as the operator reads it, for a progress line.
@@ -327,7 +327,7 @@ void ConsoleClient::home(double speed_scale, std::uint8_t target)
       const bool success = result.result->success;
       outcome(
         outcome_opening("Home", success, !success && stopped_since(stops_at_send, result.code)) +
-        result.result->detail);
+        outcome_detail("Home", result.result->detail));
     };
   home_->async_send_goal(goal, options);
 }

@@ -245,7 +245,7 @@ TEST(ConsoleView, AValidateThenRunRefusedBeforeEitherPhaseSaysSo)
   result.cycles_completed = 0;
   EXPECT_EQ(
     validate_then_run_outcome(result),
-    "Validate then run: refused or failed. the plant is not at the program's start. "
+    "Validate then run: refused or failed. The plant is not at the program's start. "
     "Refused before either phase began. Cycles completed on the twin: 0.");
 }
 
@@ -257,7 +257,7 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
   failed.ended_in = ConsoleState::PHASE_VALIDATING;
   EXPECT_EQ(
     validate_then_run_outcome(failed),
-    "Validate then run: refused or failed. stopped. Ended in: Validating in simulation. "
+    "Validate then run: refused or failed. Stopped. Ended in: Validating in simulation. "
     "Cycles completed on the twin: 0.");
 
   ValidateThenRun::Result passed;
@@ -267,7 +267,7 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
   passed.cycles_completed = 2;
   EXPECT_EQ(
     validate_then_run_outcome(passed),
-    "Validate then run: done. passed in simulation; 2 cycles on the twin. "
+    "Validate then run: done. Passed in simulation; 2 cycles on the twin. "
     "Ended in: Running twin. Cycles completed on the twin: 2.");
 }
 
@@ -306,7 +306,7 @@ TEST(ConsoleView, AStartProgramOutcomeIsSentencesAndSaysItsCountOnce)
   done.cycles_completed = 2;
   EXPECT_EQ(
     cite_console_gui::run_program_outcome(done),
-    "Start program: done. Start program: 2 cycle(s) completed.");
+    "Start program: done. 2 cycle(s) completed.");
 
   cite_interfaces::action::RunProgram::Result stopped;
   stopped.success = false;
@@ -332,6 +332,40 @@ TEST(ConsoleView, AStartProgramOutcomeIsSentencesAndSaysItsCountOnce)
   EXPECT_EQ(cite_console_gui::run_program_outcome(bare), "Start program: done.");
   EXPECT_EQ(cite_console_gui::as_sentence(" \t "), "");
   EXPECT_EQ(cite_console_gui::as_sentence("Is it?"), "Is it?");
+}
+
+TEST(ConsoleView, AnOutcomeSaysItsRequestOnceAndOpensItsDetailWithACapital)
+{
+  // The console's detail that opens with the request's own name and a colon
+  // is not said after the opening again, and a detail that opens in lower
+  // case is given a capital, as the sentence after "done." is (ADR-0074).
+  using cite_console_gui::outcome_detail;
+  EXPECT_EQ(
+    outcome_detail("Home", "Home: the simulation's arm is at the program's start"),
+    "The simulation's arm is at the program's start");
+  EXPECT_EQ(outcome_detail("Stop", "stopping: the goal is cancelled"),
+    "Stopping: the goal is cancelled") << "a different word is not the request's prefix";
+  EXPECT_EQ(outcome_detail("Start robot", "the robot is started"), "The robot is started");
+  EXPECT_EQ(outcome_detail("Start program", "Start program was stopped"),
+    "Start program was stopped") << "the request's name without a colon is the console's words";
+  EXPECT_EQ(outcome_detail("Home", "  Home:  "), "");
+  EXPECT_EQ(outcome_detail("Home", ""), "");
+  EXPECT_EQ(outcome_detail("Home", "0.5 is the floor"), "0.5 is the floor");
+
+  cite_interfaces::action::RunProgram::Result done;
+  done.success = true;
+  done.detail = "Start program: 2 cycle(s) completed";
+  EXPECT_EQ(
+    cite_console_gui::run_program_outcome(done), "Start program: done. 2 cycle(s) completed.");
+  ValidateThenRun::Result passed;
+  passed.success = true;
+  passed.detail = "Validate then run: passed in simulation";
+  passed.ended_in = ConsoleState::PHASE_RUNNING;
+  passed.cycles_completed = 1;
+  EXPECT_EQ(
+    validate_then_run_outcome(passed),
+    "Validate then run: done. Passed in simulation. Ended in: Running twin. "
+    "Cycles completed on the twin: 1.");
 }
 
 TEST(ConsoleView, ADisplayedLineKeepsItsWordsAndNeverBreaksANumberFromItsUnit)

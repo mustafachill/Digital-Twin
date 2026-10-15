@@ -652,13 +652,13 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
 
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.start_robot();}, &Recorder::outcomes),
-    "Start robot: done. fake start_robot");
+    "Start robot: done. Fake start_robot");
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.confirm_operator();}, &Recorder::outcomes),
-    "Confirm: refused or failed. fake confirm refused");
+    "Confirm: refused or failed. Fake confirm refused");
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.stop();}, &Recorder::outcomes),
-    "Stop: done. fake stop");
+    "Stop: done. Fake stop");
   EXPECT_EQ(
     sent_once_served(
       recorder, [&]() {client.home(0.5, ConsoleState::TARGET_REAL);}, &Recorder::progress),
@@ -985,7 +985,7 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
   EXPECT_EQ(recorder.progress.back(), "") << "the progress line outlived its request";
   EXPECT_EQ(
     recorder.outcomes.back(),
-    "Validate then run: done. passed in simulation (1 cycle), then 3 cycle(s) on the twin. "
+    "Validate then run: done. Passed in simulation (1 cycle), then 3 cycle(s) on the twin. "
     "Ended in: Running twin. Cycles completed on the twin: 3.");
 }
 
@@ -999,7 +999,7 @@ TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
   ConsoleClient client(names, recorder.callbacks());
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.start_robot();}, &Recorder::outcomes),
-    "Start robot: done. fake start_robot");
+    "Start robot: done. Fake start_robot");
   {
     std::lock_guard<std::mutex> lock(recorder.mutex);
     ASSERT_GE(recorder.progress.size(), 2u);

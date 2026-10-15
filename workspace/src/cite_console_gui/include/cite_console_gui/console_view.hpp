@@ -79,6 +79,14 @@ std::string validate_then_run_outcome(
 /// console's own detail, which does say, always follows the opening (S-04).
 std::string outcome_opening(const std::string & request, bool success, bool after_stop);
 
+/// The console's `detail` as the outcome line after "<request>: done. " (or
+/// the other openings) says it: trimmed at its start, without a leading
+/// "<request>:" that would repeat the opening ("Home: done. Home: the arm is
+/// at the program's start" reads "Home: done. The arm is ..."), and with its
+/// first letter a capital, as a sentence's is. For display only: the
+/// console's detail is not changed, only the line the panel composes from it.
+std::string outcome_detail(const std::string & request, const std::string & detail);
+
 /// The outcome line for a RunProgram result: the opening, the console's
 /// detail as a sentence of its own, and - for a request that did not
 /// complete - how many cycles did. A completed request's detail already

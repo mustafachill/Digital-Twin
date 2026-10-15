@@ -155,6 +155,24 @@ std::string as_sentence(const std::string & text)
   return sentence;
 }
 
+std::string outcome_detail(const std::string & request, const std::string & detail)
+{
+  const auto first = detail.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) {
+    return "";
+  }
+  std::string said = detail.substr(first);
+  const std::string prefix = request + ":";
+  if (!request.empty() && said.compare(0, prefix.size(), prefix) == 0) {
+    const auto rest = said.find_first_not_of(" \t\r\n", prefix.size());
+    said = rest == std::string::npos ? std::string() : said.substr(rest);
+  }
+  if (!said.empty() && said[0] >= 'a' && said[0] <= 'z') {
+    said[0] = static_cast<char>(said[0] - 'a' + 'A');
+  }
+  return said;
+}
+
 namespace
 {
 
@@ -232,7 +250,8 @@ std::string run_program_outcome(
   const cite_interfaces::action::RunProgram::Result & result, bool after_stop)
 {
   return joined(
-    {outcome_opening("Start program", result.success, after_stop), as_sentence(result.detail),
+    {outcome_opening("Start program", result.success, after_stop),
+      as_sentence(outcome_detail("Start program", result.detail)),
       result.success ? std::string() :
       "Cycles completed: " + std::to_string(result.cycles_completed) + "."});
 }
@@ -251,7 +270,7 @@ std::string validate_then_run_outcome(
   }
   const std::string opening = outcome_opening("Validate then run", result.success, after_stop);
   return joined(
-    {opening, as_sentence(result.detail), where,
+    {opening, as_sentence(outcome_detail("Validate then run", result.detail)), where,
       "Cycles completed on the twin: " + std::to_string(result.cycles_completed) + "."});
 }
 
