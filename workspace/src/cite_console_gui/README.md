@@ -35,8 +35,8 @@ MIDDLE       the live 3D view, with a label naming the last view chosen  | STATU
                                                                          | sides, twin fidelity,
                                                                          | event log  (info only)
 QUESTION     the console's prompt, Confirm, Cancel (Stop) - only while it asks
-COMMAND DECK view buttons | target, speed, cycles | Start robot, Home, Start program,
-             Validate then run + its caveat | Stop (far right, the deck's full height)
+COMMAND DECK view buttons | target ("Select a target" while none is), speed, cycles |
+             Start robot, Home, Start program, Validate then run | Stop (far right, full height)
 ```
 
 - **Every clickable control is in the deck** (or in the question directly above it). The
@@ -112,8 +112,8 @@ own. The counterpart's window is Harmonic's default, unchanged.
 | Twin mode | `TwinMode` on `TwinMode::TOPIC`, read directly from the twin boundary (ADR-0044); marked "the real arm may be commanded" whenever a physical side runs and the mode is not known to be `SIM` |
 | Phase | While a validate-then-run request runs: "Validating in simulation" or "Running twin" (`ConsoleState.phase`) |
 | Connections | Live, stale or absent for the twin boundary; for each side also not ready or not started (see below). Monitoring only |
-| Start robot | `StartRobot` |
-| Target | Simulation, Real arm or Twin (`ConsoleState.TARGET_*`, [ADR-0072](../../../docs/adr/0072-the-operator-chooses-where-the-signal-goes.md)); a choice not in `available_targets` is disabled and labelled "not running". **Never preselected**, not even when only one is offered (see below) |
+| Start robot | `StartRobot`; enabled only while a target is selected (see below) |
+| Target | Simulation, Real arm or Twin (`ConsoleState.TARGET_*`, [ADR-0072](../../../docs/adr/0072-the-operator-chooses-where-the-signal-goes.md)); a choice not in `available_targets` is disabled and labelled "not running". **Simulation is preselected** whenever it is offered; Real arm and Twin **never** are, not even when only one is offered (see below). While none is selected the deck says "Select a target" |
 | Speed | 1.0 ("Original speed") preselected, then 0.5, 0.25, 0.1. The selected scale is stated in the rail's Robot card. Where the console states a floor (`minimum_speed_scale`), the panel shows it there and says whether it applies to the selected target; for a target the console lists in `floored_targets` — and while no target is selected — choices below it are disabled and labelled "below the floor". A choice per request, not a live override |
 | Home | `HomeRobot`, with the selected speed and target |
 | Start program | `RunProgram`, with the selected speed, target and a cycle count (at least 1); enabled only when the console lists the target in `startable_targets` |
@@ -141,13 +141,22 @@ then would not be heard again while the boundary stays up. It becomes "unknown" 
 ### The target selection
 
 The selected target is held by the plugin and settled by `settled_selection` in the same
-header, so the rule is unit-tested. The panel **never selects a target itself**, not even
-the only one a plant-only deployment offers: the operator always picks (ADR-0072 decision 3,
-safety audit R-18). The selection is cleared to none when the panel loads, when the console
-leaves (its state publisher unmatched) and comes back, and whenever `available_targets`
-changes in any way; Home and Start program stay disabled until the operator picks again. A
-console that restarts without its publisher ever unmatching, serving the same targets,
-keeps the selection — the panel cannot see that restart.
+header, so the rule is unit-tested. The panel selects **Simulation** whenever the console
+offers it and nothing else is selected — on the first `ConsoleState` heard, and again
+whenever a selection is dropped (ADR-0072 decision 3, amended 2026-10-15). The simulation
+never routes to the physical side, so this default cannot send a signal to the real arm.
+The panel **never selects Real arm or Twin itself**, not even when one of them is all that
+is offered: the operator picks those (safety audit R-18), and the default never replaces a
+pick that stands. An operator's pick is dropped when the console leaves (its state publisher
+unmatched) and comes back, and whenever `available_targets` changes in any way; the panel
+then falls back to Simulation if it is offered, and otherwise selects nothing. A console
+that restarts without its publisher ever unmatching, serving the same targets, keeps the
+selection — the panel cannot see that restart.
+
+While a console is heard and no target is selected (`target_hint_shown`), Start robot, Home
+and Start program are disabled and the deck says "Select a target" beside its Setup title,
+in the attention colour (ISA-101), not the alarm's. Every goal still names its target
+explicitly, and the console still refuses a goal without one.
 
 ### Validate in simulation, then run twin
 
@@ -161,8 +170,9 @@ it is sent only at a scale the twin accepts (`PanelSelection::may_validate_then_
 
 The panel shows the phase as "Validating in simulation" and "Running twin", and the outcome
 in the console's own words. It never says "safe", "verified" or "validated for the real
-cell": beside the button it states that passing in simulation is not evidence that the real
-arm's cycle is safe (ADR-0073 decision 5).
+cell"; a pass is "passed in simulation". No caveat text sits beside the button (ADR-0073
+decision 5, amended 2026-10-15): the twin's own prompt, which the operator confirms in phase
+2, says that the simulation pass is not evidence of physical safety.
 
 ### Connections
 
@@ -288,9 +298,12 @@ resource, as gz-gui does, and fails on any QML warning. At each of 1920×1080, 1
 window, unclipped and overlapping no other; that the question, shown by hand, is above the deck
 and inside the window; that nothing clickable lies outside the deck and the question; that
 nothing at the middle of the 3D view takes the mouse, while the header, the rail and the deck
-do; that no target is preselected and 1.0 is; that Stop's label is exact; that every console
-button is disabled with no console; and that the validate-then-run caveat, at its longest, sits
-beside its button and whole. Below those sizes it holds that Stop stays inside the window and
+do; that no target is selected with no console heard and 1.0 is; that Stop's label is exact;
+that every console button is disabled with no console; and that no caveat text sits beside
+Validate then run. With the simulation offered, it holds that Simulation is selected and Real
+arm and Twin are not; without it, that nothing is selected, Start robot is disabled and "Select
+a target" is shown whole in the deck just above the target selector, at every size, until the
+operator picks. Below those sizes it holds that Stop stays inside the window and
 clear of every other control. With a console heard - an alarm band, the boundary and both
 sides live, a divergence sample, a long step - at 1920×1080 and 1280×720 it holds that every
 header pill keeps its status word and overlaps nothing, that the deck's controls stay whole and
@@ -347,8 +360,8 @@ person to look at, not a gate.
   request clears the last one's outcome, and a request's progress line is cleared when it ends.
 - **A target the console does not serve:** not offered, and a goal naming one is refused by
   the console (`HomeRobot.action`, `RunProgram.action`); the panel never sends an unset one.
-- **Validate then run on a deployment without the twin target:** disabled, and the panel says
-  it is offered only when both sides run; the console refuses it anyway.
+- **Validate then run on a deployment without the twin target:** disabled; the console
+  refuses it anyway.
 - **A request the console refuses:** the outcome line shows the console's detail. A
   rejected goal carries no reason to its client, so the console publishes it in its state
   as `last_error` ("refused: <reason>", the state itself unchanged), and the panel shows it
