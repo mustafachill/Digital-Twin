@@ -65,6 +65,7 @@ from cite_bringup.program import targets
 from cite_bringup.program.home import bring_to_start, StartPose
 from cite_bringup.program.operator import confirm_operator, PLACE_PROMPT
 from cite_bringup.program.steps import EXIT_INTERRUPTED, run, Step, StepFailed
+from cite_interfaces.msg import TwinMode
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,7 @@ def start_robot(
     await_operator: Callable[[str], str],
     initialize_physical: Callable[[], None],
     prompt: str,
+    running_physical: Sequence[str] = (),
 ) -> None:
     """Enable ``target``'s arms: on a physical side, SIM held and the cell cleared first.
 
@@ -140,6 +142,12 @@ def start_robot(
     position. Then the custody of the target's sides. Raises `StepFailed` or
     `KeyboardInterrupt`; leaves the twin's mode alone - Start robot never
     leaves SIM.
+
+    ``running_physical`` is every running physical side of the pair, whatever
+    the target. Where one runs and the target commands none of them, SIM is
+    still held - nobody is asked anything and nothing is initialized - so a
+    start never reads as done while the twin may command a physical arm
+    (ADR-0075 decision 2: leaving FAULT needs the twin heard in SIM).
     """
     try:
         if physical:
@@ -153,6 +161,14 @@ def start_robot(
                 prompt=targeted_prompt(prompt, target, physical),
             )
             initialize_physical()
+        elif running_physical:
+            mode = cell.hold_sim()
+            if mode != TwinMode.MODE_SIM:
+                raise StepFailed(
+                    f"the twin is in mode {mode}, not SIM ({TwinMode.MODE_SIM}): it may still "
+                    f"command {', '.join(running_physical)}, so nothing is started. Put it in "
+                    "SIM first"
+                )
         cell.refuse_if_holding(targets.SIDES[target])
     finally:
         # The mode was never changed here, so SIM stands: the hold is let go.

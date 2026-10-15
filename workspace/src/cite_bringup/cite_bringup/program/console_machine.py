@@ -36,7 +36,8 @@ closing - and it runs the program's ONE sequencer, `program.cycle`, the same
   commands a physical side the twin's mode read as SIM and the operator asked
   to clear the cell (the initializer may home the track), then `home.initialize`
   on that side alone; then the custody of the target's sides. A simulation
-  start asks nothing and initializes nothing.
+  start asks nothing and initializes nothing, but holds SIM where any physical
+  side runs (ADR-0075 decision 2).
 * **Home**: `cycle.home` - on a physical side SIM read, the operator asked to
   clear the cell, `home.bring_to_start` through the twin, then SIM again.
 * **Start program**, per cycle: a work-piece on every simulated side's table
@@ -505,6 +506,10 @@ class ConsoleMachine:
                         physical, say, self.interrupted
                     ),
                     prompt=start_prompt(target),
+                    # Every running physical side: SIM is held for a
+                    # Simulation start too, whatever ``_entered`` says
+                    # (ADR-0075 decision 2).
+                    running_physical=self._physical,
                 )
             finally:
                 cell.close()

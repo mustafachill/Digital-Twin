@@ -734,15 +734,16 @@ def test_a_real_home_with_the_carriage_away_after_initializing_says_what_to_do()
     assert [call[0] for call in calls] == ["initialize", "measure"]
 
 
-def _start(target: int, physical, log) -> None:
+def _start(target: int, physical, log, cell=None, running_physical=()) -> None:
     cycle.start_robot(
-        Cell(log),
+        cell or Cell(log),
         target=target,
         physical=physical,
         say=lambda text: log.append(("said", text)),
         await_operator=lambda prompt: log.append(("asked", prompt)) or "",
         initialize_physical=lambda: log.append(("initialize",)),
         prompt="START?",
+        running_physical=running_physical,
     )
 
 
@@ -754,6 +755,33 @@ def test_a_simulation_start_asks_no_one_and_initializes_nothing() -> None:
     assert "asked" not in names and "hold_sim" not in names and "initialize" not in names
     assert "enter_target" not in names
     assert ("refuse_if_holding", ("plant",)) in log
+
+
+def test_a_simulation_start_beside_a_physical_side_holds_sim_and_asks_no_one() -> None:
+    """ADR-0075 decision 2: SIM is read even when the target commands no physical side."""
+    log: list = []
+    _start(SIM, [], log, running_physical=["counterpart"])
+    names = _names(log)
+    assert names.index("hold_sim") < names.index("refuse_if_holding")
+    assert "asked" not in names and "initialize" not in names and "enter_target" not in names
+    assert names[-1] == "release_hold"
+
+
+def test_a_simulation_start_beside_a_physical_side_refuses_out_of_sim() -> None:
+    """ADR-0075 decision 2 (R-01): the twin heard in VALIDATED starts nothing."""
+
+    class Validated(Cell):
+        def hold_sim(self):
+            self.log.append(("hold_sim",))
+            return TwinMode.MODE_VALIDATED
+
+    log: list = []
+    with pytest.raises(StepFailed) as refused:
+        _start(SIM, [], log, cell=Validated(log), running_physical=["counterpart"])
+    assert "not SIM" in str(refused.value) and "counterpart" in str(refused.value)
+    names = _names(log)
+    assert "refuse_if_holding" not in names and "asked" not in names
+    assert "initialize" not in names and names[-1] == "release_hold"
 
 
 def test_a_real_start_asks_in_sim_then_initializes_and_reads_the_real_arms_custody() -> None:

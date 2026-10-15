@@ -1906,6 +1906,39 @@ def test_a_fault_unstarts_every_side() -> None:
     assert snapshot.state == ConsoleState.READY and snapshot.started_targets == (SIM,)
 
 
+def test_a_simulation_start_does_not_leave_fault_while_the_twin_is_out_of_sim() -> None:
+    """R-01, ADR-0075 decision 2: leaving FAULT needs SIM, whatever the target.
+
+    The home's return to SIM failed, so this console still holds that it entered
+    VALIDATED, and the twin is heard there: a Simulation start must not read as
+    done while the twin may command the physical arm.
+    """
+    rig = Rig(physical=["counterpart"]).started(TWIN)
+    rig.away = [None]
+    rig.left = [False]
+    join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
+    rig.answer()
+    join()
+    assert rig.machine.snapshot().state == ConsoleState.FAULT
+    rig.mode = rig.heard = TwinMode.MODE_VALIDATED
+    asked = rig.asked()
+    rig.calls.clear()
+    rig.initialized.clear()
+    outcome = rig.machine.start_robot(SIM)
+    assert not outcome.success and "not SIM" in outcome.detail
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.FAULT and snapshot.started_targets == ()
+    # Nothing asked of the operator and the physical side never initialized.
+    assert rig.asked() == asked and rig.initialized == []
+    assert ("hold_sim",) in rig.calls
+    # Once the twin is in SIM, the same Simulation start is the way back.
+    rig.mode = rig.heard = TwinMode.MODE_SIM
+    assert rig.machine.start_robot(SIM).success
+    snapshot = rig.machine.snapshot()
+    assert snapshot.state == ConsoleState.READY and snapshot.started_targets == (SIM,)
+    assert rig.asked() == asked and rig.initialized == []
+
+
 def test_a_stopped_start_unstarts_its_target_and_leaves_the_others_started() -> None:
     reached = threading.Event()
 
