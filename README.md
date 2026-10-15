@@ -123,6 +123,24 @@ Authoring only, no Docker, nothing to build:
 
 Then read [`docs/onboarding/getting-started.md`](./docs/onboarding/getting-started.md).
 
+## Starting the control center
+
+On the Linux workstation, the operator console starts with one click
+([ADR-0078](./docs/adr/0078-one-click-control-center.md)). `./cite-control-center` checks
+Docker access, grants X access to your own user for the run, prepares the image if it is
+missing, rebuilds only if a source changed, and opens the console window. Closing the
+window ends it cleanly; any other end opens a dialog naming the log under
+`~/.local/state/cite-digital-twin/logs/` (`latest.log` is the newest). It never runs
+`sudo`: when Docker refuses access it says what to do instead. The hardware opt-in is the
+console's own (`.env`), so it starts the simulation alone unless `CITE_ALLOW_HARDWARE=1`.
+
+```bash
+./scripts/install-launcher             # add "CITE Control Center" to the applications menu
+./scripts/install-launcher --desktop   # ... and an icon on the desktop
+./cite-control-center                  # or start it from a terminal
+./scripts/install-launcher --uninstall # remove the menu entry, icon and desktop icon
+```
+
 ## How the system is built
 
 A strict layer stack. **A layer may depend only on layers below it** — an upward
@@ -174,13 +192,15 @@ directly — they route to the right environment automatically.
 |---|---|
 | `./scripts/bootstrap` | Prepare or repair the environment. Idempotent. |
 | `./scripts/doctor` | Diagnose. Run this first when something is wrong. |
-| `./scripts/build` | Build the ROS 2 workspace. |
+| `./scripts/build [--if-stale]` | Build the ROS 2 workspace; `--if-stale` only if a source changed since the last successful build. |
 | `./scripts/test` | Host tooling tests, then ROS tests. |
 | `./scripts/lint` · `format` | Check · apply formatting and static analysis. |
 | `./scripts/validate-model` | Validate the facility model. Runs anywhere. |
 | `./scripts/sim [--zone <name>] [--headless] [--pair]` | Launch the simulated cell. The model declares one zone, `cell_b`, the one-arm cell, so `--zone` may be left out; it is required again whenever the model declares more than one ([ADR-0069](./docs/adr/0069-remove-the-parked-line-and-cell-a-from-the-main-tree.md) decision 5). `--pair` brings up both sides of a twin pair and needs a zone that declares one — `cell_b` does. |
 | `./scripts/scenario [name] [--zone <name>]` | Run a headless scenario; no argument lists them. There are two, `bringup` and `program_cycle`, both on `cell_b`. |
 | `./scripts/program [--headless] [--cycles N] [--speed-scale S]` | Bring up both sides of the paired zone — the counterpart is the physical arm, behind `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` — and run the real program once per cycle through the twin boundary. A demonstration: it asserts nothing; `program_cycle` is the check. |
+| `./scripts/control-center` · `./cite-control-center` | Start the operator console with one click: checks, X access, build if stale, then `./scripts/console`. What the desktop icon runs. |
+| `./scripts/install-launcher [--desktop] [--uninstall]` | Install (or remove) the control center's menu entry and icon for this user. |
 | `./scripts/hulls [--write]` | Check, or re-derive, the convex-hull collision meshes L0 declares. |
 | `./scripts/audit-deps [--image]` | Scan dependencies for known vulnerabilities. |
 | `./scripts/fetch-assets` | Download large assets declared in the manifest. |

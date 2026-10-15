@@ -224,6 +224,14 @@ operator panel to the plant side's Gazebo window.
 CITE_ALLOW_HARDWARE=1 ./scripts/console    # both sides: the simulation and the physical arm
 ```
 
+**One click** ([ADR-0078](../adr/0078-one-click-control-center.md)): `./cite-control-center`,
+or the "CITE Control Center" icon `./scripts/install-launcher` installs, runs the same
+`./scripts/console` after checking Docker and X access and rebuilding only if a source changed.
+It logs to `~/.local/state/cite-digital-twin/logs/latest.log`. **Closing the window is a clean
+end:** the plant's launch prints `CITE_WINDOW_CLOSED` and the supervisor exits 0; exit 3
+(`PAIR_ENDED`) still means a participant went away unexpectedly, and the control center shows
+that in a dialog.
+
 **The hardware opt-in decides which sides start**
 ([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)). Without it the plant
 starts alone and prints `real arm not started: CITE_ALLOW_HARDWARE is not 1; simulation target

@@ -2077,14 +2077,12 @@ by however long the node lagged.
 events. It is not shown to be a hazard. It is a design question for a safety review: dating
 states from their own stamp would need clocks the two sides agree on.
 
-### #107 — Closing the console window ends `./scripts/console` with exit code 3 (2026-10-14)
-
-**What happens.** The normal way to end the console is to close its window and press OK. The
-pair then ends with `PAIR_ENDED` (3), which `cite_bringup/pair.py` uses for "one half of the
-pair went away", although every part reports status 0. Seen in a real-window run of the
-ADR-0074 frame; `pair.py` predates that branch.
-
-**Why it matters.** Anything that wraps the command reads an ordinary close as a failure.
+### #107 — Closing the console window ends `./scripts/console` with exit code 3 (2026-10-14) — closed 2026-10-15
+**Closed** by [ADR-0078](adr/0078-one-click-control-center.md) decision 3. A windowed `gz sim`
+that exits 0 outside a teardown makes its launch print `CITE_WINDOW_CLOSED`, and the supervisor
+reads that as a stop, so a pair whose parts all announced returns 0; `PAIR_ENDED` (3) stays for
+a participant that went away without it. Held by `cite_bringup`'s `test_pair.py` and
+`test_simulation_launch.py`.
 
 ### #108 — The panel cannot tell a stopped request from a failed one (2026-10-14)
 
