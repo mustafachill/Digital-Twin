@@ -23,7 +23,9 @@
   physical side's liveness contract is typed too: `TwinHeartbeat` (boundary to side) and
   `DeadmanState` (deadman to the relays and the boundary). `InitializeAsset` is what a
   physical arm's operator does by hand in UFACTORY Studio before running the program, served
-  by `cite_hardware`'s initializer on the physical side only.
+  by `cite_hardware`'s initializer on the physical side only; its first step is `ReleaseArm`,
+  the deadman's one way from HELD to HEALTHY
+  ([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)).
 - **Related:** [ADR-0010](../adr/0010-typed-ros-interfaces.md), [`../architecture/naming-and-namespaces.md`](../architecture/naming-and-namespaces.md)
 
 Every boundary between components in this system is a **typed ROS 2 interface**. If a

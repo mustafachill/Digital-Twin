@@ -18,21 +18,34 @@
 #   INACTIVE  the deadman is not active. Cleared by activating it.
 #   AWAITING  active, and no heartbeat has arrived yet. Cleared by the first
 #             heartbeat from the boundary of the deadman's own zone, which
-#             latches that boundary's id and enables the arm.
+#             latches that boundary's id and moves to HELD (ADR-0076).
+#   HELD      a fresh heartbeat of the latched boundary is arriving, and the
+#             operator has not released the arm. The arm is sent STOP on every
+#             tick, exactly as in AWAITING, and motion is refused. HELD trips
+#             as HEALTHY does, with one difference: the vendor driver counts
+#             as lost only once it has been served exactly once since
+#             activation, because a side started under a boundary already
+#             beating reaches HELD before its driver exists. Cleared only by
+#             `ReleaseArm` (ReleaseArm.srv), which the asset's initializer
+#             calls as its first step - so only by an operator's Start robot,
+#             Home or program homing. Every new deadman process starts toward HELD,
+#             a restarted side's included: a reconnect never enables the arm.
 #   TRIPPED   heartbeats stopped, their publisher disappeared, or a second
 #             boundary appeared (another id, or a second publisher), or the
 #             vendor driver's set_state service stopped being served exactly
-#             once (the driver went away or restarted), after the first one
-#             arrived. LATCHED: cleared only by a deliberate lifecycle
-#             deactivate and activate, which return to AWAITING with the arm
-#             still stopped, never by heartbeats resuming
+#             once (the driver went away or restarted), in HELD or HEALTHY.
+#             LATCHED: never cleared by heartbeats resuming
 #             (cross-cutting-safety.md: automatic resumption after an
 #             unexplained fault is a Critical finding).
+#             The deadman keeps sending STOP and then ENDS ITS PROCESS, which
+#             takes its side down whole; a side started again comes up held
+#             (ADR-0076 decision 5).
 #
-# HEALTHY says motion is PERMITTED, not that the arm is READY. The deadman then
-# enables the arm (set_mode, then set_state 0), and `arm_enabled` turns true only
-# once that set_state(0) is acknowledged in the current HEALTHY period; it is
-# false in every other state and again after any change of state. The relays keep
+# HEALTHY says motion is PERMITTED, not that the arm is READY. On the
+# HELD -> HEALTHY edge, and nowhere else, the deadman enables the arm (set_mode,
+# then set_state 0), and `arm_enabled` turns true only once that set_state(0)
+# is acknowledged in the current HEALTHY period; it is false in every other
+# state and again after any change of state. The relays keep
 # gating on `state` alone. A consumer that needs the arm ready to follow a
 # trajectory must require `arm_enabled` as well. It says what the deadman's own
 # enable achieved: another client stopping the arm afterwards is not seen here.
@@ -50,6 +63,7 @@ uint8 STATE_INACTIVE=0
 uint8 STATE_AWAITING=1
 uint8 STATE_HEALTHY=2
 uint8 STATE_TRIPPED=3
+uint8 STATE_HELD=4
 
 std_msgs/Header header
 string asset_id             # the arm whose side this deadman guards

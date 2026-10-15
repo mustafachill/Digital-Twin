@@ -39,6 +39,7 @@ msg/DeadmanState.msg
   uint8 STATE_AWAITING=1
   uint8 STATE_HEALTHY=2
   uint8 STATE_TRIPPED=3
+  uint8 STATE_HELD=4
   std_msgs/Header header
   string asset_id
   uint8 state
@@ -189,6 +190,10 @@ srv/JointsAt.srv
   uint8 MALFORMED=3
   bool at
   uint8 reason
+  string detail
+srv/ReleaseArm.srv
+  ---
+  bool success
   string detail
 srv/SetMode.srv
   string SERVICE="/cite/twin/set_mode"

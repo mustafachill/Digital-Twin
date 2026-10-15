@@ -32,6 +32,7 @@ than by reading the definitions.
 | `TwinHeartbeat` | `cite_twin/twin_boundary.py`, onto each side's own domain from that side's own executor (ADR-0070 item 5) |
 | `DeadmanState` | `cite_hardware/deadman.py`, started first by `cite_bringup`'s `hardware.launch.py` on a physical side (ADR-0070 item 6); read by the relays and by the twin boundary's readiness gate |
 | `InitializeAsset` | `cite_hardware/initializer.py`, on a physical side only, under the plan's `initialize_service` (ADR-0070); called by `cite_bringup.program.home` |
+| `ReleaseArm` | `cite_hardware/deadman.py`, on a physical side only, under the plan's `release_service` (ADR-0076); called by the initializer as its first step, which alone moves a held arm to HEALTHY |
 | `TwinMode`, `DivergenceMetrics`, `SetMode`, `TrackArrived`, `JointsAt` | `cite_twin/twin_boundary.py`, which the pair supervisor starts under `./scripts/sim --pair` and `./scripts/program` (ADR-0057) and no launch file starts; it refuses a zone declaring one side, and the one shipped zone, `cell_b`, declares two. Every `DivergenceMetrics` it can publish has `valid` false (ADR-0050) |
 | `ConsoleState`, `StartRobot`, `ConfirmOperator`, `StopCell`, `HomeRobot`, `RunProgram`, `ValidateThenRun` | `cite_bringup/program/console.py` (`cell_console`), on the plant's domain, which the pair supervisor starts once the twin boundary has announced readiness, when asked with `--console` (ADR-0071). Names are `/cite/<zone>/console/<leaf>`, formed once by the generator (`ids.zone_scope`) and read from the zone's bring-up plan |
 

@@ -1,0 +1,23 @@
+# Release a physical arm the deadman holds (ADR-0076): HELD -> HEALTHY.
+#
+# A physical side's deadman holds its arm at the vendor's STOP from the moment
+# it starts. The twin boundary's first heartbeat moves it from AWAITING to HELD
+# and NOT to HEALTHY: the arm stays at STOP, and every relay refuses motion,
+# until this service releases it. The edge it causes, HELD -> HEALTHY, is the one
+# place the deadman enables the arm (set_mode, then set_state 0); whether that
+# enable was acknowledged is read on DeadmanState.arm_enabled, not here.
+#
+# Called by the asset's initializer as its first step (InitializeAsset.srv), so
+# the arm is released only by an operator's command: the console's Start robot
+# after the go-ahead, `./scripts/home`, or the homing of `./scripts/program`.
+#
+# Refused, with the reason in `detail`, in every state but HELD: INACTIVE,
+# AWAITING (no heartbeat yet), HEALTHY (already released) and TRIPPED. Refused
+# too while the vendor driver's set_state is not served exactly once.
+#
+# Served by the deadman under `/cite/<zone>/<asset>/release`, the name its
+# generated parameters state (`release_service`). Not a safety function: the
+# physical E-stop is.
+---
+bool success   # the deadman went from HELD to HEALTHY
+string detail  # what the deadman did, or why it refused

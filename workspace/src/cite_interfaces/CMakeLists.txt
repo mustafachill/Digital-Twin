@@ -30,6 +30,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/Holding.srv
   srv/InitializeAsset.srv
   srv/JointsAt.srv
+  srv/ReleaseArm.srv
   srv/SetMode.srv
   srv/StartRobot.srv
   srv/StopCell.srv
