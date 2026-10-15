@@ -1196,6 +1196,8 @@ def test_the_node_never_publishes_an_older_snapshot_after_a_newer_one() -> None:
     node._publisher = Publisher()
     node._machine = None
     node._running = ("plant", "counterpart")
+    node._sides_lock = threading.Lock()
+    node._connected = ("plant", "counterpart")
     node.get_clock = lambda: Clock()
     rig = Rig()
     older = rig.machine.snapshot()
@@ -2007,6 +2009,64 @@ def test_a_lapse_its_initialization_outlasts_does_not_keep_the_side_unstarted() 
     rig.answer()
     assert join().success
     assert rig.machine.snapshot().started_targets == (REAL,)
+
+
+def test_a_physical_side_that_leaves_the_running_sides_is_no_longer_started() -> None:
+    """ADR-0077: a disconnected real arm comes back HELD, so it is started again."""
+    rig = Rig(physical=["counterpart"]).started(TWIN)
+    rig.machine.running_changed(SIDES)
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+    rig.available = [SIM]
+    rig.machine.running_changed(("plant",))
+    snapshot = rig.snapshots[-1]
+    assert snapshot.available_targets == (SIM,)
+    assert snapshot.started_targets == (SIM,) and snapshot.state == ConsoleState.READY
+    # Back up: offered again, and not started until Start robot says so.
+    rig.available = list(ALL)
+    rig.machine.running_changed(SIDES)
+    assert rig.machine.snapshot().started_targets == (SIM,)
+    refusal = rig.machine.motion_refusal(0.1, None, REAL)
+    assert refusal is not None and "is not started (counterpart)" in refusal
+    rig.started(REAL)
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
+
+
+def test_a_side_leaving_the_running_sides_while_it_is_started_stays_unstarted() -> None:
+    """S-01 for ADR-0077: a Start robot in flight does not re-add a side that left."""
+    rig = Rig(physical=["counterpart"])
+    rig.machine.running_changed(SIDES)
+
+    def initialize(sides, say, interrupted) -> None:
+        rig.initialized.append(tuple(sides))
+
+    rig.machine._initialize_physical = initialize
+    original = FakeCell.refuse_if_holding
+
+    def leave_then_read(cell, sides=("plant",)) -> None:
+        rig.machine.running_changed(("plant",))
+        original(cell, sides)
+
+    FakeCell.refuse_if_holding = leave_then_read
+    try:
+        join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+        rig.answer()
+        assert join().success
+    finally:
+        FakeCell.refuse_if_holding = original
+    snapshot = rig.machine.snapshot()
+    assert REAL not in snapshot.started_targets and snapshot.state == ConsoleState.NOT_STARTED
+
+
+def test_a_connected_held_side_accepts_start_robot_and_nothing_that_moves() -> None:
+    """ADR-0077 decision 5: up and HELD - offered, not commandable - is what Start robot is for."""
+    rig = Rig(physical=["counterpart"], commandable=("plant",))
+    for target in (REAL, TWIN):
+        refusal = rig.machine.motion_refusal(0.1, None, target)
+        assert refusal is not None
+    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
+    rig.answer()
+    assert join().success
+    assert rig.initialized == [("counterpart",)], "the release is the initializer's"
 
 
 def test_a_fault_unstarts_every_side() -> None:

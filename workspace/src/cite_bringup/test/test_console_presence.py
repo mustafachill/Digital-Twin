@@ -246,6 +246,39 @@ def test_a_plant_alone_console_commands_and_names_the_plants_belt_alone(
         console.destroy_node()
 
 
+# --- ADR-0077: the console offers what is up now ----------------------------
+
+
+def test_the_console_offers_the_targets_whose_sides_are_up_now(graph) -> None:
+    """Declared `--sides all`, the real arm offered only while the twin says it is up."""
+    import cite_bringup.program.console as console_module
+    from cite_bringup.program import targets
+
+    console = console_module.CellConsole(
+        load(default_plan_path("cell_b")), ("plant", "counterpart")
+    )
+    try:
+        assert console.on_configure(None) == console_module.TransitionCallbackReturn.SUCCESS
+        # Before the twin is heard: the simulated sides alone.
+        assert console._available() == [targets.SIM] and not console._counterpart_running()
+        # The physical side is still the declared one, for the speed floor.
+        assert console.machine.physical == ["counterpart"]
+        up = TwinSides(running=["plant", "counterpart"], commandable=["plant"],
+                       expected=["plant", "counterpart"], physical=["counterpart"],
+                       held=["counterpart"])
+        console._on_twin_sides(up)
+        assert console._available() == list(targets.ALL) and console._counterpart_running()
+        # Connected and held: Start robot is offered for it, Home is not.
+        assert targets.REAL in console.machine.snapshot().available_targets
+        assert targets.REAL not in console.machine.snapshot().started_targets
+        down = TwinSides(running=["plant"], commandable=["plant"],
+                         expected=["plant", "counterpart"], physical=["counterpart"])
+        console._on_twin_sides(down)
+        assert console._available() == [targets.SIM] and not console._counterpart_running()
+    finally:
+        console.destroy_node()
+
+
 # --- R-01, S-01, S-02: the cell asks the twin, on its own domain only ---------
 
 

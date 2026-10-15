@@ -289,6 +289,9 @@ def physical_sides_refusal(
     (R-06) - and its carriages reported stationary. None when they are, or
     when the target commands no physical side.
 
+    A physical side that is not up now (`TwinSides.running`, ADR-0077) refuses
+    whatever is asked: its robot is not connected.
+
     Before a homing request (``homing``, ADR-0076) the arm is held at STOP
     until the initializer releases it after the go-ahead, so a side need not be
     commandable yet: the post-initialization judgement before the target's
@@ -300,6 +303,14 @@ def physical_sides_refusal(
     if message is None:
         return f"no TwinSides heard on {TwinSides.TOPIC}"
     physical = [side for side in targets.SIDES[target] if side in message.physical]
+    # Declared and not up now (ADR-0077): no homing tolerates a side whose
+    # robot is not connected - there is no initializer there to release it.
+    absent = [side for side in physical if side not in message.running]
+    if absent:
+        return (
+            f"{', '.join(absent)} is not up now: "
+            f"{message.detail or 'the twin gave no reason'}"
+        )
     if homing:
         waiting = [
             side
@@ -745,7 +756,7 @@ class RosCell:
             raise StepFailed(refusal)
 
     def require_running(self, target: int) -> None:
-        """Refuse ``target`` if a side it commands does not run (R-17, ADR-0072).
+        """Refuse ``target`` if a side it commands is not up now (R-17, ADR-0072, ADR-0077).
 
         Read from the twin's latched `TwinSides`, before anyone is asked into the
         cell: a pair started with the plant alone has no real arm, and a terminal
@@ -762,7 +773,17 @@ class RosCell:
             self._until_true(lambda: bool(heard), f"TwinSides on {TwinSides.TOPIC}")
         finally:
             self.node.destroy_subscription(subscription)
-        missing = [side for side in targets.SIDES[target] if side not in heard[-1].running]
+        sides = heard[-1]
+        missing = [side for side in targets.SIDES[target] if side not in sides.running]
+        # `running` is the sides up NOW (ADR-0077). A side declared and not up
+        # is a kept counterpart whose robot is not connected; one not declared
+        # at all is a pair started with the plant alone.
+        absent = [side for side in missing if side in sides.expected]
+        if absent:
+            raise StepFailed(
+                f"{targets.label(target)} commands {', '.join(absent)}, which is not up now "
+                f"({sides.detail or 'not connected'}). Nothing else is run in its place"
+            )
         if missing:
             raise StepFailed(
                 f"{targets.label(target)} commands {', '.join(missing)}, which this pair does not "

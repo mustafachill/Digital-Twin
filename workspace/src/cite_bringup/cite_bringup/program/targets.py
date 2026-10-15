@@ -28,8 +28,9 @@ cannot import `cite_twin` (it depends on this one), so `cite_twin`'s tests hold
 the two equal rather than either restating the other unchecked.
 
 It also says which targets a running deployment can serve: a target is offered
-- selectable, and accepted by Start robot - when every side it commands RUNS
-(the pair supervisor's `--sides`; ADR-0075 decision 4). Whether a side may be
+- selectable, and accepted by Start robot - when every side it commands is UP
+NOW (`TwinSides.running`; ADR-0075 decision 4 as ADR-0077 amends it: an
+operator console's pair keeps its physical counterpart, which comes and goes). Whether a side may be
 COMMANDED now is a separate question - a simulated side always, a physical side
 only while the twin boundary judges it ready by measurement
 (`TwinSides.commandable`, R-19) - which Home and Start program ask
@@ -98,11 +99,12 @@ def running_physical(plan: Plan, running: Collection[str]) -> list[str]:
 
 
 def available(running: Collection[str]) -> list[int]:
-    """Return the targets every side of which runs, in panel order (ADR-0075 decision 4).
+    """Return the targets every side of which is up now, in panel order (ADR-0075, ADR-0077).
 
     Commandability is not asked here: a physical side that has not found its
-    zero still offers its targets, so Start robot - the request that zeroes
-    it - can be sent to them. Home and Start program ask `not_commandable`.
+    zero, or that is connected and HELD (ADR-0076), still offers its targets,
+    so Start robot - the request that zeroes and releases it - can be sent to
+    them. Home and Start program ask `not_commandable`.
     """
     return [target for target in ALL if all(side in running for side in SIDES[target])]
 
@@ -130,7 +132,7 @@ def refusal(target: int, offered: Sequence[int]) -> str | None:
     if target not in offered:
         named = ", ".join(LABELS[item] for item in offered) or "nothing"
         return (
-            f"{LABELS[target]} is not offered now: a side it commands does not run. "
+            f"{LABELS[target]} is not offered now: a side it commands is not up. "
             f"Offered: {named}"
         )
     return None

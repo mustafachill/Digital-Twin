@@ -299,8 +299,8 @@ class ConsoleMachine:
     ``make_cell(speed, interrupted)`` returns a `RosCell`-like cell driving the
     twin at ``speed`` that raises `Interrupted` once ``interrupted()`` is true,
     and ``speed`` None for a cell that is never handed a step; the caller
-    closes it. ``physical`` is the RUNNING physical sides
-    (`targets.running_physical`, R-16). ``initialize_physical(sides, say,
+    closes it. ``physical`` is the DECLARED physical sides
+    (`targets.running_physical` of the pair's `--sides`, R-16), up or not. ``initialize_physical(sides, say,
     interrupted)`` is `home.initialize` for ``sides``, which are always the
     running physical sides of ONE request's target (ADR-0075).
     ``place_parts(sides, may_hold, say, interrupted)`` puts a work-piece on
@@ -311,8 +311,8 @@ class ConsoleMachine:
     returns a goal's scale or raises `ValueError` (`sides.required_speed_scale`
     for the target's sides, R-25), and ``minimum_speed_scale`` is the floor it
     applies to a target with a physical side, 0 for none. ``available()`` is
-    the targets the running deployment offers (`targets.available`: every
-    side running, ADR-0075 decision 4), and ``commandable()`` the sides the
+    the targets offered now (`targets.available`: every side of them up now,
+    ADR-0075 decision 4 as ADR-0077 amends it), and ``commandable()`` the sides the
     twin says may be commanded now (`TwinSides.commandable`, R-19): Home and
     Start program are refused for a target with a side outside it.
     ``heard_twin_mode`` is the twin's mode as last heard on its topic, None
@@ -378,6 +378,10 @@ class ConsoleMachine:
         #: The sides the twin called commandable when last told
         #: (`commandable_changed`), to see one cease to be.
         self._was_commandable: set[str] = set(commandable())
+        #: The sides the twin said were up when last told (`running_changed`,
+        #: ADR-0077), to see one leave. Empty until told: a side never heard
+        #: running was never started.
+        self._was_running: set[str] = set()
         #: The physical sides that ceased to be commandable while a request
         #: ran, since it began (S-01): the Start robot in flight does not mark
         #: one started at its end unless its initialization ended after the
@@ -504,6 +508,33 @@ class ConsoleMachine:
             if self._busy:
                 # A Start robot in flight would re-add it at its end (S-01).
                 self._lapsed_in_flight.update(lapsed)
+            if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
+                self._state = ConsoleState.NOT_STARTED
+            snapshot = self._snapshot()
+        self._on_change(snapshot)
+
+    def running_changed(self, now: Collection[str]) -> None:
+        """Take the sides the twin says are up now, and publish the state again (ADR-0077).
+
+        A physical side that was up and is no longer - its robot disconnected,
+        or its deadman tripped and its side is being started again - has its
+        started flag cleared, as a lapse of commandability clears it
+        (`commandable_changed`): restarting is not resuming, and the side comes
+        back HELD, so Start robot is asked again before Home or Start program.
+        A lapse heard while a request runs keeps the side out of what that
+        request starts. An idle READY console with no side left started is
+        NOT_STARTED.
+
+        ``now`` is the set the twin's message carried, compared with the one
+        before it, for the reason `commandable_changed` gives (S-02).
+        """
+        with self._lock:
+            now = set(now)
+            left = (self._was_running - now).intersection(self._physical)
+            self._was_running = now
+            self._started_sides.difference_update(left)
+            if self._busy:
+                self._lapsed_in_flight.update(left)
             if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
                 self._state = ConsoleState.NOT_STARTED
             snapshot = self._snapshot()

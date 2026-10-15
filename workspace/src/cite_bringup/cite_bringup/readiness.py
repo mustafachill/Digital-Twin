@@ -292,6 +292,17 @@ SIDE_DOWN = "down"
 SIDE_FAILED = "failed"
 SIDE_STATES = (SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_DOWN, SIDE_FAILED)
 
+#: How many attempts in a row a KEPT side may make that reach its robot and
+#: then fail to announce, before it is `failed` and not started again
+#: (ADR-0077 decision 2). Stated here, beside the states, because the pair
+#: supervisor applies it and the twin boundary says it to the operator, and the
+#: boundary may not import the supervisor (it starts processes). An owner's
+#: decision, not a measurement: how often a physical connection fails
+#: transiently has not been measured (open-work #93), and this is the number to
+#: revisit once it has. A side that came up resets the count, so a robot that
+#: drops now and then is reconnected every time.
+KEPT_ATTEMPTS = 3
+
 
 def side_state_line(side: str, state: str) -> str:
     """Format one state line for the boundary's standard input; refuse an unknown state."""

@@ -178,11 +178,18 @@ class CellConsole(LifecycleNode):
         )
         self._plan = plan
         self._names = plan.console
-        #: The sides the pair supervisor started (`--sides`, ADR-0072): a fact
-        #: about this deployment, read once.
+        #: The sides the pair supervisor DECLARED (`--sides`, ADR-0072): a fact
+        #: about this deployment, read once. What is physical, and the speed
+        #: floor, are read off these.
         self._running = tuple(running)
-        #: Guards `_commandable` alone, so the machine may read it under its lock.
+        #: Guards `_commandable` and `_connected` alone, so the machine may read
+        #: them under its lock.
         self._sides_lock = threading.Lock()
+        #: The declared sides the twin says are UP NOW (`TwinSides.running`,
+        #: ADR-0077): an operator console's pair keeps its physical counterpart,
+        #: which comes and goes. Until the twin is heard, the declared simulated
+        #: sides and no physical one. The targets offered are this set's.
+        self._connected: tuple[str, ...] = ()
         #: The sides a mode may command now, as the twin last said (`TwinSides`,
         #: R-19); until it is heard, the running simulated sides and no
         #: physical one - a physical side is commanded only by measurement
@@ -236,6 +243,7 @@ class CellConsole(LifecycleNode):
         simulated = [side for side in simulated_sides(plan) if side in self._running]
         with self._sides_lock:
             self._commandable = tuple(simulated)
+            self._connected = tuple(simulated)
         self._machine = ConsoleMachine(
             physical=physical,
             simulated=simulated,
@@ -553,23 +561,33 @@ class CellConsole(LifecycleNode):
             self._publish(machine.snapshot())
 
     def _on_twin_sides(self, message: TwinSides) -> None:
-        """Keep what the twin says may be commanded now, and publish the state again (R-19).
+        """Keep which sides are up and may be commanded now, and publish the state again.
 
-        The machine is told, so a physical side that ceased to be commandable
-        is no longer started (ADR-0075 decision 2); it publishes the state.
+        R-19 and ADR-0077. The machine is told both, so a physical side that
+        ceased to be commandable, or left the sides running, is no longer
+        started (ADR-0075 decision 2); each publishes the state.
         """
+        connected = tuple(side for side in message.running if side in self._running)
         commandable = tuple(side for side in message.commandable if side in self._running)
         with self._sides_lock:
+            self._connected = connected
             self._commandable = commandable
         machine = self._machine
         if machine is not None:
-            # This message's own set, outside `_sides_lock` (the machine reads
+            # This message's own sets, outside `_sides_lock` (the machine reads
             # that lock under its own): a later one cannot hide its lapse (S-02).
+            machine.running_changed(connected)
             machine.commandable_changed(commandable)
 
     def _available(self) -> list[int]:
-        """Return the targets this deployment offers: every side running (ADR-0075)."""
-        return targets.available(self._running)
+        """Return the targets offered now: every side of them up (ADR-0075, ADR-0077)."""
+        with self._sides_lock:
+            return targets.available(self._connected)
+
+    def _counterpart_running(self) -> bool:
+        """Whether the counterpart is up now, as the twin last said (ADR-0077)."""
+        with self._sides_lock:
+            return COUNTERPART_SIDE in self._connected
 
     def _commandable_now(self) -> tuple[str, ...]:
         """Return the running sides the twin last said may be commanded now (R-19)."""
@@ -622,7 +640,7 @@ class CellConsole(LifecycleNode):
                 startable_targets=list(snapshot.startable_targets),
                 floored_targets=list(snapshot.floored_targets),
                 started_targets=list(snapshot.started_targets),
-                counterpart_running=COUNTERPART_SIDE in self._running,
+                counterpart_running=self._counterpart_running(),
                 step=snapshot.step,
                 prompt=snapshot.prompt,
                 last_error=snapshot.last_error,

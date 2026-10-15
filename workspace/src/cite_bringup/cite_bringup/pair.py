@@ -131,6 +131,7 @@ from cite_bringup.readiness import (
     announced_reachable,
     announced_side,
     announced_window_closed,
+    KEPT_ATTEMPTS,
     SIDE_CONNECTING,
     SIDE_DOWN,
     SIDE_FAILED,
@@ -223,14 +224,6 @@ BOUNDARY_CEILING_S = 120.0
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
 
-#: How many attempts in a row a KEPT side may make that reach its robot and
-#: then fail to announce, before it is `failed` and not started again
-#: (ADR-0077 decision 2). An owner's decision, not a measurement: how often a
-#: physical connection fails transiently has not been measured (open-work
-#: #93), and this is the number to revisit once it has. A side that came up
-#: resets the count, so a robot that drops now and then is reconnected every
-#: time.
-KEPT_ATTEMPTS = 3
 
 
 #: `--sides`: the plant alone, or every side the plan declares (ADR-0072). The
