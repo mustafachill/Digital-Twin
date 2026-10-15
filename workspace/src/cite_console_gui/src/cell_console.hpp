@@ -78,6 +78,7 @@
 #include "cite_console_gui/world_stats_client.hpp"
 #include "cite_console_gui/console_client.hpp"
 #include "cite_console_gui/console_config.hpp"
+#include "cite_console_gui/console_view.hpp"
 #include "cite_console_gui/enablement.hpp"
 #include "cite_console_gui/health.hpp"
 #include "cite_console_gui/selection.hpp"
@@ -201,7 +202,8 @@ public:
   QString configError() const {return config_error_;}
   QString stateName() const {return state_name_;}
   bool faulted() const {return selection_.view().heard && selection_.view().phase == Phase::FAULT;}
-  QString step() const {return step_;}
+  /// As the Robot card shows it (`display_text`, T-03).
+  QString step() const {return QString::fromStdString(display_text(step_.toStdString()));}
   QString prompt() const {return prompt_;}
   QString lastError() const {return last_error_;}
   bool robotStarted() const {return selection_.view().robot_started;}
@@ -240,7 +242,8 @@ public:
   QString boundaryLink() const;
   QVariantList sideHealth() const;
   QString progress() const {return progress_;}
-  QString outcome() const {return outcome_;}
+  /// As the Robot card shows it (`display_text`, T-03).
+  QString outcome() const {return QString::fromStdString(display_text(outcome_.toStdString()));}
   bool busy() const {return selection_.view().heard && selection_.view().busy;}
   QString facilityLabel() const {return QString::fromStdString(frame_config_.facility_label);}
   QString zoneLabel() const {return QString::fromStdString(frame_config_.zone_label);}

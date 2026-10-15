@@ -1274,6 +1274,25 @@ TEST(PanelQml, WorldStatisticsTurnStaleOnThePluginsTimerAndCurrentOnArrival)
   EXPECT_FALSE(plugin.worldStatsStale()) << "the arrival did not restart the age";
 }
 
+// T-03: the Robot card shows the console's step and outcome without stray
+// spaces, and a number with its unit is one unbreakable piece.
+TEST(PanelQml, TheRobotCardShowsAStepWithoutStraySpacesOrALoneUnit)
+{
+  Framed framed(kSizes[3]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.step = "  ok  plant: conveyor at 0 m/s";
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  settle(framed);
+  auto * step = framed.find("stepRow");
+  ASSERT_NE(step, nullptr);
+  auto * value = step->findChild<QQuickItem *>("fieldValue");
+  ASSERT_NE(value, nullptr);
+  EXPECT_EQ(
+    value->property("text").toString(),
+    QString::fromUtf8("ok plant: conveyor at 0\u00a0m/s"));
+}
+
 // R-05: the view label names what Follow robot follows in the configuration's
 // words, never a literal of its own.
 TEST(PanelQml, FollowingIsNamedByTheConfiguration)

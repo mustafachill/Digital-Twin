@@ -87,6 +87,15 @@ std::string outcome_opening(const std::string & request, bool success, bool afte
 std::string run_program_outcome(
   const cite_interfaces::action::RunProgram::Result & result, bool after_stop = false);
 
+/// `text` as a line of the Robot card shows it (T-03), the same words:
+/// every run of whitespace one space, none at either end, and the space
+/// between a number and the unit after it ("0.5 m/s", "1.00 / s") a no-break
+/// space, so that a line never breaks between them. For display only: what
+/// the event log and the outcome's sources hold is unchanged, and the
+/// console's prompt is never passed through it (the operator confirms
+/// exactly that text).
+std::string display_text(const std::string & text);
+
 /// `text` as a sentence of its own: trimmed, and ended with a full stop
 /// unless it ends in one, "!" or "?". Empty for blank text.
 std::string as_sentence(const std::string & text);

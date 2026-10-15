@@ -15,6 +15,8 @@
 #include "cite_console_gui/console_view.hpp"
 
 #include <initializer_list>
+#include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -151,6 +153,56 @@ std::string as_sentence(const std::string & text)
     sentence += '.';
   }
   return sentence;
+}
+
+namespace
+{
+
+/// A number as a step writes one: digits, a sign, at most one decimal point.
+bool is_number(const std::string & word)
+{
+  std::size_t at = word.empty() || (word[0] != '-' && word[0] != '+') ? 0 : 1;
+  bool digits = false;
+  bool point = false;
+  for (; at < word.size(); ++at) {
+    if (word[at] >= '0' && word[at] <= '9') {
+      digits = true;
+    } else if (word[at] == '.' && !point) {
+      point = true;
+    } else {
+      return false;
+    }
+  }
+  return digits;
+}
+
+/// A unit a step or an outcome writes after a number, or the "/" of a rate.
+bool is_unit(const std::string & word)
+{
+  static const std::set<std::string> units = {
+    "/", "m/s", "mm/s", "rad/s", "/s", "m", "mm", "s", "ms", "rad", "deg", "°", "%", "Hz", "×"};
+  return units.count(word) == 1;
+}
+
+}  // namespace
+
+std::string display_text(const std::string & text)
+{
+  std::vector<std::string> words;
+  std::istringstream stream(text);
+  for (std::string word; stream >> word; ) {
+    words.push_back(word);
+  }
+  std::string line;
+  for (std::size_t index = 0; index < words.size(); ++index) {
+    if (index > 0) {
+      const std::string & before = words[index - 1];
+      const bool bound = is_unit(words[index]) && (is_number(before) || before == "/");
+      line += bound ? "\u00a0" : " ";
+    }
+    line += words[index];
+  }
+  return line;
 }
 
 namespace

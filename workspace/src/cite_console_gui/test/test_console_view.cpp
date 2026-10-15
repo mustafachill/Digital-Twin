@@ -334,6 +334,26 @@ TEST(ConsoleView, AStartProgramOutcomeIsSentencesAndSaysItsCountOnce)
   EXPECT_EQ(cite_console_gui::as_sentence("Is it?"), "Is it?");
 }
 
+TEST(ConsoleView, ADisplayedLineKeepsItsWordsAndNeverBreaksANumberFromItsUnit)
+{
+  // T-03: a step as cell_console says one ("  ok  <side>: ..."), and units
+  // that wrapped alone on the Robot card.
+  const std::string nbsp = "\u00a0";
+  EXPECT_EQ(
+    cite_console_gui::display_text("  ok  plant: conveyor at 0 m/s"),
+    "ok plant: conveyor at 0" + nbsp + "m/s");
+  EXPECT_EQ(cite_console_gui::display_text("speed 1.00 / s"), "speed 1.00" + nbsp + "/" + nbsp + "s");
+  EXPECT_EQ(cite_console_gui::display_text("0 / m/s"), "0" + nbsp + "/" + nbsp + "m/s");
+  EXPECT_EQ(
+    cite_console_gui::display_text("slide the track to 350 mm at -0.25 m/s"),
+    "slide the track to 350" + nbsp + "mm at -0.25" + nbsp + "m/s");
+  // Words that are not units, and numbers with none, are left as they are.
+  EXPECT_EQ(
+    cite_console_gui::display_text("move to blockly_04 at 0.111 of full speed, 3 cycles"),
+    "move to blockly_04 at 0.111 of full speed, 3 cycles");
+  EXPECT_EQ(cite_console_gui::display_text(" \t\n "), "");
+}
+
 TEST(ConsoleView, AValidateThenRunPhaseTheContractDoesNotProduceIsNotARefusal)
 {
   // A success that names no phase is not said as a refusal, and a phase this
