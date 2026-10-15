@@ -289,6 +289,10 @@ cite_build_inputs_fingerprint() {
     } | cksum | awk '{print $1}'
 }
 
+# record_build_inputs — write the configure-time fingerprint above to its stamp,
+# after a build configured the tree; the gates compare against it
+# (assert_build_inputs_current). Silent and harmless where there is no build
+# directory to hold the stamp.
 record_build_inputs() {
     local stamp
     stamp="$(cite_build_stamp_path)"

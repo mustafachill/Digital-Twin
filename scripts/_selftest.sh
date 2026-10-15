@@ -1892,6 +1892,9 @@ expect_ok   "and the control center starts the console with its run id" \
             grep -qF 'CITE_CONSOLE_RUN="$CC_RUN" ./scripts/console' "${REPO_ROOT}/scripts/control-center"
 expect_ok   "the control center refuses while another gui container of this checkout runs" \
             grep -q 'console_containers_running' "${REPO_ROOT}/scripts/control-center"
+# shellcheck disable=SC2016
+expect_ok   "and its refusal names the containers with a docker stop hint" \
+            grep -qF 'docker stop ${OTHERS//' "${REPO_ROOT}/scripts/control-center"
 
 # control_center_forward: this run's container first, the console's group as a
 # fallback, nothing before the console exists.

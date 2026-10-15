@@ -60,7 +60,8 @@ controller, a stage out of order, a `package://` URI that does not resolve — i
 The order is a real dependency chain, not a preference
 ([`cross-cutting-lifecycle.md`](../../../docs/architecture/cross-cutting-lifecycle.md)).
 
-1. `gz sim`, and one `ros_gz_bridge parameter_bridge`.
+1. `gz sim -s` (the server), plus a separate `gz sim -g` (the window) when the side is
+   windowed (ADR-0078 decision 3), and one `ros_gz_bridge parameter_bridge`.
 2. The scene: `robot_state_publisher` plus `ros_gz_sim create`.
 3. One `robot_state_publisher` and one `create` per arm — **one Gazebo model per arm**,
    because `gz_ros2_control` attaches to a model and the controller manager it creates claims

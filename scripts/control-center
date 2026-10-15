@@ -154,7 +154,9 @@ progress "Checking the build; it is rebuilt only if a source changed."
 # reach. Refused, with what to do (ADR-0078).
 OTHERS="$(console_containers_running)"
 [ -z "$OTHERS" ] || fail "A simulation window of this checkout is already running (container ${OTHERS//$'\n'/, }).
-Close it, or stop it with Ctrl-C where it was started, then start the control center again."
+Close it, or stop it with Ctrl-C where it was started, or from a terminal with
+  docker stop ${OTHERS//$'\n'/ }
+then start the control center again."
 
 CC_RUN="cc-$$-$(date -u +%Y%m%dT%H%M%SZ)"
 trap 'control_center_forward 1' HUP
