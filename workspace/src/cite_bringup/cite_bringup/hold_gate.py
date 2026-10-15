@@ -23,10 +23,17 @@ held and non-zero naming the one that did not. Nothing that could move the arm
 
 What it confirms, for every physical arm on the side, in order:
 
-1. **The deadman says AWAITING**: active, and holding the arm because no
-   heartbeat has arrived. Read on its latched `DeadmanState`.
-2. **Every vendor service the side's nodes call is advertised**: the vendor
-   driver is up, which means the plugin has connected to the arm's controller.
+1. **The deadman says AWAITING or HELD**: active, and holding the arm at STOP -
+   because no heartbeat has arrived (AWAITING), or because the operator has
+   not released it (HELD, ADR-0076 decision 6). A side started while the twin
+   boundary is already beating finds its deadman HELD at once; both are held,
+   and neither permits motion. Read on its latched `DeadmanState`.
+2. **Every vendor service the side's nodes call is served by exactly one
+   server**: the vendor driver is up, which means the plugin has connected to
+   the arm's controller. Exactly one, and not merely advertised (ADR-0076
+   decision 6): a driver that crashed leaves its endpoints on the graph until
+   their discovery lease expires, and a STOP answered by - or lost to - that
+   stale one says nothing about the live one.
 3. **A STOP sent to the vendor is acknowledged** (`set_state(4)`, `ret == 0`).
    The deadman sends the same STOP on every tick and publishes no observable of
    its acknowledgement, so this gate sends one of its own and waits for the
@@ -81,14 +88,25 @@ class HoldFailed(RuntimeError):
     """A condition of the hold did not hold before the ceiling."""
 
 
-def awaiting(message: DeadmanState | None) -> bool:
-    """Whether the deadman's last word is AWAITING: active, and holding the arm."""
-    return message is not None and message.state == DeadmanState.STATE_AWAITING
+#: The deadman states in which the arm is held at STOP and motion is refused,
+#: and which the gate accepts: AWAITING, and HELD (ADR-0076 decision 6).
+HELD_STATES = (DeadmanState.STATE_AWAITING, DeadmanState.STATE_HELD)
 
 
-def missing_services(wanted: list[str], advertised: set[str]) -> list[str]:
-    """Return the vendor services not yet advertised, in the order they were asked for."""
-    return [name for name in wanted if name not in advertised]
+def held(message: DeadmanState | None) -> bool:
+    """Whether the deadman's last word is AWAITING or HELD: active, and holding the arm."""
+    return message is not None and message.state in HELD_STATES
+
+
+def not_served_once(wanted: list[str], servers: Callable[[str], int]) -> list[str]:
+    """Return each vendor service not served by exactly one server, with its count.
+
+    In the order they were asked for; ``servers`` counts a service's servers on
+    the graph. None is a driver not up yet; two or more is a driver whose
+    crashed predecessor's endpoints are still on the graph (ADR-0076).
+    """
+    counts = [(name, servers(name)) for name in wanted]
+    return [f"{name} ({count} server(s))" for name, count in counts if count != 1]
 
 
 def wait_until(
@@ -214,9 +232,6 @@ def main(argv: list[str] | None = None) -> int:
             lambda: rclpy.spin_once(node, timeout_sec=_SLICE_S),
         )
 
-    def advertised() -> set[str]:
-        return {name for name, _types in node.get_service_names_and_types()}
-
     try:
         for manager, physical, vendor in arms:
             last: list[DeadmanState] = []
@@ -224,15 +239,15 @@ def main(argv: list[str] | None = None) -> int:
                 DeadmanState, physical.deadman_state_topic, last.append, LATCHED
             )
             spin_until(
-                lambda: awaiting(last[-1] if last else None),
-                lambda: f"{manager.asset}: the deadman did not say AWAITING on "
+                lambda: held(last[-1] if last else None),
+                lambda: f"{manager.asset}: the deadman did not say AWAITING or HELD on "
                 f"{physical.deadman_state_topic}",
             )
             wanted = list(vendor.services.values())
             spin_until(
-                lambda: not missing_services(wanted, advertised()),
-                lambda: f"{manager.asset}: the vendor driver did not advertise "
-                f"{missing_services(wanted, advertised())}",
+                lambda: not not_served_once(wanted, node.count_services),
+                lambda: f"{manager.asset}: the vendor driver did not serve exactly once "
+                f"{not_served_once(wanted, node.count_services)}",
             )
             client = node.create_client(SetInt16, vendor.services["set_state"])
             response = call_until_answered(
@@ -250,7 +265,11 @@ def main(argv: list[str] | None = None) -> int:
                     f"{manager.asset}: the vendor refused a STOP (code {code}). Clear the "
                     "arm's error with the vendor's own tools before starting again."
                 )
-            node.get_logger().info(f"{manager.asset}: held at STOP, deadman AWAITING")
+            state = last[-1].state if last else None
+            node.get_logger().info(
+                f"{manager.asset}: held at STOP, deadman "
+                f"{'HELD' if state == DeadmanState.STATE_HELD else 'AWAITING'}"
+            )
     except HoldFailed as failure:
         print(f"HOLD GATE FAILED: {failure}", file=sys.stderr)
         return 1

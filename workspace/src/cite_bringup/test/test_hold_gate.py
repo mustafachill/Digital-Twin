@@ -34,13 +34,16 @@ import sys
 
 from cite_bringup.hold_gate import (
     call_until_answered,
+    held,
     HoldFailed,
+    not_served_once,
     vendor_call_deadline_s,
     wait_until,
 )
 from cite_bringup.plan import COUNTERPART_SIDE, default_plan_path, load
 from cite_interfaces.msg import DeadmanState
 import pytest
+import rclpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "cite_hardware" / "test"))
 from vendor_fakes import (  # noqa: E402
@@ -225,6 +228,31 @@ def test_a_client_that_never_matches_fails_at_the_deadline_having_sent_nothing()
     assert client.sent == []
 
 
+@pytest.mark.parametrize(
+    ("state", "accepted"),
+    [
+        (DeadmanState.STATE_INACTIVE, False),
+        (DeadmanState.STATE_AWAITING, True),
+        (DeadmanState.STATE_HELD, True),
+        (DeadmanState.STATE_HEALTHY, False),
+        (DeadmanState.STATE_TRIPPED, False),
+    ],
+)
+def test_awaiting_and_held_are_held(state: int, accepted: bool) -> None:
+    """ADR-0076 decision 6: a side started under a beating boundary is HELD."""
+    assert held(DeadmanState(state=state)) is accepted
+    assert held(None) is False
+
+
+def test_a_service_is_ready_only_when_served_exactly_once() -> None:
+    counts = {"/a": 1, "/b": 0, "/c": 2}
+    assert not_served_once(["/a", "/b", "/c"], counts.__getitem__) == [
+        "/b (0 server(s))",
+        "/c (2 server(s))",
+    ]
+    assert not_served_once(["/a"], counts.__getitem__) == []
+
+
 def test_the_per_call_bound_is_the_deadmans_own() -> None:
     physical, _names = _vendor()
     # A positive number read from the generated file, not restated here.
@@ -242,7 +270,7 @@ def test_1_a_deadman_that_is_not_awaiting_confirms_no_hold(rig, state: int) -> N
     deadman.say(state, "not awaiting")
     result = _gate()
     assert result.returncode == 1, result.stderr
-    assert f"did not say AWAITING on {physical.deadman_state_topic}" in result.stderr
+    assert f"did not say AWAITING or HELD on {physical.deadman_state_topic}" in result.stderr
 
 
 def test_2_a_vendor_service_not_advertised_is_named(rig) -> None:
@@ -255,7 +283,7 @@ def test_2_a_vendor_service_not_advertised_is_named(rig) -> None:
     harness.fakes = [rig_track, rig_arm]
     result = _gate()
     assert result.returncode == 1, result.stderr
-    assert vendor.services["get_gripper_position"] in result.stderr
+    assert f"{vendor.services['get_gripper_position']} (0 server(s))" in result.stderr
     assert vendor.services["set_state"] not in result.stderr
 
 
@@ -306,3 +334,41 @@ def test_5_an_awaiting_deadman_and_an_acknowledged_stop_confirm_the_hold(rig) ->
     sent = arm.requests[len(before):]
     assert sent and set(sent) == {4}
     assert arm.modes == []
+
+
+def test_6_a_held_deadman_and_an_acknowledged_stop_confirm_the_hold(rig) -> None:
+    """ADR-0076 decision 6: HELD is held, as AWAITING is."""
+    harness, _physical, _vendor, deadman = rig
+    deadman.say(DeadmanState.STATE_HELD, "held")
+    _track, arm = harness.fakes
+    before = list(arm.requests)
+    result = _gate()
+    assert result.returncode == 0, result.stderr
+    assert "deadman HELD" in result.stderr + result.stdout
+    sent = arm.requests[len(before):]
+    assert sent and set(sent) == {4}
+    assert arm.modes == []
+
+
+def test_7_a_vendor_service_served_twice_confirms_no_hold(rig) -> None:
+    """ADR-0076 decision 6: a crashed driver's stale endpoint is not the live one.
+
+    Last: the second server is in a node of its own, destroyed at the end, and
+    it serves a service the gate never calls, so nothing keeps it advertised.
+    """
+    harness, _physical, vendor, deadman = rig
+    deadman.say(DeadmanState.STATE_AWAITING, "awaiting")
+    name = vendor.services["get_gripper_position"]
+    stale = rclpy.create_node("stale_vendor_driver")
+    stale.create_service(GetFloat32, name, lambda _request, response: response)
+    try:
+        harness.wait_for(lambda: harness.node.count_services(name) == 2, "two servers seen")
+        _track, arm = harness.fakes
+        before = len(arm.requests)
+        result = _gate()
+        assert result.returncode == 1, result.stderr
+        assert f"{name} (2 server(s))" in result.stderr
+        # No STOP was sent: the gate waits for one server before it sends.
+        assert len(arm.requests) == before
+    finally:
+        stale.destroy_node()
