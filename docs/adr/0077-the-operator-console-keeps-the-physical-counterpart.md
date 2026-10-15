@@ -10,7 +10,7 @@
     [ADR-0057](0057-start-the-twin-boundary-from-the-pair-supervisor.md),
     [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md) decision 4,
     [ADR-0075](0075-start-robot-and-home-act-on-the-selected-target.md) decision 4 and the
-    failure table of [ADR-0047](0047-two-processes-joined-on-readiness.md).
+    failure table of [ADR-0047](0047-two-independent-launches-joined-not-sequenced.md).
   - Depends on [ADR-0076](0076-a-physical-arm-is-held-until-the-operator-starts-it.md).
 
 ## Context
