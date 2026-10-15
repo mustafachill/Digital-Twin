@@ -17,7 +17,8 @@
 ADR-0070 item 6, and the launch requirements of the safety re-audit (L-1 to
 L-7). **Nothing here starts a process, and nothing reaches a robot.** A fake
 `ros2_control` hardware is not possible with the vendor plugin, so the launch
-description is built and read: which refusals come first, that the deadman is
+description is built and read: which refusals come first, that nothing starts
+before the reach gate found the robot (ADR-0077), that the deadman is
 confirmed active before the controller manager exists, that nothing that could
 move the arm starts before the hold gate, that nothing respawns and that every
 process going away takes the side with it. The address used anywhere here is
@@ -45,7 +46,7 @@ from cite_bringup.plan import (
     load,
     PLANT_SIDE,
 )
-from cite_bringup.readiness import READY_TOKEN
+from cite_bringup.readiness import REACHABLE_TOKEN, READY_TOKEN
 from cite_bringup.readiness_witness import endpoints, physical_endpoints
 from cite_bringup.side_launch import FailTheLaunch, skill_parameters
 from control_msgs.action import FollowJointTrajectory, GripperCommand
@@ -268,26 +269,84 @@ def test_the_launch_declares_no_clock_argument(module) -> None:
         for entity in module.generate_launch_description().entities
         if isinstance(entity, DeclareLaunchArgument)
     }
-    assert declared == {"zone", "side"}
+    assert declared == {"zone", "side", "wait_for_robot"}
+
+
+def test_a_wait_for_robot_that_is_not_a_boolean_is_refused(
+    module, context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(HARDWARE_OPT_IN_ENV, "1")
+    context.launch_configurations["wait_for_robot"] = "maybe"
+    actions = module._bring_up(context)
+    assert _is_stop(actions)
+    assert "wait_for_robot" in _message(actions, context)
 
 
 # --- The order a physical side comes up in -----------------------------------
 
 
-def test_the_deadman_is_the_first_thing_started_and_driven_alone(module, context) -> None:
+def test_the_reach_gate_is_the_only_thing_started_on_nothing(module, context) -> None:
+    """ADR-0077 decision 3: no deadman and no vendor driver before the robot answered."""
     actions = _structure(module)
     started = [a for a in actions if isinstance(a, Node)]
-    assert [_executable(n) for n in started] == ["deadman.py", "lifecycle_driver.py"]
+    assert [_executable(n) for n in started] == ["reach_gate.py"]
+
+
+def test_the_deadman_is_started_once_the_robot_answered_and_driven_alone(
+    module, context
+) -> None:
+    actions = _structure(module)
+    (reached,) = [a for a in actions if _executable(a) == "reach_gate.py"]
+    assert _releasing(actions, context, "deadman.py") is reached
+    assert _releasing(actions, context, "lifecycle_driver.py") is reached
+    released = dict((id(t), e) for t, e in _gated(actions, context))[id(reached)]
+    drivers = [e for e in released if _executable(e) == "lifecycle_driver.py"]
     physical = _plan().controller_managers[0].physical_on(COUNTERPART_SIDE)
-    driver = started[1]
-    assert driver._Node__arguments == ["--node", physical.deadman]  # noqa: SLF001
+    assert drivers[0]._Node__arguments == ["--node", physical.deadman]  # noqa: SLF001
+
+
+def test_the_reachable_line_is_said_when_the_reach_gate_exits_cleanly(module, context) -> None:
+    """The line the pair supervisor tells a refusal from a failed connection by."""
+    actions = _structure(module)
+    tokens = [
+        target
+        for target, entities in _gated(actions, context)
+        for e in entities
+        if isinstance(e, LogInfo)
+        and REACHABLE_TOKEN in "".join(p.perform(context) for p in e.msg)
+    ]
+    assert [_executable(t) for t in tokens] == ["reach_gate.py"]
+
+
+def test_a_reach_gate_that_failed_stops_the_side(module, context) -> None:
+    actions = _structure(module)
+    (handler,) = [
+        a.event_handler
+        for a in actions
+        if isinstance(a, RegisterEventHandler)
+        and a.event_handler.matches(_exit_of([n for n in actions if isinstance(n, Node)][0]))
+    ]
+    assert _is_stop(handler.handle(_Exited(1), context))
+
+
+def test_only_a_kept_side_waits_for_its_robot_without_a_ceiling(module) -> None:
+    """`--wait` is passed when the supervisor keeps the side, never by default."""
+    plan = _plan()
+    assert module.reach_gate_arguments(plan, COUNTERPART_SIDE, False) == [
+        "--zone", "cell_b", "--side", COUNTERPART_SIDE,
+    ]
+    assert module.reach_gate_arguments(plan, COUNTERPART_SIDE, True)[-1] == "--wait"
+    for argument in module.reach_gate_arguments(plan, COUNTERPART_SIDE, True):
+        assert TEST_ADDRESS not in argument
 
 
 def test_the_controller_manager_exists_only_after_the_deadman_is_confirmed(
     module, context
 ) -> None:
     actions = _structure(module)
-    first_driver = [a for a in actions if _executable(a) == "lifecycle_driver.py"][0]
+    first_driver = _releasing(actions, context, "ros2_control_node")
+    assert _executable(first_driver) == "lifecycle_driver.py"
+    assert _releasing(actions, context, "deadman.py") is not first_driver
     assert _releasing(actions, context, "ros2_control_node") is first_driver
     assert not any(_executable(a) == "ros2_control_node" for a in actions)
 
@@ -485,6 +544,7 @@ def test_the_physical_counterpart_gets_the_hardware_launch() -> None:
     assert argv[3] == pair.HARDWARE_LAUNCH
     assert "side:=counterpart" in argv and not any(a.startswith("headless") for a in argv)
     assert pair.side_launch(plan, PLANT_SIDE, headless=True)[3] == pair.SIMULATION_LAUNCH
+    assert "wait_for_robot:=true" not in argv
 
 
 def test_the_selection_reads_the_declared_fact_and_not_the_backend_name() -> None:

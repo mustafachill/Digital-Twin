@@ -32,11 +32,15 @@ ament_python_install_package(${PROJECT_NAME})
 # ADR-0071's operator console server, which the pair supervisor starts once the
 # twin boundary has announced. The node is `program/console.py`; this is the
 # file `ros2 run` executes.
+# ADR-0077's reach gate: the first link of a physical side's chain, which waits
+# for the robot to answer on the network before the deadman and the vendor
+# driver are started.
 install(PROGRAMS
   ${PROJECT_NAME}/readiness_witness.py
   ${PROJECT_NAME}/lifecycle_driver.py
   ${PROJECT_NAME}/grasp_hold_bridge.py
   ${PROJECT_NAME}/hold_gate.py
+  ${PROJECT_NAME}/reach_gate.py
   ${PROJECT_NAME}/cell_console.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -74,6 +78,9 @@ if(BUILD_TESTING)
   # R-05, R-09: the hold gate against cite_hardware's vendor fakes, each case
   # the real gate as a process; nothing reaches hardware.
   ament_add_pytest_test(hold_gate test/test_hold_gate.py TIMEOUT 180)
+  # ADR-0077 decision 3: the reach gate against a loopback listener; no robot
+  # is reached and no address is printed.
+  ament_add_pytest_test(reach_gate test/test_reach_gate.py TIMEOUT 120)
   # ADR-0054 clause 6: the reproduction refused end to end - L0 edit, generate,
   # load the plan, call the gate. The only assertion that runs the whole path
   # the defect ran, and the only one crossing `cite_tools` and `cite_bringup`,

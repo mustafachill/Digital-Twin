@@ -226,3 +226,95 @@ GOALS_STILL_RUNNING = "goal(s) L5 dispatched are still running"
 def waits_for_goals_to_end(detail: str) -> bool:
     """Whether a refusal's detail says only that dispatched goals are still running."""
     return GOALS_STILL_RUNNING in detail
+
+
+#: The fixed word a physical side's launch prints once its reach gate found the
+#: robot on the network (ADR-0077 decision 3). A fifth word for a fifth fact:
+#: *the arm's controller answers on its report port, so the vendor driver may be
+#: started against it*. It is not readiness - nothing on the side is up yet -
+#: and the pair supervisor reads it as the line between "the robot is not
+#: there" (an exit before it is a configuration refusal, not retried) and "the
+#: robot is there and the side failed to come up" (retried, a bounded number of
+#: times).
+REACHABLE_TOKEN = "CITE_SIDE_REACHABLE"
+
+
+def reachable_announcement(side: str, zone: str) -> str:
+    """Format the one line a physical side emits when its robot answered the reach gate.
+
+    The side and zone are named for the reason a ready line names them. The
+    robot's address is NOT in it, and never may be: it lives only in the
+    process environment (ADR-0070 item 2).
+    """
+    return f"{REACHABLE_TOKEN} side={side} zone={zone}"
+
+
+def announced_reachable(line: str) -> str | None:
+    """Return the side named by a reachable line, or ``None`` if it is not one.
+
+    Substring rather than prefix matching, for the reason :func:`announced_side`
+    gives: `launch` prefixes what it logs.
+    """
+    if REACHABLE_TOKEN not in line:
+        return None
+    for field in line.split():
+        if field.startswith("side="):
+            return field[len("side="):]
+    return None
+
+
+#: The fixed word of a line the pair supervisor writes on the twin boundary's
+#: STANDARD INPUT (ADR-0077 decision 4): what the supervisor knows of a kept
+#: physical side right now. The other tokens here travel up a pipe from a
+#: participant to the supervisor; this one travels down, from the supervisor to
+#: the boundary, and it is stated here for the same reason - one statement, read
+#: by the end that writes it and the end that parses it.
+SIDE_STATE_TOKEN = "CITE_SIDE_STATE"
+
+#: A kept side's states, in the order a connection goes through them.
+#:
+#: - `waiting`: its launch is started and its reach gate is waiting for the
+#:   robot on the network; nothing of the side is up.
+#: - `connecting`: the robot answered; the side is coming up (driver, deadman,
+#:   controllers) and has not announced.
+#: - `up`: the side announced readiness. It is still HELD until an operator's
+#:   Start robot releases it (ADR-0076); `up` says the side exists, not that it
+#:   may move.
+#: - `down`: the side was up and exited; the supervisor is sweeping its group
+#:   before it starts it again.
+#: - `failed`: the side will not be started again in this run: it refused its
+#:   configuration before the robot was reached, or it reached the robot and
+#:   failed to come up `KEPT_ATTEMPTS` times in a row (`pair.py`).
+SIDE_WAITING = "waiting"
+SIDE_CONNECTING = "connecting"
+SIDE_UP = "up"
+SIDE_DOWN = "down"
+SIDE_FAILED = "failed"
+SIDE_STATES = (SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_DOWN, SIDE_FAILED)
+
+
+def side_state_line(side: str, state: str) -> str:
+    """Format one state line for the boundary's standard input; refuse an unknown state."""
+    if state not in SIDE_STATES:
+        raise ValueError(f"{state!r} is not a side state; one of {', '.join(SIDE_STATES)}")
+    return f"{SIDE_STATE_TOKEN} side={side} state={state}"
+
+
+def parsed_side_state(line: str) -> tuple[str, str] | None:
+    """Return ``(side, state)`` from a state line, or ``None`` if it is not a whole one.
+
+    A line carrying the token with a side missing, or a state not in
+    `SIDE_STATES`, is not one: the reader that acts on it moves a physical
+    side's availability, and a half-read line must move nothing.
+    """
+    if SIDE_STATE_TOKEN not in line:
+        return None
+    side = state = None
+    for field in line.split():
+        if field.startswith("side="):
+            side = field[len("side="):]
+        elif field.startswith("state="):
+            state = field[len("state="):]
+    if not side or state not in SIDE_STATES:
+        return None
+    return side, state

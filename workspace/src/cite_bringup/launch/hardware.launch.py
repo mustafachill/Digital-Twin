@@ -31,19 +31,28 @@ requested and confirmed by `lifecycle_driver.py` (ADR-0058):
    side's domain (ADR-0044); every environment argument the description reads
    must be set and of its declared kind. The robot's address is never logged:
    the description is expanded in this process, so it is on no command line.
-2. **The deadman, first** - configured and activated, confirmed - before the
+2. **The reach gate** (`reach_gate.py`, ADR-0077 decision 3): every physical
+   arm on the side answers on its controller's report port. The vendor driver
+   crashes against a robot that is not there, so nothing that would start it
+   starts first. Its exit is announced (`CITE_SIDE_REACHABLE`): the pair
+   supervisor reads that line as the robot being there, so an exit after it is
+   a side that failed to come up and one before it a refusal. With
+   `wait_for_robot:=true` - which the supervisor passes for a KEPT side only
+   (ADR-0077 decision 2) - it waits for the robot without a ceiling; otherwise
+   it gives up after `reach_gate.REACH_CEILING_S`.
+3. **The deadman** - configured and activated, confirmed - before the
    vendor's hardware component exists, so the arm is held at the vendor's STOP
    state from the moment the plugin connects.
-3. **The controller manager** with the vendor plugin, the description
+4. **The controller manager** with the vendor plugin, the description
    publisher, the facility nodes, the two adapters and the initializer (which
    serves `InitializeAsset` and does nothing until asked); then these
    configured and activated, confirmed.
-4. **The hold gate** (`hold_gate.py`): the deadman says AWAITING or HELD,
+5. **The hold gate** (`hold_gate.py`): the deadman says AWAITING or HELD,
    every vendor service the side's nodes call is served by exactly one server,
    and a STOP sent to the vendor is acknowledged (ADR-0076 decision 6). The
    deadman itself offers no observable for its own first acknowledged STOP,
    so this is the gate's own (safety re-audit L-4).
-5. **The controllers**, stage by stage, and **MoveIt**; then the planning
+6. **The controllers**, stage by stage, and **MoveIt**; then the planning
    scene; then the skill servers and the readiness witness, which on this side
    also waits for the two actions the deadman cancels; then the token.
 
@@ -63,7 +72,9 @@ comes up HELD all the same.
 the controller manager, a relay, a facility node, move_group or a skill server
 exiting for ANY reason stops the launch, and nothing on this side respawns. A
 deadman that tripped ends its own process on purpose, after its stops, so a
-trip takes the side down (ADR-0076 decision 5).
+trip takes the side down (ADR-0076 decision 5). What starts the side again, if
+anything does, is the pair supervisor keeping it (ADR-0077): the whole launch,
+after its old process group is swept, and it comes up HELD.
 Every node here runs on the wall clock (`use_sim_time: false`, L-7), and this
 launch declares no argument that could change that.
 """
@@ -82,7 +93,7 @@ from cite_bringup.plan import (
     resolve_description_args,
     resolve_uri,
 )
-from cite_bringup.readiness import ready_announcement
+from cite_bringup.readiness import reachable_announcement, ready_announcement
 from cite_bringup.side_launch import (
     controller_chain,
     DRIVER_HINT,
@@ -125,6 +136,16 @@ _EXECUTABLES = {
     "initializer": "initializer.py",
 }
 
+_REACH_HINT = (
+    "The robot did not answer on the network, so neither the deadman nor the vendor "
+    "driver was started. The reach gate says whether the address is unset or "
+    "malformed or the robot never answered; it never prints the address."
+)
+
+#: What `wait_for_robot` accepts, as `simulation.launch.py` reads `headless`.
+_TRUE = ("true", "1")
+_FALSE = ("false", "0")
+
 _HOLD_HINT = (
     "The arm was never confirmed held: the hold gate names whether the deadman, a "
     "vendor service or the vendor's answer to a STOP is what never arrived. Nothing "
@@ -150,6 +171,15 @@ def generate_launch_description() -> LaunchDescription:
                 description=(
                     "Which side of the zone this launch is: a side whose hardware the "
                     "plan declares physical. Required."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "wait_for_robot",
+                default_value="false",
+                description=(
+                    "Wait for the robot on the network without a ceiling (true), or give "
+                    "up after the reach gate's ceiling (false). The pair supervisor "
+                    "passes true for a kept side only (ADR-0077)."
                 ),
             ),
             OpaqueFunction(function=_bring_up),
@@ -205,7 +235,14 @@ def expand_description(path, arguments: dict[str, str]) -> str:
 def _bring_up(context: LaunchContext) -> list:
     zone = LaunchConfiguration("zone").perform(context)
     side = LaunchConfiguration("side").perform(context)
+    wait = LaunchConfiguration("wait_for_robot", default="false").perform(context)
+    wait = wait.strip().lower()
     try:
+        if wait not in _TRUE + _FALSE:
+            raise PlanError(
+                f"wait_for_robot:={wait!r} is not a boolean. Use wait_for_robot:=true or "
+                "wait_for_robot:=false."
+            )
         plan = load(default_plan_path(zone))
         managers = physical_managers(plan, side)
         # The door (ADR-0054): this launch starts a physical side, so it asks.
@@ -220,7 +257,7 @@ def _bring_up(context: LaunchContext) -> list:
         }
     except PlanError as exc:
         return stop(f"BRING-UP FAILED: {exc}")
-    return physical_side(plan, side, descriptions)
+    return physical_side(plan, side, descriptions, wait_for_robot=wait in _TRUE)
 
 
 def _split(name: str) -> tuple[str, str]:
@@ -256,7 +293,30 @@ def hold_gate(plan: Plan, side: str) -> Node:
     )
 
 
-def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
+def reach_gate(plan: Plan, side: str, wait_for_robot: bool) -> Node:
+    """Build the process whose exit means every physical arm on the side answered.
+
+    The address is not among its arguments: the gate reads it from the
+    environment it inherits, through `plan.resolve_description_args`, the one
+    reader of that variable (ADR-0070 item 2).
+    """
+    return Node(
+        package="cite_bringup",
+        executable="reach_gate.py",
+        name="reach_gate",
+        arguments=reach_gate_arguments(plan, side, wait_for_robot),
+        output="screen",
+    )
+
+
+def reach_gate_arguments(plan: Plan, side: str, wait_for_robot: bool) -> list[str]:
+    """Build the reach gate's argument vector, so that a test can read it back."""
+    return ["--zone", plan.zone, "--side", side] + (["--wait"] if wait_for_robot else [])
+
+
+def physical_side(
+    plan: Plan, side: str, descriptions: dict[str, str], *, wait_for_robot: bool = False
+) -> list:
     """Describe the whole physical side, gated step by step (see the module docstring).
 
     Split from `_bring_up` so that a test can build it with a description
@@ -269,17 +329,31 @@ def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
         )
     ]
 
-    # 2. The deadman(s), and a driver for them alone.
+    # 2. The reach gate, the only process started on nothing.
+    reached = reach_gate(plan, side, wait_for_robot)
+    actions.append(reached)
+
+    # 3. The deadman(s), and a driver for them alone, once the robot answered -
+    # and the line saying it did, which the pair supervisor reads.
     deadmen = []
+    first_steps: list = [LogInfo(msg=reachable_announcement(side, plan.zone))]
     for manager in plan.controller_managers:
         physical = manager.physical_on(side)
         node = _hardware_node("deadman", physical.deadman, physical.parameters)
-        actions += managed_node(node, physical.deadman)
+        first_steps += managed_node(node, physical.deadman)
         deadmen.append(physical.deadman)
     first_driver = lifecycle_driver(deadmen)
-    actions.append(first_driver)
+    first_steps.append(first_driver)
+    actions.append(
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=reached,
+                on_exit=gate(first_steps, "the deadman", hint=_REACH_HINT),
+            )
+        )
+    )
 
-    # 3. The hardware, the facility nodes and the adapters, once every deadman
+    # 4. The hardware, the facility nodes and the adapters, once every deadman
     # is confirmed active.
     hardware: list = []
     adapters: list[str] = []
@@ -326,7 +400,7 @@ def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
         )
     )
 
-    # 4. The hold gate, once the facility nodes and adapters are confirmed active.
+    # 5. The hold gate, once the facility nodes and adapters are confirmed active.
     held = hold_gate(plan, side)
     actions.append(
         RegisterEventHandler(
@@ -337,7 +411,7 @@ def physical_side(plan: Plan, side: str, descriptions: dict[str, str]) -> list:
         )
     )
 
-    # 5. Controllers and planners once the arm is confirmed held; then the
+    # 6. Controllers and planners once the arm is confirmed held; then the
     # planning scene; then the skills and the witness; then the token.
     controller_actions, first_spawner, last_spawner = controller_chain(plan, side)
     planners = move_groups(
