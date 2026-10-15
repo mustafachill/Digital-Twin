@@ -1,6 +1,6 @@
 # ADR-0075: Start robot and Home act on the selected target
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-15 (owner, on merge)
 - **Date:** 2026-10-15
 - **Deciders:** Project owner (decision of 2026-10-15: "when the target changes, Start robot
   follows it; Home, likewise, affects only the target")
