@@ -14,8 +14,9 @@
 
 """Where the signal goes: the simulation, the real arm, or the twin (ADR-0072).
 
-The operator picks a target with every Home and Start program, and it is never
-defaulted (`ConsoleState.TARGET_*`). This module is the ONE place a target is
+The operator picks a target with every Home and Start program
+(`ConsoleState.TARGET_*`): the server never defaults a target; the panel may
+preselect SIM (ADR-0072 amendment 2026-10-15). This module is the ONE place a target is
 turned into the twin mode it is run in and the sides it commands:
 
     simulation  -> SIM        -> the plant
@@ -97,7 +98,8 @@ def available(running: Collection[str], commandable: Collection[str]) -> list[in
 def refusal(target: int, offered: Sequence[int]) -> str | None:
     """Say why a goal naming ``target`` is rejected now, or None (R-18).
 
-    0 is unset and never read as a default; a value no constant names is
+    0 is unset and the server never reads it as a default (the panel may
+    preselect SIM, ADR-0072 amendment 2026-10-15); a value no constant names is
     refused by its number; a target the deployment does not offer now - its
     sides are not running, or a physical one is not ready - is refused naming
     what is offered.

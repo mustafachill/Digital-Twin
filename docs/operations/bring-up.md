@@ -233,22 +233,28 @@ the plant's 3D view. **Nothing moves until a button is pressed.**
 
 **The target selector** chooses where the signal goes: **Simulation** (`SIM`, the plant alone),
 **Real arm** (`REAL`, the physical counterpart alone) or **Twin** (`VALIDATED`, both). Only the
-targets the running deployment can serve are offered, and nothing is preselected: Home and Start
-program stay disabled until a target is chosen, and the choice is cleared whenever the offered set
-or the console changes. The target is sent with every Home and Start program. Each side's "at the
+targets the running deployment can serve are offered. **Simulation is preselected** whenever it is
+offered; Real arm and Twin never are, not even when only one is offered. An operator's pick is
+dropped whenever the offered set or the console changes; the panel then falls back to Simulation
+if it is offered, otherwise selects nothing, and says so in its event log. While no target is
+selected the deck says "Select a target", and Start robot, Home and Start program stay disabled.
+The target is sent with every Home and Start program. **Start robot carries no target**: it starts
+every running side whatever is selected, and on a physical side it still asks the operator to
+confirm before the track may move. Each side's "at the
 program's start" is shown and measured separately; switching target leaves each side where the
 last run left it, and a Twin run needs a Twin Home first after any single-side run that moved one
 side.
 
 | Button | What it does | Enabled when |
 |---|---|---|
-| **Start robot** | On a physical side: holds the twin in SIM at the boundary, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. | No request is running (the server also refuses while a terminal program client is on the graph) |
+| **Start robot** | On a physical side: holds the twin in SIM at the boundary, asks the operator to confirm the cell is clear (the track may home and move to its start), then initializes the arm as UFACTORY Studio does. On an all-simulated pair it only checks custody. It carries no target: it acts on every running side, whatever is selected. | No request is running and a target is selected (the server also refuses while a terminal program client is on the graph) |
 | **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm) and brings them there, then measures again. | The robot is started, the console is READY and a target is chosen |
 | **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
 
 **Validate then run** ([ADR-0073](../adr/0073-validate-in-simulation-then-run-the-twin.md)) is
-served by the console as the `ValidateThenRun` action; the panel has no button for it yet. One
+served by the console as the `ValidateThenRun` action, and the panel's **Validate in simulation,
+then run twin** button sends it with the selected speed and cycle count and no target. One
 request runs one cycle on the simulation alone at the chosen scale. If that cycle fails or is
 stopped, the request ends and nothing is sent to the real arm. If it passes, both sides are
 measured at the program's start: a side away is refused and nothing homes in between, so Home

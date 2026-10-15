@@ -26,8 +26,9 @@ The surface is shown to visitors as well as used by operators.
 Fixed facts:
 
 - Everything ADR-0071, ADR-0072 and ADR-0073 decide about **behaviour** is unchanged. The
-  panel holds no logic. Stop is labelled "software stop, not an E-stop" and is not red. The
-  target is never preselected. Confirm shows the verbatim prompt. The UI never says "safe"
+  panel holds no logic. Stop is labelled "software stop, not an E-stop" and is not red.
+  Simulation is preselected where it is served; Real arm and Twin never are (ADR-0072's
+  2026-10-15 amendment). Confirm shows the verbatim prompt. The UI never says "safe"
   or "verified" (the caveat beside the validate-then-run button was removed by ADR-0073's 2026-10-15 amendment). There is one ROS
   context, on the plant domain. Every console button is disabled while no `ConsoleState` is
   heard.

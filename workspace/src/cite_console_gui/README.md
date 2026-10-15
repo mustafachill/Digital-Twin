@@ -112,7 +112,7 @@ own. The counterpart's window is Harmonic's default, unchanged.
 | Twin mode | `TwinMode` on `TwinMode::TOPIC`, read directly from the twin boundary (ADR-0044); marked "the real arm may be commanded" whenever a physical side runs and the mode is not known to be `SIM` |
 | Phase | While a validate-then-run request runs: "Validating in simulation" or "Running twin" (`ConsoleState.phase`) |
 | Connections | Live, stale or absent for the twin boundary; for each side also not ready or not started (see below). Monitoring only |
-| Start robot | `StartRobot`; enabled only while a target is selected (see below) |
+| Start robot | `StartRobot`; enabled only while a target is selected (see below), but it carries **no target**: it starts every running side, and on a physical side it still asks the operator to confirm before the track may move |
 | Target | Simulation, Real arm or Twin (`ConsoleState.TARGET_*`, [ADR-0072](../../../docs/adr/0072-the-operator-chooses-where-the-signal-goes.md)); a choice not in `available_targets` is disabled and labelled "not running". **Simulation is preselected** whenever it is offered; Real arm and Twin **never** are, not even when only one is offered (see below). While none is selected the deck says "Select a target" |
 | Speed | 1.0 ("Original speed") preselected, then 0.5, 0.25, 0.1. The selected scale is stated in the rail's Robot card. Where the console states a floor (`minimum_speed_scale`), the panel shows it there and says whether it applies to the selected target; for a target the console lists in `floored_targets` — and while no target is selected — choices below it are disabled and labelled "below the floor". A choice per request, not a live override |
 | Home | `HomeRobot`, with the selected speed and target |
@@ -155,8 +155,16 @@ selection — the panel cannot see that restart.
 
 While a console is heard and no target is selected (`target_hint_shown`), Start robot, Home
 and Start program are disabled and the deck says "Select a target" beside its Setup title,
-in the attention colour (ISA-101), not the alarm's. Every goal still names its target
-explicitly, and the console still refuses a goal without one.
+in the attention colour (ISA-101), not the alarm's. Every Home and Start program goal still
+names its target explicitly, and the console still refuses one without it. Start robot is
+gated on a selection but carries no target (`StartRobot` has no target field): whatever is
+selected, it starts every running side, and on a physical side it still asks the operator to
+confirm before the track may move (ADR-0072, amended 2026-10-15).
+
+When the panel drops an operator's Real arm or Twin pick, its event log says so: "Target
+selection dropped", with "Console changed: now Simulation" (or "now none")
+(`dropped_pick_note` in [`include/cite_console_gui/selection.hpp`](include/cite_console_gui/selection.hpp)).
+A display, like the rest of the log.
 
 ### Validate in simulation, then run twin
 
