@@ -1929,8 +1929,10 @@ def test_a_lapse_of_the_only_started_side_leaves_the_console_not_started() -> No
 
 
 def test_a_side_becoming_commandable_clears_nothing() -> None:
-    """Only a true-to-false change clears a started flag: a start whose track
-    the twin calls commandable late stays started once it is."""
+    """Only a true-to-false change clears a started flag.
+
+    A start whose track the twin calls commandable late stays started once it is.
+    """
     rig = Rig(physical=["counterpart"], commandable=("plant",)).started(TWIN)
     rig.commandable = list(SIDES)
     rig.machine.commandable_changed()
