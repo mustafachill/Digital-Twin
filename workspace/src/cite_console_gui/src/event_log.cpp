@@ -29,17 +29,28 @@ bool EventLog::record(
   const std::string & time, const std::string & state, const std::string & step,
   const std::string & last_error)
 {
-  if (!entries_.empty()) {
-    const EventEntry & newest = entries_.front();
-    if (newest.state == state && newest.step == step && newest.last_error == last_error) {
-      return false;
-    }
+  if (has_transition_ && last_transition_.state == state && last_transition_.step == step &&
+    last_transition_.last_error == last_error)
+  {
+    return false;
   }
-  entries_.push_front(EventEntry{time, state, step, last_error});
+  last_transition_ = EventEntry{time, state, step, last_error};
+  has_transition_ = true;
+  push(last_transition_);
+  return true;
+}
+
+void EventLog::note(const std::string & time, const std::string & state, const std::string & detail)
+{
+  push(EventEntry{time, state, detail, ""});
+}
+
+void EventLog::push(const EventEntry & entry)
+{
+  entries_.push_front(entry);
   while (entries_.size() > capacity_) {
     entries_.pop_back();
   }
-  return true;
 }
 
 }  // namespace cite_console_gui

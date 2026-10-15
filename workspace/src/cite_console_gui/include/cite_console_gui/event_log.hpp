@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // The frame's event log (ADR-0074): the last transitions of the console's
-// state, kept on the panel's side for display only, with no Qt and no ROS.
+// state, and the panel's own notes (a dropped target pick, R-03), kept on the
+// panel's side for display only, with no Qt and no ROS.
 //
 // A TRANSITION is a ConsoleState whose state, step or last error differs from
 // the last one recorded; a re-publication of the same state is not one. The
@@ -58,14 +59,25 @@ public:
     const std::string & time, const std::string & state, const std::string & step,
     const std::string & last_error);
 
+  /// Record a line the panel itself says (`state` as its title, `detail`
+  /// beneath), heard at `time`. Always recorded, and never compared with: the
+  /// console's next state is a transition only if it differs from the last
+  /// one the CONSOLE said.
+  void note(const std::string & time, const std::string & state, const std::string & detail);
+
   /// Newest first; at most `capacity` of them.
   const std::deque<EventEntry> & entries() const {return entries_;}
 
   std::size_t capacity() const {return capacity_;}
 
 private:
+  void push(const EventEntry & entry);
+
   std::size_t capacity_;
   std::deque<EventEntry> entries_;
+  /// The last transition the console said; a note is not one.
+  bool has_transition_{false};
+  EventEntry last_transition_;
 };
 
 }  // namespace cite_console_gui

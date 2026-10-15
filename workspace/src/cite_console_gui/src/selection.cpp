@@ -14,8 +14,19 @@
 
 #include "cite_console_gui/selection.hpp"
 
+#include <string>
+
 namespace cite_console_gui
 {
+
+std::string dropped_pick_note(Target before, Target after)
+{
+  if ((before != Target::REAL && before != Target::TWIN) || after == before) {
+    return {};
+  }
+  return std::string("Console changed: now ") +
+         (after == Target::NONE ? "none" : target_name(after));
+}
 
 void PanelSelection::apply(const ConsoleView & view)
 {

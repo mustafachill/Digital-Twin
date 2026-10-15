@@ -1472,6 +1472,40 @@ TEST(PanelQml, TheEventLogShowsItsLinesAsTheRobotCardDoes)
   EXPECT_TRUE(shown_step) << "the event log does not show the step as displayed";
 }
 
+// R-03 / S-02: when a change of the console drops the operator's Twin pick,
+// the event log says so, and says what is selected now.
+TEST(PanelQml, ADroppedPickIsSaidInTheEventLog)
+{
+  Framed framed(kSizes[3]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.available_targets = {
+    cite_interfaces::msg::ConsoleState::TARGET_SIM,
+    cite_interfaces::msg::ConsoleState::TARGET_TWIN};
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  settle(framed);
+  const int logged = framed.plugin.eventLog().size();
+  framed.plugin.selectTarget(2);
+  ASSERT_EQ(framed.plugin.selectedTarget(), 2);
+
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, ready_on_the_simulation());
+  settle(framed);
+  EXPECT_EQ(framed.plugin.selectedTarget(), 0);
+  const QVariantList rows = framed.plugin.eventLog();
+  ASSERT_EQ(rows.size(), logged + 1)
+    << "the console's state did not change; only the note is new";
+  const QVariantMap newest = rows.front().toMap();
+  EXPECT_EQ(newest["state"].toString(), QString("Target selection dropped"));
+  EXPECT_EQ(newest["step"].toString(), QString("Console changed: now Simulation"));
+  bool shown = false;
+  for (QQuickItem * item : descendants(framed.find("eventCard"))) {
+    if (item->property("text").toString() == newest["step"].toString()) {
+      shown = true;
+    }
+  }
+  EXPECT_TRUE(shown) << "the note is not on screen";
+}
+
 // R-05: the view label names what Follow robot follows in the configuration's
 // words, never a literal of its own.
 TEST(PanelQml, FollowingIsNamedByTheConfiguration)
@@ -1641,7 +1675,7 @@ TEST(PanelQml, APictureOfTheFrameIsWrittenAtEverySize)
       Framed framed(size);
       ASSERT_NE(framed.panel, nullptr);
       if (std::strcmp(variant, "_question") == 0) {
-        // As a console that asks and offers validate-then-run would show it.
+        // As a console asking the operator its question would show it.
         framed.find("confirmation")->setVisible(true);
       } else if (std::strcmp(variant, "_heard") == 0) {
         hear_everything(framed);

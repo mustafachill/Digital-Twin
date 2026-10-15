@@ -347,6 +347,7 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
 void CellConsole::apply_state(
   const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher)
 {
+  const Target before = selection_.selected();
   selection_.apply(view_from(state, publisher));
   state_name_ = QString::fromUtf8(phase_name(selection_.view().phase));
   step_ = QString::fromStdString(state.step);
@@ -359,11 +360,12 @@ void CellConsole::apply_state(
   speed_scale_ = state.speed_scale;
   emit viewChanged();
   emit healthChanged();
-  log_transition();
+  log_transition(before);
 }
 
 void CellConsole::forget_state()
 {
+  const Target before = selection_.selected();
   selection_.forget();
   state_name_ = "No console";
   step_.clear();
@@ -381,16 +383,21 @@ void CellConsole::forget_state()
   // The console that left can report nothing more about its request.
   run_progress_ = RunProgress{};
   emit runProgressChanged();
-  log_transition();
+  log_transition(before);
 }
 
-void CellConsole::log_transition()
+void CellConsole::log_transition(Target before)
 {
   const QString now = QTime::currentTime().toString("HH:mm:ss");
-  if (event_log_.record(
-      now.toStdString(), state_name_.toStdString(), step_.toStdString(),
-      last_error_.toStdString()))
-  {
+  bool changed = event_log_.record(
+    now.toStdString(), state_name_.toStdString(), step_.toStdString(),
+    last_error_.toStdString());
+  const std::string dropped = dropped_pick_note(before, selection_.selected());
+  if (!dropped.empty()) {
+    event_log_.note(now.toStdString(), "Target selection dropped", dropped);
+    changed = true;
+  }
+  if (changed) {
     emit eventLogChanged();
   }
 }

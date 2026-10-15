@@ -319,7 +319,9 @@ private:
   void set_progress(const QString & text);
   void set_outcome(const QString & text);
   /// Record what the console says now in the event log, at the wall clock.
-  void log_transition();
+  // Records the console's transition, then - when settling it dropped the
+  // operator's pick of `before` - the panel's note saying so (R-03).
+  void log_transition(Target before);
   /// Once the window that shows the panel is visible, hide gz-gui's title
   /// toolbar and maximize it (ADR-0074). Acts only in gz-gui's own main window.
   void frame_window_when_shown();

@@ -81,3 +81,17 @@ TEST(EventLog, ACapacityOfZeroStillKeepsTheNewest)
   ASSERT_EQ(log.entries().size(), 1u);
   EXPECT_EQ(log.entries().front().state, "B");
 }
+
+// R-03: the panel's own note (a dropped target pick) is shown, and the
+// console's same state heard after it is still not a new transition.
+TEST(EventLog, ANoteIsShownButIsNotTheConsolesLastState)
+{
+  EventLog log;
+  log.record("10:00:00", "READY", "", "");
+  log.note("10:00:00", "Target selection dropped", "Console changed: now Simulation");
+  ASSERT_EQ(log.entries().size(), 2u);
+  EXPECT_EQ(log.entries().front().state, "Target selection dropped");
+  EXPECT_EQ(log.entries().front().step, "Console changed: now Simulation");
+  EXPECT_FALSE(log.record("10:00:01", "READY", "", "")) << "a re-publication after a note";
+  EXPECT_TRUE(log.record("10:00:02", "RUNNING", "", ""));
+}

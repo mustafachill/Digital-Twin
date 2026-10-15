@@ -24,10 +24,18 @@
 #ifndef CITE_CONSOLE_GUI__SELECTION_HPP_
 #define CITE_CONSOLE_GUI__SELECTION_HPP_
 
+#include <string>
+
 #include "cite_console_gui/enablement.hpp"
 
 namespace cite_console_gui
 {
+
+/// The event log's line when settling dropped an operator's pick (R-03,
+/// S-02): `before` was Real arm or Twin - targets the panel never selects
+/// itself, so only the operator can have picked them - and `after` is what
+/// the panel holds now. Empty when no such pick was dropped. Display only.
+std::string dropped_pick_note(Target before, Target after);
 
 class PanelSelection
 {

@@ -26,6 +26,7 @@
 #include "cite_console_gui/selection.hpp"
 #include "cite_interfaces/msg/console_state.hpp"
 
+using cite_console_gui::dropped_pick_note;
 using cite_console_gui::PanelSelection;
 using cite_console_gui::Target;
 using cite_console_gui::target_from;
@@ -266,4 +267,22 @@ TEST(PanelSelection, ValidateThenRunFollowsTheConsolesOfferAndTheTwinsStart)
   EXPECT_TRUE(selection.buttons().validate_then_run);
   selection.forget();
   EXPECT_FALSE(selection.buttons().validate_then_run) << "the console left";
+}
+
+// R-03 / S-02: a dropped Real arm or Twin pick is said in the event log; the
+// panel's own default (Simulation) replaced, or a pick kept, is not.
+TEST(PanelSelection, ADroppedRealArmOrTwinPickIsNoted)
+{
+  EXPECT_EQ(dropped_pick_note(Target::TWIN, Target::SIM), "Console changed: now Simulation");
+  EXPECT_EQ(dropped_pick_note(Target::REAL, Target::NONE), "Console changed: now none");
+  EXPECT_EQ(dropped_pick_note(Target::TWIN, Target::TWIN), "");
+  EXPECT_EQ(dropped_pick_note(Target::SIM, Target::NONE), "");
+  EXPECT_EQ(dropped_pick_note(Target::NONE, Target::SIM), "");
+
+  PanelSelection selection;
+  selection.apply(view_from(ready(), FIRST));
+  ASSERT_TRUE(selection.select(Target::REAL));
+  const Target before = selection.selected();
+  selection.apply(view_from(ready(PLANT_ONLY), FIRST));
+  EXPECT_EQ(dropped_pick_note(before, selection.selected()), "Console changed: now Simulation");
 }
