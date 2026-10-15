@@ -109,8 +109,9 @@ remain. The counterpart's window config is unchanged.
 - The workaround relies on gz-gui internals: the card's `containmentMask`, its MouseArea
   children, and the main window's `header` property. A gz-gui upgrade can break it.
   `test_panel_in_gz_gui` loads the panel into gz-gui's real card offscreen and holds the
-  pass-through and Stop's reachability, and at runtime the panel undoes the pass-through
-  and warns if Stop would no longer take a press. What a real display and window manager do
+  pass-through and that real clicks reach Stop, and at runtime the panel undoes the
+  pass-through and warns if Stop, or the question's Confirm and Cancel, would no longer take
+  a press. What a real display and window manager do
   is still checked only by hand.
 - The plant window under `./scripts/sim --pair` loses Gazebo's editing tools and its pause
   control. A developer who needs them runs `./scripts/sim` on its own.
