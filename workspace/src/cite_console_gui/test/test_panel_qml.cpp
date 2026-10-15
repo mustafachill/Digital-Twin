@@ -1293,6 +1293,45 @@ TEST(PanelQml, TheRobotCardShowsAStepWithoutStraySpacesOrALoneUnit)
     QString::fromUtf8("ok plant: conveyor at 0\u00a0m/s"));
 }
 
+// A request sent, or accepted, that has not reported yet is shown starting,
+// not idle; its first feedback shows its position, and its end idle again.
+TEST(PanelQml, CycleProgressShowsASentRequestStartingNotIdle)
+{
+  Framed framed(kSizes[3]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, ready_on_the_simulation());
+  settle(framed);
+  auto * card = framed.find("progressCard");
+  auto * title = framed.find("runTitle");
+  ASSERT_NE(card, nullptr);
+  ASSERT_NE(title, nullptr);
+  EXPECT_EQ(title->property("text").toString(), QString("No request running"));
+  EXPECT_EQ(card->property("summary").toString(), QString("Idle"));
+
+  cite_console_gui::RunProgress sent;
+  sent.starting = "Start program";
+  cite_console_gui::CellConsoleTestAccess::report_run(framed.plugin, sent);
+  settle(framed);
+  EXPECT_EQ(title->property("text").toString(), QString::fromUtf8("Start program — starting…"));
+  EXPECT_EQ(card->property("summary").toString(), QString("Starting"));
+
+  cite_console_gui::RunProgress running;
+  running.active = true;
+  running.cycle = 1;
+  running.cycles = 2;
+  running.step_index = 3;
+  running.step_count = 9;
+  cite_console_gui::CellConsoleTestAccess::report_run(framed.plugin, running);
+  settle(framed);
+  EXPECT_EQ(title->property("text").toString(), QString("Start program"));
+  EXPECT_EQ(card->property("summary").toString(), QString::fromUtf8("Cycle 1/2 · step 3/9"));
+
+  cite_console_gui::CellConsoleTestAccess::report_run(
+    framed.plugin, cite_console_gui::RunProgress{});
+  settle(framed);
+  EXPECT_EQ(title->property("text").toString(), QString("No request running"));
+}
+
 // The event log shows a step and a last error as the Robot card shows a
 // line (`display_text`): no stray spaces, no unit alone.
 TEST(PanelQml, TheEventLogShowsItsLinesAsTheRobotCardDoes)

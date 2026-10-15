@@ -30,6 +30,9 @@ struct RunProgress
 {
   /// A request is running and has reported.
   bool active{false};
+  /// The request ("Start program", "Validate then run") sent, or accepted,
+  /// that has not reported yet; empty once it has, and when none is sent.
+  std::string starting;
   /// The phase as the operator reads it ("Validating in simulation", "Running
   /// twin"); empty for Start program.
   std::string phase;

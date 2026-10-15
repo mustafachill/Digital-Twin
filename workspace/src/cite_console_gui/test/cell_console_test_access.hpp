@@ -86,6 +86,13 @@ struct CellConsoleTestAccess
     emit plugin.viewChanged();
   }
 
+  /// The running request's position, as the client would report it.
+  static void report_run(CellConsole & plugin, const RunProgress & position)
+  {
+    plugin.run_progress_ = position;
+    emit plugin.runProgressChanged();
+  }
+
   /// The steady clock the plugin reads the world statistics' age on (R2-01).
   static void set_clock(CellConsole & plugin, std::function<std::int64_t()> now_ms)
   {

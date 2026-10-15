@@ -42,6 +42,14 @@ std::string answered(const std::string & request, bool success, const std::strin
   return outcome_opening(request, success, false) + outcome_detail(request, detail);
 }
 
+/// A request sent that has not reported its position yet.
+RunProgress starting(const std::string & request)
+{
+  RunProgress position;
+  position.starting = request;
+  return position;
+}
+
 /// A ValidateThenRun phase as the operator reads it, for a progress line.
 std::string phase_label(std::uint8_t phase)
 {
@@ -346,6 +354,7 @@ void ConsoleClient::run_program(
   // A new request: the last one's outcome is no longer the latest (T-05).
   outcome("");
   const std::uint64_t stops_at_send = stops_accepted_.load();
+  run_progress(starting("Start program"));
 
   rclcpp_action::Client<Run>::SendGoalOptions options;
   options.goal_response_callback =
@@ -400,6 +409,7 @@ void ConsoleClient::validate_then_run(double speed_scale, std::uint32_t cycles)
   // A new request: the last one's outcome is no longer the latest (T-05).
   outcome("");
   const std::uint64_t stops_at_send = stops_accepted_.load();
+  run_progress(starting("Validate then run"));
 
   rclcpp_action::Client<ValidateThenRun>::SendGoalOptions options;
   options.goal_response_callback =

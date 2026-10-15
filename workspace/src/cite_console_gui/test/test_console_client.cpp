@@ -914,18 +914,24 @@ TEST(ConsoleClient, ARunsFeedbackIsItsPositionAndItsEndClearsIt)
     recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 3);}, &Recorder::progress);
   EXPECT_EQ(accepted, "Start program: accepted.");
   console.accepted_seen();
-  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.positions.empty();}));
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
   console.feedback_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.outcomes.empty();}));
-  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 3;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
-  const RunProgress & running = recorder.positions.front();
+  // Sent, and starting until its first feedback: not idle (ADR-0074).
+  const RunProgress & sent = recorder.positions.front();
+  EXPECT_FALSE(sent.active);
+  EXPECT_EQ(sent.starting, "Start program");
+  const RunProgress & running = recorder.positions[1];
   EXPECT_TRUE(running.active);
+  EXPECT_EQ(running.starting, "") << "a request that reported is no longer starting";
   EXPECT_EQ(running.cycle, 2u);
   EXPECT_EQ(running.cycles, 3u);
   EXPECT_EQ(running.step_index, 3u);
   EXPECT_EQ(running.step_count, 7u);
   EXPECT_FALSE(recorder.positions.back().active) << "the run ended and its position stayed";
+  EXPECT_EQ(recorder.positions.back().starting, "") << "the run ended and was still starting";
 }
 
 TEST(ConsoleClient, ARejectedRunHasNoPosition)
@@ -936,9 +942,12 @@ TEST(ConsoleClient, ARejectedRunHasNoPosition)
   ConsoleClient client(names, recorder.callbacks());
   sent_once_served(
     recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 1);}, &Recorder::progress);
-  ASSERT_TRUE(recorder.wait_for([&]() {return !recorder.positions.empty();}));
+  // Starting once sent; nothing once rejected.
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
+  EXPECT_EQ(recorder.positions.front().starting, "Start program");
   EXPECT_FALSE(recorder.positions.back().active);
+  EXPECT_EQ(recorder.positions.back().starting, "") << "a rejected run is still starting";
 }
 
 TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
@@ -955,16 +964,18 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
       recorder, [&]() {client.validate_then_run(0.5, 3);}, &Recorder::progress),
     "Validate then run: accepted.");
   console.accepted_seen();
-  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 1;}));
-  console.feedback_seen();
   ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 2;}));
+  console.feedback_seen();
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 3;}));
   console.feedback_seen();
   ASSERT_TRUE(
     recorder.wait_for(
       [&]() {return !recorder.outcomes.empty() && !recorder.outcomes.back().empty();}));
-  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 3;}));
+  ASSERT_TRUE(recorder.wait_for([&]() {return recorder.positions.size() >= 4;}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
-  const RunProgress & validating = recorder.positions[0];
+  EXPECT_FALSE(recorder.positions[0].active);
+  EXPECT_EQ(recorder.positions[0].starting, "Validate then run");
+  const RunProgress & validating = recorder.positions[1];
   EXPECT_TRUE(validating.active);
   EXPECT_EQ(
     validating.phase,
@@ -973,7 +984,7 @@ TEST(ConsoleClient, AValidateThenRunsFeedbackIsItsPhaseAndItsPosition)
   EXPECT_EQ(validating.cycles, 1u) << "phase 1 is one cycle, not the goal's";
   EXPECT_EQ(validating.step_index, 2u);
   EXPECT_EQ(validating.step_count, 5u);
-  const RunProgress & running = recorder.positions[1];
+  const RunProgress & running = recorder.positions[2];
   EXPECT_TRUE(running.active);
   EXPECT_EQ(
     running.phase,

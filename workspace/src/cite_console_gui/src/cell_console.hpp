@@ -178,6 +178,8 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(bool worldStatsStale READ worldStatsStale NOTIFY worldStatsChanged)
   // The running request's position, from its feedback (`RunProgress`).
   Q_PROPERTY(bool runActive READ runActive NOTIFY runProgressChanged)
+  // The request sent that has not reported yet (`RunProgress::starting`).
+  Q_PROPERTY(QString runStarting READ runStarting NOTIFY runProgressChanged)
   Q_PROPERTY(QString runPhase READ runPhase NOTIFY runProgressChanged)
   Q_PROPERTY(int runCycle READ runCycle NOTIFY runProgressChanged)
   Q_PROPERTY(int runCycles READ runCycles NOTIFY runProgressChanged)
@@ -253,6 +255,7 @@ public:
   bool worldPaused() const {return world_stats_heard_ && world_stats_.paused;}
   bool worldStatsStale() const {return world_stats_stale_;}
   bool runActive() const {return run_progress_.active;}
+  QString runStarting() const {return QString::fromStdString(run_progress_.starting);}
   QString runPhase() const {return QString::fromStdString(run_progress_.phase);}
   int runCycle() const {return static_cast<int>(run_progress_.cycle);}
   int runCycles() const {return static_cast<int>(run_progress_.cycles);}

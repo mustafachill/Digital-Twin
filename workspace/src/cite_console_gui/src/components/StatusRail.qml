@@ -170,7 +170,8 @@ Rectangle {
         compact: rail.compact
         summary: CellConsole.runActive ?
           "Cycle " + CellConsole.runCycle + "/" + CellConsole.runCycles +
-          " · step " + CellConsole.runStepIndex + "/" + CellConsole.runStepCount : "Idle"
+          " · step " + CellConsole.runStepIndex + "/" + CellConsole.runStepCount :
+          CellConsole.runStarting !== "" ? "Starting" : "Idle"
 
         RowLayout {
           Layout.fillWidth: true
@@ -200,10 +201,14 @@ Rectangle {
           ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
+            // A request sent that has not reported yet is starting, not idle.
             UiText {
+              objectName: "runTitle"
               Layout.fillWidth: true
-              text: !CellConsole.runActive ? "No request running" :
-                CellConsole.runPhase !== "" ? CellConsole.runPhase : "Start program"
+              text: CellConsole.runActive ?
+                (CellConsole.runPhase !== "" ? CellConsole.runPhase : "Start program") :
+                CellConsole.runStarting !== "" ? CellConsole.runStarting + " — starting…" :
+                "No request running"
               strong: true
             }
             UiText {
