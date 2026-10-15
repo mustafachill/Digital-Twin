@@ -65,10 +65,15 @@ button set and its operator flow more than asked. Rejected.
      side. For Twin the plant side is started too.
    - Custody is read for the target's sides only.
 2. **"Started" is per side.** `ConsoleState` gains `uint8[] started_targets`: the available
-   targets every side of which is started, derived from the console's one target table, so the
-   panel restates no side map. `robot_started` keeps its name and means "at least one side is
-   started". A FAULT, or a new Start robot on a side, clears that side's started flag exactly as
-   the console-wide flag was cleared before.
+   targets every side of which is started **and commandable**, derived from the console's one
+   target table, so the panel restates no side map. A started side whose track is not yet
+   commandable therefore keeps its target out of `started_targets`, and the deck asks for Start
+   robot. `robot_started` keeps its name and means "at least one side is started". Only a
+   FAULT, a new Start robot on a side, or that physical side ceasing to be commandable clears
+   its started flag (a side that recovers must be started again); a Stop leaves started
+   sides started, as the console-wide flag did, and nothing homes after it (ADR-0037).
+   **Leaving FAULT still needs the twin heard in `SIM`** on a pair where a physical side runs,
+   whatever the target: Start robot on Simulation does not skip that read.
 3. **Home and Start program need their target started.** A goal whose target is not in
    `started_targets` is refused, with a detail that names Start robot. Home initializes only the
    physical sides of its target (as today), and its go-ahead prompt names the target's arms
