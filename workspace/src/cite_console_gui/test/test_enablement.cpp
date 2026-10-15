@@ -52,6 +52,7 @@ using cite_console_gui::SPEED_CHOICES;
 using cite_console_gui::speed_choice_enabled;
 using cite_console_gui::Target;
 using cite_console_gui::target_choice_enabled;
+using cite_console_gui::target_hint_shown;
 using cite_console_gui::target_name;
 using cite_console_gui::validation_phase_name;
 using cite_console_gui::ValidationPhase;
@@ -158,12 +159,15 @@ constexpr Need NO = Need::NO;
 const std::vector<Row> & rows()
 {
   static const std::vector<Row> table = {
-    {"a console not started, idle, offers Start robot", Button::START_ROBOT,
-      {Phase::NOT_STARTED}, ANY, NO, ANY, ANY, {}, ANY, ANY},
-    {"a READY console, idle, may be started again", Button::START_ROBOT,
-      {Phase::READY}, ANY, NO, ANY, ANY, {}, ANY, ANY},
-    {"a FAULT, idle, is left by Start robot", Button::START_ROBOT,
-      {Phase::FAULT}, ANY, NO, ANY, ANY, {}, ANY, ANY},
+    {"a console not started, idle, with a served target selected, offers Start robot",
+      Button::START_ROBOT,
+      {Phase::NOT_STARTED}, ANY, NO, ANY, ANY, {}, YES, ANY},
+    {"a READY console, idle, with a served target selected, may be started again",
+      Button::START_ROBOT,
+      {Phase::READY}, ANY, NO, ANY, ANY, {}, YES, ANY},
+    {"a FAULT, idle, with a served target selected, is left by Start robot",
+      Button::START_ROBOT,
+      {Phase::FAULT}, ANY, NO, ANY, ANY, {}, YES, ANY},
     {"a started robot, READY and idle, with a served target selected, may Home", Button::HOME,
       {Phase::READY}, YES, NO, ANY, ANY, {}, YES, ANY},
     {"... and with a target the console says is startable selected, may run",
@@ -293,17 +297,38 @@ TEST(Enablement, HomeNeedsAStartedRobot)
   EXPECT_TRUE(enabled_for(view(Phase::READY, true), Target::SIM).home);
 }
 
-TEST(Enablement, HomeAndStartProgramNeedASelectedTarget)
+TEST(Enablement, StartRobotHomeAndStartProgramNeedASelectedTarget)
 {
-  // ADR-0072 decision 3: never defaulted. No selection, nothing to send -
-  // even where the plant is the only target served (R-18).
+  // ADR-0072 decision 3 (amended 2026-10-15): no selection, nothing to send,
+  // Start robot included. The goals name a target, and so must the panel.
   for (const auto & available : {BOTH_SIDES, PLANT_ONLY}) {
     const ButtonStates got =
       enabled_for(view(Phase::READY, true, false, available, available), Target::NONE);
     EXPECT_FALSE(got.home);
     EXPECT_FALSE(got.start_program);
-    EXPECT_TRUE(got.start_robot);
+    EXPECT_FALSE(got.start_robot);
   }
+  for (const Phase phase : {Phase::NOT_STARTED, Phase::READY, Phase::FAULT}) {
+    EXPECT_FALSE(enabled_for(view(phase), Target::NONE).start_robot) << phase_name(phase);
+    EXPECT_TRUE(enabled_for(view(phase), Target::SIM).start_robot) << phase_name(phase);
+    // A selection the console no longer serves is no selection.
+    EXPECT_FALSE(
+      enabled_for(view(phase, false, false, PLANT_ONLY), Target::TWIN).start_robot)
+      << phase_name(phase);
+  }
+}
+
+TEST(Enablement, TheHintIsShownWhileAHeardConsoleHasNoTargetSelected)
+{
+  EXPECT_TRUE(target_hint_shown(view(Phase::NOT_STARTED), Target::NONE));
+  EXPECT_TRUE(target_hint_shown(view(Phase::READY, true, false, {}), Target::NONE));
+  for (const Target target : ALL_TARGETS) {
+    EXPECT_FALSE(target_hint_shown(ready(), target)) << target_name(target);
+  }
+  // A selection the console no longer serves is none: the hint says so.
+  EXPECT_TRUE(target_hint_shown(view(Phase::READY, true, false, PLANT_ONLY), Target::TWIN));
+  // No console: the panel says "No console", not this.
+  EXPECT_FALSE(target_hint_shown(ConsoleView{}, Target::NONE));
 }
 
 TEST(Enablement, ATargetTheConsoleDoesNotServeIsNotSent)
@@ -365,8 +390,8 @@ TEST(Enablement, FaultOutOfSimOffersStopToAskForSimAgain)
   EXPECT_FALSE(enabled_for(fault(true, true), Target::NONE).stop);
   // P-R03: on an all-simulated pair the console refuses that Stop; not offered.
   EXPECT_FALSE(enabled_for(fault(false, false), Target::NONE).stop);
-  // And Start robot is the way back to READY either way.
-  EXPECT_TRUE(enabled_for(fault(false, false), Target::NONE).start_robot);
+  // And Start robot, with a target selected, is the way back to READY either way.
+  EXPECT_TRUE(enabled_for(fault(false, false), Target::SIM).start_robot);
 }
 
 TEST(Enablement, AnUnrecognisedStateOffersNothingButStopWhileBusy)
@@ -398,21 +423,33 @@ TEST(Targets, OnlyAServedTargetMayBeChosen)
   EXPECT_TRUE(target_choice_enabled(view(Phase::RUNNING, true, true), Target::REAL));
 }
 
-TEST(Selection, NothingIsPreselectedOnLoad)
+TEST(Selection, SimulationIsPreselectedOnLoadWhereItIsServed)
 {
-  // The panel starts with no console heard and no selection; the first state
-  // it hears selects nothing, however many targets it serves (R-18).
+  // ADR-0072 decision 3 (amended 2026-10-15): the first state heard selects
+  // the simulation, however many targets the console serves.
   const ConsoleView loaded{};
-  EXPECT_EQ(settled_selection(loaded, ready(), Target::NONE), Target::NONE);
+  EXPECT_EQ(settled_selection(loaded, ready(), Target::NONE), Target::SIM);
   const ConsoleView plant_only = view(Phase::READY, true, false, PLANT_ONLY);
-  EXPECT_EQ(settled_selection(loaded, plant_only, Target::NONE), Target::NONE);
+  EXPECT_EQ(settled_selection(loaded, plant_only, Target::NONE), Target::SIM);
+  // Not served: nothing is selected, and the operator is asked to pick.
+  const ConsoleView none_served = view(Phase::READY, true, false, {});
+  EXPECT_EQ(settled_selection(loaded, none_served, Target::NONE), Target::NONE);
+  // No console: nothing.
+  EXPECT_EQ(settled_selection(loaded, loaded, Target::NONE), Target::NONE);
 }
 
-TEST(Selection, NothingIsPreselectedEvenWhenOnlyOneTargetIsServed)
+TEST(Selection, TheRealArmAndTheTwinAreNeverPreselected)
 {
-  // R-18: a plant-only deployment still waits for the operator to pick.
-  const ConsoleView plant_only = view(Phase::READY, true, false, PLANT_ONLY);
-  EXPECT_EQ(settled_selection(plant_only, plant_only, Target::NONE), Target::NONE);
+  // R-18: a target with a physical side is the operator's pick, even when it
+  // is the only one served.
+  for (const auto & served : std::vector<std::set<Target>>{
+    {Target::REAL}, {Target::TWIN}, {Target::REAL, Target::TWIN}})
+  {
+    const ConsoleView v = view(Phase::READY, true, false, served);
+    EXPECT_EQ(settled_selection(ConsoleView{}, v, Target::NONE), Target::NONE)
+      << names_of(served);
+    EXPECT_EQ(settled_selection(v, v, Target::NONE), Target::NONE) << names_of(served);
+  }
 }
 
 TEST(Selection, TheOperatorsPickStaysWhileTheServedSetIsUnchanged)
@@ -427,51 +464,69 @@ TEST(Selection, TheOperatorsPickStaysWhileTheServedSetIsUnchanged)
   }
 }
 
-TEST(Selection, AnyChangeToTheServedSetClearsIt)
+TEST(Selection, TheOperatorsTwinIsNotOverwrittenByTheDefault)
 {
-  // The real arm's side went away: even SIM, still served, is cleared, and
-  // the plant's sole target is not chosen for the operator (R-18).
-  const ConsoleView plant_only = view(Phase::READY, true, false, PLANT_ONLY);
-  for (const Target target : SELECTIONS) {
-    EXPECT_EQ(settled_selection(ready(), plant_only, target), Target::NONE)
-      << target_name(target);
+  // The simulation is served all along; the operator's Twin stays.
+  ConsoleView now = ready();
+  for (const Phase phase : {Phase::READY, Phase::HOMING, Phase::RUNNING, Phase::READY}) {
+    const ConsoleView next = view(phase, true, phase != Phase::READY);
+    EXPECT_EQ(settled_selection(now, next, Target::TWIN), Target::TWIN) << phase_name(phase);
+    now = next;
   }
-  // The real arm's side came up: the plant-only selection is cleared too.
-  EXPECT_EQ(settled_selection(plant_only, ready(), Target::SIM), Target::NONE);
 }
 
-TEST(Selection, AConsoleThatLeftOrCameBackClearsIt)
+TEST(Selection, AnyChangeToTheServedSetDropsItToTheSimulation)
+{
+  // The real arm's side went away: the selection is dropped (R-18) and the
+  // simulation, still served, is selected in its place.
+  const ConsoleView plant_only = view(Phase::READY, true, false, PLANT_ONLY);
+  for (const Target target : SELECTIONS) {
+    EXPECT_EQ(settled_selection(ready(), plant_only, target), Target::SIM)
+      << target_name(target);
+  }
+  // The real arm's side came up: dropped too, and the simulation again.
+  EXPECT_EQ(settled_selection(plant_only, ready(), Target::SIM), Target::SIM);
+  // Twin dropped where the simulation is not served: nothing, never the real arm.
+  const ConsoleView real_only = view(Phase::READY, true, false, {Target::REAL});
+  EXPECT_EQ(settled_selection(ready(), real_only, Target::TWIN), Target::NONE);
+  EXPECT_EQ(settled_selection(ready(), real_only, Target::REAL), Target::NONE);
+}
+
+TEST(Selection, AConsoleThatLeftOrCameBackDropsItToTheSimulation)
 {
   ConsoleView gone = ready();
   gone.heard = false;
-  // Gone: the publisher unmatched.
+  // Gone: the publisher unmatched. Nothing is selected.
   EXPECT_EQ(settled_selection(ready(), ConsoleView{}, Target::TWIN), Target::NONE);
-  // Back, serving exactly what it served before: still cleared.
-  EXPECT_EQ(settled_selection(ConsoleView{}, ready(), Target::TWIN), Target::NONE);
-  EXPECT_EQ(settled_selection(gone, ready(), Target::TWIN), Target::NONE);
+  // Back, serving exactly what it served before: the pick is dropped, and the
+  // simulation selected.
+  EXPECT_EQ(settled_selection(ConsoleView{}, ready(), Target::TWIN), Target::SIM);
+  EXPECT_EQ(settled_selection(gone, ready(), Target::TWIN), Target::SIM);
 }
 
-TEST(Selection, AnotherPublisherOrAnUnreadableChangeClearsIt)
+TEST(Selection, AnotherPublisherOrAnUnreadableChangeDropsIt)
 {
   // R-02: the same set from another publisher is a console that came back.
   ConsoleView first = ready();
   first.publisher = {1};
   ConsoleView second = ready();
   second.publisher = {2};
-  EXPECT_EQ(settled_selection(first, first, Target::SIM), Target::SIM);
-  EXPECT_EQ(settled_selection(first, second, Target::SIM), Target::NONE);
+  EXPECT_EQ(settled_selection(first, first, Target::TWIN), Target::TWIN);
+  EXPECT_EQ(settled_selection(first, second, Target::TWIN), Target::SIM);
   // R-03: a served value this panel does not recognise appeared.
   ConsoleView with_unknown = first;
   with_unknown.served_values = {254};
-  EXPECT_EQ(settled_selection(first, with_unknown, Target::SIM), Target::NONE);
-  EXPECT_EQ(settled_selection(with_unknown, first, Target::SIM), Target::NONE);
+  EXPECT_EQ(settled_selection(first, with_unknown, Target::REAL), Target::SIM);
+  EXPECT_EQ(settled_selection(with_unknown, first, Target::REAL), Target::SIM);
 }
 
-TEST(Selection, OverEveryTransitionTheSelectionIsTheOperatorsOrNone)
+TEST(Selection, OverEveryTransitionTheSelectionIsTheOperatorsOrTheSimulationOrNone)
 {
   // Every served set before and after, heard or not, every prior selection:
-  // the result is never a target the operator did not pick, never one that
-  // is not served, and is kept only across an unchanged served set.
+  // the result is the operator's pick kept across an unchanged served set,
+  // or else the simulation where it is served, or else nothing. Never a
+  // target with a physical side the operator did not pick, never one that
+  // is not served.
   for (int before_bits = 0; before_bits < 16; ++before_bits) {
     for (int now_bits = 0; now_bits < 16; ++now_bits) {
       ConsoleView before = ready();
@@ -480,13 +535,18 @@ TEST(Selection, OverEveryTransitionTheSelectionIsTheOperatorsOrNone)
       ConsoleView now = ready();
       now.heard = now_bits & 8;
       now.available_targets = targets_of(now_bits & 7);
+      const bool sim_served = target_choice_enabled(now, Target::SIM);
       for (const Target selected : SELECTIONS) {
         const Target settled = settled_selection(before, now, selected);
         const std::string where = describe(before, selected) + " -> " + describe(now, selected);
-        EXPECT_TRUE(settled == Target::NONE || settled == selected) << where;
+        EXPECT_TRUE(
+          settled == Target::NONE || settled == selected || settled == Target::SIM) << where;
         EXPECT_TRUE(settled == Target::NONE || target_choice_enabled(now, settled)) << where;
+        if (settled == Target::NONE) {
+          EXPECT_FALSE(sim_served) << where;
+        }
         if (before.available_targets != now.available_targets || !before.heard) {
-          EXPECT_EQ(settled, Target::NONE) << where;
+          EXPECT_EQ(settled, sim_served ? Target::SIM : Target::NONE) << where;
         }
       }
     }

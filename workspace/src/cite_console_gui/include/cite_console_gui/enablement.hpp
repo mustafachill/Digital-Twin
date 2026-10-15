@@ -58,8 +58,9 @@ constexpr std::array<Phase, 9> ALL_PHASES = {
 };
 
 /// Where the operator sends the signal (ADR-0072): ConsoleState.TARGET_*, as the
-/// panel reads it. `NONE` is no selection - the panel never defaults one when
-/// more than one is available - and also a value the panel does not recognise.
+/// panel reads it. `NONE` is no selection - the panel defaults only `SIM`, and
+/// only while the console serves it (`settled_selection`) - and also a value
+/// the panel does not recognise.
 enum class Target
 {
   NONE,
@@ -162,7 +163,9 @@ struct ButtonStates
 /// The one enablement rule, for the target the operator selected (`NONE` if
 /// none is).
 ///
-/// - Start robot: NOT_STARTED, READY or FAULT, and nothing in progress.
+/// - Start robot: NOT_STARTED, READY or FAULT, nothing in progress, and a
+///   target is selected (ADR-0072 decision 3, amended 2026-10-15): while none
+///   is, the panel says "Select a target" (`target_hint_shown`).
 /// - Home: started, READY, nothing in progress, and the selected target is one
 ///   the console serves.
 /// - Start program: as Home, and the console says the selected target is
@@ -185,16 +188,25 @@ bool target_choice_enabled(const ConsoleView & view, Target target);
 /// The selection the panel holds once `now` is heard, given the view it
 /// replaces (`before`) and the operator's `selected` target.
 ///
-/// The panel NEVER selects a target itself, not even the only one offered
-/// (ADR-0072 decision 3; safety audit R-18): the operator always picks. A
-/// selection stays only while a console is heard, the same publisher said
+/// A selection stays only while a console is heard, the same publisher said
 /// both views, the set of targets it serves (as received, unrecognised values
-/// included) is unchanged from `before`, and it serves the selection. Anything
-/// else - no console, a console that came back (a different publisher), a set
-/// of targets that changed in any way - clears it, and Home and Start program
-/// stay disabled until the operator picks again. Selecting is
+/// included) is unchanged from `before`, and it serves the selection (safety
+/// audit R-18). Anything else - no console, a console that came back (a
+/// different publisher), a set of targets that changed in any way - drops it.
+///
+/// Where no selection is left, the panel selects `SIM` if the console serves
+/// it (ADR-0072 decision 3, amended 2026-10-15): the simulation never routes
+/// to the physical side, so the default cannot send a signal to the real arm.
+/// `REAL` and `TWIN` are NEVER selected by the panel, not even when one of
+/// them alone is served: the operator always picks those, and a pick that
+/// stays is never replaced by the default. Selecting is
 /// `settled_selection(view, view, target)`.
 Target settled_selection(const ConsoleView & before, const ConsoleView & now, Target selected);
+
+/// Whether the panel says "Select a target": a console is heard and no target
+/// is selected, so Start robot, Home and Start program are disabled for want
+/// of one (ADR-0072 decision 3, amended 2026-10-15).
+bool target_hint_shown(const ConsoleView & view, Target selected);
 
 /// Whether the console says the pair runs the counterpart's side. The panel
 /// shows a side's start status only for a side that runs.

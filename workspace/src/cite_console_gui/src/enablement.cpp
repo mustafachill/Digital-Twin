@@ -42,7 +42,7 @@ ButtonStates enabled_for(const ConsoleView & view, Target selected)
   const bool idle = !view.busy;
   const bool ready = view.phase == Phase::READY;
 
-  states.start_robot = idle &&
+  states.start_robot = idle && served(view, selected) &&
     (view.phase == Phase::NOT_STARTED || ready || view.phase == Phase::FAULT);
   states.home = idle && view.robot_started && ready && served(view, selected);
   states.start_program = states.home && startable(view, selected);
@@ -65,7 +65,16 @@ Target settled_selection(const ConsoleView & before, const ConsoleView & now, Ta
     before.publisher == now.publisher &&
     before.served_values == now.served_values &&
     before.available_targets == now.available_targets;
-  return unchanged && served(now, selected) ? selected : Target::NONE;
+  if (unchanged && served(now, selected)) {
+    return selected;
+  }
+  // The one default: the simulation, never a target with a physical side.
+  return now.heard && served(now, Target::SIM) ? Target::SIM : Target::NONE;
+}
+
+bool target_hint_shown(const ConsoleView & view, Target selected)
+{
+  return view.heard && !served(view, selected);
 }
 
 bool counterpart_running(const ConsoleView & view)

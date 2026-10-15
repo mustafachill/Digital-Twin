@@ -83,16 +83,19 @@ TEST(PanelSelection, LoadedPanelSelectsNothingAndEnablesNothing)
   PanelSelection selection;
   EXPECT_EQ(selection.selected(), Target::NONE);
   EXPECT_FALSE(selection.buttons().home);
+  EXPECT_FALSE(selection.buttons().start_robot);
   EXPECT_FALSE(selection.select(Target::SIM)) << "chosen before any console was heard";
   EXPECT_EQ(selection.selected(), Target::NONE);
 }
 
-TEST(PanelSelection, LoadStateSelectThenAChangedSetClearsIt)
+TEST(PanelSelection, LoadStateSelectThenAChangedSetDropsItToTheSimulation)
 {
   PanelSelection selection;
   selection.apply(view_from(ready(), FIRST));
-  EXPECT_EQ(selection.selected(), Target::NONE) << "the panel picked for the operator";
-  EXPECT_FALSE(selection.buttons().home);
+  // ADR-0072 decision 3 (amended 2026-10-15): the simulation, and only it.
+  EXPECT_EQ(selection.selected(), Target::SIM) << "the simulation is not preselected";
+  EXPECT_TRUE(selection.buttons().start_robot);
+  EXPECT_TRUE(selection.buttons().home);
 
   ASSERT_TRUE(selection.select(Target::TWIN));
   EXPECT_EQ(selection.selected(), Target::TWIN);
@@ -108,14 +111,44 @@ TEST(PanelSelection, LoadStateSelectThenAChangedSetClearsIt)
   selection.apply(view_from(ready(), FIRST));
   EXPECT_EQ(selection.selected(), Target::TWIN);
 
-  // The real arm's side went away: cleared, and SIM is not chosen for them.
+  // The real arm's side went away: the Twin pick is dropped, and the
+  // simulation, still served, is selected in its place.
   selection.apply(view_from(ready(PLANT_ONLY), FIRST));
-  EXPECT_EQ(selection.selected(), Target::NONE);
-  EXPECT_FALSE(selection.buttons().home);
-  EXPECT_FALSE(selection.buttons().start_program);
+  EXPECT_EQ(selection.selected(), Target::SIM);
+  EXPECT_TRUE(selection.buttons().home);
 }
 
-TEST(PanelSelection, SelectLostThenBackWithTheSameSetClearsIt)
+TEST(PanelSelection, TheOperatorsTwinIsKeptWhileItIsServed)
+{
+  PanelSelection selection;
+  selection.apply(view_from(ready(), FIRST));
+  ASSERT_EQ(selection.selected(), Target::SIM);
+  ASSERT_TRUE(selection.select(Target::TWIN));
+  for (int heard = 0; heard < 5; ++heard) {
+    selection.apply(view_from(ready(), FIRST));
+    EXPECT_EQ(selection.selected(), Target::TWIN) << "the default overwrote the operator's pick";
+  }
+}
+
+TEST(PanelSelection, WithoutTheSimulationNothingIsSelectedAndStartRobotWaits)
+{
+  ConsoleState state = ready({ConsoleState::TARGET_REAL});
+  state.state = ConsoleState::NOT_STARTED;
+  state.robot_started = false;
+  PanelSelection selection;
+  selection.apply(view_from(state, FIRST));
+  EXPECT_EQ(selection.selected(), Target::NONE) << "the real arm was preselected";
+  EXPECT_FALSE(selection.buttons().start_robot);
+  ASSERT_TRUE(selection.select(Target::REAL));
+  EXPECT_TRUE(selection.buttons().start_robot);
+  // The simulation came up: the served set changed, the pick is dropped, and
+  // the simulation is selected.
+  state.available_targets = {ConsoleState::TARGET_SIM, ConsoleState::TARGET_REAL};
+  selection.apply(view_from(state, FIRST));
+  EXPECT_EQ(selection.selected(), Target::SIM);
+}
+
+TEST(PanelSelection, SelectLostThenBackWithTheSameSetDropsIt)
 {
   PanelSelection selection;
   selection.apply(view_from(ready(), FIRST));
@@ -123,10 +156,11 @@ TEST(PanelSelection, SelectLostThenBackWithTheSameSetClearsIt)
   selection.forget();
   EXPECT_EQ(selection.selected(), Target::NONE);
   EXPECT_FALSE(selection.buttons().home);
-  // Back, same publisher identity, same set: still cleared.
+  EXPECT_FALSE(selection.buttons().start_robot);
+  // Back, same publisher identity, same set: the real arm is not selected
+  // again; the simulation is.
   selection.apply(view_from(ready(), FIRST));
-  EXPECT_EQ(selection.selected(), Target::NONE);
-  EXPECT_FALSE(selection.buttons().home);
+  EXPECT_EQ(selection.selected(), Target::SIM);
 }
 
 TEST(PanelSelection, AnUnservedTargetIsIgnored)
@@ -140,7 +174,7 @@ TEST(PanelSelection, AnUnservedTargetIsIgnored)
   EXPECT_EQ(selection.selected(), Target::SIM) << "an ignored pick changed the selection";
 }
 
-TEST(PanelSelection, AnotherConsoleWithTheSameSetClearsIt)
+TEST(PanelSelection, AnotherConsoleWithTheSameSetDropsIt)
 {
   // R-02: a console restarted without its predecessor's unmatch being seen
   // speaks from another publisher; that is a console that came back.
@@ -148,27 +182,25 @@ TEST(PanelSelection, AnotherConsoleWithTheSameSetClearsIt)
   selection.apply(view_from(ready(), FIRST));
   ASSERT_TRUE(selection.select(Target::TWIN));
   selection.apply(view_from(ready(), SECOND));
-  EXPECT_EQ(selection.selected(), Target::NONE);
-  EXPECT_FALSE(selection.buttons().home);
-  EXPECT_FALSE(selection.buttons().start_program);
+  EXPECT_EQ(selection.selected(), Target::SIM);
 }
 
-TEST(PanelSelection, AnUnknownServedValueAppearingClearsIt)
+TEST(PanelSelection, AnUnknownServedValueAppearingDropsIt)
 {
   // R-03: a value this panel cannot read is not offered, but it is a change.
   PanelSelection selection;
   selection.apply(view_from(ready(), FIRST));
-  ASSERT_TRUE(selection.select(Target::SIM));
+  ASSERT_TRUE(selection.select(Target::TWIN));
   std::vector<std::uint8_t> with_unknown = BOTH_SIDES;
   with_unknown.push_back(unknown_target());
   selection.apply(view_from(ready(with_unknown), FIRST));
-  EXPECT_EQ(selection.selected(), Target::NONE);
+  EXPECT_EQ(selection.selected(), Target::SIM);
   // Offered: only what the panel recognises.
   EXPECT_EQ(selection.view().available_targets.size(), 3U);
   // And it goes away again: also a change.
-  ASSERT_TRUE(selection.select(Target::SIM));
+  ASSERT_TRUE(selection.select(Target::REAL));
   selection.apply(view_from(ready(), FIRST));
-  EXPECT_EQ(selection.selected(), Target::NONE);
+  EXPECT_EQ(selection.selected(), Target::SIM);
 }
 
 TEST(PanelSelection, HomeAndStartProgramAreNotSentAtAScaleTheTargetRefuses)
