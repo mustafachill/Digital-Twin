@@ -45,7 +45,7 @@ answers some interfaces and not others.
 | `launch/simulation.launch.py` | the launch description built from that plan, for a simulated side |
 | `launch/hardware.launch.py` | the launch description for a PHYSICAL side (ADR-0070 item 6): the vendor plugin, `cite_hardware`'s deadman and adapters, and above them what a simulated side runs; no Gazebo, the wall clock |
 | `cite_bringup/side_launch.py` | the pieces both launches run, written once: facility nodes, lifecycle driver, controller chain, MoveIt, planning scene, skill servers, witness, and every gate and refusal |
-| `cite_bringup/hold_gate.py` | the physical side's gate: the deadman says AWAITING, every vendor service is advertised and a STOP sent to the vendor is acknowledged; nothing that can move the arm starts before it exits 0 |
+| `cite_bringup/hold_gate.py` | the physical side's gate: the deadman says AWAITING or HELD, every vendor service is served by exactly one server and a STOP sent to the vendor is acknowledged (ADR-0076); nothing that can move the arm starts before it exits 0 |
 | `cite_bringup/program/sides.py` | which sides of a zone are physical, read from the plan; `./scripts/program` skips every Gazebo-only step there |
 | `cite_bringup/program/console.py`, `console_machine.py` | the operator console server, `cell_console` (ADR-0071): a managed node on the plant's domain serving `StartRobot`, `HomeRobot`, `RunProgram`, `ValidateThenRun` (ADR-0073), `ConfirmOperator` and `StopCell` under the names the plan's `console:` block states (`/cite/<zone>/console/...`) and a latched `ConsoleState`; every refusal is the ROS-free `ConsoleMachine`'s. Started by the pair supervisor only when asked (`./scripts/sim --pair --console`); `cell_console.py` is the file `ros2 run` executes. Its Stop is a software stop on the command path, not an E-stop |
 | `cite_bringup/program/cycle.py` | the program's one sequencer - SIM read, the operator asked, custody, VALIDATED, the program, SIM again - shared by `python3 -m cite_bringup.program`, `program.home` and the console |
@@ -270,8 +270,10 @@ order, each step gated on the one before it exiting 0 and no step on a timer:
    this side also waits for the two actions the deadman cancels; the token.
 
 The token means **held, not enabled**: the vendor plugin deactivates every controller while the
-deadman holds the arm at STOP, and reactivates them once the deadman enables the arm on the
-boundary's first heartbeat. The twin boundary refuses a mode that would command the side, and
+deadman holds the arm at STOP, and reactivates them once the deadman enables the arm. The
+boundary's first heartbeat does not enable it: it moves the deadman to HELD, and only the
+initializer's release - Start robot, `./scripts/home`, a program's homing - enables the arm
+(ADR-0076). The twin boundary refuses a mode that would command the side, and
 a re-assertion of the mode already in force, until the deadman is HEALTHY with `arm_enabled`, the arm trajectory controller's state is fresh and every joint the side
 publishes is fresh (`cite_twin.physical_readiness`); the fixed program asks again under a
 ceiling. Any process of the side exiting, for any reason, stops the whole side, and nothing

@@ -40,8 +40,13 @@ command resolved, so a container left running from an earlier session cannot car
 - at every mode transition that commands a physical side, in the twin boundary.
 
 Bring-up alone does not move the arm. The physical side comes up *held*, its deadman keeping
-the vendor stopped. It enables the arm only once the twin boundary's heartbeat is healthy, and
-the program then waits for the boundary to report the side ready. What each guard does, and
+the vendor stopped, and it stays held while the twin boundary's heartbeat arrives (HELD). The
+deadman enables the arm only when the asset's initializer releases it, which happens only when
+an operator starts it - Start robot after the go-ahead, `./scripts/home`, or the homing of
+`./scripts/program`
+([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)) - and the
+program then waits for the boundary to report the side ready. A deadman trip ends the
+physical side; a side started again comes up held. What each guard does, and
 what none of them covers, is in
 [`cross-cutting-safety.md`](../architecture/cross-cutting-safety.md)'s Status block. None of
 it is the safety layer that document designs, and none of it replaces the hardware E-stop.

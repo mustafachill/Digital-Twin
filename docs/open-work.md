@@ -2030,8 +2030,9 @@ cell is an educational lab, and one operator surface per pair is the operating r
     not come from the holder.
 - **The hold is cooperative** (S2-06). A refused `SetMode` returns the holder's id, so any client
   could then send that id as its own. Real authentication needs SROS2.
-- **The deadman does not know the mode** (design R-26). In `SIM` the physical arm is enabled and
-  idle, and keeping it still rests on the routing table. Carrying "physical commanded" in
+- **The deadman does not know the mode** (design R-26). Until Start robot the physical arm is
+  held at STOP whatever the mode (ADR-0076); once released, in `SIM` it is enabled and idle,
+  and keeping it still rests on the routing table. Carrying "physical commanded" in
   `TwinHeartbeat` would let the deadman hold the arm stopped. That is a contract change and needs
   its own record.
 - **The initializer moves the track outside the mode gate.** `InitializeAsset` is called directly

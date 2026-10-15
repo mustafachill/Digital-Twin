@@ -431,9 +431,19 @@ parameters.
 1. The plant (Gazebo) and the physical side come up.
 2. The physical side starts its deadman first, then the vendor driver, and holds the arm
    stopped. **Its readiness token means held, not enabled.**
-3. The twin boundary starts, and its heartbeat makes the deadman healthy. The deadman then
-   enables the arm. The program waits until the boundary reports the side ready, with the arm
-   enabled and fresh state.
+3. The twin boundary starts, and its heartbeat moves the deadman to HELD: the boundary is
+   followed, and **the arm stays stopped** until an operator starts it
+   ([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)). Only the
+   asset's initializer releases it (`ReleaseArm`, the first step of `InitializeAsset`), and
+   the initializer runs only for Start robot after the go-ahead, `./scripts/home`, or the
+   homing of `./scripts/program`. Then the deadman enables the arm, and the program waits
+   until the boundary reports the side ready, with the arm enabled and fresh state.
+
+   **Known gap, pending an owner decision:** `./scripts/program` and `./scripts/home` judge
+   the physical side commandable *before* they ask you in and initialize, and a HELD arm is
+   not commandable. On a physical side they therefore refuse after their ready ceiling
+   ("the real arm is held until Start robot") without asking anyone in or moving anything.
+   The operator console's Start robot does not judge the side first, and releases the arm.
 4. Before each run the program reads the twin's mode. Only once it reads SIM does it ask you
    to place the part on the physical table by hand and press Enter; anything else refuses
    without asking. **The arm is enabled and still while you do.** At the end of each run the
@@ -486,9 +496,11 @@ Reduced speed and a human on the stop, in both stages.
    CITE_ALLOW_HARDWARE=1 ./scripts/sim --pair --headless
    ```
 
-   Watch the deadman reach HEALTHY with `arm_enabled`, the vendor deactivate and then
-   reactivate the arm's controllers (the joint-state broadcaster included), and the physical
-   track's position being published. The arm should not move. Then Ctrl-C.
+   Watch the deadman reach HELD on the boundary's heartbeat and stay there, the arm at STOP
+   (since ADR-0076 nothing enables it without an operator's Start robot), and the physical
+   track's position being published. The arm should not move. Then Ctrl-C. (Before ADR-0076
+   this stage showed the deadman reach HEALTHY with `arm_enabled` on the heartbeat alone; the
+   runs recorded below are from then.)
 2. **One cycle.** Only after stage 1 showed nothing unexpected:
 
    ```bash

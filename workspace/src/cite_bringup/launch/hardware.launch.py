@@ -38,25 +38,31 @@ requested and confirmed by `lifecycle_driver.py` (ADR-0058):
    publisher, the facility nodes, the two adapters and the initializer (which
    serves `InitializeAsset` and does nothing until asked); then these
    configured and activated, confirmed.
-4. **The hold gate** (`hold_gate.py`): the deadman says AWAITING, every vendor
-   service the side's nodes call is advertised, and a STOP sent to the vendor
-   is acknowledged. The deadman itself offers no observable for its own first
+4. **The hold gate** (`hold_gate.py`): the deadman says AWAITING or HELD,
+   every vendor service the side's nodes call is served by exactly one server,
+   and a STOP sent to the vendor is acknowledged (ADR-0076 decision 6). The deadman itself offers no observable for its own first
    acknowledged STOP, so this is the gate's own (safety re-audit L-4).
 5. **The controllers**, stage by stage, and **MoveIt**; then the planning
    scene; then the skill servers and the readiness witness, which on this side
    also waits for the two actions the deadman cancels; then the token.
 
-**The token does not mean the arm is enabled.** While the deadman holds the arm
-at STOP the vendor plugin deactivates every controller, `joint_state_broadcaster`
-included, and it reactivates them itself once the arm is enabled - which the
-deadman does only on the twin boundary's first heartbeat. So: side ready (held)
--> the supervisor starts the boundary -> heartbeat -> deadman HEALTHY -> the
-deadman enables the arm -> the vendor reactivates its controllers. The program
-waits for that last state through the boundary before it commands anything.
+**The token does not mean the arm is enabled, and neither does the heartbeat.**
+While the deadman holds the arm at STOP the vendor plugin deactivates every
+controller, `joint_state_broadcaster` included, and it reactivates them itself
+once the arm is enabled - which the deadman does only when an operator releases
+it (ADR-0076). So: side ready (held) -> the supervisor starts the boundary ->
+heartbeat -> deadman HELD, the arm still at STOP -> an operator's Start robot,
+`./scripts/home` or program homing -> the initializer's `ReleaseArm` -> deadman
+HEALTHY -> the deadman enables the arm -> the vendor reactivates its
+controllers. The program waits for that last state through the boundary before
+it commands anything. A side started while the boundary is already beating
+comes up HELD all the same.
 
 **A physical side goes down whole** (safety re-audit L-1 to L-3): the deadman,
 the controller manager, a relay, a facility node, move_group or a skill server
-exiting for ANY reason stops the launch, and nothing on this side respawns.
+exiting for ANY reason stops the launch, and nothing on this side respawns. A
+deadman that tripped ends its own process on purpose, after its stops, so a
+trip takes the side down (ADR-0076 decision 5).
 Every node here runs on the wall clock (`use_sim_time: false`, L-7), and this
 launch declares no argument that could change that.
 """

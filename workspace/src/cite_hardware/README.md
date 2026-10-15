@@ -29,14 +29,16 @@ and 5).
 |---|---|---|
 | `track_adapter.py` | the track controller's `joint_trajectory` topic in; the track joint's position on the arm's joint-state topic out | `set_linear_motor_pos`, `get_linear_motor_pos`, `set_linear_motor_stop` (`xarm_msgs`) |
 | `gripper_relay.py` | `control_msgs/GripperCommand` at the plan's `gripper_action`; the drive joint's position on the arm's joint-state topic | the vendor driver's `GripperCommand` at `<prefix>xarm_gripper/gripper_action`; `get_gripper_position` (`xarm_msgs/GetFloat32`) |
-| `deadman.py` | `cite_interfaces/DeadmanState`, latched and republished every tick | `set_state(4)` in every state but HEALTHY; `set_mode` then `set_state(0)` on entering HEALTHY, retried on later ticks while HEALTHY until acknowledged (`arm_enabled`); while tripped also `set_linear_motor_stop` and a cancel of every goal on named actions, every tick |
+| `deadman.py` | `cite_interfaces/DeadmanState`, latched and republished every tick; `cite_interfaces/ReleaseArm` at the plan's `release_service` (ADR-0076) | `set_state(4)` in every state but HEALTHY; `set_mode` then `set_state(0)` on the release (HELD -> HEALTHY), retried on later ticks while HEALTHY until acknowledged (`arm_enabled`); on a trip also `set_linear_motor_stop` and a cancel of every goal on named actions, then the process ends |
 
 **How the arm is stopped.** The arm's own trajectory controller is not behind any gate here.
 The deadman holds the arm stopped through the vendor's state: `set_state(4)` on every tick in
 every state but HEALTHY, so a re-enable from UFACTORY Studio, the pendant or another client is
 undone within one tick; and, while tripped, a cancel of every goal on the arm's
 `FollowJointTrajectory` action. The vendor plugin streams nothing while the arm is in state 4
-(`uf_robot_system_hardware.cpp:339-344`, `:464-502`). Only the transition AWAITING -> HEALTHY
+(`uf_robot_system_hardware.cpp:339-344`, `:464-502`). The first heartbeat moves AWAITING to
+HELD, not HEALTHY (ADR-0076): the arm stays at STOP until `ReleaseArm`, which only the
+initializer calls, as the first step of `InitializeAsset`. Only the transition HELD -> HEALTHY
 enables the arm, with the vendor plugin's own sequence (`set_mode` with its streaming mode,
 then `set_state(0)`), and the plugin then reactivates the controllers itself (`:345-350`).
 `DeadmanState.state` HEALTHY says motion is permitted; `arm_enabled` says the deadman's
@@ -78,10 +80,16 @@ for the answers within the node's own vendor-call bound (`call_deadline_s`; twic
 flight was answered is acknowledged). A SIGKILL leaves no such chance: the relays' gates close when the
 deadman's publisher goes, but nothing then puts the ARM back to state 4.
 
-**Recovery after a trip.** Find why the heartbeat stopped. Then `ros2 lifecycle set
-<deadman> deactivate` and `activate`: the deadman says AWAITING and keeps the arm stopped, and
-enables it on the first heartbeat of a running boundary. A vendor error is not cleared by this;
-it needs the vendor's own `clean_error` first.
+**A trip ends the side** (ADR-0076 decision 5). Once tripped, the deadman sends every stop and
+then ends its own process with `EXIT_TRIPPED` - once a `set_state(4)` sent after the trip is
+acknowledged, or `call_deadline_s` after the trip when none is - through
+`cite_hardware/process.py`, which first sends `set_state(4)` once more. The side's launch takes
+the whole side down when the deadman exits.
+
+**Recovery after a trip.** Find why the heartbeat stopped. Then start the side again (the
+console's keeper does, ADR-0077): the new deadman says AWAITING, then HELD on the boundary's
+heartbeat, and keeps the arm stopped until Start robot releases it. A vendor error is not
+cleared by this; it needs the vendor's own `clean_error` first.
 
 The heartbeat is `cite_interfaces/TwinHeartbeat` on `TwinHeartbeat.TOPIC`, published by the
 twin boundary (`cite_twin`) onto each side's own domain, carrying one `boundary_id` per boundary
@@ -99,8 +107,12 @@ reads 1. Then, because `on_zero` says the track has found its zero and not that 
 stands there, `get_linear_motor_pos`, and only where the carriage is not within
 `start_tolerance_m` of `start_position_m` (the program's first track target, generated from the
 program), `set_linear_motor_speed(speed_mps)` and `set_linear_motor_pos` (no wait, no
-auto-enable; sent once) followed by position reads until it is. It does nothing until asked,
-refuses while inactive or while the deadman is not HEALTHY, asks the gate again immediately
+auto-enable; sent once) followed by position reads until it is. Before any of it (step 0,
+ADR-0076) it reads the deadman's state: HELD, it calls the deadman's `ReleaseArm`
+(`deadman_release_service`) and waits within `deadline_s` for HEALTHY with `arm_enabled`;
+HEALTHY already, it releases nothing; any other state fails the request naming it, with nothing
+sent to the vendor. It does nothing until asked,
+refuses while inactive or while the deadman is not HEALTHY after step 0, asks the gate again immediately
 before sending a homing or a move, and answers `success: false` naming the step and the
 vendor's code on any refusal. A homing or move that is refused, loses the deadman's gate, sees
 the node deactivated or exceeds `deadline_s` is followed by `set_linear_motor_stop`, as is the
@@ -204,12 +216,14 @@ refuses `use_sim_time`.
   from them reads "not holding" (ADR-0063 left the SDK stall path unestablished).
 - **The deadman trips when heartbeats stop for `timeout_s`, when their publisher disappears,
   or when a second boundary appears** (another `boundary_id`, or a second publisher), after
-  the first one. **It trips too when the vendor's `set_state` stops being served by exactly one
-  server** while HEALTHY: a vendor driver that went away or restarted has STARTED the arm in its
-  own `on_activate`. Seen on the tick, so an outage shorter than `tick_period_s` with no overlap
-  of old and new server is not seen. While tripped every stop is re-issued on every tick whether or not the last
-  one was acknowledged, and each call is abandoned at `call_deadline_s` so an unanswered call
-  never holds back the next. A trip is latched until a lifecycle deactivate and activate.
+  the first one, in HELD as in HEALTHY. **It trips too when the vendor's `set_state` stops
+  being served by exactly one server** while HEALTHY, or while HELD once it has been served: a
+  vendor driver that went away or restarted has STARTED the arm in its own `on_activate`. Seen
+  on the tick, so an outage shorter than `tick_period_s` with no overlap of old and new server
+  is not seen. While tripped every stop is re-issued on every tick whether or not the last one
+  was acknowledged, and each call is abandoned at `call_deadline_s` so an unanswered call never
+  holds back the next. A trip is latched, and the deadman then ends its process (ADR-0076
+  decision 5).
 
 ## Tests
 

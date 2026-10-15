@@ -146,8 +146,9 @@ serves the **same names** the simulated controllers serve:
   accepted before a hold is never sent after it.
 - **`gripper_relay`** serves the gripper controller's `gripper_cmd` action and publishes the
   drive joint.
-- **`deadman`** holds the arm through the vendor's state until the twin boundary's heartbeat is
-  healthy.
+- **`deadman`** holds the arm through the vendor's state until an operator releases it
+  (`ReleaseArm`, called by the initializer; ADR-0076), and trips - ending the side - when the
+  twin boundary's heartbeat is lost once followed.
 
 The physical side's controller manager therefore loads no track or gripper controller. Its
 joint states come from three publishers and are merged per joint by their consumers. Names
