@@ -55,6 +55,10 @@ if(BUILD_TESTING)
   # ADR-0070 item 6: a mode commanding a physical side waits until it is enabled
   # and publishing.
   ament_add_pytest_test(physical_readiness test/test_physical_readiness.py)
+  # ADR-0077: a kept physical side as the boundary reads the supervisor's word
+  # on it - running now, the mode refused while it is absent or held, a goal to
+  # a side that went away ending, the end of the input failing closed.
+  ament_add_pytest_test(connection test/test_connection.py)
   # SA2c-S-02 c: the program's next step waits until every commanded side's
   # track stands at the target, the physical one included.
   ament_add_pytest_test(track_arrival test/test_track_arrival.py)
@@ -103,6 +107,11 @@ if(BUILD_TESTING)
   # counterpart process, no counterpart context - routing SIM to the plant and
   # refusing every mode that needs a far side.
   add_launch_test(test/test_twin_boundary_plant_alone_launch.py TIMEOUT 300)
+  # ADR-0077: the boundary of an operator console's pair, its side states on
+  # stdin, against a fake physical counterpart this test starts, kills and
+  # starts again - REAL refused while it waits or is held, accepted once
+  # released, and a goal in flight ending when the side goes away.
+  add_launch_test(test/test_twin_boundary_hot_plug_launch.py TIMEOUT 300)
   # ADR-0071: the operator console server from cite_bringup over the real
   # boundary and two fake sides - its refusals, Start robot, and a Home
   # cancelled at its track slide. Here rather than in cite_bringup because it

@@ -87,6 +87,26 @@ class PhysicalSideWatch:
         for name in names:
             self.joint_at[name] = now
 
+    def forget(self) -> None:
+        """Drop everything heard: the side went away, and what it said is not its state now.
+
+        ADR-0077: a side that is started again is judged on what ITS processes
+        say, never on a latched state its predecessor left in this watch.
+        """
+        self.deadman = None
+        self.deadman_at = None
+        self.controller_at = None
+        self.joint_at.clear()
+
+    def held(self, now: float) -> bool:
+        """Whether the deadman, heard fresh, holds the arm until Start robot (ADR-0076)."""
+        return (
+            self.deadman is not None
+            and self.deadman_at is not None
+            and now - self.deadman_at <= self.max_age_s
+            and self.deadman.state == DeadmanState.STATE_HELD
+        )
+
     def unready(self, now: float) -> str | None:
         """Say why this side may not be commanded yet, or `None` if it may."""
         if self.deadman is None or self.deadman_at is None:

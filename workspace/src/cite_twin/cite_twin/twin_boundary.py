@@ -32,6 +32,16 @@ Three things, and they are the three ADR-0050 decides:
    measures. **So the monitor publishes self-describing invalid samples rather
    than nothing**, each carrying the terms that decide its own validity.
 
+**Which sides run, now** (ADR-0077). Which sides EXIST is fixed at start
+(`--sides`). Whether a declared physical counterpart is UP is a runtime fact
+when the boundary is started with `--side-states stdin`: the pair supervisor of
+an operator console's pair keeps that side - restarts it when it is lost - and
+writes each change of its state on this process's standard input
+(`cite_twin.connection`). A side that is not up is not running and not
+commandable, a mode that would command it is refused, and a goal in flight to
+it ends when it goes away. Without the flag nothing changes: every side
+started runs for the boundary's whole life.
+
 Beside those, one thing ADR-0070 item 5 adds: a `TwinHeartbeat` on each side's
 own domain, from that side's own executor, which a physical side's deadman
 stops on when it ceases (`_Heartbeat`). And three ADR-0072 adds: a run's hold on
@@ -80,6 +90,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+from typing import TextIO
 import uuid
 
 from action_msgs.msg import GoalStatus
@@ -95,7 +106,13 @@ from cite_bringup.plan import (
 # string literal here. The supervisor that reads it imports the same module
 # (ADR-0057), and two literals would be the P1 defect this whole join is built
 # out of avoiding.
-from cite_bringup.readiness import boundary_announcement, GOALS_STILL_RUNNING
+from cite_bringup.readiness import (
+    boundary_announcement,
+    GOALS_STILL_RUNNING,
+    SIDE_DOWN,
+    SIDE_FAILED,
+    SIDE_UP,
+)
 from cite_bringup.track_command import hold as track_hold
 from cite_facility import model_info
 from cite_interfaces.msg import (
@@ -122,6 +139,7 @@ from cite_twin.boundary import (
     SideContext,
     SKILL_ACTION_TYPES,
 )
+from cite_twin.connection import Connections
 from cite_twin.custody import holding as custody_verdicts
 from cite_twin.divergence import assess, compare, JointMerge, Operand, UNMEASURED
 from cite_twin.hold import ModeHold, node_names
@@ -181,6 +199,14 @@ SERVER_WAIT_S = 30.0
 SIDES_PLANT = "plant"
 SIDES_ALL = "all"
 SIDES_CHOICES = (SIDES_PLANT, SIDES_ALL)
+
+#: `--side-states`: where the kept sides' states are read from (ADR-0077). One
+#: word, because the pair supervisor is the one writer and stdin its one pipe.
+SIDE_STATES_STDIN = "stdin"
+
+#: What a wait on a far side's goal returns when that side went away while it
+#: waited (ADR-0077): not an answer, and never mistaken for one.
+_GONE = object()
 
 #: **How one operator result is ranked out of one result per side, worst first.**
 #:
@@ -365,12 +391,21 @@ class TwinBoundary:
     a context of its own.
     """
 
+    #: What the pair supervisor said of each KEPT side (ADR-0077). A class
+    #: default that keeps nothing, so a boundary built without `side_states`
+    #: - and every test that builds one by hand - runs every side it started.
+    _connections = Connections()
+    #: Per kept side, the event a goal in flight to it waits on beside its
+    #: answer: set, and replaced, when the side stops being up (ADR-0077).
+    _gone: Mapping[str, threading.Event] = {}
+
     def __init__(
         self,
         plan: Plan,
         base: int,
         environ: Mapping[str, str],
         running: tuple[str, ...],
+        side_states: TextIO | None = None,
     ) -> None:
         self._plan = plan
         self._lock = threading.Lock()
@@ -441,6 +476,17 @@ class TwinBoundary:
         except BoundaryError:
             self.stop()
             raise
+        #: Where the kept sides' states come from, None when nothing is kept
+        #: (ADR-0077). Only a physical counterpart is kept, and only when the
+        #: supervisor says it keeps one (`--side-states stdin`).
+        self._side_states = side_states
+        kept = (
+            (COUNTERPART_SIDE,)
+            if side_states is not None and self._physical_watches
+            else ()
+        )
+        self._connections = Connections(kept)
+        self._gone = {side: threading.Event() for side in kept}
         #: Each track a physical counterpart rides, with its goal tolerance: a
         #: mode commanding that side waits until its carriage stands where the
         #: plant's does (SA-S-01 b), because a program reads only the plant's.
@@ -761,6 +807,15 @@ class TwinBoundary:
         """
         if self._counterpart is not None:
             self._counterpart.spin_in_a_thread()
+        if self._side_states is not None:
+            # A daemon thread: it blocks in `readline`, and the end of the
+            # process must not wait for a supervisor that is still writing.
+            threading.Thread(
+                target=self._read_side_states,
+                args=(self._side_states,),
+                name="twin-side-states",
+                daemon=True,
+            ).start()
         # Published once the publisher exists and from here rather than from the
         # constructor: a subscriber match is an event, and the LATCHED profile
         # is what makes a late joiner receive it. Publishing from inside the
@@ -812,6 +867,69 @@ class TwinBoundary:
     def stop(self) -> None:
         for side in self._sides.values():
             side.stop()
+
+    def _read_side_states(self, stream: TextIO) -> None:
+        """Read the supervisor's state lines until the end of input (ADR-0077).
+
+        Each change is applied under the boundary's lock, with what a side that
+        stopped being up leaves behind; `TwinSides` is then published, off the
+        lock, as every other change of the sides is. The end of the input is
+        `down` for every kept side: a supervisor that is gone says nothing more,
+        and a side nobody vouches for is not running.
+        """
+        for line in stream:
+            with self._lock:
+                change = self._connections.apply(line)
+                if change is not None:
+                    self._changed_connection(*change)
+            if change is not None:
+                self._said_connection(*change)
+                self._publish_sides()
+        with self._lock:
+            changes = self._connections.end_of_input()
+            for change in changes:
+                self._changed_connection(*change)
+        for change in changes:
+            self._said_connection(*change)
+        self._publish_sides()
+
+    def _changed_connection(self, side: str, before: str, after: str) -> None:
+        """Apply one kept side's change of state; under the lock.
+
+        A side that WAS up and no longer is ends every goal in flight to it, and
+        forgets what it last said: a side started again is judged on what its
+        new processes say, never on a latched state of the old ones.
+        """
+        if before != SIDE_UP:
+            return
+        gone = self._gone.get(side)
+        if gone is not None:
+            gone.set()
+            self._gone[side] = threading.Event()
+        if side != COUNTERPART_SIDE:
+            return
+        for watch in self._physical_watches.values():
+            watch.forget()
+        for store in (
+            self._track_positions,
+            self._joint_positions,
+            self._custody,
+            self._operands,
+            self._joints,
+        ):
+            for key in [key for key in store if key[0] == side]:
+                del store[key]
+        for joint, _tolerance_m in self._physical_tracks:
+            self._track_history[joint] = []
+
+    def _said_connection(self, side: str, before: str, after: str) -> None:
+        line = f"{side}: {before} -> {after} (the pair supervisor, ADR-0077)"
+        # Two call sites rather than one and a chosen method: rclpy memoises a
+        # logger's severity by call site.
+        if after in (SIDE_DOWN, SIDE_FAILED):
+            self._log.warning(line)
+        else:
+            self._log.info(line)
 
     # ------------------------------------------------------------------ #
     # 1. The mode server
@@ -997,14 +1115,22 @@ class TwinBoundary:
             chosen = self._route(mode)
             if chosen.accepted:
                 self._in_flight[key] = skill.endpoint
+            # Taken with the route, so a side that goes away after this line
+            # sets the event this goal waits on (ADR-0077).
+            gone = {side: self._gone[side] for side in chosen.sides if side in self._gone}
         try:
-            return self._run_dispatched_goal(skill, goal_handle, mode, chosen)
+            return self._run_dispatched_goal(skill, goal_handle, mode, chosen, gone)
         finally:
             with self._lock:
                 self._in_flight.pop(key, None)
 
     def _run_dispatched_goal(
-        self, skill: _SkillEndpoint, goal_handle, mode: int, chosen
+        self,
+        skill: _SkillEndpoint,
+        goal_handle,
+        mode: int,
+        chosen,
+        gone: Mapping[str, threading.Event] | None = None,
     ):
         """Run the body of one goal, with the goal already registered as in flight.
 
@@ -1045,7 +1171,7 @@ class TwinBoundary:
             goal_handle.abort()
             return _uncommanded_result(skill, dispatched)
 
-        outcomes = self._await_far_side_goals(dispatched, goal_handle)
+        outcomes = self._await_far_side_goals(dispatched, goal_handle, gone)
         result = _compose_result(skill, chosen.sides, outcomes)
         if result.result.code == ResultCode.SUCCESS:
             goal_handle.succeed()
@@ -1071,6 +1197,16 @@ class TwinBoundary:
                 f"{MODE_NAMES.get(mode, mode)} routes to {', '.join(absent)}, which this "
                 "deployment does not run (the pair was started with the plant alone, "
                 "ADR-0072)",
+            )
+        # Declared and not up now (ADR-0077): a goal sent there would wait on a
+        # server that is not there, or on the stale endpoint of one that was.
+        down = [side for side in chosen.sides if not self._connections.up(side)]
+        if chosen.accepted and down:
+            return Route(
+                (),
+                ResultCode.PRECONDITION_FAILED,
+                f"{MODE_NAMES.get(mode, mode)} routes to {', '.join(down)}, which is not up "
+                "now (ADR-0077): " + "; ".join(self._connections.absent()),
             )
         return chosen
 
@@ -1372,7 +1508,10 @@ class TwinBoundary:
         goal_handle.publish_feedback(message.feedback)
 
     def _await_far_side_goals(
-        self, sent: Mapping[str, Future], goal_handle
+        self,
+        sent: Mapping[str, Future],
+        goal_handle,
+        gone: Mapping[str, threading.Event] | None = None,
     ) -> dict[str, _SideOutcome]:
         """Wait for every dispatched goal, forwarding a cancel to all of them.
 
@@ -1386,11 +1525,22 @@ class TwinBoundary:
         is what `CLOSED_LOOP` is, and these are the modes defined as being
         without it. So both sides are allowed to finish and the aggregate is
         reported.
+
+        **A side that goes away ends its own wait** (ADR-0077): ``gone`` holds,
+        per kept side, the event set when it stops being up, and a wait on that
+        side's acceptance or result returns when it is set. Its outcome is a
+        `HARDWARE_FAULT` - a machine the boundary lost while it may have been
+        moving, which needs a person (ADR-0037) - and the other side is let
+        finish, as it is for any failure.
         """
+        gone = gone or {}
         handles: dict[str, object] = {}
         outcomes: dict[str, _SideOutcome] = {}
         for side_name, future in sent.items():
-            handle = _wait(future, goal_handle, handles.values())
+            handle = _wait(future, goal_handle, handles.values(), gone.get(side_name))
+            if handle is _GONE:
+                outcomes[side_name] = _lost(side_name, "before it accepted the goal")
+                continue
             if handle is None or not handle.accepted:
                 outcomes[side_name] = _SideOutcome(
                     code=ResultCode(
@@ -1404,8 +1554,11 @@ class TwinBoundary:
 
         for side_name, handle in handles.items():
             future = handle.get_result_async()
-            outcomes[side_name] = _outcome_of(
-                side_name, _wait(future, goal_handle, handles.values())
+            answer = _wait(future, goal_handle, handles.values(), gone.get(side_name))
+            outcomes[side_name] = (
+                _lost(side_name, "while the goal ran")
+                if answer is _GONE
+                else _outcome_of(side_name, answer)
             )
 
         return outcomes
@@ -1503,6 +1656,11 @@ class TwinBoundary:
         position for its carriage to be compared by: each clears by itself.
         """
         now = time.monotonic()
+        # Not up at all, as the supervisor says (ADR-0077): what was last heard
+        # from it is not its state now.
+        absent = self._connections.absent()
+        if absent:
+            return "; ".join(absent)
         reasons = [physical_unready(self._physical_watches.values(), now)]
         for joint, _tolerance_m in self._physical_tracks:
             reasons.append(
@@ -1551,14 +1709,22 @@ class TwinBoundary:
         """Return what `TwinSides` says now; under the lock.
 
         Running, physical, commandable, stationary, and why a side is not
-        commandable or not stationary. A physical carriage heard outside its
-        travel makes its side not commandable (R-06): a REAL or VALIDATED
-        transition would refuse it for good, so no target commanding it is
-        offered.
+        running, not commandable or not stationary. A physical carriage heard
+        outside its travel makes its side not commandable (R-06): a REAL or
+        VALIDATED transition would refuse it for good, so no target commanding
+        it is offered.
+
+        **Running is the sides up NOW** (ADR-0077): every side started, less a
+        kept side the supervisor does not say is up. Physical is every started
+        side whose hardware is physical, up or not, so a client can say what is
+        missing. Commandable and stationary are of the running ones.
         """
         physical = tuple(side for side in self._sides if self._is_physical(side))
+        running = tuple(side for side in self._sides if self._connections.up(side))
+        absent = self._connections.absent()
+        live = tuple(side for side in physical if side in running)
         reasons = []
-        if physical:
+        if live:
             reasons = [
                 reason
                 for reason in (
@@ -1568,12 +1734,37 @@ class TwinBoundary:
                 if reason is not None
             ]
         commandable = tuple(
-            side for side in self._sides if side not in physical or not reasons
+            side for side in running if side not in physical or not reasons
         )
-        still = self._physical_carriages_moving() if physical else None
-        stationary = tuple(side for side in physical if still is None)
-        detail = "; ".join(reasons + ([still] if still is not None else []))
-        return tuple(self._sides), physical, commandable, stationary, detail
+        still = self._physical_carriages_moving() if live else None
+        stationary = tuple(side for side in live if still is None)
+        detail = "; ".join(absent + reasons + ([still] if still is not None else []))
+        return running, physical, commandable, stationary, detail
+
+    def _connection_now(
+        self,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+        """Return `TwinSides`' expected, connecting, failed and held; under the lock.
+
+        Expected is every side this deployment started (`--sides`); connecting
+        and failed are the supervisor's word on a kept side (ADR-0077); held is
+        each running physical side whose deadman, heard fresh, holds the arm
+        until Start robot (ADR-0076).
+        """
+        now = time.monotonic()
+        held = tuple(
+            side
+            for side in self._sides
+            if self._is_physical(side)
+            and self._connections.up(side)
+            and any(watch.held(now) for watch in self._physical_watches.values())
+        )
+        return (
+            tuple(self._sides),
+            self._connections.connecting(),
+            self._connections.failed(),
+            held,
+        )
 
     def _physical_carriages_moving(self) -> str | None:
         """Why a physical carriage is not reported stationary (S-02), or None; under the lock.
@@ -1609,18 +1800,28 @@ class TwinBoundary:
         order the snapshots are taken in is the order they are published in.
         """
         with self._lock:
-            now = self._sides_now()
+            now = self._sides_now() + self._connection_now()
             last = self._sides_published
-            if last is not None and (now[:4] == last[:4] if sets_only else now == last):
+            # Every field but the detail (index 4) is a set.
+            if last is not None and (
+                now[:4] + now[5:] == last[:4] + last[5:] if sets_only else now == last
+            ):
                 return
             self._sides_published = now
-            running, physical, commandable, stationary, detail = now
+            (
+                running, physical, commandable, stationary, detail,
+                expected, connecting, failed, held,
+            ) = now
             message = TwinSides(
                 running=list(running),
                 physical=list(physical),
                 commandable=list(commandable),
                 stationary=list(stationary),
                 detail=detail,
+                expected=list(expected),
+                connecting=list(connecting),
+                failed=list(failed),
+                held=list(held),
             )
             message.stamp = self._plant.node.get_clock().now().to_msg()
             self._sides_publisher.publish(message)
@@ -1985,23 +2186,45 @@ def _outcome_of(side_name: str, outcome) -> _SideOutcome:
     )
 
 
-def _wait(future: Future, goal_handle, handles) -> object | None:
+def _wait(
+    future: Future, goal_handle, handles, gone: threading.Event | None = None
+) -> object | None:
     """Block until ``future`` completes, forwarding a cancel while waiting.
 
     The wait is on a `threading.Event` rather than a poll of the future, so
     nothing here sleeps for a guessed duration (P4). The cancel check is a poll,
     at a rate that only decides how quickly a cancel is forwarded, and it is
     reported to no consumer.
+
+    ``gone``, when given, is set if the side this future belongs to stops being
+    up (ADR-0077); the wait then returns `_GONE` rather than waiting for an
+    answer a vanished server will never send.
     """
     done = threading.Event()
     future.add_done_callback(lambda _future: done.set())
     forwarded = False
     while not done.wait(timeout=0.1):
+        if gone is not None and gone.is_set():
+            return _GONE
         if goal_handle.is_cancel_requested and not forwarded:
             forwarded = True
             for handle in list(handles):
                 handle.cancel_goal_async()
     return future.result()
+
+
+def _lost(side_name: str, when: str) -> _SideOutcome:
+    """The outcome of a goal whose side went away ``when`` (ADR-0077)."""
+    return _SideOutcome(
+        code=ResultCode(
+            code=ResultCode.HARDWARE_FAULT,
+            detail=(
+                f"side {side_name!r} disconnected {when}; where its arm stopped is not "
+                "known, and a person must look before anything else is commanded"
+            ),
+        ),
+        payload=None,
+    )
 
 
 def _physical_watches(plan: Plan) -> dict[str, PhysicalSideWatch]:
@@ -2095,6 +2318,10 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     # supervisor states, and a default here would decide it for a caller that
     # forgot - toward opening a context on a side nobody started.
     parser.add_argument("--sides", choices=SIDES_CHOICES, required=True)
+    # ADR-0077: the pair supervisor of an operator console's pair keeps its
+    # physical counterpart and writes each change of its state here. Absent,
+    # every side started runs for the boundary's whole life, as before.
+    parser.add_argument("--side-states", choices=(SIDE_STATES_STDIN,), default=None)
     # ROS strips its own arguments before a node sees them; anything left that
     # this parser does not know about is ignored rather than fatal, because
     # `launch_ros` appends `--ros-args` unconditionally.
@@ -2152,7 +2379,13 @@ def main(argv: list[str] | None = None) -> int:
 
     boundary: TwinBoundary | None = None
     try:
-        boundary = TwinBoundary(plan, base, environ, running_sides(arguments.sides))
+        boundary = TwinBoundary(
+            plan,
+            base,
+            environ,
+            running_sides(arguments.sides),
+            side_states=sys.stdin if arguments.side_states == SIDE_STATES_STDIN else None,
+        )
         boundary.spin()
     except (PlanError, BoundaryError) as error:
         print(f"cite_twin: {error}", file=sys.stderr)

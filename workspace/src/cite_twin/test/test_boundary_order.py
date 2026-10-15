@@ -56,6 +56,7 @@ def _sides_boundary(snapshots, published, during_publish=lambda: None):
         _lock=lock,
         _sides_published=None,
         _sides_now=lambda: snapshots.pop(0),
+        _connection_now=lambda: ((), (), (), ()),
         _plant=SimpleNamespace(node=SimpleNamespace(get_clock=_Clock)),
         _sides_publisher=SimpleNamespace(publish=publish),
     )
@@ -98,8 +99,8 @@ def test_an_overlapping_publisher_waits_for_the_one_in_progress() -> None:
     second[0].join(timeout=5.0)
     assert not second[0].is_alive()
     assert [detail for detail, _ in published] == ["older", "newer"]
-    # The latched one is the newer.
-    assert boundary._sides_published[-1] == "newer"
+    # The latched one is the newer; its detail is the snapshot's fifth field.
+    assert boundary._sides_published[4] == "newer"
 
 
 class _Client:

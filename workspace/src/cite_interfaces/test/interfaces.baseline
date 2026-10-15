@@ -145,6 +145,10 @@ msg/TwinSides.msg
   string[] commandable
   string[] stationary
   string detail
+  string[] expected
+  string[] connecting
+  string[] failed
+  string[] held
 srv/ConfirmOperator.srv
   ---
   bool success
