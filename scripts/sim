@@ -291,6 +291,15 @@ if [ "$PAIR" -eq 1 ]; then
         info "Starting the plant alone: the twin boundary supports SIM only (ADR-0072)"
     fi
     PAIR_ARGS=(--sides "$PAIR_SIDES" "${PAIR_ARGS[@]}")
+    # THE OPERATOR CONSOLE KEEPS ITS REAL ARM (ADR-0077): with both sides, the
+    # supervisor starts the physical counterpart at once, does not wait for it,
+    # brings it up when its robot answers on the network and again after it is
+    # lost. Every other pair - `./scripts/program`, a scenario, a pair without
+    # the console - ends when a side ends, as before.
+    if [ "$CONSOLE" -eq 1 ] && [ "$PAIR_SIDES" != "$SIDES_PLANT_WORD" ]; then
+        info "The real arm connects when it answers on the network, and reconnects if it is lost (ADR-0077)"
+        PAIR_ARGS=(--hot-plug "${PAIR_ARGS[@]}")
+    fi
     exec python3 -m cite_bringup.pair "${PAIR_ARGS[@]}"
 fi
 

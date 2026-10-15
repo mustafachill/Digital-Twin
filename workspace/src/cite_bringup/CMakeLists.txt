@@ -133,6 +133,10 @@ if(BUILD_TESTING)
   # sentence in it. **Nothing under test is lengthened by this**: the ceilings
   # those tests spend are the test file's own and are deliberately unchanged.
   ament_add_pytest_test(pair test/test_pair.py TIMEOUT 120)
+  # ADR-0077: the supervisor keeping a physical counterpart - its table, and
+  # `supervise` against a kept side that waits, comes up, is lost, refuses and
+  # hangs, all `python3` processes with no ROS in them.
+  ament_add_pytest_test(pair_keeper test/test_pair_keeper.py TIMEOUT 120)
   # ADR-0047 clause 3. `endpoints()` is the definition of "this side is up", and
   # a witness whose condition is almost empty exits 0 having checked almost
   # nothing - which the launch announces and the supervisor reports as a pair.

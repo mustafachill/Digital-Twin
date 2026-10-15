@@ -79,6 +79,22 @@ side's pipe. It is strictly stronger than liveness, because a process that has
 not crashed has not reached the end of a gate chain, and it is not a timer: a
 blocking read on a pipe has no interval.
 
+**It may KEEP a physical counterpart** (ADR-0077), when it is told to:
+`--hot-plug`, accepted only with `--console --sides all` - the operator
+console with the hardware opt-in. A kept side is started at once and is NOT
+joined on: the boundary and the console start without it, and it comes up when
+its robot answers on the network (`reach_gate.py`). Its exit does not end the
+pair. What the supervisor knows of it - `waiting`, `connecting`, `up`, `down`,
+`failed` - is written to the boundary's STANDARD INPUT, one line per change,
+from this module's main loop only (`readiness.side_state_line`). A side that
+exits after it was up is swept and started again WHOLE, and comes up held
+(ADR-0076); one that reached its robot and failed to come up is started again
+at most `KEPT_ATTEMPTS` times in a row; one that exited before its robot was
+reachable refused its configuration and is not started again. Nothing about
+it is decided from a timer but each attempt's ceiling. Every other pair -
+`./scripts/program`, every scenario, CI - keeps nothing, and a side's exit
+ends it as before.
+
 **What it costs a developer, stated because it is a real cost.** The supervisor
 owns both sides' output, so a solo bring-up's plain console becomes two labelled
 interleaved streams. Every line carries its side's name as a prefix.
@@ -112,8 +128,15 @@ from cite_bringup.plan import (
 from cite_bringup.readiness import (
     announced_boundary,
     announced_console,
+    announced_reachable,
     announced_side,
     announced_window_closed,
+    SIDE_CONNECTING,
+    SIDE_DOWN,
+    SIDE_FAILED,
+    side_state_line,
+    SIDE_UP,
+    SIDE_WAITING,
 )
 
 #: A ceiling on a failure, never a schedule. Nothing proceeds when it expires:
@@ -199,6 +222,15 @@ BOUNDARY_CEILING_S = 120.0
 #: caller that has to wait it out (`./scripts/program`), from these numbers.
 STOP_GRACE_S = 90.0
 STOP_KILL_S = 30.0
+
+#: How many attempts in a row a KEPT side may make that reach its robot and
+#: then fail to announce, before it is `failed` and not started again
+#: (ADR-0077 decision 2). An owner's decision, not a measurement: how often a
+#: physical connection fails transiently has not been measured (open-work
+#: #93), and this is the number to revisit once it has. A side that came up
+#: resets the count, so a robot that drops now and then is reconnected every
+#: time.
+KEPT_ATTEMPTS = 3
 
 
 #: `--sides`: the plant alone, or every side the plan declares (ADR-0072). The
@@ -373,6 +405,13 @@ class SideSpec:
     #: join and when it announces. Empty for a side, which the join reports as
     #: one of "both sides".
     title: str = ""
+    #: A side the supervisor KEEPS (ADR-0077): started at once, never joined on,
+    #: started again when it ends (see `_Keeper`). Only a physical counterpart
+    #: of a pair started with `--hot-plug` is kept.
+    kept: bool = False
+    #: Whether this participant reads the kept sides' states on its standard
+    #: input (`--side-states stdin`): the boundary of a `--hot-plug` pair.
+    feed_states: bool = False
 
 
 def side_specs(
@@ -381,8 +420,13 @@ def side_specs(
     *,
     headless: bool = True,
     sides: str = SIDES_ALL,
+    hot_plug: bool = False,
 ) -> list[SideSpec]:
     """One spec per side started, in the plan's order: every side, or the plant alone.
+
+    With ``hot_plug`` (ADR-0077) every PHYSICAL side is kept: its launch waits
+    for its robot without a ceiling, and the supervisor neither joins on it nor
+    ends the pair when it exits. A simulated side is never kept.
 
     The domain is resolved through `plan.resolve_domain_id` and nowhere else: a
     second copy of `base + offset` is a value in two places, and the two copies
@@ -401,8 +445,9 @@ def side_specs(
         if side.name not in chosen:
             continue
         domain = resolve_domain_id(plan, side.name, base)
-        argv = side_launch(plan, side.name, headless)
-        specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}))
+        kept = hot_plug and is_physical(plan, side.name)
+        argv = side_launch(plan, side.name, headless, kept=kept)
+        specs.append(SideSpec(side.name, argv, {DOMAIN_ENV: str(domain)}, kept=kept))
     return specs
 
 
@@ -413,7 +458,17 @@ HARDWARE_LAUNCH = "hardware.launch.py"
 SIMULATION_LAUNCH = "simulation.launch.py"
 
 
-def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
+def is_physical(plan: Plan, side: str) -> bool:
+    """Whether any asset on ``side`` declares physical hardware: the plan's fact (ADR-0054)."""
+    return any(
+        manager.commands_physical_hardware_on_or_none(side) is True
+        for manager in plan.controller_managers
+    )
+
+
+def side_launch(
+    plan: Plan, side: str, headless: bool, *, kept: bool = False
+) -> tuple[str, ...]:
     """Return the argument vector that starts ``side``, chosen by what its hardware is.
 
     A side on which any asset declares physical hardware is started by
@@ -422,13 +477,10 @@ def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
     physical side whatever it is told. The answer is the plan's declared fact
     (`commands_physical_hardware_on_or_none`), so a backend's name decides
     nothing (ADR-0054). A physical side has no window, so it takes no
-    `headless`.
+    `headless`. A KEPT physical side (ADR-0077) waits for its robot without a
+    ceiling (`wait_for_robot:=true`); no other does.
     """
-    physical = any(
-        manager.commands_physical_hardware_on_or_none(side) is True
-        for manager in plan.controller_managers
-    )
-    if physical:
+    if is_physical(plan, side):
         return (
             "ros2",
             "launch",
@@ -436,7 +488,7 @@ def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
             HARDWARE_LAUNCH,
             f"zone:={plan.zone}",
             f"side:={side}",
-        )
+        ) + (("wait_for_robot:=true",) if kept else ())
     return (
         "ros2",
         "launch",
@@ -448,7 +500,9 @@ def side_launch(plan: Plan, side: str, headless: bool) -> tuple[str, ...]:
     )
 
 
-def boundary_spec(plan: Plan, path: Path | str, sides: str = SIDES_ALL) -> SideSpec:
+def boundary_spec(
+    plan: Plan, path: Path | str, sides: str = SIDES_ALL, *, side_states: bool = False
+) -> SideSpec:
     """Return the third participant: the boundary spanning the two sides above.
 
     **Two arguments and nothing else, and that is ADR-0057's load-bearing
@@ -474,6 +528,12 @@ def boundary_spec(plan: Plan, path: Path | str, sides: str = SIDES_ALL) -> SideS
     with the plant alone has a boundary that opens no context on the
     counterpart's domain and refuses every mode but SIM. That is a fact about
     the deployment this supervisor started, not a decision about what crosses.
+
+    **And, for a `--hot-plug` pair, `--side-states stdin`** (ADR-0077 decision
+    4): the boundary reads each kept side's state on its standard input, which
+    this supervisor writes. A fact this supervisor holds - whether the side's
+    process is up - and still not a decision about what crosses: the boundary
+    measures the side itself before a mode may command it.
     """
     return SideSpec(
         BOUNDARY_NAME,
@@ -491,7 +551,8 @@ def boundary_spec(plan: Plan, path: Path | str, sides: str = SIDES_ALL) -> SideS
             str(path),
             "--sides",
             sides,
-        ),
+        )
+        + (("--side-states", "stdin") if side_states else ()),
         announcement=announced_boundary,
         announces=plan.zone,
         argument="--zone",
@@ -502,6 +563,7 @@ def boundary_spec(plan: Plan, path: Path | str, sides: str = SIDES_ALL) -> SideS
         # `argv` and would change if that token did.
         stop_reach=STOP_GROUP,
         title="the twin boundary",
+        feed_states=side_states,
     )
 
 
@@ -583,6 +645,146 @@ class _Side:
         return self.spec.announces or self.spec.name
 
 
+#: What a `_Keeper` asks the supervisor to do, in the order it returns them.
+#: `KEEP_REPORT` carries a state for the boundary; the others carry nothing.
+KEEP_REPORT = "report"
+#: Stop the current incarnation: its attempt's ceiling expired. Its exit then
+#: arrives as any exit does, and is judged as a failed attempt.
+KEEP_STOP = "stop"
+#: Sweep the ended incarnation's process group, and start the side again.
+KEEP_RESTART = "restart"
+#: Sweep the ended incarnation's process group, and start nothing.
+KEEP_SWEEP = "sweep"
+
+
+class _Keeper:
+    """What the supervisor does with ONE kept side, as a table (ADR-0077 decision 2).
+
+    Pure: no process, no clock, no pipe. Each event the supervisor sees for the
+    side is a method here, and each returns the actions to take, in order, as
+    `(KEEP_*, payload)` pairs. The supervisor's main loop applies them; a test
+    reads them.
+
+    ======================================== ===================================
+    What happened                            What is done
+    ======================================== ===================================
+    the side was started                     report `waiting`
+    its robot answered (`reachable`)         report `connecting`; this attempt's
+                                             ceiling starts
+    it announced                             report `up`; the count of failed
+                                             attempts is reset
+    it exited before its robot answered      sweep; report `failed`: it refused
+                                             its configuration, which no restart
+                                             changes
+    it exited after the robot answered and   one failed attempt: sweep, start it
+    before announcing, or its ceiling        again and report `waiting` - or,
+    expired and it was stopped               at `attempts` in a row, sweep and
+                                             report `failed`
+    it exited after it was up                report `down`; sweep, start it
+                                             again, report `waiting`
+    ======================================== ===================================
+
+    **The ceiling is per incarnation and runs from `reachable`**: a side waiting
+    for a robot that is switched off is not failing, and has none. Restarting is
+    not resuming: the side comes up whole and HELD (ADR-0076).
+    """
+
+    def __init__(
+        self, name: str, *, attempts: int = KEPT_ATTEMPTS, ceiling_s: float = READY_CEILING_S
+    ) -> None:
+        self.name = name
+        self.state: str | None = None
+        #: Consecutive attempts that reached the robot and did not come up.
+        self.failures = 0
+        #: When the current attempt's ceiling expires (monotonic), or None.
+        self.deadline: float | None = None
+        self._attempts = attempts
+        self._ceiling_s = ceiling_s
+
+    def started(self) -> list[tuple[str, str]]:
+        self.state = SIDE_WAITING
+        self.deadline = None
+        return [(KEEP_REPORT, SIDE_WAITING)]
+
+    def reachable(self, now: float) -> list[tuple[str, str]]:
+        if self.state != SIDE_WAITING:
+            return []
+        self.state = SIDE_CONNECTING
+        self.deadline = now + self._ceiling_s
+        return [(KEEP_REPORT, SIDE_CONNECTING)]
+
+    def ready(self) -> list[tuple[str, str]]:
+        if self.state not in (SIDE_WAITING, SIDE_CONNECTING):
+            return []
+        self.state = SIDE_UP
+        self.failures = 0
+        self.deadline = None
+        return [(KEEP_REPORT, SIDE_UP)]
+
+    def expired(self, now: float) -> list[tuple[str, str]]:
+        """Stop the current attempt if its ceiling has passed; its exit is then judged."""
+        if self.deadline is None or now < self.deadline:
+            return []
+        self.deadline = None
+        return [(KEEP_STOP, "")]
+
+    def exited(self) -> list[tuple[str, str]]:
+        self.deadline = None
+        if self.state == SIDE_UP:
+            self.failures = 0
+            self.state = SIDE_WAITING
+            return [(KEEP_REPORT, SIDE_DOWN), (KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
+        if self.state == SIDE_WAITING:
+            self.state = SIDE_FAILED
+            return [(KEEP_SWEEP, ""), (KEEP_REPORT, SIDE_FAILED)]
+        if self.state == SIDE_CONNECTING:
+            self.failures += 1
+            if self.failures >= self._attempts:
+                self.state = SIDE_FAILED
+                return [(KEEP_SWEEP, ""), (KEEP_REPORT, SIDE_FAILED)]
+            self.state = SIDE_WAITING
+            return [(KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
+        return []
+
+
+class _StateFeed:
+    """The kept sides' states, written on the boundary's standard input (ADR-0077).
+
+    Written from the supervisor's MAIN LOOP only, so it takes no lock: the
+    signal handler in `_stop_requests` puts on the event queue and on nothing
+    else, and a lock here would be one more thing it could interrupt while held.
+    A state said before the boundary exists is kept and written, in order, the
+    moment it is started. A boundary that has gone away is not an error here:
+    its exit is a participant ending, and the join judges that.
+    """
+
+    def __init__(self, out) -> None:
+        self._out = out
+        self._pending: list[str] = []
+        self._target: _Side | None = None
+
+    def say(self, side: str, state: str) -> None:
+        print(f"[pair] {side}: {state} (kept, ADR-0077)", file=self._out, flush=True)
+        self._pending.append(side_state_line(side, state))
+        self._flush()
+
+    def attach(self, boundary: _Side) -> None:
+        self._target = boundary
+        self._flush()
+
+    def _flush(self) -> None:
+        target = self._target
+        if target is None or target.process.stdin is None:
+            return
+        lines, self._pending = self._pending, []
+        try:
+            for line in lines:
+                target.process.stdin.write(line + "\n")
+            target.process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+
 def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
     """Start one side, in its own session, with its output on a pipe we own.
 
@@ -598,6 +800,9 @@ def _start(spec: SideSpec, environ: Mapping[str, str]) -> subprocess.Popen:
     return subprocess.Popen(
         list(spec.argv),
         env=env,
+        # A pipe this supervisor writes the kept sides' states on, for the one
+        # participant that reads them (ADR-0077); every other inherits stdin.
+        stdin=subprocess.PIPE if spec.feed_states else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -647,6 +852,11 @@ def _pump(side: _Side, events: queue.Queue, out) -> None:
         closed = announced_window_closed(line)
         if closed is not None:
             events.put(("closed", side, closed))
+        # A physical side's reach gate found its robot (ADR-0077). Only a kept
+        # side's is acted on; the join ignores it from anything else.
+        reachable = announced_reachable(line)
+        if reachable is not None:
+            events.put(("reachable", side, reachable))
     events.put(("exit", side, side.process.wait()))
 
 
@@ -768,6 +978,8 @@ def supervise(
     environ: Mapping[str, str] | None = None,
     ceiling_s: float = READY_CEILING_S,
     boundary_ceiling_s: float = BOUNDARY_CEILING_S,
+    kept_attempts: int = KEPT_ATTEMPTS,
+    kept_ceiling_s: float | None = None,
     out=None,
 ) -> int:
     """Start every side at once, join them, start the boundary, and own the pair.
@@ -803,6 +1015,12 @@ def supervise(
     operator surface died is a cell nobody can stop from where they stand, and
     ending it stops everything the console started; not asked for, there is no
     console to end anything. It needs a boundary, and is ignored without one.
+
+    **A KEPT side (ADR-0077, `SideSpec.kept`) is in none of the rows above.**
+    It is started with the others and joined on by nothing; its exit ends
+    nothing; `_Keeper` is its table, `kept_attempts` its bound and
+    `kept_ceiling_s` each attempt's ceiling from `reachable` (the sides'
+    ceiling when None). Its state is reported, not graded (:func:`_verdict`).
 
     ``boundary`` is optional, and a supervisor given none joins two sides and
     stops there. That is not a mode: it is what keeps ADR-0047's membership test
@@ -850,12 +1068,24 @@ def supervise(
     # SIGINT to the default instead.
     with _stop_requests(events):
         sides = [_launch(spec, environ, events, out) for spec in specs]
+        kept = [s.name for s in sides if s.spec.kept]
         print(
             "[pair] started " + ", ".join(s.name for s in sides) + "; waiting for "
-            "each side to announce its own readiness",
+            "each side to announce its own readiness"
+            + (
+                f" - except {', '.join(kept)}, which is kept and comes up when its "
+                "robot answers (ADR-0077)"
+                if kept
+                else ""
+            ),
             file=out,
             flush=True,
         )
+
+        def relaunch(spec: SideSpec) -> _Side:
+            print(f"[pair] starting {spec.name} again (kept, ADR-0077)", file=out, flush=True)
+            return _launch(spec, environ, events, out)
+
         interrupted, participants = _join(
             sides,
             events,
@@ -863,6 +1093,9 @@ def supervise(
             out,
             start_next=[starter(spec) for spec in followers],
             boundary_ceiling_s=boundary_ceiling_s,
+            relaunch=relaunch,
+            kept_attempts=kept_attempts,
+            kept_ceiling_s=ceiling_s if kept_ceiling_s is None else kept_ceiling_s,
         )
     # Drained BEFORE anything is stopped, and that ordering is the point. When
     # two sides fail for one reason they fail together, and a side stopped by
@@ -1006,6 +1239,9 @@ def _join(
     *,
     start_next: Sequence[Callable[[], _Side]] = (),
     boundary_ceiling_s: float = BOUNDARY_CEILING_S,
+    relaunch: Callable[[SideSpec], _Side] | None = None,
+    kept_attempts: int = KEPT_ATTEMPTS,
+    kept_ceiling_s: float = READY_CEILING_S,
 ) -> tuple[bool, list[_Side]]:
     """Block until the pair is complete and then until it ends.
 
@@ -1026,6 +1262,13 @@ def _join(
     ``start_next`` is every participant started after the join, in order: the
     boundary, then the operator console (ADR-0071). Each is started on the
     announcement of everything before it, under the boundary's ceiling.
+
+    **A kept side is not waited for** (ADR-0077): the join is over the other
+    participants, and every event of a kept side goes to its `_Keeper`, whose
+    actions are applied here - on this loop, which is the supervisor's main
+    thread, and so is every write of a state to the boundary (`_StateFeed`).
+    Its attempt's ceiling is one more deadline this wait honours. An event
+    from an incarnation that is no longer the current one is dropped.
     """
     participants = list(sides)
     ceiling = ceiling_s
@@ -1034,14 +1277,78 @@ def _join(
     # The participant started last after the join, None before the join. What
     # an arrival of "everything is ready" means depends on it.
     latest: _Side | None = None
+    feed = _StateFeed(out)
+    keepers = {
+        side.name: _Keeper(side.name, attempts=kept_attempts, ceiling_s=kept_ceiling_s)
+        for side in sides
+        if side.spec.kept
+    }
+    current = {side.name: side for side in sides if side.spec.kept}
+
+    def keep(name: str, actions: list[tuple[str, str]]) -> None:
+        for action, state in actions:
+            if action == KEEP_REPORT:
+                feed.say(name, state)
+            elif action == KEEP_STOP:
+                print(
+                    f"[pair] {name} reached its robot and did not announce within "
+                    f"{kept_ceiling_s:g} s; stopping this attempt",
+                    file=out,
+                    flush=True,
+                )
+                _stop(current[name], out)
+            elif action == KEEP_SWEEP:
+                _sweep([current[name]], out)
+            elif action == KEEP_RESTART:
+                old = current[name]
+                # The old group first, whole: a launch that died on a signal
+                # leaves what it started running, and a second vendor driver
+                # beside the first is the stale endpoint ADR-0076 guards.
+                _sweep([old], out)
+                if relaunch is None:
+                    continue
+                started = relaunch(old.spec)
+                participants[participants.index(old)] = started
+                current[name] = started
+
+    def joined_over(group: Iterable[_Side]) -> bool:
+        return all(member.ready for member in group if not member.spec.kept)
+
+    for name, keeper in keepers.items():
+        keep(name, keeper.started())
     while True:
-        joined = all(participant.ready for participant in participants)
-        timeout = None if joined else max(0.0, deadline - time.monotonic())
+        joined = joined_over(participants)
+        waits = [] if joined else [deadline]
+        waits += [k.deadline for k in keepers.values() if k.deadline is not None]
+        timeout = None if not waits else max(0.0, min(waits) - time.monotonic())
         try:
             kind, side, payload = events.get(timeout=timeout)
         except queue.Empty:
-            _report_ceiling(participants, ceiling, out)
-            return False, participants
+            now = time.monotonic()
+            if not joined and now >= deadline:
+                _report_ceiling(participants, ceiling, out)
+                return False, participants
+            for name, keeper in keepers.items():
+                keep(name, keeper.expired(now))
+            continue
+        if side is not None and side.spec.kept and kind != "stop":
+            if current.get(side.name) is not side:
+                continue
+            keeper = keepers[side.name]
+            if kind == "reachable":
+                keep(side.name, keeper.reachable(time.monotonic()))
+                continue
+            if kind == "exit":
+                side.status = payload
+                print(f"[pair] {side.name} exited {payload}", file=out, flush=True)
+                keep(side.name, keeper.exited())
+                continue
+            if kind == "ready" and payload == side.announces:
+                side.ready = True
+                keep(side.name, keeper.ready())
+                continue
+        if kind == "reachable":
+            continue
         if kind == "stop":
             print(
                 f"[pair] asked to stop (signal {payload}); ending both sides",
@@ -1092,7 +1399,7 @@ def _join(
                 )
                 return False, participants
             side.ready = True
-            if not all(p.ready for p in participants):
+            if not joined_over(participants):
                 continue
             if latest is None:
                 print(
@@ -1116,6 +1423,8 @@ def _join(
             # before it - nor the console before the boundary (ADR-0071).
             latest = pending.pop(0)()
             participants.append(latest)
+            if latest.spec.feed_states:
+                feed.attach(latest)
             ceiling = boundary_ceiling_s
             deadline = time.monotonic() + ceiling
         else:
@@ -1135,7 +1444,7 @@ def _report_ceiling(
     is silent and a boundary that is silent send the reader to different places.
     """
     for participant in participants:
-        if participant.ready:
+        if participant.ready or participant.spec.kept:
             continue
         print(
             f"[pair] {participant.name} never announced readiness and never "
@@ -1169,20 +1478,25 @@ def _verdict(participants: Sequence[_Side], interrupted: bool, out) -> int:
     a pair whose boundary never answered cannot answer `SetMode`, which is the
     thing the pair is for, and reporting that as a pair that merely ended would
     lose the diagnosis the line above it just printed.
+
+    **A kept side is reported and not graded** (ADR-0077): whether a robot was
+    connected when the pair ended says nothing about whether the pair ran.
     """
     for participant in participants:
         print(
             f"[pair] {participant.name}: ready={participant.ready} "
-            f"status={participant.status}",
+            f"status={participant.status}"
+            + (" (kept, not graded)" if participant.spec.kept else ""),
             file=out,
             flush=True,
         )
-    if interrupted and all(participant.ready for participant in participants):
+    graded = [participant for participant in participants if not participant.spec.kept]
+    if interrupted and all(participant.ready for participant in graded):
         # The pair came up and an operator ended it - with a signal, or by
         # closing a window (ADR-0078). That is what asking for a pair and then
         # stopping it looks like, and it is not a failure.
         return 0
-    if not all(participant.ready for participant in participants):
+    if not all(participant.ready for participant in graded):
         return 1
     return PAIR_ENDED
 
@@ -1270,14 +1584,31 @@ def main(argv: list[str] | None = None) -> int:
         choices=SIDES_CHOICES,
         help="Start every side the plan declares, or the plant alone (ADR-0072).",
     )
+    # ADR-0077: keep the physical counterpart - start it at once, join on it
+    # never, start it again when it ends. Handed here by `./scripts/sim` for
+    # the operator console with the hardware opt-in, and refused anywhere else:
+    # a pair that is not the console has no operator to see a side come and go.
+    parser.add_argument(
+        "--hot-plug",
+        action="store_true",
+        help="Keep the physical counterpart: connect when reachable, survive its loss "
+        "(ADR-0077). Only with --console --sides all.",
+    )
     args = parser.parse_args(
         _flags(sys.argv[1:] if argv is None else argv, parser)
     )
+    if args.hot_plug and not (args.console and args.sides == SIDES_ALL):
+        parser.error(
+            "--hot-plug keeps the physical counterpart of the operator console's pair, so "
+            f"it is accepted only with --console --sides {SIDES_ALL} (ADR-0077)"
+        )
 
     try:
         path = default_plan_path(args.zone)
         plan = load(path)
-        specs = side_specs(plan, os.environ, headless=args.headless, sides=args.sides)
+        specs = side_specs(
+            plan, os.environ, headless=args.headless, sides=args.sides, hot_plug=args.hot_plug
+        )
     except PlanError as exc:
         print(f"PAIR BRING-UP FAILED: {exc}", file=sys.stderr)
         return 1
@@ -1312,7 +1643,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     return supervise(
         specs,
-        boundary=boundary_spec(plan, path, args.sides),
+        boundary=boundary_spec(plan, path, args.sides, side_states=args.hot_plug),
         console=console,
         ceiling_s=args.ceiling,
     )

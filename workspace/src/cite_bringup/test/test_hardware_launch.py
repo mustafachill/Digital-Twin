@@ -545,6 +545,8 @@ def test_the_physical_counterpart_gets_the_hardware_launch() -> None:
     assert "side:=counterpart" in argv and not any(a.startswith("headless") for a in argv)
     assert pair.side_launch(plan, PLANT_SIDE, headless=True)[3] == pair.SIMULATION_LAUNCH
     assert "wait_for_robot:=true" not in argv
+    kept = pair.side_launch(plan, COUNTERPART_SIDE, headless=False, kept=True)
+    assert kept[-1] == "wait_for_robot:=true"
 
 
 def test_the_selection_reads_the_declared_fact_and_not_the_backend_name() -> None:
