@@ -433,20 +433,24 @@ parameters.
    stopped. **Its readiness token means held, not enabled.**
 3. The twin boundary starts, and its heartbeat moves the deadman to HELD: the boundary is
    followed, and **the arm stays stopped** until an operator starts it
-   ([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)). Only the
-   asset's initializer releases it (`ReleaseArm`, the first step of `InitializeAsset`), and
-   the initializer runs only for Start robot after the go-ahead, `./scripts/home`, or the
-   homing of `./scripts/program`. Then the deadman enables the arm, and the program waits
+   ([ADR-0076](../adr/0076-a-physical-arm-is-held-until-the-operator-starts-it.md)). The
+   deadman releases it on any `ReleaseArm` call on the side's domain once the side is ready
+   (a STOP acknowledged by the vendor, and the side's controllers up); the operator routes are
+   the only callers in the tree: the asset's initializer calls it as the first step of
+   `InitializeAsset`, which runs only for Start robot after the go-ahead, `./scripts/home`, or
+   the homing of `./scripts/program`. Then the deadman enables the arm, and the program waits
    until the boundary reports the side ready, with the arm enabled and fresh state.
 
-   **Known gap, pending an owner decision:** `./scripts/program` and `./scripts/home` judge
-   the physical side commandable *before* they ask you in and initialize, and a HELD arm is
-   not commandable. On a physical side they therefore refuse after their ready ceiling
-   ("the real arm is held until Start robot") without asking anyone in or moving anything.
-   The operator console's Start robot does not judge the side first, and releases the arm.
+   `./scripts/home` and the homing of `./scripts/program` take the same order as Start robot:
+   the twin held in SIM; a carriage the twin hears moving refuses, while a held arm and a
+   track that has not found its zero (no position yet) do not; you are asked to clear the
+   cell with a prompt saying the arm will be ENABLED and the track may home; the arm is
+   initialized, which releases it; and only then is the side judged ready before the twin
+   leaves SIM.
 4. Before each run the program reads the twin's mode. Only once it reads SIM does it ask you
    to place the part on the physical table by hand and press Enter; anything else refuses
-   without asking. **The arm is enabled and still while you do.** At the end of each run the
+   without asking. **The arm is enabled and still while you do**, except before a homing
+   first cycle, where it is held at STOP and is enabled on your confirmation. At the end of each run the
    program puts the twin back in SIM; if that fails, the run fails and the cycle loop ends. No
    box is spawned and no belt runs on the physical side.
 5. A track step first asks every side whether its carriage is already at the target. If the
@@ -484,7 +488,9 @@ The supervisor then stops the boundary first, so the deadman trips and stops the
 brings each side down.
 **After a deadman trip** the trip latches, and the arm stays stopped until an operator
 deliberately resets it. The recovery sequence is in `workspace/src/cite_hardware/README.md`.
-Restarting the whole run is also a reset.
+Restarting the whole run is also a reset. **If the deadman logs "no STOP was acknowledged after
+the trip: the arm may remain enabled"**, the vendor never confirmed the stop: check the arm in
+UFACTORY Studio, and stop it there if it is enabled, before the next start.
 
 ### First motion, always: two stages
 

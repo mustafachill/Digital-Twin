@@ -186,12 +186,20 @@ def carriage_verdict(
 
     AWAY never clears by itself, so it says what to do from outside the cell;
     UNHEARD is said as unheard, never as "home it" (R-04). Before a homing
-    move (``homing``) AWAY is no refusal: bringing the carriages together is
-    what that move does, and the start is measured again after it (ADR-0070).
+    move (``homing``) neither AWAY nor UNHEARD is a refusal: bringing the
+    carriages together is what that move does, a track not yet zeroed has no
+    position to hear (ADR-0076), and the start is measured again after the
+    initialization (ADR-0070).
     """
     if answer.reason == TrackArrived.Response.ARRIVED:
         return None
-    if homing and answer.reason == TrackArrived.Response.AWAY:
+    if homing and answer.reason in (
+        TrackArrived.Response.AWAY,
+        TrackArrived.Response.UNHEARD,
+    ):
+        # Before a homing move (ADR-0076): the move brings a carriage apart
+        # together, and a track not yet zeroed publishes no position; the
+        # start is measured after the initialization either way.
         return None
     if answer.reason == TrackArrived.Response.AWAY:
         return (
@@ -268,17 +276,42 @@ def holding_answer_refusal(answer, sides) -> str | None:
     return "; ".join(found) if found else None
 
 
-def physical_sides_refusal(message: TwinSides | None, target: int) -> str | None:
+def physical_sides_refusal(
+    message: TwinSides | None,
+    target: int,
+    homing: bool = False,
+    unheard: frozenset[str] | set[str] = frozenset(),
+) -> str | None:
     """Say why the operator may not be asked in yet, as to the target's physical sides (S-02).
 
     ``message`` is the twin's latest `TwinSides`. Each physical side of the
     target must be commandable now - ready, and its carriage inside its travel
     (R-06) - and its carriages reported stationary. None when they are, or
     when the target commands no physical side.
+
+    Before a homing request (``homing``, ADR-0076) the arm is held at STOP
+    until the initializer releases it after the go-ahead, so a side need not be
+    commandable yet: the post-initialization judgement before the target's
+    mode is what checks it. Its carriage must still not be heard MOVING: a side
+    not reported stationary refuses unless it is in ``unheard`` - the twin has
+    no fresh position for its carriage, which a track that has not found its
+    zero never publishes.
     """
     if message is None:
         return f"no TwinSides heard on {TwinSides.TOPIC}"
     physical = [side for side in targets.SIDES[target] if side in message.physical]
+    if homing:
+        waiting = [
+            side
+            for side in physical
+            if side not in message.stationary and side not in unheard
+        ]
+        if not waiting:
+            return None
+        return (
+            f"{', '.join(waiting)}: its carriage is heard and not reported stationary, so "
+            f"it may be moving: {message.detail or 'the twin gave no reason'}"
+        )
     waiting = [
         side
         for side in physical
@@ -899,14 +932,18 @@ class RosCell:
         to do - from outside the cell - rather than once VALIDATED is asked of
         an operator who confirmed it clear. Never heard in time refuses too.
         Before a homing move (``homing``) a carriage apart is no refusal: that
-        move brings it to the start (`carriage_verdict`).
+        move brings it to the start (`carriage_verdict`). Nor is a side not yet
+        commandable, or a carriage the twin has no fresh position for: the arm
+        is held until the initializer releases it after the go-ahead, and a
+        track that has not found its zero publishes none (ADR-0076). A carriage
+        heard and not stationary still refuses (`physical_sides_refusal`).
 
         The real arm alone is not compared with the plant (ADR-0072): the plant
         is idle, and the boundary does not compare the carriages in REAL either.
         """
         if self._via != "twin":
             return None
-        refusal = self._await_physical_sides(target)
+        refusal = self._await_physical_sides(target, homing=homing)
         if refusal is not None:
             return refusal
         if self._track_arrived is None or self._track is None:
@@ -918,19 +955,23 @@ class RosCell:
             f"{self._track.joint} on the arm's joint states",
         )
         plant_m = self._track_position
+        # Before a homing move an unheard carriage is no refusal, so it is
+        # asked once and not waited for.
         answer = await_heard(
             self._ask_arrival(plant_m, "the carriages before the operator"),
             self._pause_between_asks,
-            time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S,
+            time.monotonic() + (0.0 if homing else PHYSICAL_SIDE_READY_CEILING_S),
         )
         return carriage_verdict(answer, plant_m, PHYSICAL_SIDE_READY_CEILING_S, homing)
 
-    def _await_physical_sides(self, target: int) -> str | None:
+    def _await_physical_sides(self, target: int, homing: bool = False) -> str | None:
         """Wait for `physical_sides_refusal` to clear on the latched `TwinSides`, or say why not.
 
         A ceiling on a failure, not a schedule: a carriage that stopped is
         said at once on the next `TwinSides`, and one still moving, or a side
-        not ready, at the ceiling is the refusal.
+        not ready, at the ceiling is the refusal. Before a homing move
+        (``homing``) a side not reported stationary is asked of the twin
+        (`_unheard_carriages`): one with no fresh position is let through.
         """
         heard: list[TwinSides] = []
         subscription = self.node.create_subscription(
@@ -939,7 +980,17 @@ class RosCell:
         deadline = time.monotonic() + PHYSICAL_SIDE_READY_CEILING_S
         try:
             while True:
-                refusal = physical_sides_refusal(heard[-1] if heard else None, target)
+                message = heard[-1] if heard else None
+                unheard: frozenset[str] = frozenset()
+                if homing and message is not None:
+                    unheard = self._unheard_carriages(
+                        [
+                            side
+                            for side in targets.SIDES[target]
+                            if side in message.physical and side not in message.stationary
+                        ]
+                    )
+                refusal = physical_sides_refusal(message, target, homing, unheard)
                 if refusal is None:
                     return None
                 if time.monotonic() > self._clamped(deadline):
@@ -950,6 +1001,22 @@ class RosCell:
                 self._spin_once(_SPIN_SLICE_S)
         finally:
             self.node.destroy_subscription(subscription)
+
+    def _unheard_carriages(self, sides) -> frozenset[str]:
+        """Return those of ``sides`` whose carriage the twin has no fresh position for.
+
+        Asked of the boundary with `TrackArrived`, one side at a time and at
+        any target: UNHEARD says the side's position is not heard, or too old,
+        and nothing else does. Without a track nothing is unheard.
+        """
+        if not sides or self._track_arrived is None or self._track is None:
+            return frozenset()
+        return frozenset(
+            side
+            for side in sides
+            if self._ask_arrival(0.0, f"whether {side}'s carriage is heard", (side,))().reason
+            == TrackArrived.Response.UNHEARD
+        )
 
     def away_from_start(self, start, sides=()) -> str | None:
         """Measure the program's start on ``sides``; say where a side is not, or None.

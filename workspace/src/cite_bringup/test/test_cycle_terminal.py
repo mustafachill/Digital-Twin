@@ -285,8 +285,18 @@ def test_a_completed_home_says_done_and_exits_0() -> None:
     ended = _home(Cell(log), log, _reader(log))
     assert (ended.status, ended.sim_confirmed) == (0, True)
     assert log[-2:] == ["said done: both arms are at the program's start", "call return_to_sim"]
-    assert log.index("asked Target: the twin (simulation and real arm); physical side(s) "
-                     "commanded: counterpart. HOME?") < log.index("call initialize")
+    # ADR-0076: the arm is held until the initialization, and the prompt and
+    # the line before it say that the confirmation enables it (S-05).
+    assert log.index(
+        "asked Target: the twin (simulation and real arm); physical side(s) commanded: "
+        "counterpart. On confirmation the real arm is ENABLED, and its track may home and "
+        "move to the program's start. HOME?"
+    ) < log.index("call initialize")
+    assert (
+        "said The twin is in SIM and forwards nothing to counterpart. Its arm is held at STOP "
+        "(or, if already started, enabled and holding where it stands); on confirmation it "
+        "will be ENABLED, and the track may home and move to its start."
+    ) in log
 
 
 @pytest.mark.parametrize("homed", [True, False])

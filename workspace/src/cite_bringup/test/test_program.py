@@ -323,7 +323,7 @@ def _tracking(cell, plant_m: float, answers: list):
     ros._until_true = lambda predicate, what: None
     # The physical sides are ready and their carriages still (S-02): the
     # carriage-agreement question is the one these tests ask.
-    ros._await_physical_sides = lambda target: None
+    ros._await_physical_sides = lambda target, homing=False: None
     asked: list[float] = []
 
     def ask_arrival(position_m: float, what: str, sides=()):
@@ -1270,15 +1270,46 @@ def test_bring_to_start_stops_on_any_failure_and_retries_nothing(
     assert [call[0] for call in ros.calls] == calls
 
 
-def test_before_a_home_only_a_carriage_heard_apart_is_let_through() -> None:
-    """Homing clears AWAY; an unheard carriage, or one the twin cannot judge, still refuses."""
+def test_before_a_home_a_carriage_apart_or_unheard_is_let_through() -> None:
+    """Homing clears AWAY, and UNHEARD - a track not yet zeroed (ADR-0076); not the rest."""
     away = _answer(False, "counterpart: stands at 300.0 mm")
     assert carriage_verdict(away, 0.0, 120.0) is not None
     assert carriage_verdict(away, 0.0, 120.0, homing=True) is None
     unheard = _answer(False, "no track position heard", TrackArrived.Response.UNHEARD)
-    assert "did not hear" in carriage_verdict(unheard, 0.0, 120.0, homing=True)
+    assert "did not hear" in carriage_verdict(unheard, 0.0, 120.0)
+    assert carriage_verdict(unheard, 0.0, 120.0, homing=True) is None
     other = _answer(False, "not a track", TrackArrived.Response.NOT_A_TRACK)
     assert carriage_verdict(other, 0.0, 120.0, homing=True) is not None
+
+
+def test_before_a_home_an_unheard_carriage_is_asked_once_and_not_waited_for(cell) -> None:
+    """ADR-0076: a held, unzeroed carriage is no refusal before a homing request."""
+    unheard = TrackArrived.Response.UNHEARD
+    ros, asked = _tracking(
+        cell, 0.65, [_answer(False, "counterpart: no track position heard", unheard, False)]
+    )
+    assert ros.carriage_refusal(TWIN, homing=True) is None
+    assert asked == [0.65]
+
+
+def test_the_unheard_carriages_are_asked_side_by_side(cell) -> None:
+    """ADR-0076: `TrackArrived` UNHEARD, for that side alone, is what marks it unheard."""
+    ros, _ = _tracking(cell, 0.65, [])
+    sides_asked: list = []
+    replies = {
+        "counterpart": _answer(False, "counterpart: no track position heard",
+                               TrackArrived.Response.UNHEARD),
+        "plant": _answer(False, "plant: stands at 300.0 mm"),
+    }
+
+    def ask_arrival(position_m: float, what: str, sides=()):
+        sides_asked.append(tuple(sides))
+        return lambda: replies[sides[0]]
+
+    ros._ask_arrival = ask_arrival
+    assert ros._unheard_carriages(["counterpart", "plant"]) == {"counterpart"}
+    assert sides_asked == [("counterpart",), ("plant",)]
+    assert ros._unheard_carriages([]) == frozenset()
 
 
 def test_the_twins_measurement_is_said_as_where_a_side_stands() -> None:
@@ -1730,6 +1761,8 @@ def test_a_physical_side_not_ready_or_moving_refuses_before_the_carriages_are_co
 ) -> None:
     """S-02, R-06: asked first, and its refusal is the answer; nothing else is asked."""
     ros, asked = _tracking(cell, 0.65, [])
-    ros._await_physical_sides = lambda target: "counterpart is not ready to be commanded"
+    ros._await_physical_sides = (
+        lambda target, homing=False: "counterpart is not ready to be commanded"
+    )
     assert ros.carriage_refusal(TWIN) == "counterpart is not ready to be commanded"
     assert asked == []

@@ -63,7 +63,7 @@ from dataclasses import dataclass
 from cite_bringup.plan import PLANT_SIDE
 from cite_bringup.program import targets
 from cite_bringup.program.home import bring_to_start, StartPose
-from cite_bringup.program.operator import confirm_operator, PLACE_PROMPT
+from cite_bringup.program.operator import confirm_operator, ENABLE_NOTICE, PLACE_PROMPT
 from cite_bringup.program.steps import EXIT_INTERRUPTED, run, Step, StepFailed
 from cite_interfaces.msg import TwinMode
 
@@ -159,6 +159,7 @@ def start_robot(
                 await_operator,
                 lambda: None,
                 prompt=targeted_prompt(prompt, target, physical),
+                enabling=True,
             )
             initialize_physical()
         elif running_physical:
@@ -385,6 +386,14 @@ def _ask_the_operator(
     twin is HELD in SIM before the operator is asked (`hold_sim`, S2-01): a
     read of its mode would let another client switch it while the person is
     in the cell.
+
+    A homing request (``homing``) initializes the physical arm after the
+    go-ahead, and the arm is HELD at STOP until then (ADR-0076): the carriage
+    check tolerates a side not yet commandable and a carriage with no position
+    yet, still refuses one heard moving, and the prompt names the enable and
+    the homing (`ENABLE_NOTICE`), as the console's Start robot does. Readiness
+    is judged after the initialization, before the target's mode
+    (`home.bring_to_start`).
     """
     if physical:
         confirm_operator(
@@ -394,5 +403,8 @@ def _ask_the_operator(
             say,
             await_operator,
             lambda: cell.carriage_refusal(target, homing=homing),
-            prompt=targeted_prompt(prompt, target, physical),
+            prompt=targeted_prompt(
+                f"{ENABLE_NOTICE}{prompt}" if homing else prompt, target, physical
+            ),
+            enabling=homing,
         )

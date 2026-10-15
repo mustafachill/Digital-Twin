@@ -32,6 +32,14 @@ from cite_interfaces.msg import TwinMode
 #: What the operator is asked before a run of the program.
 PLACE_PROMPT = "Place the part on the table by hand, clear the cell, then press Enter. "
 
+#: Put before the prompt of a request that initializes a physical arm first - a
+#: homing request (ADR-0076): the arm is held at STOP until then, and the
+#: initializer enables it and may home its track.
+ENABLE_NOTICE = (
+    "On confirmation the real arm is ENABLED, and its track may home and move to the "
+    "program's start. "
+)
+
 
 def confirm_operator(
     mode: int | None,
@@ -41,6 +49,7 @@ def confirm_operator(
     read: Callable[[str], str],
     carriage_refusal: Callable[[], str | None],
     prompt: str = PLACE_PROMPT,
+    enabling: bool = False,
 ) -> None:
     """Ask the operator to place the part and clear the cell, once the twin is in SIM.
 
@@ -52,7 +61,9 @@ def confirm_operator(
     is no answer, and refuses. ``prompt`` is what the operator is asked.
     ``scale`` is None where nothing is run at a scale (the console's Start
     robot, whose initializer moves the track at its own speed), and then no
-    scale is said.
+    scale is said. ``enabling`` is True where the confirmation is followed by
+    the arm's initialization (Start robot, a homing request): the arm may be
+    held at STOP until then, and is said so (ADR-0076).
     """
     if mode is None:
         raise StepFailed(
@@ -71,10 +82,18 @@ def confirm_operator(
     for side in physical:
         if scale is not None:
             say(f"{side} is physical and runs at speed scale {scale:g}.")
-        say(
-            f"The twin is in SIM and forwards nothing to {side}, but its ARM IS ENABLED "
-            "and holds where it stands."
-        )
+        if enabling:
+            say(
+                f"The twin is in SIM and forwards nothing to {side}. Its arm is held at STOP "
+                "(or, if already started, enabled and holding where it stands); on "
+                "confirmation it will be ENABLED, and the track may home and move to its "
+                "start."
+            )
+        else:
+            say(
+                f"The twin is in SIM and forwards nothing to {side}, but its ARM IS ENABLED "
+                "and holds where it stands."
+            )
     try:
         read(prompt)
     except EOFError:

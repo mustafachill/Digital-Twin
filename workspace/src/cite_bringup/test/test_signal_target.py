@@ -682,6 +682,90 @@ def test_a_physical_side_not_commandable_refuses_before_the_prompt(target) -> No
     assert refusal is not None and "outside its travel" in refusal
 
 
+# --- ADR-0076: a homing request on a HELD arm --------------------------------
+
+
+def test_before_a_home_a_held_side_and_an_unzeroed_carriage_are_tolerated() -> None:
+    """Decision (a): held (not commandable) and no position yet do not refuse a homing."""
+    held = _sides(commandable=("plant",), detail="counterpart: the deadman is HELD")
+    assert physical_sides_refusal(held, REAL) is not None
+    assert physical_sides_refusal(held, REAL, homing=True) is None
+    unzeroed = _sides(
+        commandable=("plant",), stationary=(), detail="picker_track_joint: no position heard"
+    )
+    assert physical_sides_refusal(unzeroed, TWIN, homing=True, unheard={"counterpart"}) is None
+
+
+@pytest.mark.parametrize("target", [REAL, TWIN])
+def test_before_a_home_a_carriage_heard_moving_still_refuses(target) -> None:
+    """Decision (a): a carriage the twin hears and does not report stationary refuses."""
+    moving = _sides(
+        commandable=("plant",),
+        stationary=(),
+        detail="picker_track_joint is not reported stationary",
+    )
+    refusal = physical_sides_refusal(moving, target, homing=True)
+    assert refusal is not None and "may be moving" in refusal
+    assert "no TwinSides heard" in physical_sides_refusal(None, target, homing=True)
+
+
+def test_a_real_home_asks_the_go_ahead_naming_the_enable_then_initializes() -> None:
+    """Decision (a): SIM held, carriage judged for a homing, go-ahead, initialize, home."""
+    log: list = []
+    ended = _home(REAL, ["counterpart"], log)
+    assert ended.status == 0
+    names = _names(log)
+    assert ("carriage_refusal", REAL, True) in log
+    assert (
+        names.index("hold_sim")
+        < names.index("carriage_refusal")
+        < names.index("asked")
+        < names.index("initialize")
+        < names.index("enter_target")
+    )
+    (asked,) = [entry[1] for entry in log if entry[0] == "asked"]
+    assert "ENABLED" in asked and "home" in asked and asked.endswith("HOME?")
+    said = " ".join(entry[1] for entry in log if entry[0] == "said")
+    assert "held at STOP" in said and "will be ENABLED" in said
+    assert "ARM IS ENABLED" not in said
+
+
+def test_a_home_whose_carriage_is_heard_moving_asks_no_one_and_initializes_nothing() -> None:
+    """Decision (a): the refusal comes before the go-ahead, and nothing is released."""
+
+    class Moving(Cell):
+        def carriage_refusal(self, target, homing=False):
+            self.log.append(("carriage_refusal", target, homing))
+            return "counterpart: its carriage is heard and not reported stationary"
+
+    log: list = []
+    ended = cycle.home(
+        Moving(log),
+        [move("zero")],
+        START,
+        target=REAL,
+        physical=["counterpart"],
+        scale=0.5,
+        say=lambda text: log.append(("said", text)),
+        await_operator=lambda prompt: log.append(("asked", prompt)) or "",
+        initialize_physical=lambda: log.append(("initialize",)),
+        prompt="HOME?",
+    )
+    assert ended.status == 1 and "not reported stationary" in ended.failure
+    names = _names(log)
+    assert "asked" not in names and "initialize" not in names and "move" not in names
+
+
+def test_a_run_that_does_not_home_still_says_the_arm_is_enabled() -> None:
+    """S-05: only an initializing request says held; an ordinary run's arm is enabled."""
+    log: list = []
+    _run(REAL, ["counterpart"], log)
+    said = " ".join(entry[1] for entry in log if entry[0] == "said")
+    assert "ARM IS ENABLED" in said and "held at STOP" not in said
+    (asked,) = [entry[1] for entry in log if entry[0] == "asked"]
+    assert "ENABLED" not in asked
+
+
 def test_the_simulation_waits_on_no_physical_side() -> None:
     assert physical_sides_refusal(_sides(commandable=("plant",), stationary=()), SIM) is None
     assert "no TwinSides heard" in physical_sides_refusal(None, REAL)
