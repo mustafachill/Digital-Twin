@@ -721,20 +721,34 @@ void CellConsole::selectPreset(int index)
 
 bool CellConsole::pressReaches(QQuickItem * target) const
 {
+  // A control with no window, no size or its centre outside the window cannot
+  // be pressed at all: that is a failure, never a pass (S-03).
   if (target == nullptr || target->window() == nullptr || target->width() <= 0.0 ||
     target->height() <= 0.0)
   {
-    return true;
+    return false;
   }
   const QPointF centre =
     target->mapToScene(QPointF(target->width() / 2.0, target->height() / 2.0));
   QQuickItem * root = target->window()->contentItem();
   if (!QRectF(0.0, 0.0, root->width(), root->height()).contains(centre)) {
-    // Outside the window: a layout on its way somewhere, not one to judge.
-    return true;
+    return false;
   }
   QQuickItem * found = first_press_target(root, centre, target);
   return found != nullptr && (found == target || target->isAncestorOf(found));
+}
+
+QQuickItem * CellConsole::modalOverlay(QQuickItem * target) const
+{
+  if (target == nullptr || target->window() == nullptr) {
+    return nullptr;
+  }
+  for (QQuickItem * item : target->window()->contentItem()->childItems()) {
+    if (overlay_keeps_the_press(item)) {
+      return item;
+    }
+  }
+  return nullptr;
 }
 
 void CellConsole::followRobot()

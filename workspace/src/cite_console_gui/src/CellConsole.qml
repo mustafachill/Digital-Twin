@@ -38,11 +38,17 @@
 // card that clipped its children to its shape would, masked, take every press
 // from every button in it. So once gz-gui's window is shown - every card in
 // its place; gz-gui docks a card off the window before it floats it - and
-// whenever the frame is laid out again after that, the plugin judges whether a
-// press at Stop's centre reaches Stop (`pressReaches`). If it does not, the
-// mask and the MouseAreas are put back as gz-gui made them and a warning is
-// printed: the scene loses the mouse over the middle, and the panel stays
-// usable.
+// whenever the frame is laid out again after that, the card's z or the
+// frame's visibility changes, or the question comes or goes, the plugin
+// judges whether a press at the centre of each control that stops or answers
+// the console reaches it (`pressReaches`): the deck's Stop and, while the
+// question is shown, its Cancel (Stop) and Confirm. Each judgement runs once
+// the layout has settled (`Qt.callLater`, an event, not a timer), and one that
+// cannot be pressed at all - outside the window, no size - fails. While a
+// modal popup holds every press, nothing is judged; it is judged again when
+// the popup goes. If one fails, the mask and the MouseAreas are put back as
+// gz-gui made them and a warning is printed: the scene loses the mouse over
+// the middle, and the panel stays usable.
 //
 // COLOUR IS FOR THE ABNORMAL (ISA-101). Every colour is in `Theme`.
 
@@ -104,27 +110,69 @@ Item {
     card.containmentMask = noInput;
     frame.passCard = card;
     frame.passAreas = areas;
+    card.zChanged.connect(frame.checkStopReachable);
     checkStopReachable();
   }
+  // Every control whose press asks the console to stop or answers it: the
+  // deck's Stop always, the question's Cancel (Stop) and Confirm while shown.
+  function pressTargets() {
+    var targets = [{name: "Stop", item: deck.stopButton}];
+    if (confirmation.visible) {
+      targets.push({name: "Cancel (Stop)", item: confirmation.cancelButton});
+      targets.push({name: "Confirm", item: confirmation.confirmButton});
+    }
+    return targets;
+  }
+  // The overlay a modal popup holds every press in, while the check waits for
+  // it to close; null while none does.
+  property var waitingOverlay: null
+  function stopWaitingForOverlay() {
+    if (frame.waitingOverlay !== null) {
+      frame.waitingOverlay.childrenChanged.disconnect(frame.checkStopReachable);
+      frame.waitingOverlay = null;
+    }
+  }
   function checkStopReachable() {
-    if (!frame.windowShown || frame.passCard === null ||
-      CellConsole.pressReaches(deck.stopButton))
-    {
+    Qt.callLater(frame.judgeStopReachable);
+  }
+  function judgeStopReachable() {
+    if (!frame.windowShown || frame.passCard === null || !frame.visible) {
       return;
     }
+    var overlay = CellConsole.modalOverlay(deck.stopButton);
+    if (overlay !== null) {
+      if (frame.waitingOverlay !== overlay) {
+        frame.stopWaitingForOverlay();
+        overlay.childrenChanged.connect(frame.checkStopReachable);
+        frame.waitingOverlay = overlay;
+      }
+      return;
+    }
+    frame.stopWaitingForOverlay();
+    var targets = frame.pressTargets();
+    for (var t = 0; t < targets.length; ++t) {
+      if (!CellConsole.pressReaches(targets[t].item)) {
+        frame.undoPassThrough(targets[t].name);
+        return;
+      }
+    }
+  }
+  function undoPassThrough(name) {
+    frame.passCard.zChanged.disconnect(frame.checkStopReachable);
     frame.passCard.containmentMask = null;
     for (var i = 0; i < frame.passAreas.length; ++i) {
       frame.passAreas[i].enabled = true;
     }
     frame.passCard = null;
     frame.passAreas = [];
-    console.warn("CellConsole: A PRESS ON STOP DID NOT REACH STOP with the mouse passed " +
-      "through to the 3D view, so the pass-through is undone: the panel takes the mouse " +
-      "over the whole view, and the scene gets none (ADR-0074, S-02).");
+    console.warn("CellConsole: A PRESS ON " + name.toUpperCase() + " DID NOT REACH IT with " +
+      "the mouse passed through to the 3D view, so the pass-through is undone: the panel " +
+      "takes the mouse over the whole view, and the scene gets none (ADR-0074, S-02).");
   }
   onParentChanged: passMouseThrough()
   onWidthChanged: checkStopReachable()
   onHeightChanged: checkStopReachable()
+  onVisibleChanged: checkStopReachable()
   // Connected here rather than with Connections, whose function handlers
   // need a newer QtQml than this file imports.
   function onWindowShown() {
@@ -218,6 +266,8 @@ Item {
     height: implicitHeight
     // Never over the header or the alarm band (S-03).
     maximumHeight: Math.max(64, deck.y - alarm.y - alarm.height)
+    onVisibleChanged: frame.checkStopReachable()
+    onHeightChanged: frame.checkStopReachable()
   }
 
   CommandDeck {

@@ -60,6 +60,7 @@
 #include <QTest>
 #include <QtGlobal>
 #include <QUrl>
+#include <QVariant>
 
 #include <cmath>
 #include <cstring>
@@ -807,6 +808,173 @@ TEST(PanelQml, InACardThatWouldHideStopThePassThroughIsUndone)
     << "a real press on Stop did not reach the plugin's stop() after the undo";
 }
 
+namespace
+{
+
+/// A console asking the operator, with a request in progress: the question
+/// is shown, and its Confirm and Cancel (Stop) with it.
+cite_interfaces::msg::ConsoleState asking_the_operator()
+{
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.state = cite_interfaces::msg::ConsoleState::AWAITING_OPERATOR;
+  state.busy = true;
+  state.prompt = "Put a work-piece on the plant's pick table, then confirm.";
+  return state;
+}
+
+/// An item that takes the left button over `rect` of the window, above the card.
+std::unique_ptr<QQuickItem> cover(QQuickWindow & window, const QRectF & rect)
+{
+  auto item = std::make_unique<QQuickItem>();
+  item->setParentItem(window.contentItem());
+  item->setZ(10.0);
+  item->setPosition(rect.topLeft());
+  item->setSize(rect.size());
+  item->setAcceptedMouseButtons(Qt::LeftButton);
+  return item;
+}
+
+bool passed_through(const Carded & carded)
+{
+  return carded.panel->property("passCard").value<QObject *>() == carded.card;
+}
+
+}  // namespace
+
+// S-02: Stop is not the only control that stops. While the console asks, the
+// question's Cancel (Stop) and Confirm are judged too, and a real click on
+// each reaches the plugin.
+TEST(PanelQml, WhileTheConsoleAsksCancelAndConfirmTakeTheirPresses)
+{
+  using cite_console_gui::CellConsoleTestAccess;
+  Carded carded(false);
+  ASSERT_NE(carded.panel, nullptr);
+  CellConsoleTestAccess::hear(carded.plugin, asking_the_operator());
+  QCoreApplication::processEvents();
+  auto * banner = carded.panel->findChild<QQuickItem *>("confirmation");
+  auto * cancel = carded.panel->findChild<QQuickItem *>("cancelButton");
+  auto * confirm = carded.panel->findChild<QQuickItem *>("confirmButton");
+  ASSERT_NE(banner, nullptr);
+  ASSERT_NE(cancel, nullptr);
+  ASSERT_NE(confirm, nullptr);
+  ASSERT_TRUE(banner->isVisible());
+  EXPECT_TRUE(passed_through(carded));
+  EXPECT_TRUE(carded.plugin.pressReaches(cancel));
+  EXPECT_TRUE(carded.plugin.pressReaches(confirm));
+  click(carded.window, cancel);
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(carded.plugin), 1u)
+    << "a real press on Cancel (Stop) did not reach the plugin's stop()";
+  click(carded.window, confirm);
+  EXPECT_EQ(CellConsoleTestAccess::confirms_pressed(carded.plugin), 1u)
+    << "a real press on Confirm did not reach the plugin's confirm()";
+}
+
+// S-02: a question whose Cancel (Stop) a press would not reach undoes the
+// pass-through when it is shown, though the deck's Stop is still reachable.
+TEST(PanelQml, AQuestionWhoseCancelWouldLoseItsPressUndoesThePassThrough)
+{
+  using cite_console_gui::CellConsoleTestAccess;
+  Carded carded(false);
+  ASSERT_NE(carded.panel, nullptr);
+  auto * deck = carded.panel->findChild<QQuickItem *>("commands");
+  ASSERT_NE(deck, nullptr);
+  ASSERT_TRUE(passed_through(carded));
+  // Over the strip the question takes above the deck, and nothing of the deck.
+  const double deck_top = deck->mapToScene(QPointF(0.0, 0.0)).y();
+  const auto strip = cover(carded.window, QRectF(0.0, deck_top - 64.0, 1920.0, 64.0));
+  QCoreApplication::processEvents();
+  EXPECT_TRUE(passed_through(carded)) << "nothing that stops was covered yet";
+  CellConsoleTestAccess::hear(carded.plugin, asking_the_operator());
+  QCoreApplication::processEvents();
+  EXPECT_FALSE(passed_through(carded))
+    << "the question's Cancel (Stop) would lose its press and the pass-through was kept";
+  auto * stop = carded.panel->findChild<QQuickItem *>("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_TRUE(carded.plugin.pressReaches(stop));
+}
+
+// S-03: a Stop that cannot be pressed at all - its centre outside the window -
+// is a failure, never a pass.
+TEST(PanelQml, AStopOutsideTheWindowUndoesThePassThrough)
+{
+  Carded carded(false);
+  ASSERT_NE(carded.panel, nullptr);
+  ASSERT_TRUE(passed_through(carded));
+  // The card, and the frame in it, larger than the window: Stop, at the
+  // frame's bottom right, is outside it.
+  carded.card->setSize(QSizeF(2600.0, 1500.0));
+  QCoreApplication::processEvents();
+  auto * stop = carded.panel->findChild<QQuickItem *>("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_FALSE(carded.plugin.pressReaches(stop));
+  EXPECT_FALSE(passed_through(carded)) << "Stop is outside the window and the pass-through stayed";
+}
+
+// S-03: the card's z and the frame's visibility change what a press reaches,
+// so each is judged again: a card put under an item that takes Stop's press,
+// or shown again with one over Stop, undoes the pass-through.
+TEST(PanelQml, TheCardsZAndVisibilityAreJudgedAgain)
+{
+  {
+    SCOPED_TRACE("z");
+    Carded carded(false);
+    ASSERT_NE(carded.panel, nullptr);
+    carded.card->setZ(20.0);
+    const auto over = cover(carded.window, QRectF(0.0, 0.0, 1920.0, 1080.0));
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(passed_through(carded)) << "the card is above the item";
+    carded.card->setZ(0.0);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(passed_through(carded)) << "the card went under an item and was not judged";
+  }
+  {
+    SCOPED_TRACE("visibility");
+    Carded carded(false);
+    ASSERT_NE(carded.panel, nullptr);
+    carded.card->setVisible(false);
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(passed_through(carded)) << "a hidden frame is not judged";
+    const auto over = cover(carded.window, QRectF(0.0, 0.0, 1920.0, 1080.0));
+    carded.card->setVisible(true);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(passed_through(carded)) << "the frame was shown again and not judged";
+  }
+}
+
+// R2-02: while a modal popup holds every press, nothing is judged and the
+// pass-through stays; once it closes, the frame is judged again.
+TEST(PanelQml, AModalPopupDefersTheJudgementUntilItCloses)
+{
+  Carded carded(false);
+  ASSERT_NE(carded.panel, nullptr);
+  ASSERT_TRUE(passed_through(carded));
+  QQmlComponent popup_component(&carded.engine);
+  popup_component.setData(
+    "import QtQuick 2.9\nimport QtQuick.Controls 2.2\n"
+    "Popup { modal: true; width: 200; height: 100; enter: Transition {} exit: Transition {} }",
+    QUrl());
+  std::unique_ptr<QObject> popup(popup_component.create(carded.context.get()));
+  ASSERT_NE(popup, nullptr) << describe(popup_component.errors()).join("\n").toStdString();
+  popup->setProperty("parent", QVariant::fromValue(carded.window.contentItem()));
+  QMetaObject::invokeMethod(popup.get(), "open");
+  QCoreApplication::processEvents();
+  ASSERT_TRUE(popup->property("visible").toBool());
+  auto * stop = carded.panel->findChild<QQuickItem *>("stopButton");
+  ASSERT_NE(stop, nullptr);
+  EXPECT_NE(carded.plugin.modalOverlay(stop), nullptr);
+  // A relayout while it is open: not judged, so not undone.
+  carded.card->setSize(QSizeF(1900.0, 1060.0));
+  QCoreApplication::processEvents();
+  EXPECT_TRUE(passed_through(carded)) << "the open modal popup was judged as the layout";
+  // An item over Stop, then the popup closes: judged again, and undone.
+  const auto over = cover(carded.window, QRectF(0.0, 0.0, 1920.0, 1080.0));
+  QMetaObject::invokeMethod(popup.get(), "close");
+  QCoreApplication::processEvents();
+  QCoreApplication::processEvents();
+  EXPECT_EQ(carded.plugin.modalOverlay(stop), nullptr);
+  EXPECT_FALSE(passed_through(carded)) << "the frame was not judged again once the popup closed";
+}
+
 // The judge itself: an item laid over Stop that takes the left button is what
 // a press reaches, and one that takes no button is not.
 TEST(PanelQml, APressReachesTheItemOnTopThatTakesIt)
@@ -841,6 +1009,14 @@ TEST(PanelQml, APressReachesTheItemOnTopThatTakesIt)
   area->setVisible(false);
   cover.setVisible(false);
   EXPECT_TRUE(framed.plugin.pressReaches(stop));
+  // S-03: what cannot be pressed at all is never said to take the press.
+  EXPECT_FALSE(framed.plugin.pressReaches(nullptr));
+  QQuickItem sizeless;
+  sizeless.setParentItem(framed.window.contentItem());
+  EXPECT_FALSE(framed.plugin.pressReaches(&sizeless)) << "an item with no size";
+  QQuickItem windowless;
+  windowless.setSize(QSizeF(10.0, 10.0));
+  EXPECT_FALSE(framed.plugin.pressReaches(&windowless)) << "an item in no window";
 }
 
 namespace

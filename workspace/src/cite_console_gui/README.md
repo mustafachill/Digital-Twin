@@ -76,11 +76,16 @@ gz-gui version change, or fall back to ADR-0074's Option B.
    QML sets the card's `containmentMask` to an empty item and disables the `MouseArea`s that
    are direct children of the card's `contentItem` (`passMouseThrough` in `CellConsole.qml`).
    A parent that has no `card()` - the offscreen test's - is left alone. **Stop comes first:**
-   once gz-gui's window is shown, and on every relayout after that, the plugin judges whether
-   a press at Stop's centre reaches Stop, picking the item as Qt Quick 5.15 does
-   (`pressReaches`). If it does not - a card that clipped its children would, masked, take
-   every press - the mask and the `MouseArea`s are put back, a warning is printed, and the
-   panel keeps working while the scene loses the mouse over the middle.
+   once gz-gui's window is shown, and on every relayout, change of the card's z or the frame's
+   visibility, and coming or going of the question after that, the plugin judges whether a
+   press at the centre of each control that stops or answers the console reaches it - the
+   deck's Stop and, while the question is shown, its Cancel (Stop) and Confirm - picking the
+   item as Qt Quick 5.15 does (`pressReaches`). A control that cannot be pressed at all (its
+   centre outside the window, no size) fails. While a modal popup holds every press nothing is
+   judged, and the frame is judged again once it closes (`modalOverlay`). If one fails - a card
+   that clipped its children would, masked, take every press - the mask and the `MouseArea`s
+   are put back, a warning is printed, and the panel keeps working while the scene loses the
+   mouse over the middle.
 2. **The title toolbar** is the main window's `ApplicationWindow.header`. The plugin hides it
    (`frame_window` in `cell_console.cpp`), and only in gz-gui's own main window.
 3. **Maximized, not fullscreen**: the plugin calls `showMaximized` on the same window, so the
@@ -294,9 +299,13 @@ card fits without scrolling. It also holds that a segment always shows the plugi
 selection, never the click; that the cycles shown are the cycles sent; that no control takes
 keyboard focus; that a long question never covers the header; where the layout steps down;
 that Stop's subtitle never breaks inside "E-stop"; that stale world statistics are said
-stale; and, with a stand-in card, that the mouse pass-through is undone when Stop would lose
-its press. `test_panel_in_gz_gui` holds the pass-through, the hidden toolbar and the maximize
-in gz-gui's own card and window.
+stale; and, with a stand-in card, that a real click through the window on Stop, on the
+question's Cancel (Stop) and on Confirm reaches the plugin while one in the middle of the view
+reaches the scene under the card, and that the mouse pass-through is undone when any of them
+would lose its press, when Stop is outside the window, and after a modal popup closes - never
+while it is open. `test_panel_in_gz_gui` holds the pass-through, a real click on Stop, the
+middle taken by no item of the card, the hidden toolbar and the maximize in gz-gui's own card
+and window.
 
 It also writes a picture of the frame at each size - no console, the question shown, and a
 console heard - to

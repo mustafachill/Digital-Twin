@@ -34,6 +34,9 @@ Rectangle {
   readonly property real naturalHeight:
     Math.max(64, title.implicitHeight + 2 + promptText.implicitHeight + 20)
   implicitHeight: Math.min(maximumHeight, naturalHeight)
+  // The frame judges that a press on each reaches it (S-02).
+  readonly property Item confirmButton: confirmButtonItem
+  readonly property Item cancelButton: cancelButtonItem
 
   InputShield {}
 
@@ -102,6 +105,7 @@ Rectangle {
       }
     }
     DeckButton {
+      id: confirmButtonItem
       objectName: "confirmButton"
       Layout.preferredWidth: 140
       text: "Confirm"
@@ -109,6 +113,7 @@ Rectangle {
       onClicked: CellConsole.confirm()
     }
     DeckButton {
+      id: cancelButtonItem
       objectName: "cancelButton"
       Layout.preferredWidth: 140
       text: "Cancel (Stop)"

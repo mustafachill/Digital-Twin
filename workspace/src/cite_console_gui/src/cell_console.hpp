@@ -276,9 +276,13 @@ public:
   /// paint order, a clipping item's children only inside its `contains`, and
   /// the first visible, enabled item that contains the point and takes the
   /// left button. `target` itself is judged by where it is, enabled or not.
-  /// True while it cannot be judged: no window, no size, or its centre outside
-  /// the window (S-02).
+  /// False when it cannot be pressed at all: no window, no size, or its centre
+  /// outside the window (S-03).
   Q_INVOKABLE bool pressReaches(QQuickItem * target) const;
+  /// The popup overlay of `target`'s window while a modal popup open in it
+  /// keeps every press; null otherwise. While it does, what a press reaches
+  /// is the popup's, not the layout's, and is not judged (R2-02).
+  Q_INVOKABLE QQuickItem * modalOverlay(QQuickItem * target) const;
 
 signals:
   void viewChanged();
