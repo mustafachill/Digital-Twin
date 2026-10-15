@@ -139,7 +139,12 @@ has consumers is expensive, so the review is where the cost is paid.
 | Add a constant | Yes | Just add it |
 | Rename a field | **No** | New field, deprecate old, remove after consumers migrate |
 | Change a type | **No** | New field with a new name |
+| Change a field's meaning | **No** | New field with a new name; the old keeps its meaning until removed |
 | Remove a field | **No** | Deprecate first, remove in a later release |
+
+A recorded exception: `TwinSides.running` changed from "started" to "up now" in place
+([ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md), Consequences),
+with every reader in this tree moved with it.
 
 Contract tests compare against a stored baseline, so a breaking change fails the build
 rather than surfacing at runtime in a consumer nobody remembered

@@ -60,7 +60,8 @@ names text that is `git show 960e6b4:CLAUDE.md`.
   runs it on the pair, and `./scripts/scenario program_cycle` checks it on the plant.
 - **`./scripts/sim --pair`** brings each side up on its own `ROS_DOMAIN_ID` and Gazebo
   partition, joins them on a readiness witness and starts the L5 twin boundary, `cite_twin`
-  (ADR-0047, ADR-0050, ADR-0057). The physical counterpart's side starts from
+  (ADR-0047, ADR-0050, ADR-0057), except the operator console's pair, which keeps its physical
+  side (ADR-0077). The physical counterpart's side starts from
   `hardware.launch.py`, and only with `CITE_ALLOW_HARDWARE=1` (ADR-0054, ADR-0070); without it
   the pair is refused. Lifecycle transitions are requested and confirmed (ADR-0058);
   Pilz plans, with OMPL only on a planning failure (ADR-0027); arms collide against derived
@@ -250,6 +251,7 @@ to the toolchain do not ripple through agent configurations and documentation.
 | `./scripts/scenario [name] [--zone <name>]` | Headless simulation-in-the-loop scenario; no argument lists them. `--zone` follows the same rule as `./scripts/sim`'s — the model's only zone by default, required when there are several (ADR-0069 decision 5) — through `tests/scenarios/_cell.py`, which asks `cite_bringup/zones.py`. The scenarios are `bringup` and `program_cycle` |
 | `./scripts/program [--zone <name>] [--headless] [--cycles N] [--speed-scale S]` | Bring the twin pair up, start each side's belt on that side, put a box on each side's table and run the real xArm 5's program once through the twin boundary (ADR-0067): both arms and both tracks from one client. On a physical side (ADR-0070) it needs `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` in (0, 1], commands no belt, and asks the operator to place the part by hand before each cycle. `--zone` as for `./scripts/sim`. **A demonstration, not an instrument**: it gates nothing and is in no CI step; `./scripts/scenario program_cycle` is what checks it, on the plant |
 | `./scripts/home [--zone <name>] [--speed-scale S]` | Against a pair that is ALREADY RUNNING (it attaches to that container and refuses when there is none; it restarts nothing): initializes each physical arm every time (`InitializeAsset`: track motor and gripper enabled, track homed if it has not found its zero, carriage brought to the program's start), then measures and brings both arms to the program's start through the twin only if a side is away (ADR-0070). `./scripts/program` does the same before its first cycle. On a physical side it needs `CITE_ALLOW_HARDWARE=1` and an explicit `--speed-scale` |
+| `./scripts/console [--zone <name>]` | Open the operator console: exactly `./scripts/sim --pair --console`, windowed (ADR-0071); `--headless` is refused |
 | `./scripts/control-center` | Start the operator console with one click (ADR-0078): Docker and X checks, image and build if stale, then `./scripts/console`. `./cite-control-center` at the root only runs it; it is what the desktop icon runs |
 | `./scripts/install-launcher [--desktop] [--uninstall]` | Install or remove the control center's desktop entry and icon for this user (ADR-0078) |
 | `./scripts/enter [dev\|gui\|hardware] [command...]` | Interactive shell in the container; with a trailing command, runs it there and exits |

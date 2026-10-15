@@ -46,9 +46,13 @@
   its report port before the deadman and the vendor driver start. Inside a launch nothing still
   respawns. What may start a side again is the pair supervisor of an operator console's pair
   (`--hot-plug`), and only the whole launch: after the side exited, once its old process group
-  is swept, and at most `KEPT_ATTEMPTS` times in a row for attempts that reached the robot and
-  did not come up. A restarted side comes up HELD (ADR-0076), so nothing moves without a new
-  Start robot and the operator's go-ahead. Every other pair still ends when a side ends.
+  is swept empty, at most `KEPT_ATTEMPTS` times in a row for attempts that reached the robot and
+  did not come up, and at most `KEPT_RECONNECTS` downs within `KEPT_RECONNECT_WINDOW_S`; a group
+  that does not empty after `SIGKILL` is never started beside. A restarted side comes up HELD
+  (ADR-0076), so nothing moves without a new Start robot and the operator's go-ahead, and the
+  side going down takes the twin's mode to SIM, so a mode commanding it is entered again only
+  through `SetMode`'s readiness measurement of the new side. Every other pair still ends when a
+  side ends.
   **The deadman** (`cite_hardware/deadman.py`) watches the twin boundary's `TwinHeartbeat`. The
   heartbeat carries the boundary's id; a second id or a second publisher trips it.
   - It holds the arm through the vendor's own state: a STOP on every tick unless HEALTHY.

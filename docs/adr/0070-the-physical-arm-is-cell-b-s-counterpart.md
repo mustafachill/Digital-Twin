@@ -1,6 +1,7 @@
 # ADR-0070: The physical xArm 5 is `cell_b`'s counterpart
 
 - **Status:** Accepted 2026-10-05 by the project owner (amended 2026-10-05, 2026-10-06 (owner decisions: opt-in from .env; registration order; physical grip and physical arm arrival executed, not judged), 2026-10-08 (owner decisions: initialize as in Studio and home before the program; measure the start before homing; a refused track move ends the move): see "Amendment — what was built" at the end)
+- **Amended 2026-10-15 by [ADR-0076](0076-a-physical-arm-is-held-until-the-operator-starts-it.md) (Proposed):** item 5's deadman no longer enables the arm on the boundary's first heartbeat; it holds it (HELD) until the operator's release (`ReleaseArm`, called by the asset initializer).
 - **Date:** 2026-10-05
 - **Deciders:** Project owner
 - **Related:** lifts [ADR-0048](0048-refuse-a-counterpart-the-generator-cannot-build.md) clause 1

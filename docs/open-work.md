@@ -2136,6 +2136,30 @@ readiness check. A track that lost its zero never becomes commandable again by i
 **The fix.** Forget only lapses heard before the initializer's own final measurement, and give
 the subscription a deeper history or have the twin latch a lapse counter.
 
+### #111 — `readiness.py` is shared by the supervisor and the boundary from `cite_bringup` (2026-10-15)
+
+**What happens.** `cite_twin` (L5) imports the side-state words, `parsed_side_state` and the
+other tokens from `cite_bringup.readiness`, beside the plan reader it already imports from
+there. The module is ROS-free and holds only words two processes exchange, but it sits in the
+bring-up package, so L5's view of a kept side depends on a bring-up module (ADR-0077 review,
+A-02). The failed line now carries its own attempt count, so the boundary no longer imports
+the supervisor's `KEPT_ATTEMPTS`.
+
+**The fix.** Move the exchanged words to a neutral, ROS-free package both depend on, with no
+change to the words themselves. Not done with ADR-0077: it moves every reader of the tokens.
+
+### #112 — `TwinSides` carries per-side state as parallel lists, and a restarted panel infers it (2026-10-15)
+
+**What happens.** A kept side's state reaches clients as membership in `TwinSides.running`,
+`expected`, `connecting`, `failed` and `held`, plus free-text `detail`; `running` changed its
+meaning in place (ADR-0077, a recorded exception to the compatibility table). A panel started
+after the side went down sees it `expected` and not `running`, `connecting` or `failed`, and
+cannot tell `waiting` from `down` except through `detail` (ADR-0077 review, A-03).
+
+**The fix.** A typed per-side `SideStatus` (side, declared, state as a constant, attempts,
+reason) published latched by the boundary, replacing the parallel lists; a contract change
+that needs an ADR.
+
 ### #97 — Low residuals left by the final Phase 2.B review (2026-10-05)
 Each fails safe; none blocks the first supervised motion. From the last reviewer and
 safety-auditor passes on `feat/real-counterpart`:

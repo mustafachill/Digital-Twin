@@ -58,16 +58,28 @@ Rejected.
 1. **Declared versus up.** The set of sides that may exist is still fixed at start
    (`--sides`). Whether a declared physical counterpart is up right now is a runtime fact. The
    supervisor reports it and the boundary measures it. This restates ADR-0050 decision 4.
-2. **Hot-plug applies only to the operator console with the opt-in.** With `--console` and a
-   physical counterpart, the supervisor runs the side as **kept**:
+2. **Hot-plug applies only to the operator console with the opt-in.** With the pair
+   supervisor's `--hot-plug`, accepted only beside `--console --sides all` (the operator
+   console with a physical counterpart and the hardware opt-in), the supervisor runs the side
+   as **kept**:
    - It starts the side at once, but does not join on it.
    - It reports one of `waiting`, `connecting`, `up`, `down` or `failed`.
-   - When the side exits after `up`, it reports `down`, sweeps the side's process group,
-     restarts the side and reports `waiting`.
-   - At most three consecutive attempts that reach the robot but fail before `up` are made;
-     after that the side is `failed`.
+   - When the side exits after `up`, it sweeps the side's process group, reports `down` once
+     the group is empty, restarts the side and reports `waiting`.
+   - At most three consecutive attempts that reach the robot but fail before `up` are made
+     (`readiness.KEPT_ATTEMPTS`); after that the side is `failed`.
+   - At most five downs after `up` within ten minutes (`readiness.KEPT_RECONNECTS` within
+     `readiness.KEPT_RECONNECT_WINDOW_S`); the next is `failed`, and only a restart of the app
+     starts the side again. Every reconnect starts a whole vendor driver against a real arm,
+     and an unbounded loop of them is a fault nobody is shown.
    - An exit before the robot was reachable, which means a configuration refusal, is `failed`
-     at once.
+     at once. So is an announcement naming another participant.
+   - A process group still not empty after `SIGKILL` and a bounded wait is `failed`: a second
+     driver is never started beside processes of the first.
+   - The kept side's stop and sweep are escalated from the supervisor's main loop and never
+     waited on there, so they never delay judging the participants whose exit ends the pair.
+   - A `failed` line carries the failed attempts in a row that ended it (`attempts=N`), and
+     the boundary words its refusal from the line.
    - Every other pair, including `./scripts/program`, scenarios and CI, is unchanged. A side
      exit there still ends the pair (ADR-0072 decision 4).
    - *Implementation note (2026-10-15):* the pair supervisor runs the side with the launch
@@ -83,8 +95,11 @@ Rejected.
    - `TwinSides.running` lists the sides up now.
    - The new fields `expected` and `connecting` list the declared sides and those being
      connected.
-   - The mode authority is unchanged: while the counterpart is absent or held, REAL and
-     VALIDATED are refused by measurement.
+   - While the counterpart is absent or held, REAL and VALIDATED are refused by measurement.
+   - *Implementation note (2026-10-15, review S-01):* a kept side that stops being `up`
+     takes the mode to SIM if the mode in force commands it, published at once and carried
+     by the mode hold. The mode was entered on a readiness measured against the incarnation
+     that is gone; entering it again is a `SetMode`, which measures the new one.
    - Goals in flight to a side that went away end; they never hang.
    - *Implementation note (2026-10-15):* `TwinSides` also gained `failed` (declared sides not
      retried) and `held` (running sides whose deadman holds the arm, ADR-0076), so the panel
@@ -107,13 +122,17 @@ Rejected.
 - Real arm and Twin appear when the robot is there and disappear when it is not.
 
 ### What this costs us
-- New supervisor state: the keeper, its restart bound, and per-attempt ceilings. There is a
+- New supervisor state: the keeper, its restart bounds, and per-attempt ceilings. There is a
   new boundary input and a contract change to `TwinSides`.
 - `TwinSides.running` changes meaning from "started" to "up now", so every reader must be
-  checked.
+  checked. **This is a recorded exception** to the interface compatibility table
+  ([`docs/interfaces/README.md`](../interfaces/README.md)), which says a field whose meaning
+  changes is a new field: every reader of `running` is in this tree and was moved with the
+  change, and for every pair that keeps no side the two meanings are the same set. A per-side
+  typed status is the replacement that would retire the exception (open-work).
 - Each reconnect briefly energizes the arm (ADR-0076, consequences).
 - How fast the vendor detects a pulled cable has not been measured (open-work #93).
 
 ### What we will have to revisit
-- The restart bound and the probe period, once a physical disconnect has been measured.
+- The restart bounds and the probe period, once a physical disconnect has been measured.
 - More than one physical side.

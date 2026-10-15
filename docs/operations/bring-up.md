@@ -231,7 +231,9 @@ It logs to `~/.local/state/cite-digital-twin/logs/latest.log`. **Closing the win
 end:** when the plant's window closes over a running simulation, its launch prints
 `CITE_WINDOW_CLOSED` and the supervisor exits 0; exit 3
 (`PAIR_ENDED`) still means a participant went away unexpectedly, and the control center shows
-that in a dialog.
+that in a dialog. **Only the plant's window - the one with the panel - is the clean stop.** In
+an all-simulated console the counterpart's Gazebo window announces nothing when it is closed:
+closing it ends that side, and the pair ends with an error (exit 3), as any side lost does.
 
 **The hardware opt-in decides which sides start**
 ([ADR-0072](../adr/0072-the-operator-chooses-where-the-signal-goes.md)). Without it the plant
@@ -244,15 +246,20 @@ every button in the bottom deck ([ADR-0074](../adr/0074-the-operator-console-fra
 ([ADR-0077](../adr/0077-the-operator-console-keeps-the-physical-counterpart.md)). With the
 opt-in, the console's pair starts the physical side at once and does not wait for it: the app
 opens with Simulation ready whether or not the robot is on. The side's first process, the reach
-gate, asks the arm's report port (30001) once a second and starts nothing else until it
-answers. The panel shows the real arm as **waiting for robot**, then **connecting**, then
+gate, asks the arm's report port (the vendor's, which L0 states as the arm type's
+`vendor_driver.report_port` and the plan carries) every `reach_gate.PROBE_PERIOD_S`, and starts
+nothing else until it answers. The panel shows the real arm as **waiting for robot**, then **connecting**, then
 **connected, held - press Start robot**; Real arm and Twin become selectable once it is
 connected. If the side goes down (a pulled cable, a deadman trip), the panel shows
 **disconnected, reconnecting**, Real arm and Twin disappear, the selection falls back to
 Simulation, and the supervisor sweeps the side and starts it again; it comes back held, and
-Home and Start program are refused until Start robot. A side that reaches the robot and fails to
-come up three times in a row, or that refuses its configuration (an unset or malformed
-`CITE_XARM_IP`), is shown **failed** and is not retried until the app is restarted. Only the
+Home and Start program are refused until Start robot. **The twin's mode falls back to SIM by
+itself** when the side goes down, so Real arm or Twin is entered again only through the
+mode change that measures the new connection. A side that reaches the robot and fails to come
+up `KEPT_ATTEMPTS` times in a row, that goes down `KEPT_RECONNECTS` times within
+`KEPT_RECONNECT_WINDOW_S` (all three in `cite_bringup/readiness.py`), whose old processes
+cannot be stopped, or that refuses its configuration (an unset or malformed `CITE_XARM_IP`),
+is shown **failed** and is not retried until the app is restarted. Only the
 console's pair keeps its side; `./scripts/program` and every scenario still end when a side
 ends.
 
@@ -484,6 +491,14 @@ parameters.
    cell with a prompt saying the arm will be ENABLED and the track may home; the arm is
    initialized, which releases it; and only then is the side judged ready before the twin
    leaves SIM.
+
+   **The homing pre-check reads the carriage's position once.** A carriage the vendor is
+   still moving — during its own homing, or while being jogged from UFACTORY Studio — is not a
+   fresh position, and the initializer has no way to know: such a reading passes the
+   pre-check (both the at-start test and the travel check) as if it were where the carriage
+   stands. Do not move the track from UFACTORY Studio, or start a vendor homing, while the
+   twin is running; close Studio's track controls before Start robot, `./scripts/home` or
+   `./scripts/program`.
 4. Before each run the program reads the twin's mode. Only once it reads SIM does it ask you
    to place the part on the physical table by hand and press Enter; anything else refuses
    without asking. **The arm is enabled and still while you do**, except before a homing
