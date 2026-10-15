@@ -2057,6 +2057,11 @@ def test_a_simulation_start_does_not_leave_fault_while_the_twin_is_out_of_sim() 
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.READY and snapshot.started_targets == (SIM,)
     assert rig.asked() == asked and rig.initialized == []
+    # SIM was confirmed by that start's hold (S-03): the VALIDATED this console
+    # entered before the fault is no longer its own, so one heard now is foreign.
+    rig.heard = TwinMode.MODE_VALIDATED
+    refusal = rig.machine.motion_refusal(0.1, None, SIM)
+    assert refusal is not None and "did not ask for" in refusal
 
 
 def test_a_stopped_start_unstarts_its_target_and_leaves_the_others_started() -> None:

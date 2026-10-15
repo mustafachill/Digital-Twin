@@ -244,6 +244,14 @@ class _Observed:
             self._entered(True)
         self._recorded(self._cell.enter_target, target, **kwargs)
 
+    def hold_sim(self) -> int:
+        # A hold that reads SIM confirms SIM (S-03): whatever this console
+        # entered before, it no longer commands from it.
+        mode = self._recorded(self._cell.hold_sim)
+        if mode == TwinMode.MODE_SIM:
+            self._entered(False)
+        return mode
+
     def return_to_sim(self) -> bool:
         left = self._cell.return_to_sim()
         if left:
