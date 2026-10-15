@@ -271,10 +271,21 @@ def test_the_console_offers_the_targets_whose_sides_are_up_now(graph) -> None:
         # Connected and held: Start robot is offered for it, Home is not.
         assert targets.REAL in console.machine.snapshot().available_targets
         assert targets.REAL not in console.machine.snapshot().started_targets
+        # R-05: REAL started (as a Start robot leaves it), then the arm leaves:
+        # REAL is neither offered nor started any more.
+        with console.machine._lock:
+            console.machine._started_sides.add("counterpart")
+        released = TwinSides(running=["plant", "counterpart"],
+                             commandable=["plant", "counterpart"],
+                             stationary=["counterpart"],
+                             expected=["plant", "counterpart"], physical=["counterpart"])
+        console._on_twin_sides(released)
+        assert targets.REAL in console.machine.snapshot().started_targets
         down = TwinSides(running=["plant"], commandable=["plant"],
                          expected=["plant", "counterpart"], physical=["counterpart"])
         console._on_twin_sides(down)
         assert console._available() == [targets.SIM] and not console._counterpart_running()
+        assert targets.REAL not in console.machine.snapshot().started_targets
     finally:
         console.destroy_node()
 

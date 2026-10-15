@@ -697,6 +697,21 @@ def test_before_a_home_a_held_side_and_an_unzeroed_carriage_are_tolerated() -> N
 
 
 @pytest.mark.parametrize("target", [REAL, TWIN])
+def test_before_a_home_a_physical_side_not_up_refuses_whatever_is_tolerated(target) -> None:
+    """ADR-0077: neither `homing` nor an unheard carriage lets a side that is not up pass."""
+    absent = TwinSides(
+        running=["plant"],
+        physical=["counterpart"],
+        commandable=["plant"],
+        stationary=[],
+        detail="counterpart: waiting for the robot on the network",
+    )
+    refusal = physical_sides_refusal(absent, target, homing=True, unheard={"counterpart"})
+    assert refusal is not None and "counterpart is not up now" in refusal
+    assert "waiting for the robot" in refusal
+
+
+@pytest.mark.parametrize("target", [REAL, TWIN])
 def test_before_a_home_a_carriage_heard_moving_still_refuses(target) -> None:
     """Decision (a): a carriage the twin hears and does not report stationary refuses."""
     moving = _sides(

@@ -2031,6 +2031,18 @@ def test_a_physical_side_that_leaves_the_running_sides_is_no_longer_started() ->
     assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
 
 
+def test_a_console_whose_last_started_side_leaves_is_not_started() -> None:
+    """R-05: only the real arm started, and it leaves: READY becomes NOT_STARTED."""
+    rig = Rig(physical=["counterpart"]).started(REAL)
+    rig.machine.running_changed(SIDES)
+    assert rig.machine.snapshot().state == ConsoleState.READY
+    rig.available = [SIM]
+    rig.machine.running_changed(("plant",))
+    snapshot = rig.snapshots[-1]
+    assert snapshot.started_targets == ()
+    assert snapshot.state == ConsoleState.NOT_STARTED
+
+
 def test_a_side_leaving_the_running_sides_while_it_is_started_stays_unstarted() -> None:
     """S-01 for ADR-0077: a Start robot in flight does not re-add a side that left."""
     rig = Rig(physical=["counterpart"])
