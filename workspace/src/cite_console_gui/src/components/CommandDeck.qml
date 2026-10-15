@@ -14,7 +14,8 @@
 
 // The command deck (ADR-0074): EVERY clickable control of the window, in one
 // place and never scrolled. Left to right - the view buttons (subdued), the
-// target (with "Select a target" while none is), speed and cycles, the
+// target (with "Select a target" while none is, and "Start robot for this
+// target" while the selected one is not started), speed and cycles, the
 // actions, and Stop at the far right.
 //
 // Layout only. Every "enabled" below is a property the plugin computes with
@@ -121,12 +122,14 @@ Rectangle {
         GroupTitle { text: "Setup" }
         // No target selected while a console is heard (`target_hint_shown`):
         // Start robot, Home and Start program wait for one (ADR-0072 decision
-        // 3, amended 2026-10-15). Text, not a control; the attention colour,
-        // never the alarm's (ISA-101).
+        // 3, amended 2026-10-15). A selected target not started
+        // (`start_hint_shown`): Home and Start program wait for Start robot
+        // on it (ADR-0075). Text, not a control; the attention colour, never
+        // the alarm's (ISA-101).
         UiText {
           objectName: "targetHint"
-          visible: CellConsole.targetHintShown
-          text: "Select a target"
+          visible: CellConsole.targetHintShown || CellConsole.startHintShown
+          text: CellConsole.targetHintShown ? "Select a target" : "Start robot for this target"
           size: Theme.caption
           strong: true
           color: Theme.attention

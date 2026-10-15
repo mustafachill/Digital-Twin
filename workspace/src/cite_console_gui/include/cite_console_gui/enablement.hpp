@@ -14,7 +14,7 @@
 
 // Which of the panel's buttons may be pressed, as one pure function of what the
 // console last said and the target the operator selected (ADR-0071 decision 5,
-// ADR-0072 decision 3).
+// ADR-0072 decision 3, ADR-0075 decision 5).
 //
 // The panel holds no logic: `cell_console` enforces every refusal itself, and a
 // button the panel enables that the console refuses costs a refusal message,
@@ -73,7 +73,8 @@ enum class Target
 ///
 /// The panel does NOT know which sides a target commands (review R-02): the
 /// console derives every fact that depends on it from its one target table and
-/// publishes it (`startable_targets`, `floored_targets`, `counterpart_running`).
+/// publishes it (`started_targets`, `startable_targets`, `floored_targets`,
+/// `counterpart_running`).
 constexpr std::array<Target, 3> ALL_TARGETS = {Target::SIM, Target::REAL, Target::TWIN};
 
 /// The phase of a validate-then-run request (ADR-0073): ConsoleState.PHASE_*,
@@ -96,6 +97,8 @@ struct ConsoleView
   /// disables every button and says "No console".
   bool heard{false};
   Phase phase{Phase::UNKNOWN};
+  /// ConsoleState.robot_started: at least one side is started (ADR-0075).
+  /// Shown, never decided on: `started_targets` is the console's verdict.
   bool robot_started{false};
   bool busy{false};
   /// ConsoleState.plant_at_start / counterpart_at_start: each side's arm at
@@ -114,6 +117,10 @@ struct ConsoleView
   /// selection is settled against this: a change to the served set the panel
   /// cannot read is still a change (R-18).
   std::set<std::uint8_t> served_values;
+  /// ConsoleState.started_targets, as targets this panel recognises: Start
+  /// robot started every side of each, so Home and Start program may be sent
+  /// for it (ADR-0075 decision 5).
+  std::set<Target> started_targets;
   /// ConsoleState.startable_targets, as targets this panel recognises: every
   /// side of each is at the program's start, so Start program may be sent.
   std::set<Target> startable_targets;
@@ -164,20 +171,25 @@ struct ButtonStates
 /// none is).
 ///
 /// - Start robot: NOT_STARTED, READY or FAULT, nothing in progress, and a
-///   target is selected (ADR-0072 decision 3, amended 2026-10-15): while none
-///   is, the panel says "Select a target" (`target_hint_shown`).
-/// - Home: started, READY, nothing in progress, and the selected target is one
-///   the console serves.
+///   target the console serves is selected (ADR-0072 decision 3, amended
+///   2026-10-15): while none is, the panel says "Select a target"
+///   (`target_hint_shown`). Started or not: Start robot on a started target
+///   starts it again (ADR-0075 decision 5).
+/// - Home: READY, nothing in progress, and the selected target is one the
+///   console serves and says is started (`started_targets`, ADR-0075): while
+///   it is not, the panel says "Start robot for this target"
+///   (`start_hint_shown`).
 /// - Start program: as Home, and the console says the selected target is
 ///   startable - every side of it at the program's start (ADR-0072 decision 3).
 /// - Stop: a request is in progress; or FAULT while the twin is not in SIM on
 ///   a pair with a physical side, where Stop asks the twin for SIM again
 ///   (StopCell.srv).
 /// - Confirm: AWAITING_OPERATOR.
-/// - Validate then run: started, READY, nothing in progress, the console offers
-///   it (`validate_then_run_offered`) and says the twin is startable (both arms
-///   at the program's start; ValidateThenRun.action). It carries no target, so
-///   the operator's selection does not touch it.
+/// - Validate then run: READY, nothing in progress, the console offers it
+///   (`validate_then_run_offered`) and says the twin is started and startable
+///   (both arms started and at the program's start; ValidateThenRun.action,
+///   ADR-0075). It carries no target, so the operator's selection does not
+///   touch it.
 ///
 /// Nothing at all before a ConsoleState is heard.
 ButtonStates enabled_for(const ConsoleView & view, Target selected);
@@ -207,6 +219,12 @@ Target settled_selection(const ConsoleView & before, const ConsoleView & now, Ta
 /// is selected, so Start robot, Home and Start program are disabled for want
 /// of one (ADR-0072 decision 3, amended 2026-10-15).
 bool target_hint_shown(const ConsoleView & view, Target selected);
+
+/// Whether the panel says "Start robot for this target": a console is heard,
+/// it serves the selected target, and it does not say that target is started,
+/// so Home and Start program wait for Start robot on it (ADR-0075 decision 5).
+/// Never shown with `target_hint_shown`, whose place it takes.
+bool start_hint_shown(const ConsoleView & view, Target selected);
 
 /// Whether the console says the pair runs the counterpart's side. The panel
 /// shows a side's start status only for a side that runs.

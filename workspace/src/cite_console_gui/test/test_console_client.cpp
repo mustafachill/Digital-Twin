@@ -218,9 +218,9 @@ public:
     if (answer_start_robot) {
       start_robot_ = node_->create_service<StartRobot>(
         names.start_robot,
-        [this](const std::shared_ptr<StartRobot::Request>,
+        [this](const std::shared_ptr<StartRobot::Request> request,
         std::shared_ptr<StartRobot::Response> response) {
-          note("start_robot");
+          note("start_robot target " + std::to_string(request->target));
           response->success = true;
           response->detail = "fake start_robot";
         });
@@ -229,7 +229,9 @@ public:
       start_robot_ = node_->create_service<StartRobot>(
         names.start_robot,
         [this](const std::shared_ptr<rmw_request_id_t>,
-        const std::shared_ptr<StartRobot::Request>) {note("start_robot");});
+        const std::shared_ptr<StartRobot::Request> request) {
+          note("start_robot target " + std::to_string(request->target));
+        });
     }
     confirm_ = node_->create_service<ConfirmOperator>(
       names.confirm_operator,
@@ -651,7 +653,8 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
   ConsoleClient client(names, recorder.callbacks());
 
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.start_robot();}, &Recorder::outcomes),
+    sent_once_served(
+      recorder, [&]() {client.start_robot(ConsoleState::TARGET_TWIN);}, &Recorder::outcomes),
     "Start robot: done. Fake start_robot");
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.confirm_operator();}, &Recorder::outcomes),
@@ -669,9 +672,11 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
       &Recorder::progress),
     "Start program: rejected by the console (see last error).");
 
-  // ADR-0072: each goal carries the target it was given, field for field.
+  // ADR-0072, ADR-0075: each request carries the target it was given, field
+  // for field - Start robot's included.
   const std::vector<std::string> expected = {
-    "start_robot", "confirm_operator", "stop",
+    "start_robot target " + std::to_string(ConsoleState::TARGET_TWIN),
+    "confirm_operator", "stop",
     "home " + std::to_string(0.5) + " target " + std::to_string(ConsoleState::TARGET_REAL),
     "run_program " + std::to_string(0.25) + " target " +
     std::to_string(ConsoleState::TARGET_TWIN) + " cycles 3",
@@ -753,7 +758,7 @@ TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
   ConsoleClient client(names, recorder.callbacks());
 
   const auto started = std::chrono::steady_clock::now();
-  client.start_robot();
+  client.start_robot(ConsoleState::TARGET_SIM);
   client.confirm_operator();
   client.stop();
   client.home(1.0, ConsoleState::TARGET_SIM);
@@ -788,7 +793,8 @@ TEST(ConsoleClient, ItTearsDownWithARequestInFlightAndStateArriving)
   EXPECT_TRUE(recorder.wait_for([&]() {return !recorder.states.empty();}));
   // A request the fake never answers: in flight when the client goes.
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client->start_robot();}, &Recorder::progress),
+    sent_once_served(
+      recorder, [&]() {client->start_robot(ConsoleState::TARGET_SIM);}, &Recorder::progress),
     "Start robot: sent.");
 
   const auto started = std::chrono::steady_clock::now();
@@ -1009,7 +1015,8 @@ TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
   Recorder recorder;
   ConsoleClient client(names, recorder.callbacks());
   EXPECT_EQ(
-    sent_once_served(recorder, [&]() {client.start_robot();}, &Recorder::outcomes),
+    sent_once_served(
+      recorder, [&]() {client.start_robot(ConsoleState::TARGET_SIM);}, &Recorder::outcomes),
     "Start robot: done. Fake start_robot");
   {
     std::lock_guard<std::mutex> lock(recorder.mutex);

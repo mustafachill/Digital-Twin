@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // The panel's enablement table, over every phase, every flag and every target
-// (ADR-0071, ADR-0072).
+// (ADR-0071, ADR-0072, ADR-0075).
 //
-// Two halves. The exhaustive half walks all 9 phases x 2^12 flags x 4
+// Two halves. The exhaustive half walks all 9 phases x 2^15 flags x 4
 // selections and holds each button to an INDEPENDENT statement of the rule: a
 // table of named rows, each one situation in which one button is offered
 // (P-R03). A button is expected enabled exactly when some row for it matches,
@@ -25,9 +25,10 @@
 // meets, so that a failure reads as a situation.
 //
 // The panel knows NOTHING about which sides a target commands (review R-02):
-// whether a target may be started, and whether the speed floor applies to it,
-// are the console's published verdicts (`startable_targets`,
-// `floored_targets`), and the rows below are stated in those terms only.
+// whether a target is started, whether it may be run, and whether the speed
+// floor applies to it, are the console's published verdicts
+// (`started_targets`, `startable_targets`, `floored_targets`), and the rows
+// below are stated in those terms only.
 
 #include <gtest/gtest.h>
 
@@ -50,6 +51,7 @@ using cite_console_gui::phase_name;
 using cite_console_gui::settled_selection;
 using cite_console_gui::SPEED_CHOICES;
 using cite_console_gui::speed_choice_enabled;
+using cite_console_gui::start_hint_shown;
 using cite_console_gui::Target;
 using cite_console_gui::target_choice_enabled;
 using cite_console_gui::target_hint_shown;
@@ -77,6 +79,11 @@ ConsoleView view(
   v.phase = phase;
   v.robot_started = robot_started;
   v.busy = busy;
+  // A started console has started every target it serves, unless a test says
+  // otherwise (ADR-0075).
+  if (robot_started) {
+    v.started_targets = available;
+  }
   v.available_targets = std::move(available);
   v.startable_targets = std::move(startable);
   v.twin_in_sim = twin_in_sim;
@@ -119,6 +126,7 @@ std::string describe(const ConsoleView & v, Target selected)
          " physical=" + std::to_string(v.has_physical_side) +
          " offered=" + std::to_string(v.validate_then_run_offered) +
          " available=[" + names_of(v.available_targets) +
+         "] started=[" + names_of(v.started_targets) +
          "] startable=[" + names_of(v.startable_targets) +
          "] selected=" + target_name(selected);
 }
@@ -148,14 +156,16 @@ struct Row
   Need selected_startable;    // the selection is one of startable_targets
   Need offered = Need::ANY;   // validate_then_run_offered
   Need twin_startable = Need::ANY;  // the twin is one of startable_targets
+  Need selected_started = Need::ANY;  // the selection is one of started_targets
+  Need twin_started = Need::ANY;      // the twin is one of started_targets
 };
 
 constexpr Need ANY = Need::ANY;
 constexpr Need YES = Need::YES;
 constexpr Need NO = Need::NO;
 
-/// The rule, as ADR-0071, ADR-0072 and StopCell.srv state it, one situation
-/// per row.
+/// The rule, as ADR-0071, ADR-0072, ADR-0075 and StopCell.srv state it, one
+/// situation per row.
 const std::vector<Row> & rows()
 {
   static const std::vector<Row> table = {
@@ -168,20 +178,21 @@ const std::vector<Row> & rows()
     {"a FAULT, idle, with a served target selected, is left by Start robot",
       Button::START_ROBOT,
       {Phase::FAULT}, ANY, NO, ANY, ANY, {}, YES, ANY},
-    {"a started robot, READY and idle, with a served target selected, may Home", Button::HOME,
-      {Phase::READY}, YES, NO, ANY, ANY, {}, YES, ANY},
+    {"READY and idle, with a served target the console says is started selected, may Home",
+      Button::HOME,
+      {Phase::READY}, ANY, NO, ANY, ANY, {}, YES, ANY, ANY, ANY, YES},
     {"... and with a target the console says is startable selected, may run",
       Button::START_PROGRAM,
-      {Phase::READY}, YES, NO, ANY, ANY, {}, YES, YES},
+      {Phase::READY}, ANY, NO, ANY, ANY, {}, YES, YES, ANY, ANY, YES},
     {"a request in progress, in any phase, may be stopped", Button::STOP,
       {}, ANY, YES, ANY, ANY, {}, ANY, ANY},
     {"a FAULT out of SIM with a physical side: Stop asks for SIM again", Button::STOP,
       {Phase::FAULT}, ANY, ANY, NO, YES, {}, ANY, ANY},
     {"the console asks the operator: Confirm", Button::CONFIRM,
       {Phase::AWAITING_OPERATOR}, ANY, ANY, ANY, ANY, {}, ANY, ANY},
-    {"a started robot, READY and idle, the console offering it and the twin startable, "
+    {"READY and idle, the console offering it and the twin started and startable, "
       "may validate then run - whatever target is selected", Button::VALIDATE_THEN_RUN,
-      {Phase::READY}, YES, NO, ANY, ANY, {}, ANY, ANY, YES, YES},
+      {Phase::READY}, ANY, NO, ANY, ANY, {}, ANY, ANY, YES, YES, ANY, YES},
   };
   return table;
 }
@@ -191,6 +202,7 @@ bool matches(const Row & row, const ConsoleView & v, Target selected)
   const bool served = selected != Target::NONE && v.available_targets.count(selected) == 1;
   const bool startable =
     selected != Target::NONE && v.startable_targets.count(selected) == 1;
+  const bool started = selected != Target::NONE && v.started_targets.count(selected) == 1;
   return (row.phases.empty() || row.phases.count(v.phase) == 1) &&
          satisfies(row.started, v.robot_started) && satisfies(row.busy, v.busy) &&
          satisfies(row.twin_in_sim, v.twin_in_sim) &&
@@ -199,7 +211,9 @@ bool matches(const Row & row, const ConsoleView & v, Target selected)
          satisfies(row.selected_served, served) &&
          satisfies(row.selected_startable, startable) &&
          satisfies(row.offered, v.validate_then_run_offered) &&
-         satisfies(row.twin_startable, v.startable_targets.count(Target::TWIN) == 1);
+         satisfies(row.twin_startable, v.startable_targets.count(Target::TWIN) == 1) &&
+         satisfies(row.selected_started, started) &&
+         satisfies(row.twin_started, v.started_targets.count(Target::TWIN) == 1);
 }
 
 bool expected(Button button, const ConsoleView & v, Target selected)
@@ -215,7 +229,7 @@ bool expected(Button button, const ConsoleView & v, Target selected)
   return false;
 }
 
-constexpr int FLAG_BITS = 12;
+constexpr int FLAG_BITS = 15;
 
 /// The view for one combination of the flags `bits` encodes.
 ConsoleView walked(Phase phase, int bits)
@@ -230,6 +244,7 @@ ConsoleView walked(Phase phase, int bits)
   v.available_targets = targets_of((bits >> 5) & 7);
   v.startable_targets = targets_of((bits >> 8) & 7);
   v.validate_then_run_offered = bits & 2048;
+  v.started_targets = targets_of((bits >> 12) & 7);
   return v;
 }
 
@@ -256,7 +271,7 @@ TEST(Enablement, EveryPhaseFlagAndSelectionFollowsTheTableOfSituations)
       }
     }
   }
-  EXPECT_EQ(rows_walked, 9 * (1 << FLAG_BITS) * 4);
+  EXPECT_EQ(rows_walked, 9 * (1 << 15) * 4);
 }
 
 TEST(Enablement, EveryRowOfTheTableIsReachable)
@@ -290,11 +305,62 @@ TEST(Enablement, NotStartedOffersOnlyStartRobot)
   EXPECT_EQ(enabled_for(view(Phase::NOT_STARTED), Target::SIM), expected);
 }
 
-TEST(Enablement, HomeNeedsAStartedRobot)
+TEST(Enablement, HomeNeedsTheSelectedTargetStarted)
 {
-  // READY without robot_started: a console that never started cannot home.
+  // READY without the target started: a target Start robot never started
+  // cannot home (ADR-0075 decision 3).
   EXPECT_FALSE(enabled_for(view(Phase::READY, false), Target::SIM).home);
   EXPECT_TRUE(enabled_for(view(Phase::READY, true), Target::SIM).home);
+  ConsoleView v = ready(BOTH_SIDES);
+  v.started_targets = {Target::SIM};
+  EXPECT_TRUE(enabled_for(v, Target::SIM).home);
+  EXPECT_TRUE(enabled_for(v, Target::SIM).start_program);
+  for (const Target target : {Target::REAL, Target::TWIN}) {
+    EXPECT_FALSE(enabled_for(v, target).home) << target_name(target);
+    EXPECT_FALSE(enabled_for(v, target).start_program) << target_name(target);
+  }
+}
+
+TEST(Enablement, TheDeckFollowsTheSelectedTarget)
+{
+  // ADR-0075 decision 5: Simulation started, then the operator selects Twin.
+  ConsoleView v = ready(BOTH_SIDES);
+  v.started_targets = {Target::SIM};
+  const ButtonStates sim = enabled_for(v, Target::SIM);
+  EXPECT_TRUE(sim.start_robot) << "a started target may be started again";
+  EXPECT_TRUE(sim.home);
+  EXPECT_FALSE(start_hint_shown(v, Target::SIM));
+  const ButtonStates twin = enabled_for(v, Target::TWIN);
+  EXPECT_TRUE(twin.start_robot);
+  EXPECT_FALSE(twin.home);
+  EXPECT_FALSE(twin.start_program);
+  EXPECT_TRUE(start_hint_shown(v, Target::TWIN));
+  // Once the twin is started, Home is offered for it and the hint goes.
+  v.started_targets = BOTH_SIDES;
+  EXPECT_TRUE(enabled_for(v, Target::TWIN).home);
+  EXPECT_FALSE(start_hint_shown(v, Target::TWIN));
+}
+
+TEST(Enablement, TheStartHintNeedsAServedSelectionNotStarted)
+{
+  EXPECT_TRUE(start_hint_shown(view(Phase::NOT_STARTED), Target::SIM));
+  for (const Target target : ALL_TARGETS) {
+    EXPECT_FALSE(start_hint_shown(ready(), target)) << target_name(target);
+  }
+  // No selection: "Select a target" is said instead, never both.
+  EXPECT_FALSE(start_hint_shown(view(Phase::NOT_STARTED), Target::NONE));
+  EXPECT_TRUE(target_hint_shown(view(Phase::NOT_STARTED), Target::NONE));
+  // A selection the console does not serve is none.
+  EXPECT_FALSE(start_hint_shown(view(Phase::READY, true, false, PLANT_ONLY), Target::TWIN));
+  // No console: nothing.
+  EXPECT_FALSE(start_hint_shown(ConsoleView{}, Target::SIM));
+  for (const Phase phase : ALL_PHASES) {
+    for (const Target selected : SELECTIONS) {
+      const ConsoleView v = view(phase, false);
+      EXPECT_FALSE(start_hint_shown(v, selected) && target_hint_shown(v, selected))
+        << phase_name(phase) << " " << target_name(selected);
+    }
+  }
 }
 
 TEST(Enablement, StartRobotHomeAndStartProgramNeedASelectedTarget)
@@ -654,7 +720,8 @@ TEST(ValidateThenRun, EachMissingConditionDisablesItAlone)
     {"the twin not startable (an arm away from the start)",
       [](ConsoleView & v) {v.startable_targets = {Target::SIM, Target::REAL};}},
     {"a request in progress", [](ConsoleView & v) {v.busy = true;}},
-    {"Start robot has not succeeded", [](ConsoleView & v) {v.robot_started = false;}},
+    {"the twin not started (ADR-0075)",
+      [](ConsoleView & v) {v.started_targets = {Target::SIM, Target::REAL};}},
     {"not READY (FAULT)", [](ConsoleView & v) {v.phase = Phase::FAULT;}},
     {"not READY (NOT_STARTED)", [](ConsoleView & v) {v.phase = Phase::NOT_STARTED;}},
     {"no console heard", [](ConsoleView & v) {v.heard = false;}},

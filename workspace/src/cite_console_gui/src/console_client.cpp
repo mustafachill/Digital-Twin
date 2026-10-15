@@ -255,15 +255,17 @@ void ConsoleClient::run_progress(const RunProgress & position) const
   }
 }
 
-void ConsoleClient::start_robot()
+void ConsoleClient::start_robot(std::uint8_t target)
 {
   if (!start_robot_->service_is_ready()) {
     outcome("Start robot: the console does not serve it right now.");
     return;
   }
   sending("Start robot: sent.");
+  auto request = std::make_shared<StartRobot::Request>();
+  request->target = target;
   start_robot_->async_send_request(
-    std::make_shared<StartRobot::Request>(),
+    request,
     [this](rclcpp::Client<StartRobot>::SharedFuture future) {
       const auto response = future.get();
       progress("");

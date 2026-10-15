@@ -105,23 +105,29 @@ TEST(ConsoleView, TheViewCarriesTheFlagsAndReadsSimFromTheMode)
 
 TEST(ConsoleView, TheViewCarriesTheConsolesTargetVerdicts)
 {
-  // R-02: startable and floored targets, and whether the counterpart runs, are
-  // the console's published facts; the view carries them and derives nothing.
+  // R-02: started, startable and floored targets, and whether the counterpart
+  // runs, are the console's published facts; the view carries them and
+  // derives nothing (ADR-0075 for started).
   ConsoleState state;
   state.state = ConsoleState::READY;
   state.available_targets = {
     ConsoleState::TARGET_SIM, ConsoleState::TARGET_REAL, ConsoleState::TARGET_TWIN};
+  state.started_targets = {ConsoleState::TARGET_TWIN, 200};
   state.startable_targets = {ConsoleState::TARGET_REAL};
   state.floored_targets = {ConsoleState::TARGET_SIM};
   state.counterpart_running = true;
   const auto view = view_from(state);
+  // A value this panel does not recognise is no started target.
+  EXPECT_EQ(view.started_targets, std::set<Target>{Target::TWIN});
   EXPECT_EQ(view.startable_targets, std::set<Target>{Target::REAL});
   EXPECT_EQ(view.floored_targets, std::set<Target>{Target::SIM});
   EXPECT_TRUE(view.counterpart_running);
   state.counterpart_running = false;
+  state.started_targets = {};
   state.startable_targets = {};
   state.floored_targets = {};
   const auto none = view_from(state);
+  EXPECT_TRUE(none.started_targets.empty());
   EXPECT_TRUE(none.startable_targets.empty());
   EXPECT_TRUE(none.floored_targets.empty());
   EXPECT_FALSE(none.counterpart_running);

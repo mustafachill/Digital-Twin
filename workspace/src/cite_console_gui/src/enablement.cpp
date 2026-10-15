@@ -25,6 +25,12 @@ bool served(const ConsoleView & view, Target target)
   return target != Target::NONE && view.available_targets.count(target) == 1;
 }
 
+/// The console says Start robot started every side of `target` (ADR-0075).
+bool started(const ConsoleView & view, Target target)
+{
+  return target != Target::NONE && view.started_targets.count(target) == 1;
+}
+
 /// The console says every side of `target` is at the program's start.
 bool startable(const ConsoleView & view, Target target)
 {
@@ -44,13 +50,13 @@ ButtonStates enabled_for(const ConsoleView & view, Target selected)
 
   states.start_robot = idle && served(view, selected) &&
     (view.phase == Phase::NOT_STARTED || ready || view.phase == Phase::FAULT);
-  states.home = idle && view.robot_started && ready && served(view, selected);
+  states.home = idle && ready && served(view, selected) && started(view, selected);
   states.start_program = states.home && startable(view, selected);
   states.stop = view.busy ||
     (view.phase == Phase::FAULT && !view.twin_in_sim && view.has_physical_side);
   states.confirm = view.phase == Phase::AWAITING_OPERATOR;
-  states.validate_then_run = idle && view.robot_started && ready &&
-    view.validate_then_run_offered && startable(view, Target::TWIN);
+  states.validate_then_run = idle && ready && view.validate_then_run_offered &&
+    started(view, Target::TWIN) && startable(view, Target::TWIN);
   return states;
 }
 
@@ -75,6 +81,11 @@ Target settled_selection(const ConsoleView & before, const ConsoleView & now, Ta
 bool target_hint_shown(const ConsoleView & view, Target selected)
 {
   return view.heard && !served(view, selected);
+}
+
+bool start_hint_shown(const ConsoleView & view, Target selected)
+{
+  return view.heard && served(view, selected) && !started(view, selected);
 }
 
 bool counterpart_running(const ConsoleView & view)

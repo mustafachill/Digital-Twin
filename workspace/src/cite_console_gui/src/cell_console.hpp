@@ -139,6 +139,9 @@ class CellConsole : public gz::gui::Plugin
   // No target is selected while a console is heard: the deck says "Select a
   // target" (`target_hint_shown`, ADR-0072 decision 3 as amended 2026-10-15).
   Q_PROPERTY(bool targetHintShown READ targetHintShown NOTIFY viewChanged)
+  // The selected target is served and not started: the deck says "Start robot
+  // for this target" in the same place (`start_hint_shown`, ADR-0075).
+  Q_PROPERTY(bool startHintShown READ startHintShown NOTIFY viewChanged)
 
   // The view buttons (ADR-0071): the 3D view's camera, moved by the window's
   // CameraTracking. Enabled whenever the configuration gave the panel what each
@@ -236,6 +239,10 @@ public:
   bool targetHintShown() const
   {
     return target_hint_shown(selection_.view(), selection_.selected());
+  }
+  bool startHintShown() const
+  {
+    return start_hint_shown(selection_.view(), selection_.selected());
   }
   bool resetViewEnabled() const {return static_cast<bool>(camera_);}
   QStringList viewPresets() const;

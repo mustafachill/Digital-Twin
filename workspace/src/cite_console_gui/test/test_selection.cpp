@@ -46,8 +46,8 @@ const std::vector<std::uint8_t> BOTH_SIDES = {
 const std::vector<std::uint8_t> PLANT_ONLY = {ConsoleState::TARGET_SIM};
 
 /// A READY, started, idle console with both arms at the start, serving `served`:
-/// every served target startable, and those with the real arm floored, as the
-/// console derives them (R-02).
+/// every served target started and startable, and those with the real arm
+/// floored, as the console derives them (R-02, ADR-0075).
 ConsoleState ready(const std::vector<std::uint8_t> & served = BOTH_SIDES)
 {
   ConsoleState state;
@@ -58,6 +58,7 @@ ConsoleState ready(const std::vector<std::uint8_t> & served = BOTH_SIDES)
   state.counterpart_at_start = true;
   state.minimum_speed_scale = 0.25;
   state.available_targets = served;
+  state.started_targets = served;
   state.startable_targets = served;
   for (const std::uint8_t target : served) {
     if (target == ConsoleState::TARGET_REAL || target == ConsoleState::TARGET_TWIN) {

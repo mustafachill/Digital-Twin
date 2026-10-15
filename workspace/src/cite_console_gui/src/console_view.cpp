@@ -114,6 +114,12 @@ ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publ
       view.available_targets.insert(target);
     }
   }
+  for (const std::uint8_t value : state.started_targets) {
+    const Target target = target_from(value);
+    if (target != Target::NONE) {
+      view.started_targets.insert(target);
+    }
+  }
   for (const std::uint8_t value : state.startable_targets) {
     const Target target = target_from(value);
     if (target != Target::NONE) {

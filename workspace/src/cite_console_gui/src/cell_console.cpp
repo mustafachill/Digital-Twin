@@ -674,7 +674,7 @@ void CellConsole::selectTarget(int index)
 void CellConsole::startRobot()
 {
   if (client_ && selection_.buttons().start_robot) {
-    client_->start_robot();
+    client_->start_robot(target_value(selection_.selected()));
   }
 }
 

@@ -515,7 +515,8 @@ QList<QQuickItem *> segments(QQuickItem * selector)
   return found;
 }
 
-/// A console READY to run on the simulation alone, as `cell_console` says it.
+/// A console READY to run on the simulation alone, as `cell_console` says it:
+/// Start robot succeeded for the simulation (ADR-0075).
 cite_interfaces::msg::ConsoleState ready_on_the_simulation()
 {
   cite_interfaces::msg::ConsoleState state;
@@ -523,6 +524,7 @@ cite_interfaces::msg::ConsoleState ready_on_the_simulation()
   state.robot_started = true;
   state.plant_at_start = true;
   state.available_targets = {cite_interfaces::msg::ConsoleState::TARGET_SIM};
+  state.started_targets = {cite_interfaces::msg::ConsoleState::TARGET_SIM};
   state.startable_targets = {cite_interfaces::msg::ConsoleState::TARGET_SIM};
   state.twin_mode = cite_interfaces::msg::TwinMode::MODE_SIM;
   state.step = "ok";
@@ -621,6 +623,7 @@ TEST(PanelQml, WithoutTheSimulationTheDeckAsksForATargetUntilOneIsPicked)
     state.state = cite_interfaces::msg::ConsoleState::NOT_STARTED;
     state.robot_started = false;
     state.available_targets = {cite_interfaces::msg::ConsoleState::TARGET_REAL};
+    state.started_targets = {};
     state.startable_targets = {};
     cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
     QCoreApplication::processEvents();
@@ -648,13 +651,58 @@ TEST(PanelQml, WithoutTheSimulationTheDeckAsksForATargetUntilOneIsPicked)
     EXPECT_LE(hint_rect.bottom(), selector_rect.top() + 0.5) << "the hint is not above the target";
     EXPECT_LT(selector_rect.top() - hint_rect.bottom(), 24.0) << "the hint is far from the target";
 
-    // The operator picks the real arm: the hint goes, Start robot may be sent.
+    // The operator picks the real arm: Start robot may be sent, and the hint
+    // in the same place now names it (ADR-0075).
     click(framed.window, segments(selector)[1]);
     EXPECT_EQ(selector->property("checkedIndex").toInt(), 1);
-    EXPECT_FALSE(hint->isVisible()) << "the hint stays with a target selected";
+    EXPECT_TRUE(shown(hint, framed.panel));
+    EXPECT_EQ(hint->property("text").toString(), QString("Start robot for this target"));
+    EXPECT_LE(hint->property("contentWidth").toDouble(), hint->width() + 0.5)
+      << "the start hint is cut short";
     EXPECT_TRUE(framed.find("startRobotButton")->isEnabled());
     EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
   }
+}
+
+// ADR-0075 decision 5: the deck follows the target. With the simulation
+// started, selecting the twin enables Start robot again, disables Home until
+// the twin is started, and says "Start robot for this target"; back on the
+// simulation, Home is offered and the hint goes.
+TEST(PanelQml, TheDeckFollowsTheSelectedTarget)
+{
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+  state.available_targets = {
+    cite_interfaces::msg::ConsoleState::TARGET_SIM, cite_interfaces::msg::ConsoleState::TARGET_REAL,
+    cite_interfaces::msg::ConsoleState::TARGET_TWIN};
+  cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+  QCoreApplication::processEvents();
+
+  auto * selector = framed.find("targetSelector");
+  auto * hint = framed.find("targetHint");
+  auto * start = framed.find("startRobotButton");
+  auto * home = framed.find("homeButton");
+  ASSERT_NE(selector, nullptr);
+  ASSERT_NE(hint, nullptr);
+  ASSERT_NE(start, nullptr);
+  ASSERT_NE(home, nullptr);
+  EXPECT_EQ(selector->property("checkedIndex").toInt(), 0);
+  EXPECT_TRUE(home->isEnabled()) << "Home on the started simulation";
+  EXPECT_FALSE(hint->isVisible());
+
+  click(framed.window, segments(selector)[2]);
+  EXPECT_EQ(selector->property("checkedIndex").toInt(), 2);
+  EXPECT_TRUE(start->isEnabled()) << "Start robot for the twin";
+  EXPECT_FALSE(home->isEnabled()) << "Home for a twin not started";
+  EXPECT_FALSE(framed.find("startProgramButton")->isEnabled());
+  EXPECT_TRUE(shown(hint, framed.panel));
+  EXPECT_EQ(hint->property("text").toString(), QString("Start robot for this target"));
+
+  click(framed.window, segments(selector)[0]);
+  EXPECT_TRUE(home->isEnabled());
+  EXPECT_FALSE(hint->isVisible());
+  EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
 }
 
 // R-01: the cycles field shows the number a button would send, and no other.

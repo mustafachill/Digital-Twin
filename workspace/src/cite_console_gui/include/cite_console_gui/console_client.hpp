@@ -129,7 +129,9 @@ public:
   ConsoleClient(const ConsoleClient &) = delete;
   ConsoleClient & operator=(const ConsoleClient &) = delete;
 
-  void start_robot();
+  /// `target` is the ConsoleState.TARGET_* whose sides Start robot starts
+  /// (ADR-0075), sent as given: the console refuses one it does not serve.
+  void start_robot(std::uint8_t target);
   void confirm_operator();
   void stop();
   /// `target` is the ConsoleState.TARGET_* the goal carries (ADR-0072), sent
