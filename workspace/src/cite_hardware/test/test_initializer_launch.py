@@ -416,7 +416,18 @@ class TestInitializer(unittest.TestCase):
         response = self._initialize()
         self.assertFalse(response.success)
         self.assertIn("refused the release", response.detail)
+        self.assertNotIn("may be enabled", response.detail)
         self.assertEqual(self._sent(), [])
+
+    def test_a_failure_after_the_release_says_the_arm_may_be_enabled(self):
+        """S-04: the release is not undone, and the operator is told so."""
+        self.vendor.calls.clear()
+        self._held()
+        self.vendor.failures[FakeTrackInit.ENABLE] = 9
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn(f"refused {FakeTrackInit.ENABLE}", response.detail)
+        self.assertIn("the arm was released and may be enabled", response.detail)
 
     def test_a_release_never_enabled_fails_at_the_deadline(self):
         self._held()

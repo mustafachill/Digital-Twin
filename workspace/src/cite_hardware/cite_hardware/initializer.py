@@ -29,10 +29,13 @@ starts it (ADR-0076):
    `deadline_s`, until it says HEALTHY with `arm_enabled`. HEALTHY already:
    nothing is released. Any other state - AWAITING, TRIPPED, INACTIVE, or no
    fresh state at all - fails the request naming it, and nothing is sent to
-   the vendor. This is the one caller of `ReleaseArm`, and every caller of this
-   service is an operator's command (Start robot after the go-ahead,
-   `./scripts/home`, the homing of `./scripts/program`), so the arm is released
-   only by an operator;
+   the vendor. This is the one caller of `ReleaseArm` in the tree, and every
+   caller of this service in the tree is an operator's command (Start robot
+   after the go-ahead, `./scripts/home`, the homing of `./scripts/program`).
+   The deadman refuses the release until the side is ready (S-01), and serves
+   it to any client on the side's domain once it is. A failure after the
+   release says that the arm was released and may be enabled (S-04): nothing
+   here holds it again;
 1. `set_linear_motor_enable(1)`;
 2. `set_gripper_enable(1)`;
 3. `get_linear_motor_on_zero`, and ONLY where it reads 0:
@@ -104,6 +107,10 @@ NODE_NAME = "initializer"
 
 #: The vendor's argument that enables the track motor, and the gripper.
 VENDOR_ENABLE = 1
+
+#: Added to every failure after the release (S-04): the deadman stays HEALTHY,
+#: so the arm stays released, and nothing here holds it again.
+RELEASED_MAY_BE_ENABLED = "the arm was released and may be enabled"
 
 SPECS: tuple[Spec, ...] = (
     Spec(
@@ -359,6 +366,13 @@ class Initializer(LifecycleNode):
         assert config is not None
         deadline = self._now() + config["deadline_s"]
         released = await self._release_if_held(deadline)
+        try:
+            return f"{released}; " + await self._after_release(deadline)
+        except InitializeFailed as failure:
+            raise InitializeFailed(f"{failure}; {RELEASED_MAY_BE_ENABLED}") from failure
+
+    async def _after_release(self, deadline: float) -> str:
+        """Run steps 1 to 6, once the arm is released."""
         gate = self._gate
         assert gate is not None
         if not gate.permits_motion():
@@ -388,7 +402,7 @@ class Initializer(LifecycleNode):
             )
             homed = "the track was homed and is on its zero"
         moved = await self._bring_to_start(deadline)
-        return f"{released}; track and gripper enabled; {homed}; {moved}"
+        return f"track and gripper enabled; {homed}; {moved}"
 
     async def _release_if_held(self, deadline: float) -> str:
         """Step 0: release a HELD arm and wait for it enabled; refuse every other state."""
@@ -421,13 +435,15 @@ class Initializer(LifecycleNode):
             if now is not None and now.state not in (HELD, HEALTHY):
                 raise InitializeFailed(
                     f"released, and the deadman is now "
-                    f"{STATE_NAMES.get(now.state, now.state)}: {now.detail}"
+                    f"{STATE_NAMES.get(now.state, now.state)}: {now.detail}; "
+                    f"{RELEASED_MAY_BE_ENABLED}"
                 )
             try:
                 await self._pause(config["poll_period_s"], deadline)
             except InitializeFailed as failure:
                 raise InitializeFailed(
-                    f"released, and the deadman did not say the arm is enabled: {failure}"
+                    f"released, and the deadman did not say the arm is enabled: {failure}; "
+                    f"{RELEASED_MAY_BE_ENABLED}"
                 ) from failure
 
     async def _bring_to_start(self, deadline: float) -> str:
