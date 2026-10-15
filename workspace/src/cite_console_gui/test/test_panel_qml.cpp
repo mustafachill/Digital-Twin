@@ -1178,6 +1178,48 @@ TEST(PanelQml, AtTheprimaryDisplayTheRailShowsEveryCardWithoutScrolling)
   EXPECT_GE(framed.find("eventCard")->height(), 160.0);
 }
 
+// At the smallest supported size the rail cuts no line short but the Robot
+// card's step (two lines at most, by design), and what does not fit below is
+// reached by scrolling the rail, not clipped away (ADR-0074).
+TEST(PanelQml, AtTheSmallestSizeTheRailElidesNothingAndScrollsToItsEnd)
+{
+  Framed framed(kSizes[3]);
+  ASSERT_NE(framed.panel, nullptr);
+  hear_everything(framed);
+  auto * body = framed.find("body");
+  ASSERT_NE(body, nullptr);
+  auto * step = framed.find("stepRow")->findChild<QQuickItem *>("fieldValue");
+  ASSERT_NE(step, nullptr);
+  QStringList elided;
+  for (QQuickItem * item : descendants(body)) {
+    if (item != step && item->property("truncated").toBool() && shown(item, framed.panel)) {
+      elided << item->property("text").toString();
+    }
+  }
+  EXPECT_TRUE(elided.isEmpty()) << "elided in the rail: " << elided.join(" | ").toStdString();
+
+  // The rail's content is taller than the rail here, and its end is in view
+  // once the rail is scrolled to it.
+  auto * flick = qvariant_cast<QQuickItem *>(body->property("contentItem"));
+  ASSERT_NE(flick, nullptr);
+  const double content = flick->property("contentHeight").toDouble();
+  const double room = flick->height();
+  ASSERT_GT(content, room) << "nothing to scroll at the smallest size";
+  flick->setProperty("contentY", content - room);
+  settle(framed);
+  const QRectF rail = rect_in(body, framed.panel);
+  auto * events = framed.find("eventCard");
+  ASSERT_NE(events, nullptr);
+  const QRectF at = rect_in(events, framed.panel);
+  EXPECT_LE(at.bottom(), rail.bottom() + 0.5)
+    << "the event log ends at " << at.bottom() << ", below the scrolled rail's " << rail.bottom();
+  EXPECT_GE(at.top(), rail.top() - 0.5);
+  // And the operator can see that it scrolls: its scroll bar is shown.
+  auto * indicator = framed.find("railScrollBar");
+  ASSERT_NE(indicator, nullptr);
+  EXPECT_TRUE(shown(indicator, framed.panel)) << "the rail scrolls and shows no scroll bar";
+}
+
 // R-06: world statistics not heard for longer than the configuration allows
 // are shown as the last heard, dimmed and said "stale".
 TEST(PanelQml, StaleWorldStatisticsAreSaidStale)

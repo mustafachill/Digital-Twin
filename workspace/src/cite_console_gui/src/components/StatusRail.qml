@@ -16,7 +16,7 @@
 // Cards in order of priority - the robot, the running request's progress,
 // the sides, the twin's fidelity and the event log. At the primary display
 // every card fits without scrolling the rail (T-02); the rail scrolls only
-// when the window is shorter. The event log takes the room left below the
+// when the window is shorter, and then shows its scroll bar. The event log takes the room left below the
 // other cards, never less than a few rows, and scrolls inside itself.
 
 import QtQuick 2.9
@@ -49,6 +49,11 @@ Rectangle {
     clip: true
     contentWidth: availableWidth
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    // Shown whenever the cards are taller than the rail, so that a rail cut
+    // at its bottom is seen to scroll rather than read as clipped.
+    ScrollBar.vertical.objectName: "railScrollBar"
+    ScrollBar.vertical.policy: body.contentHeight > body.availableHeight + 0.5 ?
+      ScrollBar.AlwaysOn : ScrollBar.AsNeeded
 
     ColumnLayout {
       id: cards
@@ -287,6 +292,7 @@ Rectangle {
           text: "Connections - monitoring only, not a safety function"
           size: Theme.caption
           color: Theme.muted
+          wrapMode: Text.WordWrap
         }
         RowLayout {
           Layout.fillWidth: true
