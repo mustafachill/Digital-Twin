@@ -358,49 +358,85 @@ def _seed(environ: dict) -> str | None:
 def _simulator(
     plan: Plan, side: str, *, headless: bool, seed: str | None, gz_env: dict[str, str]
 ) -> list:
-    gz_args = (
-        ["-s", "-r", "-v", "2"]
-        if headless
-        else ["-r", "-v", "2", "--gui-config", str(plan.side_named(side).gui_config)]
-    )
-    if seed is not None:
-        gz_args += ["--seed", seed]
-    gz_args.append(str(plan.world))
+    """Start the simulation server and, for a windowed run, its window as a second process.
 
-    simulator = ExecuteProcess(
-        cmd=["gz", "sim", *gz_args],
+    Always `gz sim -s`, and a window is a separate `gz sim -g` (ADR-0078
+    decision 3, corrected). The combined `gz sim` is a Ruby wrapper that forks
+    the server and the GUI, waits for whichever ends first, kills the other and
+    exits 0 whatever either did - so a server that segfaulted or was killed for
+    memory exited exactly like a window an operator closed. Two processes give
+    the launch two exit codes, which is the only way to tell those apart.
+
+    The window gets the same environment as the server - the side's
+    `GZ_PARTITION` (ADR-0042) and everything inherited, which carries the
+    panel's `GZ_GUI_PLUGIN_PATH` - and the same world argument the wrapper
+    handed its own GUI, so it finds the server it belongs to and nothing else.
+    """
+    server_args = ["-s", "-r", "-v", "2"]
+    if seed is not None:
+        server_args += ["--seed", seed]
+    server_args.append(str(plan.world))
+
+    server = ExecuteProcess(
+        cmd=["gz", "sim", *server_args],
         additional_env=gz_env,
         output="screen",
         # An orphaned `gz sim` holds ports and names, and the *next* bring-up then
         # fails pointing nowhere useful. Tearing the whole launch down when the
         # simulator exits is what keeps that from happening.
-        on_exit=_simulator_exit(plan, side, headless=headless),
+        on_exit=[Shutdown(reason="the simulator exited")],
         sigterm_timeout="10",
         sigkill_timeout="15",
     )
+    actions: list = [server]
 
-    return [simulator, _bridge(plan, gz_env)]
+    if not headless:
+        window = ExecuteProcess(
+            cmd=[
+                "gz", "sim", "-g", "-v", "2",
+                "--gui-config", str(plan.side_named(side).gui_config),
+                str(plan.world),
+            ],
+            additional_env=gz_env,
+            output="screen",
+            on_exit=_window_exit(plan, side, server),
+            sigterm_timeout="10",
+            sigkill_timeout="15",
+        )
+        actions.append(window)
+
+    actions.append(_bridge(plan, gz_env))
+    return actions
 
 
-def _simulator_exit(plan: Plan, side: str, *, headless: bool) -> callable:
-    """Tear the launch down when the simulator exits, saying so when a window closed.
+def _window_exit(plan: Plan, side: str, server: ExecuteProcess) -> callable:
+    """Tear the launch down when the window exits, saying so when it was closed.
 
-    ADR-0078 decision 3 (open-work #107). A windowed `gz sim` that exits 0 while
-    the launch is not already stopping is an operator closing the window, which
-    is how a console run normally ends. The side announces that on its own
-    standard output, as it announces readiness, so the pair supervisor reads a
-    stop asked for rather than a side lost. Every other exit - headless, non-zero,
-    or one that is part of a teardown already under way - tears down exactly as
-    before and announces nothing.
+    ADR-0078 decision 3 (open-work #107). The window exiting 0 while the server
+    is still running and the launch is not already stopping is an operator
+    closing it, which is how a console run normally ends. The PLANT announces
+    that on its own standard output, as it announces readiness, so the pair
+    supervisor reads a stop asked for rather than a side lost. Every other case
+    tears down exactly as before and announces nothing: a window that failed
+    (non-zero), a window that left because its server had already gone (the
+    server's own exit is the failure), one that is part of a teardown already
+    under way, and a counterpart's window, whose close is not the operator's
+    console being closed (the plant's window is the one that carries the panel).
     """
 
     def on_exit(event, context: LaunchContext) -> list:
-        if not headless and event.returncode == 0 and not context.is_shutdown:
+        server_running = server.process_details is not None and server.return_code is None
+        if (
+            side == PLANT_SIDE
+            and event.returncode == 0
+            and server_running
+            and not context.is_shutdown
+        ):
             return [
                 LogInfo(msg=window_closed_announcement(side, plan.zone)),
                 Shutdown(reason="the simulator window was closed"),
             ]
-        return [Shutdown(reason="the simulator exited")]
+        return [Shutdown(reason="the simulator window exited")]
 
     return on_exit
 

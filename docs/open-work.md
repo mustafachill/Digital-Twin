@@ -2078,11 +2078,19 @@ events. It is not shown to be a hazard. It is a design question for a safety rev
 states from their own stamp would need clocks the two sides agree on.
 
 ### #107 — Closing the console window ends `./scripts/console` with exit code 3 (2026-10-14) — closed 2026-10-15
-**Closed** by [ADR-0078](adr/0078-one-click-control-center.md) decision 3. A windowed `gz sim`
-that exits 0 outside a teardown makes its launch print `CITE_WINDOW_CLOSED`, and the supervisor
-reads that as a stop, so a pair whose parts all announced returns 0; `PAIR_ENDED` (3) stays for
-a participant that went away without it. Held by `cite_bringup`'s `test_pair.py` and
-`test_simulation_launch.py`.
+**Closed** by [ADR-0078](adr/0078-one-click-control-center.md) decision 3. A windowed side runs
+the simulation server (`gz sim -s`) and its window (`gz sim -g`) as two processes. When the
+plant's window exits 0 while its server is still running and no teardown is under way, the launch
+prints `CITE_WINDOW_CLOSED`, and the supervisor, accepting it only from the plant naming itself,
+reads that as a stop: a pair whose parts all announced returns 0. A server exit with any code, a
+window exit other than 0, and a counterpart's window still end the pair with `PAIR_ENDED` (3).
+The first fix watched the combined `gz sim`, a Ruby wrapper that exits 0 whichever of its server
+and GUI ended first, so a crashed server was announced as a closed window; it was reopened on
+review and corrected the same day. Held by `cite_bringup`'s `test_pair.py` and
+`test_simulation_launch.py`. In a real window on 2026-10-15 (`CITE_ALLOW_HARDWARE=0
+./scripts/console`), closing the window and pressing OK ended the run with exit 0 after
+`CITE_WINDOW_CLOSED`, and a SIGSEGV to the server process ended it with exit 3 and no
+announcement.
 
 ### #108 — The panel cannot tell a stopped request from a failed one (2026-10-14)
 

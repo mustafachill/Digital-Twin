@@ -228,7 +228,8 @@ CITE_ALLOW_HARDWARE=1 ./scripts/console    # both sides: the simulation and the 
 or the "CITE Control Center" icon `./scripts/install-launcher` installs, runs the same
 `./scripts/console` after checking Docker and X access and rebuilding only if a source changed.
 It logs to `~/.local/state/cite-digital-twin/logs/latest.log`. **Closing the window is a clean
-end:** the plant's launch prints `CITE_WINDOW_CLOSED` and the supervisor exits 0; exit 3
+end:** when the plant's window closes over a running simulation, its launch prints
+`CITE_WINDOW_CLOSED` and the supervisor exits 0; exit 3
 (`PAIR_ENDED`) still means a participant went away unexpectedly, and the control center shows
 that in a dialog.
 

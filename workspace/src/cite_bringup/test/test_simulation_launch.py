@@ -48,6 +48,7 @@ from launch.actions import ExecuteProcess, LogInfo, RegisterEventHandler, Shutdo
 from launch.event_handlers import OnProcessExit
 from launch.events.process import ProcessExited
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
+from launch_ros.actions import Node
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import StateTransition
 from lifecycle_msgs.msg import TransitionEvent
@@ -672,48 +673,97 @@ def test_no_seed_means_no_flag(
     assert "--seed" not in _command(context, simulator)
 
 
+def _simulators(context: LaunchContext, actions: list) -> list[ExecuteProcess]:
+    # A `Node`'s command cannot be performed before execution (see
+    # `_gz_transport_processes`), and no `Node` is a `gz sim`.
+    return [
+        p
+        for p in _processes(actions)
+        if not isinstance(p, Node) and _command(context, p)[:2] == ["gz", "sim"]
+    ]
+
+
+def _server_and_window(
+    context: LaunchContext, actions: list
+) -> tuple[ExecuteProcess, ExecuteProcess | None]:
+    """Return the `gz sim -s` and, for a windowed run, the `gz sim -g` (ADR-0078)."""
+    simulators = _simulators(context, actions)
+    servers = [p for p in simulators if "-s" in _command(context, p)]
+    windows = [p for p in simulators if "-g" in _command(context, p)]
+    assert len(servers) == 1, [_command(context, p) for p in simulators]
+    assert len(windows) <= 1, [_command(context, p) for p in simulators]
+    assert len(servers) + len(windows) == len(simulators), "a combined `gz sim` is back"
+    return servers[0], (windows[0] if windows else None)
+
+
 @pytest.mark.parametrize("headless", ["true", "false"])
-def test_only_a_window_is_given_the_gui_config(
+def test_the_server_is_always_its_own_process(
     module: ModuleType, context: LaunchContext, monkeypatch, headless: str
 ) -> None:
-    """The generated camera framing reaches a windowed `gz sim` and nothing else."""
+    """The server is `gz sim -s` with or without a window, and the window is `-g`.
+
+    The combined `gz sim` is a Ruby wrapper that exits 0 whichever of its server
+    and GUI ended first and however, so a crashed server was announced as a
+    closed window (ADR-0078 decision 3, corrected). Two processes, two exit codes.
+    """
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     context.launch_configurations["headless"] = headless
     actions = module._bring_up(context)
-    simulator = next(
-        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
-    )
-    command = _command(context, simulator)
+    server, window = _server_and_window(context, actions)
+    server_command = _command(context, server)
+    assert "--gui-config" not in server_command
+    assert server_command[-1].endswith(".sdf"), "the world must stay the last argument"
     if headless == "true":
-        assert "--gui-config" not in command
+        assert window is None
     else:
-        path = command[command.index("--gui-config") + 1]
+        assert window is not None
+        window_command = _command(context, window)
+        path = window_command[window_command.index("--gui-config") + 1]
         assert path.endswith("worlds/cell_b_gui.config")
-        assert command[-1].endswith(".sdf"), "the world must stay the last argument"
+        # The same world the wrapper handed its own GUI, and no simulation flag.
+        assert window_command[-1] == server_command[-1]
+        assert "-r" not in window_command and "--seed" not in window_command
 
 
-def _simulator_exit(
+class _Transport:
+    """Stands in for the server's subprocess transport, which reports its exit code."""
+
+    def __init__(self, returncode: int | None) -> None:
+        self.returncode = returncode
+
+    def get_returncode(self) -> int | None:
+        return self.returncode
+
+
+def _exits(produced) -> list:
+    produced = produced or []
+    return produced if isinstance(produced, list) else [produced]
+
+
+def _window_exit(
     module: ModuleType,
     context: LaunchContext,
     returncode: int,
     *,
+    server_returncode: int | None = None,
     shutting_down: bool = False,
 ) -> list:
-    """Return what the launch does when its `gz sim` exits with ``returncode``.
+    """Return what the launch does when its window exits with ``returncode``.
 
-    ``shutting_down`` marks the launch as stopping after it was built and before
-    the exit arrives, as at a real teardown.
+    The server is marked started and, unless ``server_returncode`` is given,
+    still running. ``shutting_down`` marks the launch as stopping after it was
+    built and before the exit arrives, as at a real teardown.
     """
     actions = module._bring_up(context)
-    simulator = next(
-        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
-    )
-    on_exit = simulator._ExecuteLocal__on_exit  # noqa: SLF001 - read only
+    server, window = _server_and_window(context, actions)
+    assert window is not None
+    server._ExecuteLocal__process_event_args = {"pid": 1}  # noqa: SLF001 - started
+    server._subprocess_transport = _Transport(server_returncode)
+    on_exit = window._ExecuteLocal__on_exit  # noqa: SLF001 - read only
     assert callable(on_exit)
     if shutting_down:
         context._set_is_shutdown(True)
-    produced = on_exit(_Exited(returncode), context) or []
-    return produced if isinstance(produced, list) else [produced]
+    return _exits(on_exit(_Exited(returncode), context))
 
 
 def _closed_window_lines(entities: list, context: LaunchContext) -> list[str]:
@@ -729,14 +779,14 @@ def _closed_window_lines(entities: list, context: LaunchContext) -> list[str]:
 def test_a_closed_window_is_announced_and_ends_the_launch(
     module: ModuleType, context: LaunchContext, monkeypatch
 ) -> None:
-    """ADR-0078 decision 3: a windowed `gz sim` exiting 0 is an operator's close.
+    """ADR-0078 decision 3: the window exiting 0 over a running server is a close.
 
     The side says so on its own output, as it announces readiness, and the
     launch still ends: the window is the cell, and nothing outlives it.
     """
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     context.launch_configurations["headless"] = "false"
-    entities = _simulator_exit(module, context, 0)
+    entities = _window_exit(module, context, 0)
     lines = _closed_window_lines(entities, context)
     assert [announced_window_closed(line) for line in lines] == [PLANT_SIDE]
     assert any(isinstance(entity, Shutdown) for entity in entities)
@@ -746,26 +796,54 @@ def test_a_closed_window_is_announced_and_ends_the_launch(
 
 
 @pytest.mark.parametrize(
-    ("headless", "returncode", "shutting_down"),
+    ("returncode", "server_returncode", "shutting_down"),
     [
-        ("true", 0, False),    # no window to close
-        ("false", 1, False),   # the simulator failed
-        ("false", -11, False),  # the simulator crashed
-        ("false", 0, True),    # part of a teardown already under way
+        (1, None, False),     # the window failed
+        (-11, None, False),   # the window crashed
+        (0, -11, False),      # the server had already crashed
+        (0, -9, False),       # the server had already been killed (OOM)
+        (0, 0, False),        # the server had already ended
+        (0, None, True),      # part of a teardown already under way
     ],
 )
-def test_any_other_simulator_exit_ends_the_launch_without_the_announcement(
+def test_any_other_window_exit_ends_the_launch_without_the_announcement(
+    module: ModuleType,
+    context: LaunchContext,
+    monkeypatch,
+    returncode: int,
+    server_returncode: int | None,
+    shutting_down: bool,
+) -> None:
+    """Only a window closed over a running server is a close; the rest is a failure."""
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["headless"] = "false"
+    entities = _window_exit(
+        module,
+        context,
+        returncode,
+        server_returncode=server_returncode,
+        shutting_down=shutting_down,
+    )
+    assert not _closed_window_lines(entities, context)
+    assert any(isinstance(entity, Shutdown) for entity in entities)
+
+
+@pytest.mark.parametrize("headless", ["true", "false"])
+@pytest.mark.parametrize("returncode", [0, 1, -11])
+def test_every_server_exit_ends_the_launch_without_the_announcement(
     module: ModuleType,
     context: LaunchContext,
     monkeypatch,
     headless: str,
     returncode: int,
-    shutting_down: bool,
 ) -> None:
-    """Only a windowed exit 0 outside a teardown is a close; the rest is as before."""
+    """A server exit is never a closed window, whatever its code and with or without one."""
     monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
     context.launch_configurations["headless"] = headless
-    entities = _simulator_exit(module, context, returncode, shutting_down=shutting_down)
+    actions = module._bring_up(context)
+    server, _ = _server_and_window(context, actions)
+    on_exit = server._ExecuteLocal__on_exit  # noqa: SLF001 - read only
+    entities = _exits(on_exit(_Exited(returncode), context) if callable(on_exit) else on_exit)
     assert not _closed_window_lines(entities, context)
     assert any(isinstance(entity, Shutdown) for entity in entities)
 
@@ -1343,12 +1421,49 @@ def test_a_counterparts_window_opens_its_own_gui_config(
     monkeypatch.setenv(DOMAIN_ENV, "43")
 
     actions = module._bring_up(context)
-    simulator = next(
-        p for p in _processes(actions) if _command(context, p)[:2] == ["gz", "sim"]
-    )
-    command = _command(context, simulator)
+    _, window = _server_and_window(context, actions)
+    assert window is not None
+    command = _command(context, window)
     path = command[command.index("--gui-config") + 1]
     assert path.endswith("worlds/counterpart/cell_b_gui.config")
+
+
+def test_a_counterparts_closed_window_is_not_announced(
+    module: ModuleType, context: LaunchContext, tmp_path: Path, monkeypatch
+) -> None:
+    """Only the plant announces a close (ADR-0078): its window carries the console.
+
+    A counterpart's window exiting 0 still ends that side, and the pair reads it
+    as a side lost, as before.
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    _paired(module, tmp_path, monkeypatch)
+    context.launch_configurations["side"] = "counterpart"
+    context.launch_configurations["headless"] = "false"
+    monkeypatch.setenv(DOMAIN_ENV, "43")
+    entities = _window_exit(module, context, 0)
+    assert not _closed_window_lines(entities, context)
+    assert any(isinstance(entity, Shutdown) for entity in entities)
+
+
+def test_a_window_carries_the_partition_its_server_does(
+    module: ModuleType, context: LaunchContext, monkeypatch
+) -> None:
+    """The window is a separate gz-transport process, so it needs the partition too.
+
+    Without it, `gz sim -g` would discover no server, or another cell's (ADR-0042).
+    """
+    monkeypatch.delenv(HARDWARE_OPT_IN_ENV, raising=False)
+    context.launch_configurations["headless"] = "false"
+    plan = load(Path(resolve_uri(GENERATED_PLAN)))
+    actions = module._bring_up(context)
+    server, window = _server_and_window(context, actions)
+    assert window is not None
+    for process in (server, window):
+        assert (
+            _environment(context, process).get(GZ_PARTITION_ENV)
+            == plan.sides[0].gz_partition
+        )
 
 
 def test_the_counterpart_started_on_the_plants_domain_refuses(

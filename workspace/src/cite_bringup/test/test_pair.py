@@ -1147,13 +1147,16 @@ def test_the_two_tokens_are_not_one_word_in_two_places() -> None:
 # --- A closed window is a clean end (ADR-0078 decision 3, open-work #107) -----
 
 
-def _closes_its_window(name: str, release: Path) -> pair.SideSpec:
-    """Return a side that announces, then says its window closed and exits 0.
+def _closes_its_window(
+    name: str, release: Path, *, naming: str | None = None
+) -> pair.SideSpec:
+    """Return a side that announces, then says a window closed and exits 0.
 
     It waits for the pair to be up first, as a side's launch outlives the join
-    before an operator closes its `gz sim` window.
+    before an operator closes its `gz sim` window. ``naming`` is the side the
+    line names, its own by default.
     """
-    closed = window_closed_announcement(name, ZONE)
+    closed = window_closed_announcement(naming or name, ZONE)
     return _announces(
         name,
         then=(
@@ -1201,6 +1204,40 @@ def test_a_side_that_exits_without_the_line_still_ends_the_pair_as_lost(
         ceiling_s=CEILING_S,
     )
     assert "window was closed" not in text
+    assert code == pair.PAIR_ENDED
+
+
+@pytest.mark.parametrize(
+    ("closer", "naming"),
+    [
+        ("counterpart", None),        # a counterpart's window is not the console's
+        ("plant", "counterpart"),     # a line naming another side is not this one's
+    ],
+)
+def test_a_close_line_from_anything_but_the_plant_itself_is_a_side_lost(
+    tmp_path: Path, closer: str, naming: str | None
+) -> None:
+    """Only the plant's launch, naming itself, ends the pair cleanly (ADR-0078).
+
+    Anything else is ignored, so the exit that follows it is judged as an exit.
+    """
+    release = tmp_path / "joined"
+    log = _Log(marker="the pair is up", release=release)
+    other = "counterpart" if closer == "plant" else "plant"
+    code, text = _supervise_within(
+        BACKSTOP_S,
+        sorted(
+            [
+                _closes_its_window(closer, release, naming=naming),
+                _announces(other, then="time.sleep(600)\n"),
+            ],
+            key=lambda spec: spec.name != "plant",
+        ),
+        log=log,
+        ceiling_s=CEILING_S,
+    )
+    assert "ignored a window-closed line" in text
+    assert "window was closed (announced" not in text
     assert code == pair.PAIR_ENDED
 
 

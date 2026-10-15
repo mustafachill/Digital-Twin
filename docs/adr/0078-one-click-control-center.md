@@ -36,8 +36,15 @@ The owner wants the control center started by double-clicking an icon.
    drawn for this project into the user's menu, and with `--desktop` onto the desktop.
    `--uninstall` removes them.
 3. **Closing the window is a clean end.**
-   - When the plant's windowed `gz sim` exits 0, its launch announces `CITE_WINDOW_CLOSED`.
-   - The supervisor treats that announcement as a stop and returns 0.
+   - A windowed side runs the server (`gz sim -s`) and its window (`gz sim -g`) as two
+     processes, with the same partition and world. The combined `gz sim` cannot be used: it is
+     a wrapper that exits 0 whichever of its server and GUI ended first, so a crashed server
+     would read as a closed window.
+   - When the plant's window exits 0 while its server is still running and no teardown is
+     under way, its launch announces `CITE_WINDOW_CLOSED`. A server exit, a window exit other
+     than 0, and a counterpart's window are not a close.
+   - The supervisor treats that announcement, from the plant naming itself, as a stop and
+     returns 0.
    - `PAIR_ENDED` stays the code for a participant that went away unexpectedly.
 4. **`./scripts/sim` refuses a missing `cite_bringup` build** instead of exiting 0.
 5. **CLAUDE.md §7 gains the new entry points** (`scripts/control-center`,

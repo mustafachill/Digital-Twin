@@ -1054,6 +1054,24 @@ def _join(
             # rather than from a terminal (ADR-0078 decision 3). The side named
             # it on its own pipe before its launch exited, which is what tells
             # this apart from a side that went away (`PAIR_ENDED`).
+            #
+            # Accepted only from the plant's own launch naming itself: that is
+            # the one side whose launch announces a close, and a line naming
+            # another side, or printed by the boundary or the console, is not a
+            # closed window. Ignored, so the participant's exit, if it follows,
+            # is judged as an exit.
+            if not (
+                side.spec.announcement is announced_side
+                and side.name == PLANT_SIDE
+                and payload == side.name
+            ):
+                print(
+                    f"[pair] ignored a window-closed line naming {payload!r} from "
+                    f"{side.name}; only the {PLANT_SIDE} announces its own window",
+                    file=out,
+                    flush=True,
+                )
+                continue
             print(
                 f"[pair] the {payload} window was closed (announced by "
                 f"{side.name}); ending the pair",
