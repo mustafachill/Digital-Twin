@@ -112,6 +112,7 @@ from cite_bringup.readiness import (
     SIDE_DOWN,
     SIDE_FAILED,
     SIDE_UP,
+    SIDE_WAITING,
 )
 from cite_bringup.track_command import hold as track_hold
 from cite_facility import model_info
@@ -903,20 +904,42 @@ class TwinBoundary:
                     self._publish_mode_guarded()
             for change in changes:
                 self._said_connection(*change)
-            self._after_connection(fell)
+            # S-05: any fall of this reader's life, so a stop that a raise cut
+            # short is sent again as the reader ends.
+            self._after_connection(ever_fell or fell)
 
     def _after_connection(self, fell: bool) -> None:
         """Off the lock: if the mode fell back, stop what SIM does not command.
 
-        The belts SIM does not command, and every physical carriage (S-03), with
-        the stop a trajectory with no points sends, which is never gated.
+        Every physical carriage first (S-03), with the hold that is never gated,
+        and then the belts SIM does not command. Each publish is guarded on its
+        own (S-05): one that raises is logged and skips none of the others.
         """
         if fell:
-            self._stop_belts_the_mode_does_not_command(TwinMode.MODE_SIM)
             physical = [side for side in self._sides if self._is_physical(side)]
             for topic in self._track_joint_by_topic:
-                self._hold_tracks(topic, physical)
+                for side_name in physical:
+                    self._guarded_stop(
+                        f"{operator_endpoint(topic)} hold on the {side_name} side",
+                        lambda topic=topic, side_name=side_name: self._hold_tracks(
+                            topic, [side_name]
+                        ),
+                    )
+            for (side_name, topic), publisher in self._belts_the_mode_does_not_command(
+                TwinMode.MODE_SIM
+            ):
+                self._guarded_stop(
+                    f"{topic} zero on the {side_name} side",
+                    lambda publisher=publisher: publisher.publish(Float64(data=0.0)),
+                )
         self._publish_sides()
+
+    def _guarded_stop(self, what: str, send) -> None:
+        """Send one stop of a fall, logged rather than raised (S-05)."""
+        try:
+            send()
+        except Exception as error:  # noqa: BLE001 - one failed stop must not skip the next
+            self._log.error(f"the fall's {what} could not be sent: {error!r}")
 
     def _changed_connection(self, side: str, before: str, after: str) -> bool:
         """Apply one kept side's change of state; under the lock. Return whether the mode fell.
@@ -931,13 +954,13 @@ class TwinBoundary:
         command the next incarnation the moment an operator released it, with
         nothing measured. Entering it again is a `SetMode`, which measures.
         """
-        if before == SIDE_DOWN:
-            # `waiting` or `failed` after `down` is said once the old group is
-            # swept empty (S-01): what it said between its fall and now is
-            # forgotten too, so the next incarnation is judged on its own.
-            self._forget(side)
-            return False
         if before != SIDE_UP:
+            if before == SIDE_DOWN or after == SIDE_WAITING:
+                # `waiting` or `failed` after `down` is said once the old group
+                # is swept empty (S-01), and `waiting` after `connecting` once a
+                # failed attempt's is (S-06): what it said is forgotten, so the
+                # next incarnation is judged on its own.
+                self._forget(side)
             return False
         gone = self._gone.get(side)
         if gone is not None:
@@ -1597,11 +1620,18 @@ class TwinBoundary:
         no operator command can reach that side except a stop; so the transition
         itself sends the stop rather than leaving a belt nobody may command.
         """
+        for _key, publisher in self._belts_the_mode_does_not_command(mode):
+            publisher.publish(Float64(data=0.0))
+
+    def _belts_the_mode_does_not_command(self, mode: int) -> list:
+        """Each ``((side, topic), publisher)`` of a belt on a side ``mode`` does not route to."""
         chosen = self._route(mode)
         commanded = set(chosen.sides) if chosen.accepted else set()
-        for (side_name, _topic), publisher in self._belt_publishers.items():
-            if side_name not in commanded:
-                publisher.publish(Float64(data=0.0))
+        return [
+            (key, publisher)
+            for key, publisher in self._belt_publishers.items()
+            if key[0] not in commanded
+        ]
 
     def _forward_feedback(self, goal_handle, message) -> None:
         """Pass one commanded side's feedback through to the operator, unchanged.

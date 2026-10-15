@@ -574,7 +574,9 @@ def test_the_fall_stops_the_physical_carriage_and_holds_no_simulated_one() -> No
     _released(boundary)
     assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
     boundary._read_side_states(io.StringIO(_line(SIDE_DOWN)))
-    (hold,) = boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent
+    # At the fall, and once more as the reader ended (S-05: `ever_fell`).
+    hold, again = boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent
+    assert again == hold
     assert hold.points[0].positions == hold.points[-1].positions, "a hold, not a move"
     assert boundary._track_publishers[("plant", TRACK_TOPIC)].sent == []
     # A side lost in SIM moved no mode, and nothing is sent.
@@ -602,4 +604,40 @@ def test_a_fall_whose_mode_publish_raises_is_still_applied_and_published_again()
     assert attempts == [TwinMode.MODE_SIM] * 2, "published again as the reader ended"
     assert any("injected publish" in line for line in boundary._log.lines)
     assert boundary._physical_watches["picker"].deadman is None, "the side was still forgotten"
-    assert len(boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent) == 1
+    assert len(boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent) == 2, "and re-sent"
+
+
+# --- S-05 / S-06: the fall's stops are each guarded; a failed attempt is forgotten
+
+
+class _RaisingPublisher:
+    def publish(self, message) -> None:
+        raise RuntimeError("injected belt publish")
+
+
+def test_a_belt_zero_that_raises_still_lets_the_track_hold_through() -> None:
+    """S-05: the hold goes first and each stop is guarded on its own."""
+    boundary = _kept_boundary()
+    boundary._belt_publishers = {(COUNTERPART, "/cite/cell_b/belt/speed"): _RaisingPublisher()}
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    assert boundary._authority.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    boundary._read_side_states(_Breaking([_line(SIDE_DOWN)]))
+    sent = boundary._track_publishers[(COUNTERPART, TRACK_TOPIC)].sent
+    # At the fall, and again as the reader ended on its error (`ever_fell`).
+    assert len(sent) == 2, "the hold was sent despite the belt's raise, and re-sent"
+    assert any("injected belt publish" in line for line in boundary._log.lines)
+
+
+def test_a_failed_attempt_is_forgotten_at_waiting_after_connecting() -> None:
+    """S-06: `connecting -> waiting` forgets what the failed attempt said."""
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_CONNECTING))
+    _released(boundary)
+    _heard_again(boundary)
+    with boundary._lock:
+        fell = boundary._changed_connection(*boundary._connections.apply(_line(SIDE_WAITING)))
+    assert not fell
+    assert boundary._physical_watches["picker"].deadman is None
+    assert (COUNTERPART, "picker_track_joint") not in boundary._track_positions
+    assert boundary._track_history["picker_track_joint"] == []
