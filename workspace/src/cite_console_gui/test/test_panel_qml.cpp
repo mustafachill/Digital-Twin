@@ -1378,6 +1378,35 @@ TEST(PanelQml, ALongQuestionNeverCoversTheHeader)
   }
 }
 
+// R2-05: the question's room is up to the alarm band only while the band is
+// shown; with none, it is up to the header. A hidden band takes no room.
+TEST(PanelQml, ALongQuestionTakesTheRoomAHiddenAlarmBandLeaves)
+{
+  for (const bool alarm : {false, true}) {
+    SCOPED_TRACE(alarm ? "alarm band shown" : "no alarm band");
+    Framed framed(kSizes[3]);
+    ASSERT_NE(framed.panel, nullptr);
+    cite_interfaces::msg::ConsoleState state = ready_on_the_simulation();
+    state.state = cite_interfaces::msg::ConsoleState::AWAITING_OPERATOR;
+    state.last_error = alarm ? "refused: an earlier request" : "";
+    while (state.prompt.size() < 4000u) {
+      state.prompt += "Confirm only once every person is outside and the E-stop is in reach. ";
+    }
+    cite_console_gui::CellConsoleTestAccess::hear(framed.plugin, state);
+    settle(framed);
+    auto * band = framed.find("alarmBand");
+    auto * confirmation = framed.find("confirmation");
+    ASSERT_NE(band, nullptr);
+    ASSERT_NE(confirmation, nullptr);
+    ASSERT_EQ(band->isVisible(), alarm);
+    const double above = alarm ? rect_in(band, framed.panel).bottom() :
+      Theme_header_bottom(framed.panel);
+    EXPECT_NEAR(rect_in(confirmation, framed.panel).top(), above, 0.5)
+      << "the question does not take the room up to the "
+      << (alarm ? "alarm band" : "header");
+  }
+}
+
 // T-03: 1280 wide is a supported size and gets the medium layout; compact is
 // for what is below every supported size.
 TEST(PanelQml, TheLayoutStepsDownBelowTheSupportedSizesOnly)

@@ -264,8 +264,9 @@ Item {
     anchors.right: parent.right
     anchors.bottom: deck.top
     height: implicitHeight
-    // Never over the header or the alarm band (S-03).
-    maximumHeight: Math.max(64, deck.y - alarm.y - alarm.height)
+    // Never over the header or the alarm band (S-03): the band's room only
+    // while it is shown (R2-05).
+    maximumHeight: Math.max(64, deck.y - alarm.y - (alarm.visible ? alarm.height : 0))
     onVisibleChanged: frame.checkStopReachable()
     onHeightChanged: frame.checkStopReachable()
   }
