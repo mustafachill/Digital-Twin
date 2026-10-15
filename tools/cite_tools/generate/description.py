@@ -473,6 +473,8 @@ class VendorNames:
     #: ``(the absolute name the plugin calls, this asset's controller manager
     #: service)``: the remaps the side's launch puts on `ros2_control_node`.
     controller_manager_remaps: tuple[tuple[str, str], ...] = ()
+    #: The TCP port the reach gate asks before the side starts (ADR-0077).
+    report_port: int | None = None
 
 
 def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorNames | None:
@@ -503,6 +505,7 @@ def vendor_names(asset: ResolvedAsset, cell: ResolvedCell, side: str) -> VendorN
             )
             for name in driver.controller_manager_services
         ),
+        report_port=driver.report_port,
     )
 
 

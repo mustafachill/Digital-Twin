@@ -374,6 +374,11 @@ plan:
 {% if manager.counterpart_vendor.gripper_action %}
         gripper_action: {{ manager.counterpart_vendor.gripper_action }}
 {% endif %}
+{% if manager.counterpart_vendor.report_port %}
+        # The arm controller's report port: what the side's reach gate asks
+        # before anything of the side starts (ADR-0077 decision 3).
+        report_port: {{ manager.counterpart_vendor.report_port }}
+{% endif %}
 {% if manager.counterpart_vendor.controller_manager_remaps %}
         # The controller manager services the vendor plugin calls by an
         # absolute name, each mapped onto this asset's own manager's service.

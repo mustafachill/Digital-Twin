@@ -492,6 +492,9 @@ class VendorNames:
     #: Absolute name the vendor plugin calls -> this asset's controller manager
     #: service it is remapped onto, on the side's `ros2_control_node`.
     controller_manager_remaps: Mapping[str, str] = MappingProxyType({})
+    #: The TCP port the arm's controller accepts its report stream on, which the
+    #: side's reach gate asks (ADR-0077 decision 3); `None` where L0 states none.
+    report_port: int | None = None
 
 
 @dataclass(frozen=True)
@@ -2175,12 +2178,20 @@ def _vendor(entry: object | None, where: str) -> VendorNames | None:
     for label, name in names.items():
         if not isinstance(name, str) or not name.startswith("/"):
             raise PlanError(f"{here}: {label} must be an absolute name, not {name!r}")
+    report_port = _optional(entry, "report_port")
+    if report_port is not None and (
+        isinstance(report_port, bool)
+        or not isinstance(report_port, int)
+        or not 1 <= report_port <= 65535
+    ):
+        raise PlanError(f"{here}: 'report_port' must be a TCP port, not {report_port!r}")
     return VendorNames(
         driver_node=names["driver_node"],
         service_namespace=names["service_namespace"],
         services=MappingProxyType(dict(services)),
         gripper_action=gripper_action,
         controller_manager_remaps=MappingProxyType(dict(remaps)),
+        report_port=report_port,
     )
 
 

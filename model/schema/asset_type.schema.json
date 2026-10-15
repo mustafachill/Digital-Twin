@@ -1506,6 +1506,12 @@
           "title": "Node",
           "type": "string"
         },
+        "report_port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Report Port",
+          "type": "integer"
+        },
         "services": {
           "items": {
             "pattern": "^[a-z][a-z0-9_]*$",
@@ -1524,7 +1530,8 @@
         "namespace_arg",
         "services",
         "streaming_mode",
-        "controller_manager_services"
+        "controller_manager_services",
+        "report_port"
       ],
       "title": "VendorDriver",
       "type": "object"

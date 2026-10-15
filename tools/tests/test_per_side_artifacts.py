@@ -381,6 +381,9 @@ class TestVendorNames:
                 f"/controller_manager/{leaf}": f"{manager['node']}/{leaf}"
                 for leaf in ("list_controllers", "switch_controller")
             },
+            # What the side's reach gate asks (ADR-0077): the controller's
+            # normal report port, `XARM_CONF::TCP_PORT_REPORT_NORM`.
+            "report_port": 30001,
         }
 
     def test_the_plan_names_what_the_vendor_creates(self, real_model: Path) -> None:
@@ -403,6 +406,8 @@ class TestVendorNames:
         assert 'node_, prefix + "xarm_gripper/gripper_action",' in driver
         hardware = _vendor_source("xarm_controller/src/hardware/uf_robot_system_hardware.cpp")
         assert 'rclcpp::Node::make_shared("ufactory_driver", node_options);' in hardware
+        config = _vendor_source("xarm_sdk/cxx/include/xarm/core/xarm_config.h")
+        assert "static const int TCP_PORT_REPORT_NORM = 30001;" in config
 
     def test_only_a_side_embedding_a_driver_names_one(self, real_model: Path) -> None:
         generated = artifacts(real_model)

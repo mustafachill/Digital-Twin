@@ -353,6 +353,11 @@ asset_type:
         controller_manager_services:
           - /controller_manager/list_controllers
           - /controller_manager/switch_controller
+        # The controller's normal report port, `XARM_CONF::TCP_PORT_REPORT_NORM`
+        # (xarm_sdk/cxx/include/xarm/core/xarm_config.h:25), the one the SDK's
+        # own connect opens its report stream on. The reach gate asks it before
+        # the side starts its driver (ADR-0077 decision 3).
+        report_port: 30001
 
   control:
     # Controller-manager rate. The vendor ships 150 Hz for the xArm, and this is

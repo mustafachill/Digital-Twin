@@ -686,6 +686,11 @@ class VendorDriver(Strict):
     controller_manager_services: list[
         Annotated[str, Field(pattern=r"^(/[A-Za-z_][A-Za-z0-9_]*)+$")]
     ]
+    #: The TCP port the arm's controller accepts its report stream on, which a
+    #: physical side's reach gate asks before anything of the side starts
+    #: (ADR-0077 decision 3). A vendor fact, read from the pinned source: the
+    #: xArm's `XARM_CONF::TCP_PORT_REPORT_NORM`.
+    report_port: Annotated[int, Field(ge=1, le=65535)]
 
 
 class VendorAxis(Strict):

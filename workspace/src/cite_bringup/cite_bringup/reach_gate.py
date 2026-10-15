@@ -24,12 +24,12 @@ off the network. That driver answers an absent robot by crashing
 to judge; a side that is still waiting for its robot is not.
 
 **What it asks**: a TCP connection to every physical arm's report port on the
-side, accepted. The port is the vendor's normal report port,
-`XARM_CONF::TCP_PORT_REPORT_NORM = 30001`
-(`xarm_ros2/xarm_sdk/cxx/include/xarm/core/xarm_config.h`), the one the SDK's
-own connect opens for its report stream (`xarm_sdk/cxx/src/xarm/core/connect.cc`).
-The connection is closed at once and nothing is sent on it: the gate commands
-nothing and reads nothing.
+side, accepted. The port is a vendor fact L0 states on the arm type's
+`vendor_driver` (`report_port`, for the xArm its normal report port
+`XARM_CONF::TCP_PORT_REPORT_NORM`) and the plan carries on the side's vendor
+block (`VendorNames.report_port`); it is read from there and written nowhere
+here. The connection is closed at once and nothing is sent on it: the gate
+commands nothing and reads nothing.
 
 **The address is read by `plan.resolve_description_args` and by nothing else**
 (ADR-0070 item 2): the description argument whose kind is `ip_address`, from
@@ -74,12 +74,6 @@ from cite_bringup.plan import (
     resolve_description_args,
 )
 
-#: The arm controller's normal report port: `XARM_CONF::TCP_PORT_REPORT_NORM`
-#: in the vendor SDK (`xarm_sdk/cxx/include/xarm/core/xarm_config.h`). A vendor
-#: constant, stated once here because nothing in the plan carries it and no
-#: Python package exports it.
-REPORT_PORT = 30001
-
 #: How long one connection attempt may take before it counts as unanswered, in
 #: wall seconds. A ceiling on one attempt: an accepted connection returns as soon
 #: as the handshake completes, and a refused one at once.
@@ -99,14 +93,16 @@ PROBE_PERIOD_S = 1.0
 REACH_CEILING_S = 60.0
 
 
-def addresses(plan: Plan, side: str, environ: Mapping[str, str]) -> list[str]:
-    """Return every physical arm's address on ``side``, read through the one reader.
+def addresses(plan: Plan, side: str, environ: Mapping[str, str]) -> list[tuple[str, int]]:
+    """Return every physical arm's ``(address, report port)`` on ``side``.
 
-    Refuses (`PlanError`) a side with no physical arm and an arm with no
-    `ip_address` argument: a gate that asked nobody would pass at once, which is
-    the one answer it must never give by accident.
+    The address is read through the one reader, the port off the plan's vendor
+    block. Refuses (`PlanError`) a side with no physical arm, an arm with no
+    `ip_address` argument and one whose vendor block states no report port: a
+    gate that asked nobody would pass at once, which is the one answer it must
+    never give by accident.
     """
-    found: list[str] = []
+    found: list[tuple[str, int]] = []
     for manager in plan.controller_managers:
         if manager.commands_physical_hardware_on_or_none(side) is not True:
             continue
@@ -121,7 +117,15 @@ def addresses(plan: Plan, side: str, environ: Mapping[str, str]) -> list[str]:
                 f"asset {manager.asset!r} on the {side} side is physical and its description "
                 "reads no IP address from the environment, so there is no robot to wait for"
             )
-        found += named
+        vendor = manager.vendor_on(side)
+        port = None if vendor is None else vendor.report_port
+        if port is None:
+            raise PlanError(
+                f"asset {manager.asset!r} on the {side} side is physical and its plan states "
+                "no vendor report port, so there is nothing to ask. It is L0's "
+                "`vendor_driver.report_port` - run ./scripts/validate-model --write"
+            )
+        found += [(address, port) for address in named]
     if not found:
         raise PlanError(
             f"zone {plan.zone!r}: the {side} side commands no physical hardware; the reach "
@@ -130,7 +134,7 @@ def addresses(plan: Plan, side: str, environ: Mapping[str, str]) -> list[str]:
     return found
 
 
-def answers(address: str, port: int = REPORT_PORT, timeout_s: float = CONNECT_TIMEOUT_S) -> bool:
+def answers(address: str, port: int, timeout_s: float = CONNECT_TIMEOUT_S) -> bool:
     """Whether ``address`` accepts a TCP connection on ``port`` within ``timeout_s``.
 
     Opened and closed at once; nothing is sent. Every failure to connect - a
@@ -144,10 +148,9 @@ def answers(address: str, port: int = REPORT_PORT, timeout_s: float = CONNECT_TI
 
 
 def wait_for(
-    targets: Sequence[str],
+    targets: Sequence[tuple[str, int]],
     *,
     ceiling_s: float | None,
-    port: int = REPORT_PORT,
     period_s: float = PROBE_PERIOD_S,
     probe: Callable[[str, int], bool] | None = None,
     clock: Callable[[], float] = time.monotonic,
@@ -163,7 +166,7 @@ def wait_for(
     pending = list(targets)
     deadline = None if ceiling_s is None else clock() + ceiling_s
     while True:
-        pending = [address for address in pending if not ask(address, port)]
+        pending = [(address, port) for address, port in pending if not ask(address, port)]
         if not pending:
             return True
         if deadline is not None and clock() >= deadline:
@@ -189,19 +192,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"reach gate: {error}", file=sys.stderr, flush=True)
         return 2
     count = f"{len(targets)} robot(s)"
+    ports = ", ".join(str(port) for port in sorted({port for _address, port in targets}))
     if arguments.wait:
         print(
             f"reach gate: waiting for {count} on the {arguments.side} side to answer on "
-            f"port {REPORT_PORT}, asking every {PROBE_PERIOD_S:g} s, without a ceiling",
+            f"port {ports}, asking every {PROBE_PERIOD_S:g} s, without a ceiling",
             flush=True,
         )
     ceiling = None if arguments.wait else REACH_CEILING_S
-    if wait_for(targets, ceiling_s=ceiling, port=REPORT_PORT):
+    if wait_for(targets, ceiling_s=ceiling):
         print(f"reach gate: {count} on the {arguments.side} side answered", flush=True)
         return 0
     print(
         f"reach gate: the robot on the {arguments.side} side did not answer on port "
-        f"{REPORT_PORT} within {REACH_CEILING_S:g} s. Is it switched on and on the "
+        f"{ports} within {REACH_CEILING_S:g} s. Is it switched on and on the "
         "network, and is its address in your local .env right? The address is not "
         "printed.",
         file=sys.stderr,

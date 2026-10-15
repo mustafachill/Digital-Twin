@@ -334,6 +334,9 @@ plan:
           set_mode: /cite/cell_b/picker/picker_picker/set_mode
           set_state: /cite/cell_b/picker/picker_picker/set_state
         gripper_action: /cite/cell_b/picker/picker_xarm_gripper/gripper_action
+        # The arm controller's report port: what the side's reach gate asks
+        # before anything of the side starts (ADR-0077 decision 3).
+        report_port: 30001
         # The controller manager services the vendor plugin calls by an
         # absolute name, each mapped onto this asset's own manager's service.
         # The side's launch remaps them on `ros2_control_node`; without it the
