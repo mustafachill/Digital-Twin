@@ -1652,6 +1652,147 @@ expect_ok   "and only when the container actually has that library" \
             grep -q 'libGLX_nvidia.so.0' "${REPO_ROOT}/scripts/sim"
 
 # -----------------------------------------------------------------------------
+# The one-click control center (ADR-0078): the decisions scripts/control-center
+# makes, each driven without a display, a Docker daemon or a desktop.
+# -----------------------------------------------------------------------------
+
+# X access: granted only when not already listed, so a run revokes only what
+# it added.
+expect_fail "no X grant is added when the same user is already listed" \
+            xhost_grant_needed cite <<<$'access control enabled, only authorized clients can connect\nSI:localuser:cite'
+expect_ok   "an X grant is added when the user is not listed" \
+            xhost_grant_needed cite <<<$'access control enabled, only authorized clients can connect'
+expect_ok   "another user's grant is not this user's" \
+            xhost_grant_needed cite <<<$'SI:localuser:someone'
+expect_fail "the listing is matched without regard to case, as xhost prints it" \
+            xhost_grant_needed cite <<<$'si:localuser:cite'
+
+# Docker access: diagnosed and said, never fixed with sudo.
+CC_TMP="$(mktemp -d)"
+printf 'sudo:x:27:cite\ndocker:x:984:cite,other\n' > "${CC_TMP}/group-member"
+printf 'sudo:x:27:cite\ndocker:x:984:other\n' > "${CC_TMP}/group-not-member"
+CC_DENIED="permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock"
+expect_ok   "in the docker group but not in this login: log out and back in" \
+            grep -q "Log out and back in" <(docker_access_advice cite "$CC_DENIED" "${CC_TMP}/group-member" "cite adm sudo")
+expect_ok   "not in the docker group: name the usermod an administrator runs" \
+            grep -qF "sudo usermod -aG docker cite" <(docker_access_advice cite "$CC_DENIED" "${CC_TMP}/group-not-member" "cite adm sudo")
+expect_ok   "in the group and in this login, yet refused: point at the socket" \
+            grep -q "docker.sock" <(docker_access_advice cite "$CC_DENIED" "${CC_TMP}/group-member" "cite docker")
+expect_ok   "a daemon that does not answer is not a permission problem" \
+            grep -q "not answering" <(docker_access_advice cite "Cannot connect to the Docker daemon" "${CC_TMP}/group-member" "cite docker")
+expect_fail "a user named in another group's line is not read as a docker member" \
+            grep -q "Log out and back in" <(docker_access_advice cite "$CC_DENIED" "${CC_TMP}/group-not-member" "cite")
+cc_runs_sudo() {  # a line that would RUN sudo: the word before any quote or comment
+    grep -Eq '^[^#"]*\bsudo\b' "${REPO_ROOT}/scripts/control-center" "${REPO_ROOT}/scripts/install-launcher"
+}
+expect_fail "the control center and the launcher installer never run sudo" cc_runs_sudo
+
+# How the console ended, in the words an operator is shown.
+expect_eq "a clean end says nothing"           ""  "$(control_center_outcome 0)"
+expect_eq "Ctrl-C says nothing"                ""  "$(control_center_outcome 130)"
+expect_eq "SIGTERM says nothing"               ""  "$(control_center_outcome 143)"
+expect_eq "1 is a start that did not happen" \
+          "The control center could not start." "$(control_center_outcome 1)"
+expect_eq "3 (PAIR_ENDED) is a part of the cell lost" \
+          "A part of the cell stopped unexpectedly." "$(control_center_outcome 3)"
+expect_eq "any other status is named" \
+          "The control center ended with exit code 7." "$(control_center_outcome 7)"
+
+# Logs: the newest 20 kept, by name (a UTC timestamp), nothing else touched.
+mkdir -p "${CC_TMP}/logs"
+for n in $(seq -w 1 25); do : > "${CC_TMP}/logs/control-center-20261015T0000${n}Z.log"; done
+: > "${CC_TMP}/logs/unrelated.txt"
+prune_logs "${CC_TMP}/logs" 20
+expect_eq "prune_logs keeps the newest 20 control-center logs" \
+          "20" "$(find "${CC_TMP}/logs" -name 'control-center-*.log' | wc -l | tr -d ' ')"
+expect_fail "and the oldest is the one removed" \
+            test -e "${CC_TMP}/logs/control-center-20261015T000001Z.log"
+expect_ok   "and the newest is kept" \
+            test -e "${CC_TMP}/logs/control-center-20261015T000025Z.log"
+expect_ok   "and a file that is not a control-center log is left alone" \
+            test -e "${CC_TMP}/logs/unrelated.txt"
+
+# build_is_current: both stamps, against a scratch tree.
+cc_current() { REPO_ROOT="$1" build_is_current; }
+cc_record() { REPO_ROOT="$1" record_build_inputs "${2:-}"; }
+CC_ROOT="${CC_TMP}/repo"
+mkdir -p "${CC_ROOT}/workspace/src/pkg/pkg" "${CC_ROOT}/workspace/build" "${CC_ROOT}/workspace/install"
+printf '<package><name>pkg</name></package>\n' > "${CC_ROOT}/workspace/src/pkg/package.xml"
+printf 'x = 1\n' > "${CC_ROOT}/workspace/src/pkg/pkg/node.py"
+expect_fail "an unstamped tree is not current" cc_current "$CC_ROOT"
+cc_record "$CC_ROOT"
+expect_ok   "a tree stamped by a full build is current" cc_current "$CC_ROOT"
+printf 'x = 2\n' > "${CC_ROOT}/workspace/src/pkg/pkg/node.py"
+expect_fail "an edited source file makes it stale" cc_current "$CC_ROOT"
+cc_record "$CC_ROOT"
+mkdir -p "${CC_ROOT}/workspace/src/pkg/pkg/__pycache__" "${CC_ROOT}/workspace/src/external/vendor"
+: > "${CC_ROOT}/workspace/src/pkg/pkg/__pycache__/node.cpython-312.pyc"
+printf 'vendor\n' > "${CC_ROOT}/workspace/src/external/vendor/file.cpp"
+expect_ok   "bytecode and vendor source under external/ are not inputs" cc_current "$CC_ROOT"
+printf 'y = 1\n' > "${CC_ROOT}/workspace/src/pkg/pkg/other.py"
+expect_fail "an added source file makes it stale" cc_current "$CC_ROOT"
+cc_record "$CC_ROOT" scoped
+expect_fail "a build that selected packages does not vouch for the rest" cc_current "$CC_ROOT"
+cc_record "$CC_ROOT"
+rm -rf "${CC_ROOT}/workspace/install"
+expect_fail "no install tree is not current, whatever the stamps say" cc_current "$CC_ROOT"
+expect_eq "the source fingerprint does not depend on where the tree is" \
+          "$(REPO_ROOT="$CC_ROOT" cite_build_sources_fingerprint)" \
+          "$(cp -r "$CC_ROOT" "${CC_TMP}/elsewhere" && REPO_ROOT="${CC_TMP}/elsewhere" cite_build_sources_fingerprint)"
+expect_ok   "scripts/build takes --if-stale and asks build_is_current" \
+            grep -q 'build_is_current' "${REPO_ROOT}/scripts/build"
+
+# ./scripts/sim refuses a missing cite_bringup instead of exiting 0 (ADR-0078).
+cc_sim_exits_0_unbuilt() {
+    grep -A4 "cite_bringup is not built yet" "${REPO_ROOT}/scripts/sim" | grep -q 'exit 0'
+}
+expect_fail "./scripts/sim does not exit 0 when cite_bringup is not built" cc_sim_exits_0_unbuilt
+
+# The desktop entry, and the installer that writes it.
+CC_ENTRY="$(desktop_entry /opt/cite/cite-control-center)"
+expect_ok "the desktop entry runs the launcher by absolute path" \
+          grep -qx 'Exec=/opt/cite/cite-control-center' <<<"$CC_ENTRY"
+expect_ok "the desktop entry opens no terminal" grep -qx 'Terminal=false' <<<"$CC_ENTRY"
+expect_ok "the desktop entry is named CITE Control Center" \
+          grep -qx 'Name=CITE Control Center' <<<"$CC_ENTRY"
+expect_ok "the desktop entry names the installed icon" \
+          grep -qx 'Icon=cite-control-center' <<<"$CC_ENTRY"
+expect_ok "the desktop entry asks for startup notification" \
+          grep -qx 'StartupNotify=true' <<<"$CC_ENTRY"
+expect_ok "the desktop entry is filed under Development and Engineering" \
+          grep -qx 'Categories=Development;Engineering;' <<<"$CC_ENTRY"
+expect_ok "a launcher path with a space is quoted" \
+          grep -qx 'Exec="/opt/a b/cite-control-center"' <(desktop_entry "/opt/a b/cite-control-center")
+if have desktop-file-validate; then
+    printf '%s\n' "$CC_ENTRY" > "${CC_TMP}/cite-control-center.desktop"
+    expect_ok "desktop-file-validate accepts the entry" \
+              desktop-file-validate "${CC_TMP}/cite-control-center.desktop"
+fi
+cc_install() {  # cc_install <args...> — the installer against a scratch home
+    HOME="${CC_TMP}/home" XDG_DATA_HOME="${CC_TMP}/home/.local/share" \
+        XDG_CONFIG_HOME="${CC_TMP}/home/.config" bash "${REPO_ROOT}/scripts/install-launcher" "$@"
+}
+CC_DATA="${CC_TMP}/home/.local/share"
+mkdir -p "${CC_TMP}/home"
+expect_ok "install-launcher installs" cc_install
+expect_ok "and installs again over itself" cc_install
+expect_ok "the entry is in the applications menu" \
+          grep -qx "Exec=${REPO_ROOT}/cite-control-center" "${CC_DATA}/applications/cite-control-center.desktop"
+expect_ok "the icon is in the user's hicolor theme" \
+          cmp -s "${REPO_ROOT}/infra/desktop/cite-control-center.svg" \
+                 "${CC_DATA}/icons/hicolor/scalable/apps/cite-control-center.svg"
+expect_ok "install-launcher --uninstall removes it" cc_install --uninstall
+expect_fail "and leaves no entry behind" test -e "${CC_DATA}/applications/cite-control-center.desktop"
+expect_fail "and no icon" test -e "${CC_DATA}/icons/hicolor/scalable/apps/cite-control-center.svg"
+expect_fail "install-launcher refuses an argument it does not know" cc_install --bogus
+for cc_exe in cite-control-center scripts/control-center scripts/install-launcher; do
+    expect_ok "${cc_exe} is executable" test -x "${REPO_ROOT}/${cc_exe}"
+done
+expect_ok "the root wrapper only runs scripts/control-center" \
+          grep -q 'exec .*scripts/control-center" "\$@"' "${REPO_ROOT}/cite-control-center"
+rm -rf "$CC_TMP"
+
+# -----------------------------------------------------------------------------
 printf '  %s%d passed, %d failed%s (shell gate self-tests)\n' \
        "$( [ "$SELFTEST_FAIL" -eq 0 ] && printf '%s' "$C_GRN" || printf '%s' "$C_RED" )" \
        "$SELFTEST_PASS" "$SELFTEST_FAIL" "$C_RST"

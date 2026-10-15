@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Install the control center's desktop entry and icon for this user (ADR-0078).
+#
+#   ./scripts/install-launcher               the applications menu
+#   ./scripts/install-launcher --desktop     the menu and the desktop
+#   ./scripts/install-launcher --uninstall   remove everything this installs
+#
+# The entry runs ./cite-control-center in this checkout, by absolute path, with
+# no terminal. Idempotent: running it again rewrites the same files. Nothing is
+# installed outside the user's own home, and nothing needs sudo.
+
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+DESKTOP=0
+UNINSTALL=0
+for arg in "$@"; do
+    case "$arg" in
+        --desktop)   DESKTOP=1 ;;
+        --uninstall) UNINSTALL=1 ;;
+        -h|--help)   sed -n '2,10p' "$0"; exit 0 ;;
+        *)           die "Unknown argument: $arg" ;;
+    esac
+done
+
+NAME="cite-control-center"
+DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+APPLICATIONS="${DATA_HOME}/applications"
+ICONS="${DATA_HOME}/icons/hicolor/scalable/apps"
+ENTRY="${APPLICATIONS}/${NAME}.desktop"
+ICON="${ICONS}/${NAME}.svg"
+ICON_SOURCE="${REPO_ROOT}/infra/desktop/${NAME}.svg"
+LAUNCHER="${REPO_ROOT}/cite-control-center"
+
+desktop_dir() {
+    local dir=""
+    if have xdg-user-dir; then
+        dir="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+    fi
+    printf '%s' "${dir:-${HOME}/Desktop}"
+}
+
+refresh_caches() {
+    if have update-desktop-database; then
+        update-desktop-database -q "$APPLICATIONS" 2>/dev/null || true
+    fi
+    if have gtk-update-icon-cache && [ -f "${DATA_HOME}/icons/hicolor/index.theme" ]; then
+        gtk-update-icon-cache -q "${DATA_HOME}/icons/hicolor" 2>/dev/null || true
+    fi
+}
+
+if [ "$UNINSTALL" -eq 1 ]; then
+    rm -f "$ENTRY" "$ICON" "$(desktop_dir)/${NAME}.desktop"
+    refresh_caches
+    ok "Removed the control center's desktop entry and icon."
+    exit 0
+fi
+
+[ -x "$LAUNCHER" ] || die "${LAUNCHER} is missing or not executable."
+[ -f "$ICON_SOURCE" ] || die "${ICON_SOURCE} is missing."
+
+mkdir -p "$APPLICATIONS" "$ICONS"
+desktop_entry "$LAUNCHER" > "$ENTRY"
+chmod 0644 "$ENTRY"
+install -m 0644 "$ICON_SOURCE" "$ICON"
+
+if have desktop-file-validate; then
+    desktop-file-validate "$ENTRY" || die "desktop-file-validate rejected ${ENTRY}."
+fi
+refresh_caches
+ok "Installed ${ENTRY}"
+ok "Installed ${ICON}"
+
+if [ "$DESKTOP" -eq 1 ]; then
+    TARGET_DIR="$(desktop_dir)"
+    mkdir -p "$TARGET_DIR"
+    TARGET="${TARGET_DIR}/${NAME}.desktop"
+    install -m 0755 "$ENTRY" "$TARGET"
+    # GNOME runs a desktop file from the desktop only once it is trusted; the
+    # owner marking it so is what the right-click "Allow Launching" does.
+    if have gio; then
+        gio set "$TARGET" metadata::trusted true 2>/dev/null \
+            || warn "Could not mark ${TARGET} as trusted; right-click it and choose Allow Launching."
+    fi
+    ok "Installed ${TARGET}"
+fi
+
+info "Start it from the applications menu as 'CITE Control Center'."

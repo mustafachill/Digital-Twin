@@ -4,10 +4,29 @@
 #   ./scripts/build
 #   ./scripts/build --packages-select cite_interfaces
 #   CITE_BUILD_JOBS=4 ./scripts/build     override the memory-derived job count
+#   ./scripts/build --if-stale            build only if a source changed since the
+#                                         last successful build (ADR-0078)
 
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 require_ros_env build "$@"
+
+IF_STALE=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --if-stale) IF_STALE=1 ;;
+        *)          ARGS+=("$arg") ;;
+    esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
+# Asked after re-entering the container, because both stamps live in the build
+# volume and the host's workspace/build is an empty mount point.
+if [ "$IF_STALE" -eq 1 ] && build_is_current; then
+    ok "The build is current: no source changed since the last successful build."
+    exit 0
+fi
 
 cd "${REPO_ROOT}/workspace" || die "workspace/ not found"
 
@@ -95,6 +114,10 @@ fi
 # Recorded only on success, and only here. This is what lets ./scripts/lint and
 # ./scripts/test tell "clean" from "answering out of a stale tree" — see the
 # build-freshness block in scripts/_lib.sh for the two incidents that cost.
-record_build_inputs
+if [ "$#" -eq 0 ]; then
+    record_build_inputs
+else
+    record_build_inputs scoped
+fi
 
 ok "Build complete. Overlay: workspace/install/setup.bash"

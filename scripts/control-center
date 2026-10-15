@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Start the operator console with one click (ADR-0078).
+#
+#   ./scripts/control-center              what the desktop icon runs
+#   ./cite-control-center                 the same, from the repository root
+#
+# In order: log, one instance, Docker access, X access for this user only, the
+# image, the build (only if a source changed), then ./scripts/console. Any
+# argument is handed to ./scripts/console unchanged. An end other than a clean
+# one is shown in a dialog that names the log.
+#
+# Written to run from a desktop entry: no terminal, any working directory, and a
+# minimal PATH. It never runs sudo; what needs an administrator is said, not done.
+#
+# Logs: ${XDG_STATE_HOME:-~/.local/state}/cite-digital-twin/logs/ (newest 20 kept,
+# latest.log points at the newest).
+
+PATH="${PATH:+${PATH}:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH
+
+case "${1:-}" in
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+esac
+
+# The repository from this file's real path, never from the working directory:
+# a desktop entry starts it in $HOME, and the root wrapper may be a symlink.
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+cd "$(dirname "$SELF")/.." || exit 1
+
+APP_TITLE="CITE Control Center"
+LOG_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/cite-digital-twin/logs"
+LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/cite-control-center.lock"
+KEEP_LOGS=20
+OPERATOR="${USER:-$(id -un)}"
+
+# --- Telling the operator ----------------------------------------------------
+# A dialog when there is a desktop to put one on, a notification when there is
+# no dialog program, and standard error always (which the log captures).
+tell() {  # tell error|warning|info <message>
+    local kind="$1" message="$2"
+    printf '%s: %s\n' "$kind" "$message" >&2
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v zenity >/dev/null 2>&1; then
+        zenity "--${kind}" --title="$APP_TITLE" --no-wrap --text="$message" >/dev/null 2>&1 && return 0
+    fi
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "$APP_TITLE" "$APP_TITLE" "$message" >/dev/null 2>&1 || true
+    fi
+}
+
+progress() {  # progress <message> — a passing notification for a long step
+    printf '==> %s\n' "$1"
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "$APP_TITLE" -t 5000 "$APP_TITLE" "$1" >/dev/null 2>&1 || true
+    fi
+}
+
+# --- One instance ------------------------------------------------------------
+# Before the log, so a second click does not leave an empty log behind it.
+command -v flock >/dev/null 2>&1 || { tell error "flock is not installed (package util-linux)."; exit 1; }
+exec 9>"$LOCK_FILE" || { tell error "Cannot open the lock file ${LOCK_FILE}."; exit 1; }
+if ! flock -n 9; then
+    tell warning "The control center is already running."
+    exit 1
+fi
+
+# --- The log -----------------------------------------------------------------
+# Everything from here on, this script's and every child's, goes to the log as
+# well as to any terminal. tee does not keep the lock open (9>&-).
+mkdir -p "$LOG_DIR" || { tell error "Cannot create the log directory ${LOG_DIR}."; exit 1; }
+LOG_FILE="${LOG_DIR}/control-center-$(date -u +%Y%m%dT%H%M%SZ).log"
+exec > >(exec tee -a "$LOG_FILE" 9>&-) 2>&1
+ln -sfn "$(basename "$LOG_FILE")" "${LOG_DIR}/latest.log"
+
+# Sourced after the redirect, so _lib.sh sees a pipe and writes no colour codes
+# into the log.
+# shellcheck source=scripts/_lib.sh
+source "${PWD}/scripts/_lib.sh"
+prune_logs "$LOG_DIR" "$KEEP_LOGS"
+
+info "${APP_TITLE} started $(date -u +%Y-%m-%dT%H:%M:%SZ) in ${REPO_ROOT}; log ${LOG_FILE}"
+
+fail() {  # fail <message> — could not start: say why and where the log is
+    err "$1"
+    tell error "$1
+
+Log: ${LOG_FILE}"
+    exit 1
+}
+
+# --- X access, granted to this user only and revoked only if granted here -----
+XHOST_ADDED=0
+# shellcheck disable=SC2329  # invoked by the EXIT trap below
+cleanup() {
+    if [ "$XHOST_ADDED" -eq 1 ]; then
+        xhost "-SI:localuser:${OPERATOR}" >/dev/null 2>&1 || true
+        info "Revoked the X access this run granted to ${OPERATOR}."
+    fi
+}
+trap cleanup EXIT
+
+# --- Docker ------------------------------------------------------------------
+have docker || fail "Docker is not installed. See docs/onboarding/getting-started.md."
+DOCKER_ERROR="$(docker info 2>&1 >/dev/null)" \
+    || fail "$(docker_access_advice "$OPERATOR" "$DOCKER_ERROR" /etc/group "$(id -nG 2>/dev/null || true)")"
+
+# --- The display -------------------------------------------------------------
+[ -n "${DISPLAY:-}" ] || fail "There is no display (DISPLAY is not set). Start the control center from the desktop."
+have xhost || fail "xhost is not installed (package x11-xserver-utils); the console window needs it."
+XHOST_LISTING="$(xhost 2>/dev/null)" || fail "Cannot reach the X display ${DISPLAY}."
+if xhost_grant_needed "$OPERATOR" <<<"$XHOST_LISTING"; then
+    xhost "+SI:localuser:${OPERATOR}" >/dev/null || fail "Could not grant ${OPERATOR} access to the display."
+    XHOST_ADDED=1
+    info "Granted X access to ${OPERATOR} for this run."
+fi
+
+# --- The image, then the build -------------------------------------------------
+if ! cite_image_present; then
+    progress "Preparing the container image. The first run takes a while."
+    ./scripts/bootstrap 9>&- || fail "Preparing the container image failed (./scripts/bootstrap)."
+fi
+
+progress "Checking the build; it is rebuilt only if a source changed."
+./scripts/enter dev ./scripts/build --if-stale 9>&- || fail "The build failed."
+
+# --- The console ---------------------------------------------------------------
+# Started as its own job (set -m), so it is not born with SIGINT ignored and so
+# a forwarded stop reaches its whole process group - the shell, the compose
+# client and through it the container - exactly as Ctrl-C in a terminal does.
+# Every stop is forwarded as SIGINT: that is the path the supervisor tears the
+# pair down on in order, and the one every shell in between waits through.
+# Standard input is /dev/null, as it is from a desktop entry: a background job
+# that reads a terminal is stopped (SIGTTIN), and nothing here takes input.
+SIGNALLED=""
+# shellcheck disable=SC2329  # invoked by the signal traps below
+forward() {  # forward <received signal number>
+    SIGNALLED="$1"
+    kill -s INT -- "-${CONSOLE_PID}" 2>/dev/null || true
+}
+progress "Starting the operator console."
+set -m
+./scripts/console "$@" </dev/null 9>&- &
+CONSOLE_PID=$!
+set +m
+trap 'forward 1' HUP
+trap 'forward 2' INT
+trap 'forward 15' TERM
+
+set +e
+while :; do
+    wait "$CONSOLE_PID"
+    STATUS=$?
+    kill -0 "$CONSOLE_PID" 2>/dev/null || break
+done
+set -e
+
+if [ -n "$SIGNALLED" ]; then
+    STATUS=$((128 + SIGNALLED))
+fi
+
+MESSAGE="$(control_center_outcome "$STATUS")"
+info "The console ended with status ${STATUS}."
+if [ -n "$MESSAGE" ]; then
+    tell error "${MESSAGE}
+
+Log: ${LOG_FILE}"
+fi
+exit "$STATUS"

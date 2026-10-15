@@ -289,11 +289,73 @@ cite_build_inputs_fingerprint() {
     } | cksum | awk '{print $1}'
 }
 
+# record_build_inputs [scoped]
+#
+# `scoped` is a build that selected packages: it says nothing about the ones it
+# skipped, so it removes the source stamp below rather than writing one, and the
+# next `--if-stale` builds.
 record_build_inputs() {
-    local stamp
+    local stamp sources
     stamp="$(cite_build_stamp_path)"
+    sources="$(cite_build_sources_stamp_path)"
     [ -d "$(dirname "$stamp")" ] || return 0
     cite_build_inputs_fingerprint > "$stamp" 2>/dev/null || true
+    if [ "${1:-}" = scoped ]; then
+        rm -f "$sources"
+    else
+        cite_build_sources_fingerprint > "$sources" 2>/dev/null || true
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# Whether a build is needed at all — `./scripts/build --if-stale` (ADR-0078).
+#
+# A second fingerprint, over EVERY first-party source file rather than the
+# configure-time inputs above, because the question is different. The gates ask
+# "can I trust this tree's configuration?" and must not fire on every edit; the
+# one-click control center asks "has anything changed since the last good build?"
+# and must fire on any edit, or an operator runs yesterday's code. Same method as
+# above — content, relative paths, no timestamps — and recorded by the same
+# successful build, next to the first stamp in the same volume.
+#
+# Excluded: vendor source under external/ (imported by vcstool, built but never
+# edited here) and what Python leaves behind in a source tree (__pycache__,
+# *.pyc, .pytest_cache, *.egg-info), none of which is an input.
+# -----------------------------------------------------------------------------
+cite_build_sources_stamp_path() {
+    printf '%s' "${REPO_ROOT}/workspace/build/.cite-build-sources"
+}
+
+cite_build_sources_fingerprint() {
+    local src="${REPO_ROOT}/workspace/src"
+    if [ ! -d "$src" ]; then
+        printf 'no-source'
+        return 0
+    fi
+    # Run from inside src so that cksum prints relative names: the same tree is
+    # /workspace in the container and a home directory on the host. A renamed or
+    # added file changes the name column, so it is a change too.
+    (
+        cd "$src" || exit 1
+        find . -path ./external -prune -o \
+               \( -name __pycache__ -o -name .pytest_cache -o -name '*.egg-info' \) -prune -o \
+               -type f -not -name '*.pyc' -print0 2>/dev/null \
+            | LC_ALL=C sort -z \
+            | xargs -0 -r cksum
+    ) | cksum | awk '{print $1}'
+}
+
+# build_is_current — true when a successful ./scripts/build recorded BOTH stamps
+# and neither differs from the source tree now. Never fatal: an unstamped tree is
+# simply "not current", which means build.
+build_is_current() {
+    local inputs sources
+    inputs="$(cite_build_stamp_path)"
+    sources="$(cite_build_sources_stamp_path)"
+    [ -d "${REPO_ROOT}/workspace/install" ] || return 1
+    [ -f "$inputs" ] && [ -f "$sources" ] || return 1
+    [ "$(cat "$inputs" 2>/dev/null)" = "$(cite_build_inputs_fingerprint)" ] || return 1
+    [ "$(cat "$sources" 2>/dev/null)" = "$(cite_build_sources_fingerprint)" ] || return 1
 }
 
 # assert_build_inputs_current <gate name>
@@ -1120,7 +1182,7 @@ require_ros_env() {
 
     # Warn before a first-run image build. Without this, `./scripts/test` on a
     # machine with no image looks like it has hung for ten minutes.
-    if ! docker image inspect cite-digital-twin:dev >/dev/null 2>&1; then
+    if ! cite_image_present; then
         warn "The container image does not exist yet and must be built first."
         warn "This takes several minutes. Run ./scripts/bootstrap to do it explicitly,"
         warn "or wait while it happens now."
@@ -1129,6 +1191,14 @@ require_ros_env() {
     info "Not a ROS environment — running '${script_name}' inside the container"
     local service="${CITE_SERVICE:-dev}"
     exec_in_container "$service" "./scripts/${script_name}" "$@"
+}
+
+# The image every service runs, as docker-compose.yml names it. Asked here rather
+# than spelled at each call site, so the shell holds it once.
+CITE_DEV_IMAGE="cite-digital-twin:dev"
+
+cite_image_present() {
+    docker image inspect "$CITE_DEV_IMAGE" >/dev/null 2>&1
 }
 
 exec_in_container() {
@@ -1369,4 +1439,98 @@ require_explicit_hardware_opt_in() {
   and confirm the cell is clear first.${ENV_FILE_OPT_IN_PROBLEM:+
   Not read from .env: ${ENV_FILE_OPT_IN_PROBLEM}.}"
     fi
+}
+
+# -----------------------------------------------------------------------------
+# The one-click control center (ADR-0078) — the decisions it makes, as functions
+# so that `scripts/_selftest.sh` can drive each one without a display, a Docker
+# daemon or a desktop. `scripts/control-center` only sequences them.
+# -----------------------------------------------------------------------------
+
+# xhost_grant_needed <user> — reads `xhost`'s listing on stdin. True when the
+# same-user grant is NOT listed, so the caller adds it and, having added it, is
+# the one that revokes it. A grant somebody else made is left as it was found.
+xhost_grant_needed() {
+    local user="$1" listing
+    listing="$(cat)"
+    ! grep -qixF -- "SI:localuser:${user}" <<<"$listing"
+}
+
+# docker_access_advice <user> <docker info error> <group file> <session groups>
+#
+# What to tell an operator whose `docker info` failed. Never runs anything:
+# the fix for a permission problem is theirs to make, and this command never
+# runs sudo (ADR-0078). The group file is /etc/group in use; the session groups
+# are `id -nG`, which is what this login actually holds — a user added to the
+# group after logging in is in the first and not yet in the second.
+docker_access_advice() {
+    local user="$1" error="$2" group_file="$3" session="$4" members
+    case "$error" in
+        *[Pp]ermission\ denied*)
+            members="$(awk -F: '$1 == "docker" { print $4 }' "$group_file" 2>/dev/null || true)"
+            if [[ ",${members}," == *",${user},"* ]]; then
+                if [[ " ${session} " == *" docker "* ]]; then
+                    printf '%s\n' "Docker refused access although this login is in the docker group.
+Check who owns the Docker socket (ls -l /var/run/docker.sock)."
+                else
+                    printf '%s\n' "You were added to the docker group, but this login started before that.
+Log out and back in (or restart the computer), then start the control center again."
+                fi
+            else
+                printf '%s\n' "This user may not use Docker. Ask an administrator to run:
+  sudo usermod -aG docker ${user}
+then log out and back in."
+            fi
+            ;;
+        *)
+            printf '%s\n' "Docker is installed but not answering. Start it (for example
+  sudo systemctl start docker) and try again.
+Docker said: ${error}"
+            ;;
+    esac
+}
+
+# control_center_outcome <exit status> — the sentence an operator is shown for
+# how the console ended, or nothing when there is nothing to report: a clean
+# end, or an interruption somebody asked for (SIGHUP, SIGINT, SIGTERM).
+control_center_outcome() {
+    case "$1" in
+        0|129|130|143) ;;
+        1) printf '%s\n' "The control center could not start." ;;
+        3) printf '%s\n' "A part of the cell stopped unexpectedly." ;;
+        *) printf '%s\n' "The control center ended with exit code $1." ;;
+    esac
+}
+
+# prune_logs <directory> <keep> — remove all but the newest <keep>
+# control-center-*.log files. Newest by name, which is a UTC timestamp, so the
+# order does not depend on modification times.
+prune_logs() {
+    local dir="$1" keep="$2" old
+    [ -d "$dir" ] || return 0
+    while IFS= read -r old; do
+        [ -n "$old" ] && rm -f -- "${dir}/${old}"
+    done < <(cd "$dir" && find . -maxdepth 1 -type f -name 'control-center-*.log' -printf '%f\n' \
+                 | LC_ALL=C sort -r | tail -n +"$((keep + 1))")
+}
+
+# desktop_entry <absolute launcher path> — the menu entry install-launcher writes.
+# A path with a space in it is quoted, as the Desktop Entry specification asks.
+desktop_entry() {
+    local exec="$1"
+    case "$exec" in
+        *" "*) exec="\"${exec}\"" ;;
+    esac
+    cat <<EOF_ENTRY
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=CITE Control Center
+Comment=Start the CITE Digital Twin operator console
+Exec=${exec}
+Icon=cite-control-center
+Terminal=false
+StartupNotify=true
+Categories=Development;Engineering;
+EOF_ENTRY
 }

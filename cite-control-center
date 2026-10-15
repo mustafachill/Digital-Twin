@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# One click: the operator console (ADR-0078). All of it is scripts/control-center.
+exec "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/scripts/control-center" "$@"
