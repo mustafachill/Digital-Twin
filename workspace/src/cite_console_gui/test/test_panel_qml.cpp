@@ -54,7 +54,9 @@
 #include <QQuickWindow>
 #include <QQuickItemGrabResult>
 #include <QRectF>
+#include <QSignalSpy>
 #include <QSizeF>
+#include <QTimer>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -63,11 +65,17 @@
 #include <QVariant>
 
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <utility>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <gz/msgs/world_stats.pb.h>
+#include <gz/transport/Node.hh>
+#include <tinyxml2.h>
+#include <unistd.h>
 
 #include "../src/cell_console.hpp"
 #include "cell_console_test_access.hpp"
@@ -1189,6 +1197,83 @@ TEST(PanelQml, StaleWorldStatisticsAreSaidStale)
   EXPECT_EQ(framed.find("rtfFigure")->property("note").toString(), QString("stale"));
 }
 
+// R-01 (second round): the stale flag through the plugin's real wiring. A
+// world statistics message published over gz transport reaches the plugin's
+// own subscription; with the plugin's clock advanced past the threshold its
+// own timer says them stale; the next message says them current at once, and
+// they stay current.
+TEST(PanelQml, WorldStatisticsTurnStaleOnThePluginsTimerAndCurrentOnArrival)
+{
+  using cite_console_gui::CellConsoleTestAccess;
+  cite_console_gui::CellConsole plugin;
+  std::int64_t now_ms = 1000;
+  CellConsoleTestAccess::set_clock(plugin, [&now_ms]() {return now_ms;});
+  const std::string topic = "/world/stale_test/stats";
+  tinyxml2::XMLDocument config;
+  const std::string xml = "<plugin filename=\"CellConsole\">"
+    "<facility_label>CITE</facility_label><zone_label>Cell B</zone_label>"
+    "<world_stats_topic>" + topic + "</world_stats_topic>"
+    "<world_stats_stale_after_s>0.1</world_stats_stale_after_s></plugin>";
+  ASSERT_EQ(config.Parse(xml.c_str()), tinyxml2::XML_SUCCESS);
+  plugin.LoadConfig(config.RootElement());
+
+  // Every notification, with the flag it said.
+  std::vector<bool> said;
+  QObject::connect(
+    &plugin, &cite_console_gui::CellConsole::worldStatsChanged,
+    [&]() {said.push_back(plugin.worldStatsStale());});
+
+  gz::transport::Node world;
+  auto publisher = world.Advertise<gz::msgs::WorldStatistics>(topic);
+  // Published until the plugin shows it: discovery is an event this test
+  // cannot see, and a hang detector bounds the wait.
+  const auto deliver = [&](std::int64_t sim_s) {
+      const QString before = plugin.simTime();
+      gz::msgs::WorldStatistics message;
+      message.mutable_sim_time()->set_sec(sim_s);
+      message.set_real_time_factor(1.0);
+      QElapsedTimer waited;
+      waited.start();
+      while (plugin.simTime() == before && waited.elapsed() < 5000) {
+        publisher.Publish(message);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+      }
+      return plugin.simTime() != before;
+    };
+  // The clock moved past the threshold until the plugin's own timer has said
+  // them stale; bounded the same way. Moved on each turn, because copies of
+  // the message `deliver` published while discovery ran may still arrive,
+  // and each is an arrival.
+  const auto until_stale = [&]() {
+      QElapsedTimer waited;
+      waited.start();
+      while (!plugin.worldStatsStale() && waited.elapsed() < 5000) {
+        now_ms += 200;
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+      }
+      return plugin.worldStatsStale();
+    };
+
+  ASSERT_TRUE(deliver(10)) << "the plugin never heard the world statistics";
+  EXPECT_FALSE(plugin.worldStatsStale());
+  EXPECT_TRUE(until_stale()) << "past the threshold, the plugin's timer never said them stale";
+
+  said.clear();
+  ASSERT_TRUE(deliver(20));
+  ASSERT_FALSE(said.empty());
+  EXPECT_FALSE(said.front()) << "the message that arrived was said stale";
+  // The clock stands still: three of the plugin's timer ticks later they are
+  // still current.
+  QSignalSpy ticks(&CellConsoleTestAccess::display_timer(plugin), &QTimer::timeout);
+  QElapsedTimer waited;
+  waited.start();
+  while (ticks.count() < 3 && waited.elapsed() < 5000) {
+    ticks.wait(1000);
+  }
+  ASSERT_GE(ticks.count(), 3) << "the plugin's display timer did not tick";
+  EXPECT_FALSE(plugin.worldStatsStale()) << "the arrival did not restart the age";
+}
+
 // R-05: the view label names what Follow robot follows in the configuration's
 // words, never a literal of its own.
 TEST(PanelQml, FollowingIsNamedByTheConfiguration)
@@ -1381,6 +1466,11 @@ int main(int argc, char ** argv)
   // The style gz-gui runs its window in, so the pictures look like the window.
   if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
     qputenv("QT_QUICK_CONTROLS_STYLE", QByteArray("Material"));
+  }
+  // Before any gz transport node exists: a partition of this test's own, so
+  // the world statistics it publishes reach only itself.
+  if (qEnvironmentVariableIsEmpty("GZ_PARTITION")) {
+    qputenv("GZ_PARTITION", QByteArray("cite_test_panel_qml_") + QByteArray::number(getpid()));
   }
   QGuiApplication app(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);

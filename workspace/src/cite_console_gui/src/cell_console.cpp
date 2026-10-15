@@ -25,6 +25,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -109,7 +110,12 @@ QQuickItem * first_press_target(QQuickItem * item, const QPointF & scene, QQuick
 }  // namespace
 
 CellConsole::CellConsole()
-: state_name_("No console")
+: state_name_("No console"),
+  now_ms_([]() {
+      return static_cast<std::int64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count());
+    })
 {
 }
 
@@ -176,7 +182,7 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
               world_stats_ = stats;
               world_stats_heard_ = true;
               world_stats_stale_ = false;
-              last_world_stats_.restart();
+              last_world_stats_ms_ = now_ms_();
               emit worldStatsChanged();
             }, Qt::QueuedConnection);
         });
@@ -521,8 +527,7 @@ void CellConsole::refresh_health()
 void CellConsole::refresh_world_stats()
 {
   const bool stale = world_stats_stale(
-    world_stats_heard_ && last_world_stats_.isValid(),
-    static_cast<double>(last_world_stats_.elapsed()) / 1000.0,
+    world_stats_heard_, static_cast<double>(now_ms_() - last_world_stats_ms_) / 1000.0,
     frame_config_.world_stats_stale_after_s);
   if (stale != world_stats_stale_) {
     world_stats_stale_ = stale;

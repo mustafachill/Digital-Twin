@@ -63,6 +63,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -355,7 +356,11 @@ private:
   std::unique_ptr<WorldStatsClient> world_stats_client_;
   WorldStats world_stats_;
   bool world_stats_heard_{false};
-  QElapsedTimer last_world_stats_;
+  /// The steady clock the world statistics' age is read on, in milliseconds;
+  /// a test's way to advance it (R2-01).
+  std::function<std::int64_t()> now_ms_;
+  /// `now_ms_` when the last world statistics arrived.
+  std::int64_t last_world_stats_ms_{0};
   bool world_stats_stale_{false};
   RunProgress run_progress_;
   /// The last sample per asset, by asset id.

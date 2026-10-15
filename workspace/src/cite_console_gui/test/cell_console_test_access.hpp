@@ -19,9 +19,13 @@
 #ifndef CELL_CONSOLE_TEST_ACCESS_HPP_
 #define CELL_CONSOLE_TEST_ACCESS_HPP_
 
+#include <QTimer>
+
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../src/cell_console.hpp"
@@ -81,6 +85,15 @@ struct CellConsoleTestAccess
     plugin.view_config_.follow_label = label;
     emit plugin.viewChanged();
   }
+
+  /// The steady clock the plugin reads the world statistics' age on (R2-01).
+  static void set_clock(CellConsole & plugin, std::function<std::int64_t()> now_ms)
+  {
+    plugin.now_ms_ = std::move(now_ms);
+  }
+
+  /// The plugin's one display timer, whose ticks re-read both ages.
+  static QTimer & display_timer(CellConsole & plugin) {return plugin.health_timer_;}
 
   /// How many times a press reached the plugin's Stop and Confirm (S-01).
   static std::size_t stops_pressed(const CellConsole & plugin) {return plugin.stops_pressed_;}

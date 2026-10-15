@@ -299,7 +299,8 @@ card fits without scrolling. It also holds that a segment always shows the plugi
 selection, never the click; that the cycles shown are the cycles sent; that no control takes
 keyboard focus; that a long question never covers the header; where the layout steps down;
 that Stop's subtitle never breaks inside "E-stop"; that stale world statistics are said
-stale; and, with a stand-in card, that a real click through the window on Stop, on the
+stale, and, through the plugin's own gz transport subscription and display timer on an
+injected clock, that they turn stale past the threshold and current again on arrival; and, with a stand-in card, that a real click through the window on Stop, on the
 question's Cancel (Stop) and on Confirm reaches the plugin while one in the middle of the view
 reaches the scene under the card, and that the mouse pass-through is undone when any of them
 would lose its press, when Stop is outside the window, and after a modal popup closes - never
