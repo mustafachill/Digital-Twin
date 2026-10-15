@@ -41,6 +41,25 @@ SideHealth side_health(
     health.why = "The twin boundary has published no TwinSides.";
     return health;
   }
+  if (sides.running.count(side) == 0 && sides.expected.count(side) == 1) {
+    // Declared and not up now: the pair keeps it (ADR-0077).
+    if (sides.failed.count(side) == 1) {
+      health.link = Link::FAILED;
+      health.why = sides.detail.empty() ?
+        "Failed to connect and not retried; restart the app once the robot is fixed." :
+        sides.detail;
+    } else if (sides.connecting.count(side) == 1) {
+      health.link = Link::CONNECTING;
+      health.why = "The robot answered; its side is coming up.";
+    } else if (was_running) {
+      health.link = Link::DISCONNECTED;
+      health.why = "Was running and is not now; it reconnects when the robot answers.";
+    } else {
+      health.link = Link::WAITING;
+      health.why = "Waiting for the robot on the network.";
+    }
+    return health;
+  }
   if (sides.running.count(side) == 0) {
     if (was_running) {
       health.why = "Was running; the twin boundary no longer lists it as running.";
@@ -55,6 +74,11 @@ SideHealth side_health(
     health.why = "The twin boundary's heartbeat is late; what it last said may be old.";
     return health;
   }
+  if (sides.commandable.count(side) == 0 && sides.held.count(side) == 1) {
+    health.link = Link::HELD;
+    health.why = "Connected and held at STOP until Start robot (ADR-0076).";
+    return health;
+  }
   if (sides.commandable.count(side) == 0) {
     health.link = Link::NOT_READY;
     health.why = sides.detail.empty() ?
@@ -67,7 +91,21 @@ SideHealth side_health(
 
 bool link_abnormal(Link link)
 {
-  return link != Link::LIVE && link != Link::NOT_STARTED;
+  switch (link) {
+    case Link::STALE:
+    case Link::ABSENT:
+    case Link::NOT_READY:
+    case Link::DISCONNECTED:
+    case Link::FAILED:
+      return true;
+    case Link::LIVE:
+    case Link::NOT_STARTED:
+    case Link::WAITING:
+    case Link::CONNECTING:
+    case Link::HELD:
+      break;
+  }
+  return false;
 }
 
 void BoundaryState::twin_mode_heard(const std::string & name, bool is_sim)
@@ -116,6 +154,16 @@ const char * link_name(Link link)
       return "not ready";
     case Link::NOT_STARTED:
       return "not started";
+    case Link::WAITING:
+      return "waiting for robot";
+    case Link::CONNECTING:
+      return "connecting";
+    case Link::DISCONNECTED:
+      return "disconnected, reconnecting";
+    case Link::FAILED:
+      return "failed";
+    case Link::HELD:
+      return "connected, held - press Start robot";
     case Link::ABSENT:
       break;
   }

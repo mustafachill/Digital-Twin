@@ -94,6 +94,19 @@ std::vector<SideRow> side_rows()
   not_commandable.detail = "counterpart: deadman TRIPPED";
   SidesView not_commandable_silent = not_commandable;
   not_commandable_silent.detail = "";
+  // ADR-0077: the console's pair declares the real arm and keeps it.
+  SidesView waiting = plant_only;
+  waiting.physical = {"counterpart"};
+  waiting.expected = {"plant", "counterpart"};
+  waiting.detail = "counterpart: waiting for the robot on the network";
+  SidesView connecting = waiting;
+  connecting.connecting = {"counterpart"};
+  SidesView failed = waiting;
+  failed.failed = {"counterpart"};
+  failed.detail = "counterpart: failed to connect 3 times";
+  SidesView held = not_commandable;
+  held.expected = {"plant", "counterpart"};
+  held.held = {"counterpart"};
 
   return {
     {"both sides live", "plant", both_live(), Link::LIVE, true, Link::LIVE, ""},
@@ -124,6 +137,22 @@ std::vector<SideRow> side_rows()
       ""},
     {"a side name nobody runs", "elsewhere", both_live(), Link::LIVE, false,
       Link::NOT_STARTED, "Not started"},
+    // ADR-0077: a declared real arm that is not up now.
+    {"declared, never up: waiting for the robot", "counterpart", waiting, Link::LIVE, false,
+      Link::WAITING, "Waiting for the robot"},
+    {"declared, the robot answered", "counterpart", connecting, Link::LIVE, false,
+      Link::CONNECTING, "coming up"},
+    {"declared, ran and is not up now", "counterpart", waiting, Link::LIVE, true,
+      Link::DISCONNECTED, "reconnects"},
+    {"declared and not retried", "counterpart", failed, Link::LIVE, true, Link::FAILED,
+      "failed to connect"},
+    {"waiting even with a late heartbeat", "counterpart", waiting, Link::STALE, false,
+      Link::WAITING, "Waiting"},
+    {"the plant of a pair waiting for its robot", "plant", waiting, Link::LIVE, true,
+      Link::LIVE, ""},
+    // ADR-0076: connected and held until Start robot.
+    {"running and held", "counterpart", held, Link::LIVE, true, Link::HELD, "Start robot"},
+    {"late heartbeat beats held", "counterpart", held, Link::STALE, true, Link::STALE, "late"},
   };
 }
 
@@ -214,11 +243,15 @@ TEST(Health, EveryLinkHasADistinctName)
 {
   const std::set<std::string> names = {
     link_name(Link::LIVE), link_name(Link::STALE), link_name(Link::ABSENT),
-    link_name(Link::NOT_READY), link_name(Link::NOT_STARTED)};
-  EXPECT_EQ(names.size(), 5u);
+    link_name(Link::NOT_READY), link_name(Link::NOT_STARTED), link_name(Link::WAITING),
+    link_name(Link::CONNECTING), link_name(Link::DISCONNECTED), link_name(Link::FAILED),
+    link_name(Link::HELD)};
+  EXPECT_EQ(names.size(), 10u);
+  EXPECT_EQ(std::string(link_name(Link::WAITING)), "waiting for robot");
+  EXPECT_EQ(std::string(link_name(Link::HELD)), "connected, held - press Start robot");
 }
 
-TEST(Health, OnlyLiveAndNotStartedAreNormal)
+TEST(Health, OnlyTheExpectedStatesAreNormal)
 {
   // R-04: a side the deployment never started is grey; R-03: not ready is
   // still abnormal, like stale and absent.
@@ -227,6 +260,13 @@ TEST(Health, OnlyLiveAndNotStartedAreNormal)
   EXPECT_TRUE(link_abnormal(Link::STALE));
   EXPECT_TRUE(link_abnormal(Link::ABSENT));
   EXPECT_TRUE(link_abnormal(Link::NOT_READY));
+  // ADR-0077: waiting for the robot, connecting and held are what a real arm
+  // normally is; a lost one and one not retried are not.
+  EXPECT_FALSE(link_abnormal(Link::WAITING));
+  EXPECT_FALSE(link_abnormal(Link::CONNECTING));
+  EXPECT_FALSE(link_abnormal(Link::HELD));
+  EXPECT_TRUE(link_abnormal(Link::DISCONNECTED));
+  EXPECT_TRUE(link_abnormal(Link::FAILED));
 }
 
 namespace

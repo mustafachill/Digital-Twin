@@ -274,6 +274,10 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
       sides.commandable.insert(message.commandable.begin(), message.commandable.end());
       sides.stationary.insert(message.stationary.begin(), message.stationary.end());
       sides.detail = message.detail;
+      sides.expected.insert(message.expected.begin(), message.expected.end());
+      sides.connecting.insert(message.connecting.begin(), message.connecting.end());
+      sides.failed.insert(message.failed.begin(), message.failed.end());
+      sides.held.insert(message.held.begin(), message.held.end());
       QMetaObject::invokeMethod(
         this, [this, sides]() {
           boundary_.sides_heard(sides);

@@ -30,9 +30,12 @@
 //     the boundary process is up and its plant-side executor is turning. Its
 //     arrival is timed on the panel's own steady clock (TwinHeartbeat.msg:
 //     "what a receiver may conclude from it is ARRIVAL, never age").
-//   - `TwinSides`, latched and published on change: which sides run, which are
-//     physical, which the boundary judges commandable and stationary, and why
-//     not (`detail`).
+//   - `TwinSides`, latched and published on change: which sides are declared
+//     (`expected`) and which are up now (`running`, ADR-0077: an operator
+//     console's pair keeps its real arm, which connects when its robot answers
+//     and reconnects when it is lost), which are being connected or will not
+//     be retried, which are physical, which the boundary judges commandable,
+//     stationary or held until Start robot, and why not (`detail`).
 // The counterpart's own heartbeat is on the counterpart's domain, which the
 // panel does not open; how fresh that side is, is the boundary's `commandable`
 // verdict, which carries no age of its own.
@@ -64,10 +67,26 @@ enum class Link
   /// A side TwinSides has never listed as running since the panel started: not
   /// part of this deployment (a plant-only run's counterpart). Normal.
   NOT_STARTED,
+  /// A declared side that has never run since the panel started and whose
+  /// robot has not answered yet (ADR-0077): the app opened with the robot off.
+  /// Normal.
+  WAITING,
+  /// A declared side whose robot answered and whose side is coming up. Normal.
+  CONNECTING,
+  /// A declared side that ran and is not running now; the pair is reconnecting
+  /// it (ADR-0077).
+  DISCONNECTED,
+  /// A declared side the pair will not start again in this run: it refused its
+  /// configuration, or failed to connect too many times (ADR-0077).
+  FAILED,
+  /// A side running, the boundary on time, and its arm held by its deadman
+  /// until an operator's Start robot (ADR-0076). Normal: it is what a
+  /// connected arm is until the operator starts it.
+  HELD,
 };
 
 /// Whether `link` is abnormal, for the panel's colour (ISA-101: colour only
-/// for the abnormal): everything but LIVE and NOT_STARTED.
+/// for the abnormal): STALE, ABSENT, NOT_READY, DISCONNECTED and FAILED.
 bool link_abnormal(Link link);
 
 /// TwinSides as the panel last heard it.
@@ -80,6 +99,14 @@ struct SidesView
   std::set<std::string> commandable;
   std::set<std::string> stationary;
   std::string detail;
+  /// The sides this deployment declared, up or not (ADR-0077).
+  std::set<std::string> expected;
+  /// Declared sides whose robot answered and which are coming up.
+  std::set<std::string> connecting;
+  /// Declared sides that will not be started again in this run.
+  std::set<std::string> failed;
+  /// Running sides whose arm the deadman holds until Start robot (ADR-0076).
+  std::set<std::string> held;
 };
 
 /// The boundary's heartbeat on the panel's domain, as the panel heard it.
@@ -111,11 +138,14 @@ struct SideHealth
 
 /// The side named `side` (by the plan's side names, which TwinSides uses):
 /// ABSENT while the boundary is absent or TwinSides is unheard; when TwinSides
-/// does not list the side as running, ABSENT if it `was_running` (it was
-/// listed before and has gone) and NOT_STARTED if it never was; STALE while the
-/// boundary's heartbeat is late (what it last said may be old); NOT_READY while
-/// the boundary does not judge the side commandable (with TwinSides' `detail`
-/// as the reason); LIVE otherwise.
+/// does not list the side as running and it is DECLARED (`expected`, ADR-0077),
+/// FAILED if it is not retried, CONNECTING while it connects, DISCONNECTED if
+/// it `was_running` and WAITING if it never was; when it is not declared either,
+/// ABSENT if it `was_running` (it was listed before and has gone) and
+/// NOT_STARTED if it never was; STALE while the boundary's heartbeat is late
+/// (what it last said may be old); HELD while its arm is held until Start robot;
+/// NOT_READY while the boundary does not judge the side commandable (with
+/// TwinSides' `detail` as the reason); LIVE otherwise.
 SideHealth side_health(
   const std::string & side, const SidesView & sides, Link boundary, bool was_running);
 
@@ -170,7 +200,8 @@ private:
 bool physical_side_commanded(bool has_physical_side, bool mode_heard, bool mode_is_sim);
 
 /// The link as the operator reads it: "live", "stale", "absent", "not ready",
-/// "not started".
+/// "not started", "waiting for robot", "connecting", "disconnected,
+/// reconnecting", "failed", "connected, held - press Start robot".
 const char * link_name(Link link);
 
 }  // namespace cite_console_gui
