@@ -46,6 +46,7 @@ import uuid
 
 from cite_interfaces.msg import DeadmanState, TwinHeartbeat
 from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.srv import ReleaseArm
 from control_msgs.action import GripperCommand
 from lifecycle_msgs.msg import Transition
 from lifecycle_msgs.srv import ChangeState, GetState
@@ -415,15 +416,26 @@ class FakeTrackInit:
 
 
 class FakeDeadman:
-    """A deadman's `DeadmanState`, republished on a timer as the real one is."""
+    """A deadman's `DeadmanState`, republished on a timer as the real one is.
+
+    With ``release_service`` it also serves `ReleaseArm` (ADR-0076), doing what
+    ``on_release`` says: "enable" - HELD becomes HEALTHY and, one republish
+    later, `arm_enabled`; "never_enable" - HEALTHY, and the enable never
+    acknowledged; "refuse" - refused, the state unchanged. A release outside
+    HELD is refused, as the real one's is. ``releases`` counts the requests.
+    """
 
     PERIOD_S = 0.05
 
-    def __init__(self, harness: Harness, topic: str) -> None:
+    def __init__(self, harness: Harness, topic: str, release_service: str = "") -> None:
         self._harness = harness
         self._topic = topic
         self._lock = threading.Lock()
         self.message: DeadmanState | None = None
+        self.releases = 0
+        self.on_release = "enable"
+        #: Set when a release asked for the arm enabled on the next republish.
+        self._enable_next = False
         #: Cleared to make this deadman HANG: alive on the graph, silent.
         self.publishing = threading.Event()
         self.publishing.set()
@@ -431,14 +443,42 @@ class FakeDeadman:
         self._timer = harness.node.create_timer(
             self.PERIOD_S, self._republish, callback_group=harness.group
         )
+        if release_service:
+            self._release = harness.node.create_service(
+                ReleaseArm, release_service, self._on_release, callback_group=harness.group
+            )
 
-    def say(self, state: int, detail: str) -> None:
+    def say(self, state: int, detail: str, arm_enabled: bool = False) -> None:
         with self._lock:
-            self.message = DeadmanState(state=state, detail=detail)
+            self.message = DeadmanState(state=state, detail=detail, arm_enabled=arm_enabled)
+            self._enable_next = False
         self.publisher.publish(self.message)
+
+    def _on_release(self, _request, response):
+        with self._lock:
+            self.releases += 1
+            held = (
+                self.message is not None and self.message.state == DeadmanState.STATE_HELD
+            )
+            if not held or self.on_release == "refuse":
+                response.success = False
+                response.detail = "release refused by the fake"
+                return response
+            self.message = DeadmanState(
+                state=DeadmanState.STATE_HEALTHY, detail="released by the fake"
+            )
+            self._enable_next = self.on_release == "enable"
+        response.success = True
+        response.detail = "released by the fake"
+        return response
 
     def _republish(self) -> None:
         with self._lock:
+            if self._enable_next and self.message is not None:
+                self.message = DeadmanState(
+                    state=self.message.state, detail=self.message.detail, arm_enabled=True
+                )
+                self._enable_next = False
             message = self.message
         if message is not None and self.publishing.is_set():
             self.publisher.publish(message)

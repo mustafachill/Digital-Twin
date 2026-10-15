@@ -16,10 +16,14 @@
 
 The vendor's `ros2_control_node` restarting is a fault: its plugin's
 `on_activate` cleans the error, enables motion and STARTS the arm by itself
-(`uf_robot_system_hardware.cpp:248-254`). So while HEALTHY, the vendor's
-`set_state` must be served by exactly one server. The vendor here is a process
-of its own (`fake_vendor_process.py`), ended with SIGINT and started again,
-because a driver going away is a process going away. Nothing reaches hardware.
+(`uf_robot_system_hardware.cpp:248-254`). So while HEALTHY, and while HELD once
+the driver has been served (ADR-0076), the vendor's `set_state` must be served
+by exactly one server. Before the driver is first served, HELD waits for it: a
+side started under a beating boundary is HELD before its driver exists. The
+vendor here is a process of its own (`fake_vendor_process.py`), ended with
+SIGINT and started again, because a driver going away is a process going away.
+A trip ends the deadman's process (ADR-0076 decision 5); the launch respawns it,
+as `test_deadman_launch.py` explains. Nothing reaches hardware.
 """
 
 from __future__ import annotations
@@ -31,14 +35,16 @@ import sys
 import threading
 import unittest
 
+from cite_hardware.deadman import EXIT_TRIPPED
 from cite_interfaces.msg import DeadmanState
 from cite_interfaces.qos import LATCHED
+from cite_interfaces.srv import ReleaseArm
 import launch
+from launch.events.process import ProcessExited, ProcessStarted
 from launch_ros.actions import Node
 import launch_testing
 import launch_testing.actions
 import launch_testing.markers
-from lifecycle_msgs.msg import Transition
 import pytest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,6 +55,8 @@ NODE = "deadman_vendor"
 ZONE = "test_vendor_zone"
 VENDOR = "/test_restarting_vendor/xarm"
 STATE_TOPIC = "/test/deadman_vendor_state"
+RELEASE = "/test/deadman_vendor/release"
+RESPAWN_DELAY_S = 1.0
 TIMEOUT_S = 0.5
 STOP, START = 4, 0
 
@@ -59,6 +67,7 @@ PARAMETERS = {
     "tick_period_s": 0.05,
     "call_deadline_s": 0.3,
     "state_topic": STATE_TOPIC,
+    "release_service": RELEASE,
     "set_state_service": f"{VENDOR}/set_state",
     "set_mode_service": f"{VENDOR}/set_mode",
     "enable_mode": 1,
@@ -76,6 +85,8 @@ def generate_test_description():
         name=NODE,
         parameters=[PARAMETERS],
         output="screen",
+        respawn=True,
+        respawn_delay=RESPAWN_DELAY_S,
     )
     return (
         launch.LaunchDescription([deadman, launch_testing.actions.ReadyToTest()]),
@@ -122,6 +133,7 @@ class TestDeadmanVendor(unittest.TestCase):
         )
         cls.boundary = FakeBoundary(cls.harness, ZONE)
         cls.vendors: list[VendorProcess] = []
+        cls.release_client = cls.harness.node.create_client(ReleaseArm, RELEASE)
 
     @classmethod
     def tearDownClass(cls):
@@ -145,56 +157,93 @@ class TestDeadmanVendor(unittest.TestCase):
             lambda: self.states and self.states[-1].state == state and self.states[-1], what
         )
 
-    def _healthy_and_enabled(self, vendor: VendorProcess, what: str) -> None:
-        self.boundary.beating.set()
+    def _release(self) -> ReleaseArm.Response:
+        return self.harness.call(self.release_client, ReleaseArm.Request(), "release answered")
+
+    def _released_and_enabled(self, vendor: VendorProcess, what: str) -> None:
+        self._state_is(DeadmanState.STATE_HELD, f"HELD {what}")
+        response = self._release()
+        self.assertTrue(response.success, response.detail)
         self._state_is(DeadmanState.STATE_HEALTHY, f"HEALTHY {what}")
         self.harness.wait_for(
             lambda: ("set_state", START) in vendor.calls and self.states[-1].arm_enabled,
             f"the arm enabled {what}",
         )
 
-    def test_the_vendor_going_away_or_restarting_trips(self):
+    def _ended_by_the_trip(self, proc_info, deadman, what: str) -> None:
+        self.harness.wait_for(
+            lambda: isinstance(proc_info[deadman], ProcessExited)
+            and proc_info[deadman].returncode == EXIT_TRIPPED,
+            f"the deadman ended with code {EXIT_TRIPPED} {what}",
+        )
+        self.harness.wait_for(
+            lambda: isinstance(proc_info[deadman], ProcessStarted),
+            f"a new deadman started {what}",
+            timeout_s=SETTLE_S + RESPAWN_DELAY_S,
+        )
+
+    def test_the_vendor_going_away_or_restarting_trips(self, proc_info, deadman):
         harness = self.harness
+        self.boundary.beating.set()
+
+        # HELD before the driver exists: no trip, and no release either.
+        self._servers(0, "no vendor server yet")
+        harness.bring_up(NODE)
+        self._state_is(DeadmanState.STATE_HELD, "HELD with no driver yet")
+        harness.hold_for(
+            lambda: self.states[-1].state != DeadmanState.STATE_HELD,
+            "a trip, or any change, before the driver was ever served",
+            4 * TIMEOUT_S,
+        )
+        refused = self._release()
+        self.assertFalse(refused.success)
+        self.assertIn("served by 0 server(s)", refused.detail)
+
+        # The driver appears; released, enabled through it.
         first = self._vendor()
         self._servers(1, "one vendor server seen")
-        harness.bring_up(NODE)
-        self._healthy_and_enabled(first, "with one vendor")
+        harness.wait_for(
+            lambda: ("set_state", STOP) in first.calls, "set_state(4) at the first vendor"
+        )
+        self._released_and_enabled(first, "with one vendor")
 
-        # The driver goes away while HEALTHY: tripped, and latched.
+        # The driver goes away while HEALTHY: tripped, and the process ended.
         first.end()
-        tripped = self._state_is(DeadmanState.STATE_TRIPPED, "TRIPPED on the vendor going away")
+        tripped = self._state_is(
+            DeadmanState.STATE_TRIPPED, "TRIPPED on the vendor going away"
+        )
         self.assertIn("served by 0 server(s)", tripped.detail)
         self.assertFalse(tripped.arm_enabled)
+        self._ended_by_the_trip(proc_info, deadman, "on the vendor going away")
 
-        # It comes back — and its own activation would have STARTED the arm.
-        # The trip holds, and the returned driver is told to STOP on a tick.
+        # It comes back - and its own activation would have STARTED the arm.
+        # The new deadman holds it at STOP and enables nothing by itself.
         second = self._vendor()
+        self._servers(1, "one vendor server again")
+        harness.bring_up(NODE)
+        self._state_is(DeadmanState.STATE_HELD, "HELD with the returned vendor")
         harness.wait_for(
-            lambda: ("set_state", STOP) in second.calls,
-            "set_state(4) at the returned vendor",
+            lambda: ("set_state", STOP) in second.calls, "set_state(4) at the returned vendor"
         )
         harness.hold_for(
-            lambda: self.states[-1].state != DeadmanState.STATE_TRIPPED
-            or ("set_state", START) in second.calls
-            or ("set_mode", 1) in second.calls,
-            "the trip clearing, or the arm enabled, on the vendor's return",
+            lambda: ("set_state", START) in second.calls or ("set_mode", 1) in second.calls,
+            "the arm enabled at the returned vendor without a release",
             4 * TIMEOUT_S,
         )
 
-        # A reset with the driver back enables again; a second server — a
-        # restart whose predecessor's discovery has not yet expired — trips.
-        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_DEACTIVATE))
-        self.assertTrue(harness.transition(NODE, Transition.TRANSITION_ACTIVATE))
-        self._servers(1, "one vendor server again")
-        self._healthy_and_enabled(second, "after the reset")
+        # A second server - a restart whose predecessor's discovery has not
+        # yet expired - trips it while HELD, the driver having been served.
         stops = second.calls.count(("set_state", STOP))
         self._vendor()
-        tripped = self._state_is(DeadmanState.STATE_TRIPPED, "TRIPPED on a second vendor server")
+        tripped = self._state_is(
+            DeadmanState.STATE_TRIPPED, "TRIPPED from HELD on a second vendor server"
+        )
         self.assertIn("served by 2 server(s)", tripped.detail)
         harness.wait_for(
             lambda: second.calls.count(("set_state", STOP)) > stops,
             "set_state(4) after the second server appeared",
         )
+        self._ended_by_the_trip(proc_info, deadman, "on a second vendor server")
         self.boundary.beating.clear()
 
 

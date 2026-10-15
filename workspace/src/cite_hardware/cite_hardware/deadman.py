@@ -36,29 +36,42 @@ is in a state at or below 2 and in the servo (or joint-velocity) mode;
 otherwise its `write` deactivates every controller and streams nothing
 (`xarm_controller/src/hardware/uf_robot_system_hardware.cpp:339-344`, the
 readiness test at `:464-502`). So, on every tick of a steady-clock timer, in
-every state but HEALTHY — before activation, AWAITING, TRIPPED, INACTIVE after
-a deactivate — it calls `set_state` with the vendor's STOP state (4). Every
-tick and regardless of the last answer: a re-enable by UFACTORY Studio, the
-pendant or any other client is undone within one tick. The plugin's own
+every state but HEALTHY — before activation, AWAITING, HELD, TRIPPED, INACTIVE
+after a deactivate — it calls `set_state` with the vendor's STOP state (4).
+Every tick and regardless of the last answer: a re-enable by UFACTORY Studio,
+the pendant or any other client is undone within one tick. The plugin's own
 `on_activate` sets the arm to START (`:248-254`), which is why activation is
-followed at once by a STOP here.
+followed at once by a STOP here; the owner accepted that brief energizing at
+every connect rather than patch the vendor (ADR-0076, "What this costs us").
 
-**Only HEALTHY enables.** On AWAITING -> HEALTHY the deadman calls the
-vendor's `set_mode` with the plugin's streaming mode, then, once that answered
-success and HEALTHY still stands, `set_state(0)`. That is the vendor plugin's
-own enable (`:252-254`) less `clean_error`, which is an operator's decision. An
+**A heartbeat holds; only the operator releases (ADR-0076).** The first
+heartbeat of its zone's boundary moves AWAITING to HELD, not HEALTHY: the
+boundary is followed and its loss trips, and the arm stays at STOP. The
+`ReleaseArm` service this node serves (`release_service`) is the one way from
+HELD to HEALTHY. The asset's initializer calls it as its first step, so the
+arm is released only by an operator's command: the console's Start robot
+after the go-ahead, `./scripts/home`, or the homing of `./scripts/program`. A
+release is refused in every other state, and while the vendor's `set_state`
+is not served exactly once. A side started while the boundary is already
+beating therefore comes up HELD, and a reconnect never enables the arm.
+
+**Only HEALTHY enables.** On HELD -> HEALTHY the deadman calls the vendor's
+`set_mode` with the plugin's streaming mode, then, once that answered success
+and HEALTHY still stands, `set_state(0)`. That is the vendor plugin's own
+enable (`:252-254`) less `clean_error`, which is an operator's decision. An
 enable that fails or is abandoned at `call_deadline_s` is tried again on later
 ticks while HEALTHY lasts, one at a time and no sooner than
 `ENABLE_RETRY_TICKS` ticks after the failure: `set_mode` itself stops the arm,
 so a retry on every tick would cycle it between STOP and START (HW-S-04). Once
-`set_state(0)` is acknowledged
-in this HEALTHY epoch, `DeadmanState.arm_enabled` says so and it is not sent
-again. "HEALTHY in this epoch, so START" is decided and sent under the one lock
-every trip and every STOP takes, so no START is ever sent after the STOP a
-state change caused. The `set_mode` service itself stops the arm before it
-changes the mode (`xarm_api/src/xarm_driver_service.cpp:543-550`). Once the arm
-is ready again the plugin's `write` reactivates the controllers itself
-(`uf_robot_system_hardware.cpp:345-350`, `_activate_controller` at `:426-440`).
+`set_state(0)` is acknowledged in this HEALTHY epoch,
+`DeadmanState.arm_enabled` says so and it is not sent again. "HEALTHY in this
+epoch, so START" is decided and sent under the one lock every trip and every
+STOP takes, so no START is ever sent after the STOP a state change caused. The
+`set_mode` service itself stops the arm before it changes the mode
+(`xarm_api/src/xarm_driver_service.cpp:543-550`). Once the arm is ready again
+the plugin's `write` reactivates the controllers itself
+(`uf_robot_system_hardware.cpp:345-350`, `_activate_controller` at
+`:426-440`).
 
 **What a trip does, on every tick while TRIPPED**, all of it asynchronous and
 none of it waited on:
@@ -75,25 +88,42 @@ answered by its deadline is abandoned and said in the log; it never holds back
 the next tick's call. The arm is stopped by `set_state(4)` and the cancel of its
 trajectory controller's goals, and by nothing else here.
 
-**The vendor driver going away trips it.** While HEALTHY, the vendor's
-`set_state` service must be served by exactly one server: none is a driver that
-went away, two is one that restarted before the old one's discovery lease
-expired. Either way the driver's `on_activate` has cleaned the error, enabled
-motion and STARTED the arm by itself (`:248-254`), which nothing here asked for.
-Seen on the tick: an outage shorter than one `tick_period_s` with no overlap is
-not seen, and a driver restart takes seconds.
+**Then the trip ends the side (ADR-0076 decision 5, owner decision of
+2026-10-15).** Once a `set_state(4)` sent at or after the trip is acknowledged,
+or `call_deadline_s` after the trip when none is, the deadman ends its own
+process with `EXIT_TRIPPED` (through `cite_hardware.process.run`, which first
+sends `set_state(4)` once more and waits for it within `call_deadline_s`). The
+side's launch takes the whole side down when the deadman exits for any reason
+(`side_down_on_exit`, `hardware.launch.py`), and a side started again comes up
+with a fresh deadman, held. Why end rather than wait latched for a lifecycle
+reset: a trip says the commander or the vendor driver is not the one this side
+was following, and a whole new side is the one recovery that re-checks
+everything it depends on (the hold gate's STOP among them) instead of trusting
+a driver that may have restarted under it. Where nothing restarts the side —
+`./scripts/program`, a scenario, a pair without the console's keeper — the trip
+already ended every motion, and the side ending now ends the pair as well.
 
-**Latched.** A trip clears only by a deliberate deactivate and activate, never
-by heartbeats resuming; the activate returns to AWAITING with the arm still
-held stopped, and only a fresh heartbeat enables it. The relays read the
-published `DeadmanState`, republished on every tick, and refuse motion in every
-state but HEALTHY.
+**The vendor driver going away trips it.** While HEALTHY, and while HELD once
+the driver has been served exactly once since activation, the vendor's
+`set_state` service must be served by exactly one server: none is a driver
+that went away, two is one that restarted before the old one's discovery lease
+expired. Either way the driver's `on_activate` has cleaned the error, enabled
+motion and STARTED the arm by itself (`:248-254`), which nothing here asked
+for. HELD waits to see the driver first because the deadman starts before the
+driver's controller manager: a side started under a boundary already beating
+reaches HELD while no driver exists yet. Seen on the tick: an outage shorter
+than one `tick_period_s` with no overlap is not seen, and a driver restart
+takes seconds.
+
+**Latched.** A trip is never cleared by heartbeats resuming. The relays read
+the published `DeadmanState`, republished on every tick, and refuse motion in
+every state but HEALTHY.
 
 **Recovery after a trip**, for an operator: find why the heartbeat stopped;
-`ros2 lifecycle set <deadman> deactivate`, then `activate`; the deadman says
-AWAITING and keeps the arm stopped; it enables the arm on the first heartbeat
-of a running boundary. A vendor error (`curr_err`) is not cleared by any of
-this and needs the vendor's own `clean_error` first.
+start the side again (or let the console's keeper do it, ADR-0077); the new
+deadman says AWAITING, then HELD on the boundary's heartbeat, and keeps the arm
+stopped until Start robot releases it. A vendor error (`curr_err`) is not
+cleared by any of this and needs the vendor's own `clean_error` first.
 
 **Its clock is the steady clock, and `use_sim_time` is refused.** It times a
 process on real hardware: simulated time is the wrong instrument, and a deadman
@@ -107,11 +137,20 @@ import sys
 import threading
 
 from action_msgs.srv import CancelGoal
-from cite_hardware.liveness import HEALTHY, Liveness, STATE_NAMES, TRIPPED
+from cite_hardware.liveness import (
+    FOLLOWING,
+    HEALTHY,
+    HELD,
+    Liveness,
+    Outcome,
+    STATE_NAMES,
+    TRIPPED,
+)
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.process import run
 from cite_interfaces.msg import DeadmanState, TwinHeartbeat
 from cite_interfaces.qos import LATCHED, STATE
+from cite_interfaces.srv import ReleaseArm
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.clock import Clock, ClockType
 from rclpy.event_handler import SubscriptionEventCallbacks
@@ -137,6 +176,11 @@ ENABLE_RETRY_TICKS = 4
 #: position control, VELO_JOINT (4) for velocity control
 #: (`uf_robot_system_hardware.cpp:487`; `XARM_MODE` in `uxbus_cmd_config.h`).
 VENDOR_STREAMING_MODES = (1, 4)
+
+#: The exit code of a deadman that ended its process because it tripped
+#: (ADR-0076 decision 5). Non-zero, so the side's launch and the pair
+#: supervisor read it as the side failing, which it did.
+EXIT_TRIPPED = 3
 
 SPECS: tuple[Spec, ...] = (
     Spec("zone", Parameter.Type.STRING, "the zone whose boundary's heartbeat is watched"),
@@ -164,6 +208,11 @@ SPECS: tuple[Spec, ...] = (
         "state_topic",
         Parameter.Type.STRING,
         "where this deadman publishes its DeadmanState, latched and on every tick",
+    ),
+    Spec(
+        "release_service",
+        Parameter.Type.STRING,
+        "the ReleaseArm service this deadman serves: its one way from HELD to HEALTHY",
     ),
     Spec(
         "set_state_service",
@@ -248,6 +297,21 @@ class Deadman(LifecycleNode):
         #: After a failed enable in an epoch: that epoch, and the steady-clock
         #: time before which it is not tried again (HW-S-04).
         self._enable_backoff: tuple[int, int] | None = None
+        self._release_server = None
+        #: Whether the vendor's set_state was served exactly once since the
+        #: last activation: from then on, HELD trips on losing it.
+        self._vendor_seen = False
+        #: Steady-clock time of this process's first trip, nanoseconds; the
+        #: process ends soon after it (ADR-0076 decision 5).
+        self._tripped_at_ns: int | None = None
+        self._end_requested = False
+        #: Ends this process with an exit code; bound by `process.run`, and
+        #: `None` for a node built in a test's own process.
+        self._end_process = None
+
+    def bind_end_process(self, end) -> None:
+        """Take `process.run`'s way of ending this process with an exit code."""
+        self._end_process = end
 
     # ------------------------------------------------------------------ #
     # Lifecycle
@@ -319,6 +383,14 @@ class Deadman(LifecycleNode):
         self._timer = self.create_timer(
             config["tick_period_s"], self._tick, callback_group=self._group, clock=self._steady
         )
+        # In the one group with the heartbeats and the tick: a release and a
+        # trip never interleave. Nothing in its callback waits.
+        self._release_server = self.create_service(
+            ReleaseArm,
+            config["release_service"],
+            self._on_release_arm,
+            callback_group=self._group,
+        )
         self.get_logger().info(
             f"configured: zone {config['zone']!r}, timeout {config['timeout_s']:g} s, "
             f"tick {config['tick_period_s']:g} s, {len(self._cancels)} action(s) to cancel"
@@ -331,6 +403,7 @@ class Deadman(LifecycleNode):
         with self._lock:
             self._liveness.activate()
             self._epoch += 1
+            self._vendor_seen = False
         # The vendor plugin's own activation sets START; this undoes it at once.
         self._hold_stopped()
         self._publish_state()
@@ -374,7 +447,8 @@ class Deadman(LifecycleNode):
         if config is None or client is None:
             return [], 0.0
         with self._lock:
-            if self._liveness is not None:
+            # A trip stays said as the process ends: it is why it ends.
+            if self._liveness is not None and self._tripped_at_ns is None:
                 self._liveness.deactivate()
                 self._epoch += 1
             request = SetInt16.Request()
@@ -391,6 +465,9 @@ class Deadman(LifecycleNode):
         if self._heartbeats is not None:
             self.destroy_subscription(self._heartbeats)
             self._heartbeats = None
+        if self._release_server is not None:
+            self.destroy_service(self._release_server)
+            self._release_server = None
         for client in [self._set_state, self._set_mode, self._linear_stop] + [
             client for _action, client in self._cancels
         ]:
@@ -427,7 +504,6 @@ class Deadman(LifecycleNode):
                 self._last_fresh_ns = self._steady.now().nanoseconds
             if after != before:
                 self._epoch += 1
-            epoch = self._epoch
         if outcome.tripped:
             self._trip(outcome.reason)
             return
@@ -436,10 +512,46 @@ class Deadman(LifecycleNode):
                 self.get_logger().warning(outcome.reason, throttle_duration_sec=5.0)
             return
         if after != before:
+            # AWAITING -> HELD at most: a heartbeat never enables (ADR-0076).
             self.get_logger().info(outcome.reason)
             self._publish_state()
-            if after == HEALTHY:
-                self._enable(epoch)
+
+    def _on_release_arm(self, _request, response):
+        """Serve `ReleaseArm`: HELD -> HEALTHY, then the enable; refused otherwise.
+
+        Decided under the lock every trip and every STOP takes, so a STOP a tick
+        decided before the release is sent before the release's `set_mode`.
+        """
+        liveness, config = self._liveness, self._config
+        if liveness is None or config is None:
+            response.success = False
+            response.detail = "release refused: the deadman is not configured"
+            return response
+        vendors = self.count_services(config["set_state_service"])
+        with self._lock:
+            if liveness.state == HELD and vendors != 1:
+                outcome = Outcome(
+                    accepted=False,
+                    reason=(
+                        f"release refused: {config['set_state_service']} is served by "
+                        f"{vendors} server(s), and the arm is enabled through exactly one"
+                    ),
+                )
+            else:
+                outcome = liveness.release()
+            if outcome.accepted:
+                self._epoch += 1
+            epoch = self._epoch
+        response.success = outcome.accepted
+        response.detail = outcome.reason
+        if not outcome.accepted:
+            self.get_logger().warning(outcome.reason)
+            return response
+        self.get_logger().info(outcome.reason)
+        self._publish_state()
+        # The one place the arm is enabled: the HELD -> HEALTHY edge.
+        self._enable(epoch)
+        return response
 
     def _on_matched(self, status) -> None:
         if status.current_count > 0 or self._liveness is None:
@@ -459,9 +571,11 @@ class Deadman(LifecycleNode):
         now = self._steady.now().nanoseconds
         self._abandon_overdue(now)
         outcome = None
+        vendors = self.count_services(config["set_state_service"])
         with self._lock:
-            if liveness.state == HEALTHY:
-                vendors = self.count_services(config["set_state_service"])
+            if vendors == 1:
+                self._vendor_seen = True
+            if liveness.state in FOLLOWING:
                 if now - self._last_fresh_ns > config["timeout_s"] * 1e9:
                     outcome = liveness.expired()
                 elif self.count_publishers(TwinHeartbeat.TOPIC) > 1:
@@ -470,20 +584,22 @@ class Deadman(LifecycleNode):
                     )
                 elif self.count_publishers(TwinHeartbeat.TOPIC) == 0:
                     outcome = liveness.publisher_lost()
-                elif vendors != 1:
+                elif vendors != 1 and (liveness.state == HEALTHY or self._vendor_seen):
                     # N-03. The vendor's `ros2_control_node` restarting is a
                     # fault, not a pause: its plugin's `on_activate` cleans the
                     # error, enables motion and STARTS the arm on its own. Gone
                     # (0) or restarted before the old one's lease expired (2),
-                    # the stop path is not the one this deadman enabled.
+                    # the stop path is not the one this deadman follows. HELD
+                    # applies it once the driver was served (module docstring).
                     outcome = liveness.vendor_lost(
                         f"{config['set_state_service']} is served by {vendors} server(s), "
-                        "and the vendor driver the arm was enabled through is one"
+                        "and the vendor driver this side was following is one"
                     )
             if outcome is not None and outcome.tripped:
                 self._epoch += 1
             state = liveness.state
             epoch = self._epoch
+            tripped_at = self._tripped_at_ns
         if outcome is not None and outcome.tripped:
             self._trip(outcome.reason)
             return
@@ -495,6 +611,10 @@ class Deadman(LifecycleNode):
             # A failed or abandoned enable is retried while HEALTHY lasts;
             # `_enable` itself refuses a second one in flight or a repeat.
             self._enable(epoch)
+        if tripped_at is not None and now - tripped_at >= config["call_deadline_s"] * 1e9:
+            self._end_after_trip(
+                f"no set_state(4) acknowledged within {config['call_deadline_s']:g} s of the trip"
+            )
         self._publish_state(log=False)
 
     # ------------------------------------------------------------------ #
@@ -502,31 +622,53 @@ class Deadman(LifecycleNode):
     # ------------------------------------------------------------------ #
 
     def _trip(self, reason: str) -> None:
+        with self._lock:
+            if self._tripped_at_ns is None:
+                self._tripped_at_ns = self._steady.now().nanoseconds
         self.get_logger().error(reason)
         self._publish_state()
         self._issue_trip_stops()
 
-    def _hold_stopped(self) -> None:
+    def _hold_stopped(self, then=None) -> None:
         """Send `set_state(4)` unless HEALTHY, deciding and sending under the lock.
 
         Under the lock so that a STOP decided on a state that is no longer
-        current — a tick that read AWAITING just before the first heartbeat —
-        is not sent after that state's START.
+        current — a tick that read HELD just before a release — is not sent
+        after that state's START.
         """
         request = SetInt16.Request()
         request.data = VENDOR_STATE_STOP
         with self._lock:
             if self._liveness is not None and self._liveness.state == HEALTHY:
                 return
-            self._call("set_state(4)", self._set_state, request)
+            self._call("set_state(4)", self._set_state, request, then=then)
 
     def _issue_trip_stops(self) -> None:
-        self._hold_stopped()
+        self._hold_stopped(then=self._trip_stop_answered)
         self._call("set_linear_motor_stop", self._linear_stop, Call.Request())
         for action, client in self._cancels:
             # A default-constructed request is a zero goal id and a zero stamp:
             # "cancel all goals" in action_msgs/srv/CancelGoal.
             self._call(f"cancel all goals on {action}", client, CancelGoal.Request())
+
+    def _trip_stop_answered(self, response) -> None:
+        """End the side once a STOP sent at or after the trip is acknowledged."""
+        if response is not None and getattr(response, "ret", None) == 0:
+            self._end_after_trip("set_state(4) acknowledged after the trip")
+
+    def _end_after_trip(self, why: str) -> None:
+        """Ask `process.run` to end this process, once (ADR-0076 decision 5)."""
+        with self._lock:
+            if self._end_requested or self._tripped_at_ns is None:
+                return
+            self._end_requested = True
+            end = self._end_process
+        self.get_logger().error(
+            f"ending this side after the trip ({why}): the deadman exits with code "
+            f"{EXIT_TRIPPED}, and a side started again comes up held"
+        )
+        if end is not None:
+            end(EXIT_TRIPPED)
 
     def _current(self, epoch: int) -> bool:
         """Whether HEALTHY holds in ``epoch``. Called with the lock held."""

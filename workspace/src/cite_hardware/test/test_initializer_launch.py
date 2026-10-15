@@ -50,6 +50,7 @@ NODE = "initializer"
 VENDOR = "/test_vendor/xarm"
 DEADMAN = "/test/deadman_state"
 SERVICE = "/test/picker/initialize"
+RELEASE = "/test/picker/release"
 #: Short, so the case that never homes ends quickly; a ceiling, not a schedule.
 DEADLINE_S = 3.0
 #: How far either side of the deadline a zero read is held; well inside
@@ -75,6 +76,7 @@ PARAMETERS = {
     "deadline_s": DEADLINE_S,
     "deadman_state_topic": DEADMAN,
     "deadman_state_max_age_s": 0.5,
+    "deadman_release_service": RELEASE,
 }
 
 
@@ -114,7 +116,7 @@ class TestInitializer(unittest.TestCase):
         cls.zero_reads_arrived = []
         cls.vendor = FakeTrackInit(cls.harness, VENDOR, on_call=cls._on_vendor_call)
         cls.track = FakeTrack(cls.harness, VENDOR)
-        cls.deadman = FakeDeadman(cls.harness, DEADMAN)
+        cls.deadman = FakeDeadman(cls.harness, DEADMAN, release_service=RELEASE)
         cls.client = cls.harness.node.create_client(InitializeAsset, SERVICE)
 
     @classmethod
@@ -149,7 +151,8 @@ class TestInitializer(unittest.TestCase):
         self.track.set_requests.clear()
         self.track.speeds.clear()
         self.deadman.publishing.set()
-        self.deadman.say(DeadmanState.STATE_HEALTHY, "healthy")
+        self.deadman.on_release = "enable"
+        self.deadman.say(DeadmanState.STATE_HEALTHY, "healthy", arm_enabled=True)
         self.vendor.calls.clear()
         self.vendor.failures.clear()
         self.vendor.on_zero = 0
@@ -377,6 +380,61 @@ class TestInitializer(unittest.TestCase):
                 expected = stops + (1 if service == FakeTrackInit.HOME else 0)
                 self.harness.wait_for(lambda: self.track.stops == expected, "the stops")
 
+    # ------------------------------------------------------------------ #
+    # Step 0: a HELD arm is released first (ADR-0076)
+    # ------------------------------------------------------------------ #
+
+    def _held(self) -> None:
+        self.deadman.say(DeadmanState.STATE_HELD, "held")
+        self.harness.wait_for(
+            lambda: self.harness.node.count_publishers(DEADMAN) == 1, "the deadman seen"
+        )
+
+    def test_a_held_arm_is_released_first_and_then_initialized(self):
+        self.vendor.on_zero = 1
+        self._held()
+        releases = self.deadman.releases
+        response = self._initialize()
+        self.assertTrue(response.success, response.detail)
+        self.assertEqual(self.deadman.releases, releases + 1, "one release")
+        self.assertIn("released and enabled", response.detail)
+        self.assertEqual(
+            self._sent(), [FakeTrackInit.ENABLE, FakeTrackInit.GRIPPER, FakeTrackInit.ON_ZERO]
+        )
+
+    def test_an_arm_already_released_is_not_released_again(self):
+        self.vendor.on_zero = 1
+        releases = self.deadman.releases
+        response = self._initialize()
+        self.assertTrue(response.success, response.detail)
+        self.assertEqual(self.deadman.releases, releases, "no release when HEALTHY")
+        self.assertIn("already released", response.detail)
+
+    def test_a_refused_release_fails_and_sends_nothing_to_the_vendor(self):
+        self._held()
+        self.deadman.on_release = "refuse"
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("refused the release", response.detail)
+        self.assertEqual(self._sent(), [])
+
+    def test_a_release_never_enabled_fails_at_the_deadline(self):
+        self._held()
+        self.deadman.on_release = "never_enable"
+        response = self._initialize()
+        self.assertFalse(response.success)
+        self.assertIn("did not say the arm is enabled", response.detail)
+        self.assertEqual(self._sent(), [])
+
+    def test_a_tripped_deadman_is_named_and_never_released(self):
+        self.deadman.say(DeadmanState.STATE_TRIPPED, "tripped by the test")
+        releases = self.deadman.releases
+        self.harness.wait_for(
+            lambda: "TRIPPED" in self._initialize().detail, "a refusal naming TRIPPED"
+        )
+        self.assertEqual(self.deadman.releases, releases)
+        self.assertEqual(self._sent(), [])
+
     def test_no_initialization_unless_the_deadman_is_healthy(self):
         self.deadman.say(DeadmanState.STATE_AWAITING, "awaiting")
         self.harness.wait_for(
@@ -386,6 +444,7 @@ class TestInitializer(unittest.TestCase):
         response = self._initialize()
         self.assertFalse(response.success)
         self.assertIn("deadman", response.detail)
+        self.assertIn("AWAITING", response.detail)
         self.assertEqual(self._sent(), [])
 
 

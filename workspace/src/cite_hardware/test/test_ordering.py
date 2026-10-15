@@ -33,9 +33,10 @@ import threading
 
 from builtin_interfaces.msg import Duration
 from cite_hardware.deadman import Deadman
-from cite_hardware.liveness import HEALTHY, TRIPPED
+from cite_hardware.liveness import HEALTHY, HELD, TRIPPED
 from cite_hardware.track_adapter import TrackAdapter
 from cite_interfaces.msg import TwinHeartbeat
+from cite_interfaces.srv import ReleaseArm
 import pytest
 import rclpy
 from rclpy.lifecycle import TransitionCallbackReturn
@@ -139,6 +140,19 @@ def _concurrently(action) -> threading.Thread:
 # ---------------------------------------------------------------------- #
 
 
+def _release(node) -> None:
+    """Heartbeat to HELD, then the operator's release to HEALTHY (ADR-0076).
+
+    The graph is not this test's: the vendor's set_state counts as served once.
+    """
+    node.count_services = lambda _name: 1
+    node._on_heartbeat(TwinHeartbeat(zone="cell_b", boundary_id="b", sequence=1))
+    assert node._liveness.state == HELD
+    assert not node._set_mode.futures, "a heartbeat never enables"
+    response = node._on_release_arm(ReleaseArm.Request(), ReleaseArm.Response())
+    assert response.success, response.detail
+
+
 def test_a_trip_between_the_start_decision_and_its_send_is_never_followed_by_start():
     """N-01: no `set_state(0)` reaches the vendor after the trip's `set_state(4)`."""
     node = _build(Deadman, "deadman")
@@ -150,7 +164,7 @@ def test_a_trip_between_the_start_decision_and_its_send_is_never_followed_by_sta
         node._linear_stop = FakeClient("set_linear_motor_stop", log)
         node._cancels = []
         node.on_activate(None)
-        node._on_heartbeat(TwinHeartbeat(zone="cell_b", boundary_id="b", sequence=1))
+        _release(node)
         assert node._liveness.state == HEALTHY
         assert node._set_mode.futures, "set_mode sent on entering HEALTHY"
 
@@ -191,7 +205,7 @@ def test_an_abandoned_set_mode_is_retried_while_healthy():
         node._linear_stop = FakeClient("set_linear_motor_stop", log)
         node._cancels = []
         node.on_activate(None)
-        node._on_heartbeat(TwinHeartbeat(zone="cell_b", boundary_id="b", sequence=1))
+        _release(node)
         assert len(node._set_mode.futures) == 1
         # In flight: a tick sends no second one.
         node._last_fresh_ns = node._steady.now().nanoseconds

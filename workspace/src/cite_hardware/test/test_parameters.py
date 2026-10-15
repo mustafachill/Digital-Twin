@@ -89,6 +89,7 @@ GOOD = {
         "deadline_s": 20.0,
         "deadman_state_topic": "/t/deadman",
         "deadman_state_max_age_s": 0.5,
+        "deadman_release_service": "/t/release",
     },
     "deadman": {
         "zone": "cell_b",
@@ -97,6 +98,7 @@ GOOD = {
         "tick_period_s": 0.1,
         "call_deadline_s": 1.0,
         "state_topic": "/t/deadman",
+        "release_service": "/t/release",
         "set_state_service": "/v/set_state",
         "set_mode_service": "/v/set_mode",
         "enable_mode": 1,

@@ -20,8 +20,19 @@ track by hand: the motor enabled, and the carriage homed when it has not found
 its zero. Without that every track move is refused by the vendor with code 82
 (`LINEAR_MOTOR_NOT_INIT`: the track's `on_zero` bit is not set), which is what
 stopped the first supervised paired run at its first track step. This node
-does the same, on request, through the vendor driver's own services:
+does the same, on request, through the vendor driver's own services - after
+releasing the arm, which a physical side's deadman holds until an operator
+starts it (ADR-0076):
 
+0. the deadman's state, read through the gate. HELD: `ReleaseArm` on the
+   deadman (`deadman_release_service`), then its state waited for, within
+   `deadline_s`, until it says HEALTHY with `arm_enabled`. HEALTHY already:
+   nothing is released. Any other state - AWAITING, TRIPPED, INACTIVE, or no
+   fresh state at all - fails the request naming it, and nothing is sent to
+   the vendor. This is the one caller of `ReleaseArm`, and every caller of this
+   service is an operator's command (Start robot after the go-ahead,
+   `./scripts/home`, the homing of `./scripts/program`), so the arm is released
+   only by an operator;
 1. `set_linear_motor_enable(1)`;
 2. `set_gripper_enable(1)`;
 3. `get_linear_motor_on_zero`, and ONLY where it reads 0:
@@ -46,7 +57,7 @@ else answers `success: false` naming the step and the vendor's code. No
 
 **Homing and the move to the start move the carriage**, so they are behind the
 deadman's gate like every other motion of this side (`cite_hardware.gate`): a
-request is refused unless the deadman says HEALTHY, the gate is asked again
+request goes past step 0 only once the deadman says HEALTHY, the gate is asked again
 immediately before the homing and before the move are sent, and a motion during
 which the gate closes or the node is deactivated, that is refused, or that does
 not finish within the deadline is followed by `set_linear_motor_stop`. So is
@@ -56,7 +67,9 @@ the process ending while a motion is in flight (`stop_before_exit`).
 `6e7a733`): only once this client has matched the vendor's server, and again
 each time `call_deadline_s` passes unanswered, with earlier requests left
 pending so a slow answer still counts. Except the homing and the move to the
-start, which are motions and are sent once.
+start, which are motions and are sent once. `ReleaseArm` is sent the same way;
+a resend refused because an earlier request already released the arm counts as
+released, which the deadman's state then says.
 
 **Nothing blocks a callback.** The service callback is a coroutine that awaits
 futures completed by other callbacks (vendor answers, a one-shot timer), on a
@@ -70,6 +83,7 @@ import sys
 import threading
 
 from cite_hardware.gate import DeadmanGate
+from cite_hardware.liveness import HEALTHY, HELD, STATE_NAMES
 from cite_hardware.mapping import (
     from_vendor_position,
     Refused,
@@ -78,7 +92,7 @@ from cite_hardware.mapping import (
 )
 from cite_hardware.parameters import ParameterError, RequiredParameters, Spec
 from cite_hardware.process import run
-from cite_interfaces.srv import InitializeAsset
+from cite_interfaces.srv import InitializeAsset, ReleaseArm
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.clock import Clock, ClockType
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
@@ -190,6 +204,11 @@ SPECS: tuple[Spec, ...] = (
         "steady-clock age above which the deadman's last state closes the gate",
         positive=True,
     ),
+    Spec(
+        "deadman_release_service",
+        Parameter.Type.STRING,
+        "the deadman's ReleaseArm service, called first when the deadman says HELD",
+    ),
 )
 
 
@@ -236,6 +255,8 @@ class Initializer(LifecycleNode):
             "linear_motor_speed_service": SetInt16,
             "linear_motor_set_position_service": LinearMotorSetPos,
             "linear_motor_get_position_service": GetInt16,
+            # Not the vendor's: the deadman's, asked as the vendor's are.
+            "deadman_release_service": ReleaseArm,
         }
         self._vendor_clients = {
             key: self.create_client(kind, config[key], callback_group=self._group)
@@ -317,10 +338,6 @@ class Initializer(LifecycleNode):
             )
             if not refusal:
                 self._busy = True
-        if not refusal and not self._gate.permits_motion():  # type: ignore[union-attr]
-            refusal = f"refused: {self._gate.why_closed()}"  # type: ignore[union-attr]
-            with self._lock:
-                self._busy = False
         if refusal:
             response.success, response.detail = False, refusal
             self.get_logger().warning(f"initialize {refusal}")
@@ -341,6 +358,11 @@ class Initializer(LifecycleNode):
         config = self._config
         assert config is not None
         deadline = self._now() + config["deadline_s"]
+        released = await self._release_if_held(deadline)
+        gate = self._gate
+        assert gate is not None
+        if not gate.permits_motion():
+            raise InitializeFailed(f"refused: {gate.why_closed()}")
         await self._ask(
             "linear_motor_enable_service",
             SetInt16.Request(data=VENDOR_ENABLE),
@@ -366,7 +388,47 @@ class Initializer(LifecycleNode):
             )
             homed = "the track was homed and is on its zero"
         moved = await self._bring_to_start(deadline)
-        return f"track and gripper enabled; {homed}; {moved}"
+        return f"{released}; track and gripper enabled; {homed}; {moved}"
+
+    async def _release_if_held(self, deadline: float) -> str:
+        """Step 0: release a HELD arm and wait for it enabled; refuse every other state."""
+        config, gate = self._config, self._gate
+        assert config is not None and gate is not None
+        state = gate.fresh_state()
+        if state is None:
+            raise InitializeFailed(f"refused: {gate.why_closed()}")
+        if state.state == HEALTHY:
+            return "the arm was already released"
+        if state.state != HELD:
+            raise InitializeFailed(
+                f"refused: the deadman is {STATE_NAMES.get(state.state, state.state)} "
+                f"({state.detail}); only a HELD arm is released"
+            )
+        self.get_logger().warning("the deadman holds the arm: releasing it")
+        answer = await self._ask(
+            "deadman_release_service", ReleaseArm.Request(), "ReleaseArm", deadline,
+            judge=False,
+        )
+        if not answer.success:
+            # A resend refused because an earlier request released the arm.
+            now = gate.fresh_state()
+            if now is None or now.state != HEALTHY:
+                raise InitializeFailed(f"the deadman refused the release: {answer.detail}")
+        while True:
+            now = gate.fresh_state()
+            if now is not None and now.state == HEALTHY and now.arm_enabled:
+                return "the arm was released and enabled"
+            if now is not None and now.state not in (HELD, HEALTHY):
+                raise InitializeFailed(
+                    f"released, and the deadman is now "
+                    f"{STATE_NAMES.get(now.state, now.state)}: {now.detail}"
+                )
+            try:
+                await self._pause(config["poll_period_s"], deadline)
+            except InitializeFailed as failure:
+                raise InitializeFailed(
+                    f"released, and the deadman did not say the arm is enabled: {failure}"
+                ) from failure
 
     async def _bring_to_start(self, deadline: float) -> str:
         """Bring the carriage to `start_position_m` unless it is already within tolerance."""
@@ -483,12 +545,22 @@ class Initializer(LifecycleNode):
         except InitializeFailed as failure:
             self.get_logger().error(str(failure))
 
-    async def _ask(self, key: str, request, label: str, deadline: float, resend: bool = True):
+    async def _ask(
+        self,
+        key: str,
+        request,
+        label: str,
+        deadline: float,
+        resend: bool = True,
+        judge: bool = True,
+    ):
         """Send once matched; send again at every `call_deadline_s` until one is answered.
 
         Every request stays pending, so whichever is answered first counts; all
         still pending are removed on return. ``resend=False`` sends once and
         waits for that answer until ``deadline``. A refusal (`ret != 0`) is final.
+        ``judge=False`` returns the answer as it came, for a caller whose
+        response has no vendor `ret`.
 
         Nothing is sent once ``deadline`` has passed, and the vendor is said not to
         have answered only when its first request went unanswered for a whole
@@ -529,6 +601,8 @@ class Initializer(LifecycleNode):
                     client.remove_pending_request(future)
                     future.cancel()
         response = answered.result()
+        if not judge and response is not None:
+            return response
         if response is None or response.ret != 0:
             code = None if response is None else response.ret
             detail = "" if response is None else f": {response.message}"

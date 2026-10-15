@@ -22,24 +22,32 @@ TRIPPED it. The node turns a trip into stop calls; this module only says when.
 THE RULES, which `DeadmanState.msg` states for a reader of the topic:
 
 - Motion is permitted in HEALTHY and in nothing else.
-- AWAITING becomes HEALTHY on the first heartbeat from the deadman's own zone,
-  carrying a boundary id, while exactly one heartbeat publisher is on the
-  topic. That heartbeat's boundary id is LATCHED: it names the one boundary
+- AWAITING becomes HELD (ADR-0076) on the first heartbeat from the deadman's
+  own zone, carrying a boundary id, while exactly one heartbeat publisher is on
+  the topic. That heartbeat's boundary id is LATCHED: it names the one boundary
   this deadman follows until the next activation. AWAITING never trips: before
   any heartbeat there is no commander whose loss could be detected, and nothing
   is permitted to move anyway.
-- HEALTHY becomes TRIPPED when the timeout elapses with no fresh heartbeat,
-  when the heartbeat's publisher disappears, when a heartbeat carries a
-  boundary id other than the latched one, or when more than one heartbeat
-  publisher is on the topic. The last two are a second boundary commanding the
-  same side, and which of the two is in charge cannot be told from here. It
-  becomes TRIPPED too when the vendor driver the deadman stops the arm through
-  is not served exactly once: a driver that went away, or restarted, re-enabled
-  the arm on its own activation, and nothing here asked it to.
+- HELD becomes HEALTHY on `release()` and on nothing else: the operator's
+  release, which the asset's initializer asks for as its first step. A
+  heartbeat never releases, so a deadman started while a boundary is already
+  beating - a restarted side - holds the arm until an operator starts it.
+  `release()` is refused, with the reason, in every other state.
+- HELD and HEALTHY become TRIPPED when the timeout elapses with no fresh
+  heartbeat, when the heartbeat's publisher disappears, when a heartbeat
+  carries a boundary id other than the latched one, or when more than one
+  heartbeat publisher is on the topic. The last two are a second boundary
+  commanding the same side, and which of the two is in charge cannot be told
+  from here. They become TRIPPED too when the vendor driver the deadman stops
+  the arm through is not served exactly once: a driver that went away, or
+  restarted, re-enabled the arm on its own activation, and nothing here asked
+  it to. (When the node reports that, and when not, is the node's: see
+  `cite_hardware.deadman`.)
 - TRIPPED is LATCHED. Heartbeats resuming do not clear it; only deactivate,
   which leaves INACTIVE, and a later activate do. An unexplained loss of the
   commander is a fault, and resuming on its own would re-run whatever caused it
-  (cross-cutting-safety.md).
+  (cross-cutting-safety.md). The node ends its process on a trip (ADR-0076
+  decision 5); the latch is what holds until it has.
 
 A heartbeat counts only when it is FRESH: from this zone, from the latched
 boundary, and with a sequence above the last one accepted. A repeated or rewound
@@ -57,13 +65,20 @@ INACTIVE = DeadmanState.STATE_INACTIVE
 AWAITING = DeadmanState.STATE_AWAITING
 HEALTHY = DeadmanState.STATE_HEALTHY
 TRIPPED = DeadmanState.STATE_TRIPPED
+HELD = DeadmanState.STATE_HELD
 
 STATE_NAMES = {
     INACTIVE: "INACTIVE",
     AWAITING: "AWAITING",
+    HELD: "HELD",
     HEALTHY: "HEALTHY",
     TRIPPED: "TRIPPED",
 }
+
+#: The states a boundary is followed in, and so the states that trip: a
+#: commander whose loss can be detected exists only once its first heartbeat
+#: has arrived.
+FOLLOWING = (HELD, HEALTHY)
 
 
 @dataclass(frozen=True)
@@ -72,7 +87,7 @@ class Outcome:
 
     #: The event changed the state, or (for a heartbeat) was fresh and counted.
     accepted: bool
-    #: This event is the one that moved HEALTHY to TRIPPED. Exactly one event
+    #: This event is the one that moved HELD or HEALTHY to TRIPPED. Exactly one event
     #: per trip carries it, so the stop calls are issued once per trip.
     tripped: bool = False
     #: Why, for the record and the published state's `detail`.
@@ -154,22 +169,43 @@ class Liveness:
             )
         self.last_sequence = sequence
         if self.state == AWAITING:
-            self.state = HEALTHY
+            self.state = HELD
             self.boundary_id = boundary_id
             self.detail = (
-                f"heartbeat {sequence} of boundary {boundary_id!r} received; motion permitted"
+                f"heartbeat {sequence} of boundary {boundary_id!r} received; the arm is "
+                "held until the operator starts it (Start robot)"
             )
         return Outcome(accepted=True, reason=self.detail)
 
+    def release(self) -> Outcome:
+        """Take the operator's release: HELD becomes HEALTHY; refused in any other state."""
+        if self.state != HELD:
+            why = {
+                INACTIVE: "the deadman is not active",
+                AWAITING: "no heartbeat of the twin boundary has arrived yet",
+                HEALTHY: "the arm is already released",
+                TRIPPED: "the deadman TRIPPED, and a trip is cleared only by ending the side",
+            }[self.state]
+            return Outcome(
+                accepted=False,
+                reason=f"release refused in {STATE_NAMES[self.state]}: {why}",
+            )
+        self.state = HEALTHY
+        self.detail = (
+            f"released by the operator, following boundary {self.boundary_id!r}; "
+            "motion permitted"
+        )
+        return Outcome(accepted=True, reason=self.detail)
+
     def second_boundary(self, reason: str) -> Outcome:
-        """Record evidence of a second boundary: a trip when HEALTHY, a refusal before."""
-        if self.state == HEALTHY:
+        """Record evidence of a second boundary: a trip once one is followed, a refusal before."""
+        if self.state in FOLLOWING:
             return self._trip(reason)
         return Outcome(accepted=False, reason=reason)
 
     def expired(self) -> Outcome:
         """Record that the timeout elapsed since the last fresh heartbeat."""
-        if self.state != HEALTHY:
+        if self.state not in FOLLOWING:
             return Outcome(accepted=False)
         return self._trip(
             f"no heartbeat within {self.timeout_s:g} s after sequence {self.last_sequence}"
@@ -177,19 +213,19 @@ class Liveness:
 
     def publisher_lost(self) -> Outcome:
         """Record that the heartbeat topic has no publisher left."""
-        if self.state != HEALTHY:
+        if self.state not in FOLLOWING:
             return Outcome(accepted=False)
         return self._trip(
             f"the heartbeat publisher disappeared after sequence {self.last_sequence}"
         )
 
     def vendor_lost(self, reason: str) -> Outcome:
-        """Record that the vendor's stop path is not the one it was: a trip when HEALTHY."""
-        if self.state != HEALTHY:
+        """Record that the vendor's stop path is not the one it was: a trip once following."""
+        if self.state not in FOLLOWING:
             return Outcome(accepted=False, reason=reason)
         return self._trip(reason)
 
     def _trip(self, reason: str) -> Outcome:
         self.state = TRIPPED
-        self.detail = f"TRIPPED: {reason}; latched until deactivate and activate"
+        self.detail = f"TRIPPED: {reason}; latched, and the deadman ends its side"
         return Outcome(accepted=True, tripped=True, reason=self.detail)

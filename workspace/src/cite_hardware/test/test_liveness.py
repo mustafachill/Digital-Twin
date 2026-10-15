@@ -16,17 +16,24 @@
 
 from __future__ import annotations
 
-from cite_hardware.liveness import AWAITING, HEALTHY, INACTIVE, Liveness, TRIPPED
+from cite_hardware.liveness import AWAITING, HEALTHY, HELD, INACTIVE, Liveness, TRIPPED
 import pytest
 
 ZONE = "cell_b"
 BOUNDARY = "boundary-a"
 
 
-def _healthy() -> Liveness:
+def _held() -> Liveness:
     liveness = Liveness(ZONE, 0.5)
     liveness.activate()
     assert liveness.heartbeat(ZONE, BOUNDARY, 1, 1).accepted
+    assert liveness.state == HELD
+    return liveness
+
+
+def _healthy() -> Liveness:
+    liveness = _held()
+    assert liveness.release().accepted
     assert liveness.state == HEALTHY
     return liveness
 
@@ -55,8 +62,87 @@ def test_awaiting_never_trips() -> None:
     assert liveness.state == AWAITING
 
 
-def test_the_first_heartbeat_permits_motion() -> None:
-    assert _healthy().permits_motion
+def test_the_first_heartbeat_holds_and_permits_nothing() -> None:
+    """ADR-0076: a heartbeat never enables; the arm waits for the operator."""
+    liveness = _held()
+    assert not liveness.permits_motion
+    assert liveness.boundary_id == BOUNDARY
+    assert "held" in liveness.detail
+    # More heartbeats keep it HELD: none of them is a release.
+    for sequence in range(2, 6):
+        assert liveness.heartbeat(ZONE, BOUNDARY, sequence, 1).accepted
+    assert liveness.state == HELD
+
+
+def test_only_the_release_permits_motion() -> None:
+    liveness = _held()
+    outcome = liveness.release()
+    assert outcome.accepted and not outcome.tripped
+    assert liveness.state == HEALTHY
+    assert liveness.permits_motion
+    assert "released" in liveness.detail
+
+
+@pytest.mark.parametrize(
+    "reach, state, why",
+    [
+        (lambda: Liveness(ZONE, 0.5), INACTIVE, "not active"),
+        (lambda: _activated(), AWAITING, "no heartbeat"),
+        (lambda: _healthy(), HEALTHY, "already released"),
+        (lambda: _tripped(), TRIPPED, "TRIPPED"),
+    ],
+)
+def test_a_release_outside_held_is_refused_and_changes_nothing(reach, state, why) -> None:
+    liveness = reach()
+    outcome = liveness.release()
+    assert not outcome.accepted and not outcome.tripped
+    assert why in outcome.reason
+    assert liveness.state == state
+
+
+def _activated() -> Liveness:
+    liveness = Liveness(ZONE, 0.5)
+    liveness.activate()
+    return liveness
+
+
+def _tripped() -> Liveness:
+    liveness = _held()
+    assert liveness.expired().tripped
+    return liveness
+
+
+@pytest.mark.parametrize(
+    "trip, words",
+    [
+        (lambda live: live.expired(), "no heartbeat within"),
+        (lambda live: live.publisher_lost(), "disappeared"),
+        (lambda live: live.heartbeat(ZONE, "boundary-b", 2, 1), "boundary-b"),
+        (lambda live: live.heartbeat(ZONE, BOUNDARY, 2, 2), "publishers"),
+        (lambda live: live.second_boundary("a rival"), "a rival"),
+        (lambda live: live.vendor_lost("set_state served twice"), "served twice"),
+    ],
+)
+def test_held_trips_exactly_as_healthy_does(trip, words) -> None:
+    for liveness in (_held(), _healthy()):
+        outcome = trip(liveness)
+        assert outcome.tripped, words
+        assert words in outcome.reason
+        assert liveness.state == TRIPPED
+        assert not liveness.permits_motion
+        # Latched: neither heartbeats nor a release clear it.
+        assert not liveness.heartbeat(ZONE, BOUNDARY, 99, 1).accepted
+        assert not liveness.release().accepted
+        assert liveness.state == TRIPPED
+
+
+def test_an_activation_after_held_starts_awaiting_again() -> None:
+    liveness = _held()
+    liveness.deactivate()
+    assert liveness.state == INACTIVE
+    liveness.activate()
+    assert liveness.state == AWAITING
+    assert liveness.boundary_id == ""
 
 
 def test_a_heartbeat_from_another_zone_does_not_count() -> None:
@@ -113,7 +199,7 @@ def test_only_deactivate_then_activate_clears_a_trip() -> None:
     # A restarted boundary has a new id and counts from 1 again, and is
     # accepted after a reset.
     assert liveness.heartbeat(ZONE, "boundary-b", 1, 1).accepted
-    assert liveness.permits_motion
+    assert liveness.state == HELD
     assert liveness.boundary_id == "boundary-b"
 
 

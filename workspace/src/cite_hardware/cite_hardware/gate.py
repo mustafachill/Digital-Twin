@@ -99,6 +99,19 @@ class DeadmanGate:
         """Return a sentence for a refusal, naming what the gate last knew."""
         return self._why_closed() or "the gate is open"
 
+    def fresh_state(self) -> DeadmanState | None:
+        """Return the latest state if it is fresh and from the one deadman, else `None`.
+
+        For a reader that needs more than yes or no - the initializer, which
+        releases a HELD arm (ADR-0076) - on the same terms the gate itself
+        trusts a state: received, one publisher, within `max_age_s`.
+        """
+        with self._lock:
+            state = self._state
+        if state is None or self._why_untrusted():
+            return None
+        return state
+
     def check(self) -> None:
         """Report a closure that no message announced: age, or the publisher count."""
         self._update()
@@ -107,6 +120,22 @@ class DeadmanGate:
         self._node.destroy_subscription(self.subscription)
 
     def _why_closed(self) -> str:
+        untrusted = self._why_untrusted()
+        if untrusted:
+            return untrusted
+        with self._lock:
+            state = self._state
+        if state is None:
+            return f"no deadman state received on {self._topic}"
+        if state.state != HEALTHY:
+            return (
+                f"the deadman reports {STATE_NAMES.get(state.state, state.state)}: "
+                f"{state.detail}"
+            )
+        return ""
+
+    def _why_untrusted(self) -> str:
+        """Say why the latest state may not be believed at all, or ''."""
         with self._lock:
             state = self._state
             received_ns = self._received_ns
@@ -122,11 +151,6 @@ class DeadmanGate:
             return (
                 f"the deadman state on {self._topic} is {age_ns * 1e-9:.3f} s old, "
                 f"above the bound of {self._max_age_ns * 1e-9:g} s"
-            )
-        if state.state != HEALTHY:
-            return (
-                f"the deadman reports {STATE_NAMES.get(state.state, state.state)}: "
-                f"{state.detail}"
             )
         return ""
 
