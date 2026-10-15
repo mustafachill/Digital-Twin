@@ -64,15 +64,19 @@ ConsoleView view_from(
 /// not produce, it is said as no phase rather than as a refusal. A value the
 /// contract does not define is said as unrecognised. In the console's words:
 /// never "safe", "verified" or "validated for the real cell" (ADR-0073).
-/// `stopped`: the request was stopped by the operator (`ConsoleClient`), so a
-/// failed result is said as stopped rather than as refused or failed.
-/// How a request ended, as its outcome line opens: "<request>: done. ",
-/// "<request>: stopped. " for one the operator stopped that did not complete,
-/// or "<request>: refused or failed. ".
-std::string outcome_opening(const std::string & request, bool success, bool stopped);
-
+/// `after_stop`: as for `outcome_opening`.
 std::string validate_then_run_outcome(
-  const cite_interfaces::action::ValidateThenRun::Result & result, bool stopped = false);
+  const cite_interfaces::action::ValidateThenRun::Result & result, bool after_stop = false);
+
+/// How a request ended, as its outcome line opens: "<request>: done. ",
+/// "<request>: ended after a Stop request. " for one that did not complete
+/// and that a Stop the console accepted, or a cancel of its goal, came before
+/// the end of (`after_stop`, from `ConsoleClient`), or "<request>: refused or
+/// failed. ". Neither of the last two says WHY it ended: the console's result
+/// carries no field that tells a stop from a fault (cell_console ends both
+/// aborted), so a fault that races a Stop is never relabelled a stop. The
+/// console's own detail, which does say, always follows the opening (S-04).
+std::string outcome_opening(const std::string & request, bool success, bool after_stop);
 
 /// The fields of a DivergenceMetrics sample the "Twin fidelity" card reads.
 DivergenceSample divergence_sample_from(const cite_interfaces::msg::DivergenceMetrics & sample);

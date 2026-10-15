@@ -174,10 +174,18 @@ enum class RunGoal
   REJECT,
   /// Accepted; one feedback (cycle 2, step 3 of 7), then it succeeds.
   SUCCEED,
-  /// Accepted; one feedback, then it holds until a Stop is served and ends
-  /// unsuccessfully, as `cell_console` ends a run its Stop stopped (aborted,
-  /// not cancelled: the stop came by StopCell, not by the goal's cancel).
+  /// Accepted; one feedback, then it holds until the client has seen its Stop
+  /// accepted (`stop_seen`) and ends unsuccessfully, as `cell_console` ends a
+  /// run its Stop stopped (aborted, not cancelled: the stop came by StopCell,
+  /// not by the goal's cancel).
   END_WHEN_STOPPED,
+  /// The same, but the run ends on a fault of its own that raced the Stop:
+  /// aborted, with the console's "failed" detail (S-04).
+  FAIL_WHEN_STOPPED,
+  /// Accepted; once a Stop is served the run ends as stopped BEFORE the Stop
+  /// is answered, and the answer waits until the client has seen the run's
+  /// result (`result_seen`): the result arrives first (R2-06).
+  END_BEFORE_STOP_ANSWERED,
 };
 
 /// A console as far as the panel can tell: its state, its services, its
@@ -233,16 +241,29 @@ public:
       });
     stop_ = node_->create_service<StopCell>(
       names.stop,
-      [this](const std::shared_ptr<StopCell::Request>,
-      std::shared_ptr<StopCell::Response> response) {
+      [this, run](const std::shared_ptr<rmw_request_id_t> header,
+      const std::shared_ptr<StopCell::Request>) {
         note("stop");
-        response->success = true;
-        response->detail = "fake stop";
+        StopCell::Response response;
+        response.success = true;
+        response.detail = "fake stop";
         {
           std::lock_guard<std::mutex> lock(mutex_);
           stopped_ = true;
         }
         stop_served_.notify_all();
+        if (run != RunGoal::END_BEFORE_STOP_ANSWERED) {
+          stop_->send_response(*header, response);
+          return;
+        }
+        // Answered off the executor once the client has the run's result; a
+        // hang detector bounds it.
+        answerer_ = std::thread([this, header, response]() mutable {
+            std::unique_lock<std::mutex> lock(mutex_);
+            acknowledged_.wait_for(lock, SETTLE, [this]() {return result_seen_;});
+            lock.unlock();
+            stop_->send_response(*header, response);
+          });
       });
     home_ = rclcpp_action::create_server<HomeRobot>(
       node_, names.home,
@@ -284,7 +305,21 @@ public:
             // once it has its result. A test fake's margin, not a sequence.
           std::this_thread::sleep_for(std::chrono::milliseconds(500));
           auto result = std::make_shared<RunProgram::Result>();
-          if (run == RunGoal::END_WHEN_STOPPED) {
+          if (run == RunGoal::END_WHEN_STOPPED || run == RunGoal::FAIL_WHEN_STOPPED) {
+            // Held until the client has seen its Stop accepted; a hang
+            // detector bounds it.
+            std::unique_lock<std::mutex> lock(mutex_);
+            acknowledged_.wait_for(lock, SETTLE, [this]() {return stop_seen_;});
+            lock.unlock();
+            result->success = false;
+            result->detail = run == RunGoal::END_WHEN_STOPPED ?
+              "Start program was stopped; nothing homes on its own" :
+              "Start program failed: the plant's arm reported a fault";
+            result->cycles_completed = 0;
+            handle->abort(result);
+            return;
+          }
+          if (run == RunGoal::END_BEFORE_STOP_ANSWERED) {
             // Held until a Stop is served; a hang detector bounds it.
             std::unique_lock<std::mutex> lock(mutex_);
             stop_served_.wait_for(lock, SETTLE, [this]() {return stopped_;});
@@ -354,6 +389,9 @@ public:
     if (runner_.joinable()) {
       runner_.join();
     }
+    if (answerer_.joinable()) {
+      answerer_.join();
+    }
     context_->shutdown("the test ended");
     executor_->cancel();
     spinner_.join();
@@ -394,6 +432,12 @@ public:
     accepted_.notify_all();
   }
 
+  /// The client has seen the console accept its Stop.
+  void stop_seen() {acknowledge(stop_seen_);}
+
+  /// The client has seen the run's result.
+  void result_seen() {acknowledge(result_seen_);}
+
   std::vector<std::string> requests()
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -406,6 +450,15 @@ private:
   {
     std::unique_lock<std::mutex> lock(mutex_);
     accepted_.wait_for(lock, SETTLE, [this]() {return accepted_seen_;});
+  }
+
+  void acknowledge(bool & flag)
+  {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      flag = true;
+    }
+    acknowledged_.notify_all();
   }
 
   void note(const std::string & request)
@@ -428,11 +481,15 @@ private:
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   std::thread spinner_;
   std::thread runner_;
+  std::thread answerer_;
   std::mutex mutex_;
   std::condition_variable stop_served_;
   bool stopped_{false};
   std::condition_variable accepted_;
   bool accepted_seen_{false};
+  std::condition_variable acknowledged_;
+  bool stop_seen_{false};
+  bool result_seen_{false};
   std::vector<std::string> requests_;
 };
 
@@ -939,12 +996,80 @@ TEST(ConsoleClient, ANewRequestClearsTheLastOutcomeAndItsEndClearsItsProgress)
   EXPECT_EQ(recorder.progress.back(), "");
 }
 
-TEST(ConsoleClient, ARunEndedByAStopIsSaidStoppedNotFailed)
+namespace
 {
-  // T-05 (b): the console accepted the operator's Stop while the run was in
-  // flight, and the run then ended unsuccessfully: it was stopped.
+
+/// The first outcome line of `recorder` that opens with `request`; empty if none.
+std::string first_outcome(Recorder & recorder, const std::string & request)
+{
+  for (const auto & line : recorder.outcomes) {
+    if (line.rfind(request, 0) == 0) {
+      return line;
+    }
+  }
+  return "";
+}
+
+/// Run a program on `console`, Stop it, and let the fake end the run once the
+/// client has seen the Stop accepted. The run's outcome line.
+std::string run_then_stop(FakeConsole & console, Recorder & recorder, ConsoleClient & client)
+{
+  EXPECT_EQ(
+    sent_once_served(
+      recorder, [&]() {client.run_program(1.0, ConsoleState::TARGET_SIM, 2);},
+      &Recorder::progress),
+    "Start program: accepted.");
+  console.accepted_seen();
+  client.stop();
+  EXPECT_TRUE(recorder.wait_for([&]() {return !first_outcome(recorder, "Stop:").empty();}));
+  console.stop_seen();
+  EXPECT_TRUE(
+    recorder.wait_for([&]() {return !first_outcome(recorder, "Start program:").empty();}));
+  std::lock_guard<std::mutex> lock(recorder.mutex);
+  return first_outcome(recorder, "Start program:");
+}
+
+}  // namespace
+
+TEST(ConsoleClient, ARunThatEndedAfterAStopIsSaidSoNotFailed)
+{
+  // T-05 (b), S-04: the console accepted the operator's Stop while the run was
+  // in flight, and the run then ended unsuccessfully: it ended after a Stop
+  // request, and the console's own detail says it was stopped.
   const ConsoleNames names = names_for("stopped");
   FakeConsole console(names, true, RunGoal::END_WHEN_STOPPED);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  EXPECT_EQ(
+    run_then_stop(console, recorder, client),
+    "Start program: ended after a Stop request. Start program was stopped; nothing homes on "
+    "its own Cycles completed: 0.");
+}
+
+TEST(ConsoleClient, AFaultThatRacesAStopIsNeverRelabelledStopped)
+{
+  // S-04: the run ended aborted after the Stop was accepted, but on a fault
+  // of its own. The opening claims no stop, and the console's detail - the
+  // fault - is shown.
+  const ConsoleNames names = names_for("fault_races_stop");
+  FakeConsole console(names, true, RunGoal::FAIL_WHEN_STOPPED);
+  Recorder recorder;
+  ConsoleClient client(names, recorder.callbacks());
+  const std::string outcome = run_then_stop(console, recorder, client);
+  EXPECT_EQ(
+    outcome,
+    "Start program: ended after a Stop request. Start program failed: the plant's arm "
+    "reported a fault Cycles completed: 0.");
+  EXPECT_EQ(outcome.find("stopped"), std::string::npos) << outcome;
+}
+
+TEST(ConsoleClient, AResultBeforeTheStopsAnswerClaimsNoStop)
+{
+  // R2-06: the run's result arrived before the console's answer to the Stop.
+  // Nothing then says the Stop came first: the opening is the neutral one,
+  // and the console's detail says what happened.
+  const ConsoleNames names = names_for("result_first");
+  FakeConsole console(names, true, RunGoal::END_BEFORE_STOP_ANSWERED);
   Recorder recorder;
   ConsoleClient client(names, recorder.callbacks());
   EXPECT_EQ(
@@ -955,24 +1080,12 @@ TEST(ConsoleClient, ARunEndedByAStopIsSaidStoppedNotFailed)
   console.accepted_seen();
   client.stop();
   ASSERT_TRUE(
-    recorder.wait_for(
-      [&]() {
-        for (const auto & line : recorder.outcomes) {
-          if (line.rfind("Start program:", 0) == 0) {
-            return true;
-          }
-        }
-        return false;
-      }));
+    recorder.wait_for([&]() {return !first_outcome(recorder, "Start program:").empty();}));
+  console.result_seen();
+  ASSERT_TRUE(recorder.wait_for([&]() {return !first_outcome(recorder, "Stop:").empty();}));
   std::lock_guard<std::mutex> lock(recorder.mutex);
-  std::string run_outcome;
-  for (const auto & line : recorder.outcomes) {
-    if (line.rfind("Start program:", 0) == 0) {
-      run_outcome = line;
-    }
-  }
   EXPECT_EQ(
-    run_outcome,
-    "Start program: stopped. Start program was stopped; nothing homes on its own "
+    first_outcome(recorder, "Start program:"),
+    "Start program: refused or failed. Start program was stopped; nothing homes on its own "
     "Cycles completed: 0.");
 }

@@ -154,8 +154,10 @@ private:
   /// and `sent` is what is in progress (T-05).
   void sending(const std::string & sent) const;
   /// Whether a request sent when `stops_accepted_` read `stops_at_send`, and
-  /// that ended unsuccessfully with `code`, was ended by the operator's Stop:
-  /// its goal was cancelled, or a Stop the console accepted came in between.
+  /// that ended unsuccessfully with `code`, ended after a Stop request: its
+  /// goal was cancelled, or the console's acceptance of a Stop arrived before
+  /// its result. Not that the Stop ended it - a fault may race it, and the
+  /// result does not say which (`outcome_opening`, S-04).
   bool stopped_since(std::uint64_t stops_at_send, rclcpp_action::ResultCode code) const;
   void run_progress(const RunProgress & position) const;
 

@@ -131,13 +131,14 @@ ConsoleView view_from(const ConsoleState & state, std::vector<std::uint8_t> publ
   return view;
 }
 
-std::string outcome_opening(const std::string & request, bool success, bool stopped)
+std::string outcome_opening(const std::string & request, bool success, bool after_stop)
 {
-  return request + (success ? ": done. " : stopped ? ": stopped. " : ": refused or failed. ");
+  return request + (success ? ": done. " :
+         after_stop ? ": ended after a Stop request. " : ": refused or failed. ");
 }
 
 std::string validate_then_run_outcome(
-  const cite_interfaces::action::ValidateThenRun::Result & result, bool stopped)
+  const cite_interfaces::action::ValidateThenRun::Result & result, bool after_stop)
 {
   const ValidationPhase ended = validation_phase_from(result.ended_in);
   std::string where;
@@ -148,7 +149,7 @@ std::string validate_then_run_outcome(
   } else {
     where = "Refused before either phase began.";
   }
-  const std::string opening = outcome_opening("Validate then run", result.success, stopped);
+  const std::string opening = outcome_opening("Validate then run", result.success, after_stop);
   return opening + result.detail + " " + where + " Cycles completed on the twin: " +
          std::to_string(result.cycles_completed) + ".";
 }

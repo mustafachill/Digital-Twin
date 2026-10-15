@@ -338,10 +338,12 @@ person to look at, not a gate.
   mouse through the middle, or the title toolbar may stay. Where the pass-through would keep a
   press from Stop, the panel undoes it and warns; anything else it cannot tell, and says
   nothing.
-- **A request the operator stopped:** its outcome says "stopped", not "refused or failed",
-  when its goal was cancelled or the console accepted a Stop while it ran and it then did not
-  complete. A new request clears the last one's outcome, and a request's progress line is
-  cleared when it ends.
+- **A request that ended after a Stop:** its outcome opens "ended after a Stop request" when its
+  goal was cancelled, or the console's acceptance of a Stop arrived before its result, and it
+  did not complete; otherwise "refused or failed". Neither says why it ended: the console ends a
+  stopped request and a faulted one alike (aborted), so the panel never calls a fault that
+  raced a Stop "stopped". The console's own detail, which does say, always follows. A new
+  request clears the last one's outcome, and a request's progress line is cleared when it ends.
 - **A target the console does not serve:** not offered, and a goal naming one is refused by
   the console (`HomeRobot.action`, `RunProgram.action`); the panel never sends an unset one.
 - **Validate then run on a deployment without the twin target:** disabled, and the panel says

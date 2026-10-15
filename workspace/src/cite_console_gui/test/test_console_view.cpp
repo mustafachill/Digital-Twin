@@ -271,12 +271,14 @@ TEST(ConsoleView, AValidateThenRunResultNamesThePhaseItEndedIn)
     "Ended in: Running twin. Cycles completed on the twin: 2.");
 }
 
-TEST(ConsoleView, ARequestTheOperatorStoppedIsSaidStopped)
+TEST(ConsoleView, ARequestThatEndedAfterAStopIsSaidSoAndNoMore)
 {
-  // T-05 (b): a request the operator stopped is said stopped, not failed; one
-  // that completed despite a late Stop is still done.
+  // T-05 (b), S-04: a request that did not complete after a Stop request is
+  // said to have ended after it - not "stopped", which the result cannot
+  // tell from a fault, and not "failed"; one that completed despite a late
+  // Stop is still done.
   EXPECT_EQ(cite_console_gui::outcome_opening("Start program", false, true),
-    "Start program: stopped. ");
+    "Start program: ended after a Stop request. ");
   EXPECT_EQ(
     cite_console_gui::outcome_opening("Start program", false, false),
     "Start program: refused or failed. ");
@@ -289,7 +291,8 @@ TEST(ConsoleView, ARequestTheOperatorStoppedIsSaidStopped)
   stopped.ended_in = ConsoleState::PHASE_VALIDATING;
   EXPECT_EQ(
     validate_then_run_outcome(stopped, true),
-    "Validate then run: stopped. Validate then run was stopped Ended in: Validating in "
+    "Validate then run: ended after a Stop request. Validate then run was stopped Ended in: "
+    "Validating in "
     "simulation. Cycles completed on the twin: 0.");
 }
 
