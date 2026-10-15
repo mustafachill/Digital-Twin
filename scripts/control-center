@@ -43,14 +43,14 @@ tell() {  # tell error|warning|info <message>
         zenity "--${kind}" --title="$APP_TITLE" --no-wrap --text="$message" >/dev/null 2>&1 && return 0
     fi
     if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
-        notify-send -a "$APP_TITLE" "$APP_TITLE" "$message" >/dev/null 2>&1 || true
+        notify-send -a "$APP_TITLE" -h string:desktop-entry:cite-control-center "$APP_TITLE" "$message" >/dev/null 2>&1 || true
     fi
 }
 
 progress() {  # progress <message> — a passing notification for a long step
     printf '==> %s\n' "$1"
     if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
-        notify-send -a "$APP_TITLE" -t 5000 "$APP_TITLE" "$1" >/dev/null 2>&1 || true
+        notify-send -a "$APP_TITLE" -h string:desktop-entry:cite-control-center -t 5000 "$APP_TITLE" "$1" >/dev/null 2>&1 || true
     fi
 }
 
@@ -123,18 +123,22 @@ progress "Checking the build; it is rebuilt only if a source changed."
 ./scripts/enter dev ./scripts/build --if-stale 9>&- || fail "The build failed."
 
 # --- The console ---------------------------------------------------------------
-# Started as its own job (set -m), so it is not born with SIGINT ignored and so
-# a forwarded stop reaches its whole process group - the shell, the compose
-# client and through it the container - exactly as Ctrl-C in a terminal does.
-# Every stop is forwarded as SIGINT: that is the path the supervisor tears the
-# pair down on in order, and the one every shell in between waits through.
-# Standard input is /dev/null, as it is from a desktop entry: a background job
-# that reads a terminal is stopped (SIGTTIN), and nothing here takes input.
+# A stop (HUP, INT or TERM to this script) is handed to the console the way
+# Ctrl-C in a terminal hands it: SIGINT into the container, to the supervisor,
+# which tears the pair down in order while the compose client keeps streaming
+# that teardown into the log and then returns the supervisor's own status
+# (stop_console_container). Before the container exists there is nothing in it
+# to stop, so the console's own process group is sent SIGINT instead; it is
+# started as its own job (set -m) so that group exists and is not born with
+# SIGINT ignored. Standard input is /dev/null, as it is from a desktop entry: a
+# background job that reads a terminal is stopped (SIGTTIN), and nothing here
+# takes input.
 SIGNALLED=""
 # shellcheck disable=SC2329  # invoked by the signal traps below
 forward() {  # forward <received signal number>
     SIGNALLED="$1"
-    kill -s INT -- "-${CONSOLE_PID}" 2>/dev/null || true
+    info "Asked to stop (signal $1); stopping the console."
+    stop_console_container || kill -s INT -- "-${CONSOLE_PID}" 2>/dev/null || true
 }
 progress "Starting the operator console."
 set -m

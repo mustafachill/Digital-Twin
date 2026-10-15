@@ -1490,6 +1490,23 @@ Docker said: ${error}"
     esac
 }
 
+# stop_console_container — ask this checkout's running `gui` container(s) to
+# stop the way Ctrl-C in a terminal does: SIGINT to the container, which tini
+# hands to the pair supervisor, which tears the pair down in order. The compose
+# client in between is NOT signalled: without a terminal it leaves on a signal
+# and stops reading the container, and the teardown would then run unwatched
+# and unlogged. Fails when there is no such container, so the caller can fall
+# back to signalling the client.
+stop_console_container() {
+    local ids
+    ids="$(docker ps -q \
+        --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+        --filter "label=com.docker.compose.service=gui" 2>/dev/null || true)"
+    [ -n "$ids" ] || return 1
+    # shellcheck disable=SC2086  # one id per word, deliberately split
+    docker kill --signal INT $ids >/dev/null
+}
+
 # control_center_outcome <exit status> — the sentence an operator is shown for
 # how the console ended, or nothing when there is nothing to report: a clean
 # end, or an interruption somebody asked for (SIGHUP, SIGINT, SIGTERM).
