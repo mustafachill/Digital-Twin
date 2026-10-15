@@ -283,8 +283,11 @@ SIDE_STATE_TOKEN = "CITE_SIDE_STATE"
 #: - `down`: the side was up and exited; the supervisor is sweeping its group
 #:   before it starts it again.
 #: - `failed`: the side will not be started again in this run: it refused its
-#:   configuration before the robot was reached, or it reached the robot and
-#:   failed to come up `KEPT_ATTEMPTS` times in a row (`pair.py`).
+#:   configuration before the robot was reached, it reached the robot and
+#:   failed to come up `KEPT_ATTEMPTS` times in a row, it went down
+#:   `KEPT_RECONNECTS` times within `KEPT_RECONNECT_WINDOW_S`, or its group
+#:   could not be emptied (`pair.py`). Its line carries `attempts=N`, the
+#:   failed attempts in a row that ended it (0 when it was not that).
 SIDE_WAITING = "waiting"
 SIDE_CONNECTING = "connecting"
 SIDE_UP = "up"
@@ -303,12 +306,46 @@ SIDE_STATES = (SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_DOWN, SIDE_FAILED)
 #: drops now and then is reconnected every time.
 KEPT_ATTEMPTS = 3
 
+#: How many times a KEPT side may go DOWN after it was up, within
+#: `KEPT_RECONNECT_WINDOW_S`, before it is `failed` and not started again
+#: (ADR-0077 decision 2). `KEPT_ATTEMPTS` bounds a side that never comes up;
+#: this bounds one that comes up and falls over again and again - every
+#: reconnect is a whole vendor driver started against a real arm, and an
+#: unbounded loop of them is not a connection but a fault nobody is shown. An
+#: owner's decision like `KEPT_ATTEMPTS`, to be revisited once open-work #93
+#: has measured how often a connection drops.
+KEPT_RECONNECTS = 5
 
-def side_state_line(side: str, state: str) -> str:
-    """Format one state line for the boundary's standard input; refuse an unknown state."""
+#: The rolling window, in seconds, over which `KEPT_RECONNECTS` is counted.
+KEPT_RECONNECT_WINDOW_S = 600.0
+
+
+def side_state_line(side: str, state: str, attempts: int | None = None) -> str:
+    """Format one state line for the boundary's standard input; refuse an unknown state.
+
+    ``attempts`` is carried on a `failed` line only (`attempts=N`): the failed
+    attempts in a row that ended the side, so that the reader builds its words
+    from the line rather than from a constant of the writer's (ADR-0077).
+    """
     if state not in SIDE_STATES:
         raise ValueError(f"{state!r} is not a side state; one of {', '.join(SIDE_STATES)}")
-    return f"{SIDE_STATE_TOKEN} side={side} state={state}"
+    line = f"{SIDE_STATE_TOKEN} side={side} state={state}"
+    if state == SIDE_FAILED:
+        line += f" attempts={0 if attempts is None else int(attempts)}"
+    return line
+
+
+def parsed_attempts(line: str) -> int | None:
+    """Return the `attempts=` field of a state line, or ``None`` if it carries none."""
+    if SIDE_STATE_TOKEN not in line:
+        return None
+    for field in line.split():
+        if field.startswith("attempts="):
+            try:
+                return int(field[len("attempts="):])
+            except ValueError:
+                return None
+    return None
 
 
 def parsed_side_state(line: str) -> tuple[str, str] | None:

@@ -27,6 +27,7 @@ node, and nothing reaches a robot.
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 import re
 import sys
@@ -40,6 +41,7 @@ from cite_bringup.readiness import (
     announced_reachable,
     boundary_announcement,
     console_announcement,
+    parsed_attempts,
     parsed_side_state,
     reachable_announcement,
     ready_announcement,
@@ -83,6 +85,10 @@ def test_a_state_line_round_trips_and_a_half_line_moves_nothing() -> None:
             COUNTERPART_SIDE,
             state,
         )
+    # A-02: a failed line carries its attempts, and no other line does.
+    assert parsed_attempts(side_state_line(COUNTERPART_SIDE, SIDE_FAILED, 3)) == 3
+    assert parsed_attempts(side_state_line(COUNTERPART_SIDE, SIDE_FAILED)) == 0
+    assert parsed_attempts(side_state_line(COUNTERPART_SIDE, SIDE_UP, 3)) is None
     assert parsed_side_state("CITE_SIDE_STATE side=counterpart") is None
     assert parsed_side_state("CITE_SIDE_STATE state=up") is None
     assert parsed_side_state("CITE_SIDE_STATE side=counterpart state=sideways") is None
@@ -110,26 +116,31 @@ def test_reachable_then_ready_is_connecting_then_up_and_the_ceiling_runs_between
     assert keeper.deadline is None
 
 
-def test_an_exit_after_up_is_down_a_restart_and_waiting_and_resets_the_count() -> None:
+SWEEP = [(pair.KEEP_SWEEP, "")]
+RESTARTED = [(pair.KEEP_RESTART, ""), (pair.KEEP_REPORT, SIDE_WAITING)]
+FAILED = [(pair.KEEP_REPORT, SIDE_FAILED)]
+
+
+def test_an_exit_after_up_is_swept_first_then_down_a_restart_and_waiting() -> None:
     keeper = _keeper()
     keeper.reachable(0.0)
-    keeper.exited()
-    keeper.started()
+    assert keeper.exited(0.0) == SWEEP
+    assert keeper.swept() == RESTARTED
     keeper.reachable(0.0)
     assert keeper.failures == 1
     keeper.ready()
-    assert keeper.exited() == [
-        (pair.KEEP_REPORT, SIDE_DOWN),
-        (pair.KEEP_RESTART, ""),
-        (pair.KEEP_REPORT, SIDE_WAITING),
-    ]
+    # S-04: nothing is reported until the old group is empty - `down` would
+    # let the boundary forget the side while its old processes still speak.
+    assert keeper.exited(1.0) == SWEEP
+    assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
     assert keeper.failures == 0
 
 
 def test_an_exit_before_the_robot_answered_is_a_refusal_and_is_not_retried() -> None:
     keeper = _keeper()
-    assert keeper.exited() == [(pair.KEEP_SWEEP, ""), (pair.KEEP_REPORT, SIDE_FAILED)]
-    assert keeper.exited() == [], "a failed side is not judged again"
+    assert keeper.exited(0.0) == SWEEP
+    assert keeper.swept() == FAILED
+    assert keeper.exited(0.0) == [], "a failed side is not judged again"
     assert keeper.reachable(0.0) == [] and keeper.ready() == []
 
 
@@ -137,18 +148,88 @@ def test_three_failed_attempts_in_a_row_are_failed() -> None:
     keeper = _keeper(attempts=3)
     for _ in range(2):
         keeper.reachable(0.0)
-        assert keeper.exited() == [(pair.KEEP_RESTART, ""), (pair.KEEP_REPORT, SIDE_WAITING)]
+        assert keeper.exited(0.0) == SWEEP
+        assert keeper.swept() == RESTARTED
     keeper.reachable(0.0)
-    assert keeper.exited() == [(pair.KEEP_SWEEP, ""), (pair.KEEP_REPORT, SIDE_FAILED)]
+    assert keeper.exited(0.0) == SWEEP
+    assert keeper.swept() == FAILED
+    assert keeper.failures == 3, "the failed line carries the count"
 
 
 def test_an_attempt_past_its_ceiling_is_stopped_once_and_its_exit_counts() -> None:
     keeper = _keeper()
     keeper.reachable(0.0)
-    assert keeper.expired(10.0) == [(pair.KEEP_STOP, "")]
+    assert keeper.expired(10.0) == [(pair.KEEP_STOP, pair.STOP_CEILING)]
     assert keeper.expired(11.0) == [], "stopped once"
-    assert keeper.exited() == [(pair.KEEP_RESTART, ""), (pair.KEEP_REPORT, SIDE_WAITING)]
+    assert keeper.exited(11.0) == SWEEP
+    assert keeper.swept() == RESTARTED
     assert keeper.failures == 1
+
+
+def test_an_announcement_after_the_stop_was_sent_is_ignored() -> None:
+    """S-06: a stopped attempt that announces late is not `up`, and its exit still counts."""
+    keeper = _keeper()
+    keeper.reachable(0.0)
+    keeper.expired(10.0)
+    assert keeper.ready() == [], "a late ready while stopping moves nothing"
+    assert keeper.failures == 0
+    assert keeper.exited(11.0) == SWEEP
+    assert keeper.swept() == RESTARTED
+    assert keeper.failures == 1
+
+
+def test_a_group_that_never_empties_is_failed_and_never_restarted() -> None:
+    """S-05: no second driver beside processes of the first."""
+    keeper = _keeper()
+    keeper.reachable(0.0)
+    keeper.ready()
+    assert keeper.exited(0.0) == SWEEP
+    assert keeper.unswept() == FAILED
+    assert keeper.swept() == [] and keeper.exited(1.0) == []
+
+
+def test_reconnects_are_bounded_within_the_window() -> None:
+    """S-02: the `reconnects`-th down within `window_s` is `failed`, not another restart."""
+    keeper = pair._Keeper(
+        COUNTERPART_SIDE, attempts=3, ceiling_s=10.0, reconnects=3, window_s=100.0
+    )
+    keeper.started()
+    for now in (0.0, 10.0):
+        keeper.reachable(now)
+        keeper.ready()
+        keeper.exited(now)
+        assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
+    keeper.reachable(20.0)
+    keeper.ready()
+    keeper.exited(20.0)
+    assert keeper.swept() == FAILED
+
+
+def test_reconnects_older_than_the_window_do_not_count() -> None:
+    keeper = pair._Keeper(
+        COUNTERPART_SIDE, attempts=3, ceiling_s=10.0, reconnects=2, window_s=100.0
+    )
+    keeper.started()
+    for now in (0.0, 150.0, 300.0, 450.0):
+        keeper.reachable(now)
+        keeper.ready()
+        keeper.exited(now)
+        assert keeper.swept() == [(pair.KEEP_REPORT, SIDE_DOWN)] + RESTARTED
+
+
+def test_the_shipped_reconnect_bound_is_the_owners_decision() -> None:
+    from cite_bringup.readiness import KEPT_RECONNECT_WINDOW_S, KEPT_RECONNECTS
+
+    assert (KEPT_RECONNECTS, KEPT_RECONNECT_WINDOW_S) == (5, 600.0)
+
+
+def test_a_misnamed_announcement_stops_the_side_and_fails_it() -> None:
+    """R-08: a kept side naming another participant is a configuration error for that side."""
+    keeper = _keeper()
+    keeper.reachable(0.0)
+    assert keeper.misnamed() == [(pair.KEEP_STOP, pair.STOP_MISNAMED)]
+    assert keeper.exited(1.0) == SWEEP
+    assert keeper.swept() == FAILED
 
 
 # --- Who is kept ----------------------------------------------------------------
@@ -274,7 +355,8 @@ def _kept(tmp_path: Path, behaviours: list[str]) -> pair.SideSpec:
 
     Every incarnation first prints its number and pid. Behaviours:
     `silent` waits for ever; `refuse` exits 2 at once; `hang` reaches its robot
-    and never announces; `up` reaches, announces and waits for ever; `lost`
+    and never announces; `deaf` does the same and ignores SIGINT; `misnamed`
+    reaches and announces as the plant; `up` reaches, announces and waits for ever; `lost`
     reaches, announces, starts a grandchild in its group, records its pid and
     exits 1 once `lose` exists; `check` reports whether that grandchild is
     still alive and waits for ever.
@@ -300,8 +382,13 @@ def _kept(tmp_path: Path, behaviours: list[str]) -> pair.SideSpec:
         "        print('grandchild alive', flush=True)\n"
         "    except ProcessLookupError:\n"
         "        print('grandchild gone', flush=True)\n"
-        "if behaviour in ('hang', 'up', 'lost'):\n"
+        "if behaviour == 'deaf':\n"
+        "    import signal\n"
+        "    signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+        "if behaviour in ('hang', 'up', 'lost', 'deaf', 'misnamed'):\n"
         f"    print({reach!r}, flush=True)\n"
+        "if behaviour == 'misnamed':\n"
+        f"    print({ready_announcement(PLANT_SIDE, ZONE)!r}, flush=True)\n"
         "if behaviour in ('up', 'lost'):\n"
         f"    print({ready!r}, flush=True)\n"
         "if behaviour == 'lost':\n"
@@ -413,6 +500,78 @@ def test_a_side_lost_after_it_was_up_is_swept_and_started_again_and_ends_nothing
     assert text.index(f"[pair] {COUNTERPART_SIDE} exited 1") < text.index(
         f"[pair] {pair.BOUNDARY_NAME} exited 0"
     )
+    # R-02: the restarted incarnation is the supervisor's to stop too, and it
+    # did - nothing of it outlives the pair.
+    restarted = int(pids[1])
+    with pytest.raises(ProcessLookupError):
+        os.kill(restarted, 0)
+
+
+def test_a_kept_sides_stop_never_holds_the_loop_that_judges_the_plant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S-07: a kept side deaf to SIGINT is escalated from the loop, not waited on.
+
+    Before the fix the loop sat in the kept side's `STOP_GRACE_S` and judged
+    the plant's exit only after it.
+    """
+    monkeypatch.setattr(pair, "STOP_GRACE_S", 6.0)
+    monkeypatch.setattr(pair, "STOP_KILL_S", 1.0)
+    stopping = tmp_path / "stopping"
+    plant = pair.SideSpec(
+        PLANT_SIDE,
+        _script(
+            PLANT_SIDE,
+            f"print({ready_announcement(PLANT_SIDE, ZONE)!r}, flush=True)\n"
+            f"while not os.path.exists({str(stopping)!r}):\n    time.sleep(0.02)\n"
+            "sys.exit(5)\n",
+        ),
+    )
+    log = _Log({f"[pair] stopping {COUNTERPART_SIDE}": stopping})
+    code, text = _supervise(
+        [plant, _kept(tmp_path, ["deaf"])],
+        boundary=_boundary("never"),
+        log=log,
+        kept_ceiling_s=0.5,
+    )
+    assert f"[pair] {PLANT_SIDE} exited 5" in text, text
+    judged = text.index(f"[pair] {PLANT_SIDE} exited 5")
+    grace = f"[pair] {COUNTERPART_SIDE} did not stop within"
+    assert grace not in text[:judged], "the plant waited out the kept side's grace"
+    assert code == pair.PAIR_ENDED
+
+
+def test_a_kept_group_that_never_empties_is_failed_and_not_started_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S-05: still not empty after SIGKILL and the bounded poll: failed, no restart."""
+    monkeypatch.setattr(pair, "STOP_KILL_S", 0.3)
+    monkeypatch.setattr(pair, "_group_is_empty", lambda side: False)
+    log = _Log({
+        f"[{pair.BOUNDARY_NAME}] got CITE_SIDE_STATE side=counterpart state=up": tmp_path / "lose",
+    })
+    code, text = _supervise(
+        [_plant(), _kept(tmp_path, ["lost", "up"])],
+        boundary=_boundary(f"state={SIDE_FAILED}"),
+        log=log,
+    )
+    assert _states(text) == [SIDE_WAITING, SIDE_CONNECTING, SIDE_UP, SIDE_FAILED], text
+    assert text.count("incarnation=") == 1, "never a second driver beside the first"
+    assert "process group was still not empty" in text
+
+
+def test_a_kept_side_announcing_as_another_is_failed_and_the_pair_goes_on(
+    tmp_path: Path,
+) -> None:
+    """R-08: a misnamed announcement is that side's configuration error, not the pair's end."""
+    code, text = _supervise(
+        [_plant(), _kept(tmp_path, ["misnamed", "up"])],
+        boundary=_boundary(f"state={SIDE_FAILED}"),
+    )
+    assert _states(text) == [SIDE_WAITING, SIDE_CONNECTING, SIDE_FAILED], text
+    assert text.count("incarnation=") == 1
+    # What ended the pair is the boundary, after the side was failed.
+    assert f"[pair] {pair.BOUNDARY_NAME} exited 0" in text
 
 
 def test_a_side_that_refuses_before_its_robot_answered_is_failed_and_not_restarted(

@@ -88,10 +88,14 @@ pair. What the supervisor knows of it - `waiting`, `connecting`, `up`, `down`,
 `failed` - is written to the boundary's STANDARD INPUT, one line per change,
 from this module's main loop only (`readiness.side_state_line`). A side that
 exits after it was up is swept and started again WHOLE, and comes up held
-(ADR-0076); one that reached its robot and failed to come up is started again
-at most `KEPT_ATTEMPTS` times in a row; one that exited before its robot was
-reachable refused its configuration and is not started again. Nothing about
-it is decided from a timer but each attempt's ceiling. Every other pair -
+(ADR-0076), at most `KEPT_RECONNECTS` times within `KEPT_RECONNECT_WINDOW_S`;
+one that reached its robot and failed to come up is started again at most
+`KEPT_ATTEMPTS` times in a row; one that exited before its robot was
+reachable refused its configuration and is not started again. Its stop and
+sweep are escalated from the main loop and never waited on there, so a kept
+side's teardown never delays the judging of the participants that end the
+pair. Nothing about it is decided from a timer but each attempt's ceiling and
+the stop ceilings. Every other pair -
 `./scripts/program`, every scenario, CI - keeps nothing, and a side's exit
 ends it as before.
 
@@ -132,6 +136,8 @@ from cite_bringup.readiness import (
     announced_side,
     announced_window_closed,
     KEPT_ATTEMPTS,
+    KEPT_RECONNECT_WINDOW_S,
+    KEPT_RECONNECTS,
     SIDE_CONNECTING,
     SIDE_DOWN,
     SIDE_FAILED,
@@ -640,13 +646,26 @@ class _Side:
 #: What a `_Keeper` asks the supervisor to do, in the order it returns them.
 #: `KEEP_REPORT` carries a state for the boundary; the others carry nothing.
 KEEP_REPORT = "report"
-#: Stop the current incarnation: its attempt's ceiling expired. Its exit then
-#: arrives as any exit does, and is judged as a failed attempt.
+#: Stop the current incarnation: its attempt's ceiling expired, or it said it
+#: was something it was not started as. Its exit then arrives as any exit
+#: does, and is judged.
 KEEP_STOP = "stop"
-#: Sweep the ended incarnation's process group, and start the side again.
-KEEP_RESTART = "restart"
-#: Sweep the ended incarnation's process group, and start nothing.
+#: Sweep the ended incarnation's process group. The supervisor reports the
+#: sweep's end back - `swept()` when the group emptied, `unswept()` when it did
+#: not - and the keeper says then what follows.
 KEEP_SWEEP = "sweep"
+#: Start the side again; its old group has already been swept empty.
+KEEP_RESTART = "restart"
+
+#: Why a `KEEP_STOP` was asked for: the attempt's ceiling passed, or the side
+#: announced as something it was not started as.
+STOP_CEILING = "ceiling"
+STOP_MISNAMED = "misnamed"
+
+#: The keeper's own states, never reported: a stop was sent and the exit is
+#: awaited (a late announcement is ignored), and the group is being swept.
+_STOPPING = "stopping"
+_SWEEPING = "sweeping"
 
 
 class _Keeper:
@@ -665,24 +684,40 @@ class _Keeper:
                                              ceiling starts
     it announced                             report `up`; the count of failed
                                              attempts is reset
-    it exited before its robot answered      sweep; report `failed`: it refused
-                                             its configuration, which no restart
-                                             changes
-    it exited after the robot answered and   one failed attempt: sweep, start it
-    before announcing, or its ceiling        again and report `waiting` - or,
-    expired and it was stopped               at `attempts` in a row, sweep and
-                                             report `failed`
-    it exited after it was up                report `down`; sweep, start it
-                                             again, report `waiting`
+    its ceiling expired, or it announced     stop it (`stopping`: an
+    as something it was not started as       announcement now is ignored)
+    it exited, whatever it was               sweep its group; what follows is
+                                             decided when the sweep ends
+    swept, after it exited before its        report `failed`: it refused its
+    robot answered, or after a misnamed      configuration, which no restart
+    announcement                             changes
+    swept, after it reached the robot and    one failed attempt: start it again
+    did not come up                          and report `waiting` - or, at
+                                             `attempts` in a row, report `failed`
+    swept, after it was up                   report `down`; start it again,
+                                             report `waiting` - or, the
+                                             `reconnects`-th down within
+                                             `window_s`, report `failed`
+    the sweep could not empty its group      report `failed`: a second driver
+                                             beside a first is never started
     ======================================== ===================================
 
-    **The ceiling is per incarnation and runs from `reachable`**: a side waiting
-    for a robot that is switched off is not failing, and has none. Restarting is
-    not resuming: the side comes up whole and HELD (ADR-0076).
+    **`down` is reported only once the old group is empty**, so the boundary
+    forgets what the side said only after nothing of the old incarnation can
+    say it again. **The ceiling is per incarnation and runs from `reachable`**:
+    a side waiting for a robot that is switched off is not failing, and has
+    none. Restarting is not resuming: the side comes up whole and HELD
+    (ADR-0076).
     """
 
     def __init__(
-        self, name: str, *, attempts: int = KEPT_ATTEMPTS, ceiling_s: float = READY_CEILING_S
+        self,
+        name: str,
+        *,
+        attempts: int = KEPT_ATTEMPTS,
+        ceiling_s: float = READY_CEILING_S,
+        reconnects: int = KEPT_RECONNECTS,
+        window_s: float = KEPT_RECONNECT_WINDOW_S,
     ) -> None:
         self.name = name
         self.state: str | None = None
@@ -692,10 +727,19 @@ class _Keeper:
         self.deadline: float | None = None
         self._attempts = attempts
         self._ceiling_s = ceiling_s
+        self._reconnects = reconnects
+        self._window_s = window_s
+        #: When the side went down after it was up, oldest first, within the window.
+        self._downs: list[float] = []
+        #: The state the current incarnation was in when it was stopped or exited.
+        self._was: str | None = None
+        #: The incarnation announced as something it was not started as.
+        self._misnamed = False
 
     def started(self) -> list[tuple[str, str]]:
         self.state = SIDE_WAITING
         self.deadline = None
+        self._misnamed = False
         return [(KEEP_REPORT, SIDE_WAITING)]
 
     def reachable(self, now: float) -> list[tuple[str, str]]:
@@ -713,30 +757,67 @@ class _Keeper:
         self.deadline = None
         return [(KEEP_REPORT, SIDE_UP)]
 
+    def misnamed(self) -> list[tuple[str, str]]:
+        """Stop an incarnation that announced as another side: its configuration is wrong."""
+        if self.state not in (SIDE_WAITING, SIDE_CONNECTING, SIDE_UP):
+            return []
+        self._misnamed = True
+        self._was = self.state
+        self.state = _STOPPING
+        self.deadline = None
+        return [(KEEP_STOP, STOP_MISNAMED)]
+
     def expired(self, now: float) -> list[tuple[str, str]]:
         """Stop the current attempt if its ceiling has passed; its exit is then judged."""
         if self.deadline is None or now < self.deadline:
             return []
         self.deadline = None
-        return [(KEEP_STOP, "")]
+        self._was = self.state
+        self.state = _STOPPING
+        return [(KEEP_STOP, STOP_CEILING)]
 
-    def exited(self) -> list[tuple[str, str]]:
+    def exited(self, now: float) -> list[tuple[str, str]]:
+        """Sweep the ended incarnation's group; `swept` says what follows."""
         self.deadline = None
-        if self.state == SIDE_UP:
+        if self.state in (SIDE_FAILED, _SWEEPING, None):
+            return []
+        if self.state != _STOPPING:
+            self._was = self.state
+        if self._was == SIDE_UP and not self._misnamed:
+            self._downs = [t for t in self._downs if now - t < self._window_s] + [now]
+        self.state = _SWEEPING
+        return [(KEEP_SWEEP, "")]
+
+    def swept(self) -> list[tuple[str, str]]:
+        """Say what follows once the ended incarnation's group is empty."""
+        if self.state != _SWEEPING:
+            return []
+        was = self._was
+        if self._misnamed or was == SIDE_WAITING:
+            return self._failed()
+        if was == SIDE_UP:
+            if len(self._downs) >= self._reconnects:
+                return self._failed()
             self.failures = 0
             self.state = SIDE_WAITING
             return [(KEEP_REPORT, SIDE_DOWN), (KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
-        if self.state == SIDE_WAITING:
-            self.state = SIDE_FAILED
-            return [(KEEP_SWEEP, ""), (KEEP_REPORT, SIDE_FAILED)]
-        if self.state == SIDE_CONNECTING:
-            self.failures += 1
-            if self.failures >= self._attempts:
-                self.state = SIDE_FAILED
-                return [(KEEP_SWEEP, ""), (KEEP_REPORT, SIDE_FAILED)]
-            self.state = SIDE_WAITING
-            return [(KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
-        return []
+        # It reached its robot (`connecting`, or stopped from there) and did
+        # not come up: one failed attempt.
+        self.failures += 1
+        if self.failures >= self._attempts:
+            return self._failed()
+        self.state = SIDE_WAITING
+        return [(KEEP_RESTART, ""), (KEEP_REPORT, SIDE_WAITING)]
+
+    def unswept(self) -> list[tuple[str, str]]:
+        """Fail a side whose ended group did not empty even after SIGKILL: never restart."""
+        if self.state != _SWEEPING:
+            return []
+        return self._failed()
+
+    def _failed(self) -> list[tuple[str, str]]:
+        self.state = SIDE_FAILED
+        return [(KEEP_REPORT, SIDE_FAILED)]
 
 
 class _StateFeed:
@@ -755,9 +836,9 @@ class _StateFeed:
         self._pending: list[str] = []
         self._target: _Side | None = None
 
-    def say(self, side: str, state: str) -> None:
+    def say(self, side: str, state: str, attempts: int | None = None) -> None:
         print(f"[pair] {side}: {state} (kept, ADR-0077)", file=self._out, flush=True)
-        self._pending.append(side_state_line(side, state))
+        self._pending.append(side_state_line(side, state, attempts))
         self._flush()
 
     def attach(self, boundary: _Side) -> None:
@@ -875,13 +956,8 @@ def _stop(side: _Side, out) -> None:
     if side.process.poll() is not None:
         return
     print(f"[pair] stopping {side.name}", file=out, flush=True)
-    if side.spec.stop_reach == STOP_GROUP:
-        _signal_group(side, signal.SIGINT)
-    else:
-        try:
-            side.process.send_signal(signal.SIGINT)
-        except ProcessLookupError:
-            return
+    if not _interrupt(side):
+        return
     try:
         side.process.wait(timeout=STOP_GRACE_S)
         return
@@ -899,6 +975,61 @@ def _stop(side: _Side, out) -> None:
     except subprocess.TimeoutExpired:
         print(f"[pair] killing {side.name}", file=out, flush=True)
     _signal_group(side, signal.SIGKILL)
+
+
+def _interrupt(side: _Side) -> bool:
+    """Send a participant the SIGINT its spec says reaches it; False if it has gone.
+
+    Never waits: :func:`_stop` waits after it, and a kept side's stop is
+    escalated from the supervisor's main loop instead (`_Ending`).
+    """
+    if side.spec.stop_reach == STOP_GROUP:
+        _signal_group(side, signal.SIGINT)
+        return True
+    try:
+        side.process.send_signal(signal.SIGINT)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+#: The stages of a kept side's ending (`_Ending`), escalated from the main loop.
+#: SIGINT sent, its exit awaited for `STOP_GRACE_S`:
+_END_INTERRUPTED = "interrupted"
+#: its group sent SIGTERM, its exit awaited for `STOP_KILL_S`:
+_END_TERMINATED = "terminated"
+#: its group sent SIGKILL; its exit follows, and no deadline is left:
+_END_KILLED = "killed"
+#: it exited; its group sent SIGTERM and polled empty for `STOP_KILL_S`:
+_END_SWEEPING = "sweeping"
+#: its group sent SIGKILL and polled empty for `STOP_KILL_S` more; a group still
+#: not empty then is a side that is not started again:
+_END_REAPING = "reaping"
+
+
+@dataclass
+class _Ending:
+    """The stop or sweep of ONE incarnation of a kept side, under way (ADR-0077).
+
+    **Never waited on.** A kept side is not a participant whose teardown ends
+    the pair, so its stop may not hold the loop that judges the participants
+    that do: the signal is sent, the next stage's deadline is recorded here, and
+    the supervisor's main loop escalates it when the deadline passes - the same
+    way it honours `_Keeper.deadline`. A plant that exits while a kept side is
+    being stopped is judged at once, not after the kept side's grace.
+    """
+
+    side: _Side
+    stage: str
+    #: When this stage escalates (monotonic), or None when nothing more is sent.
+    deadline: float | None
+
+    def wake(self, now: float) -> float | None:
+        """Return when the loop must next look at this ending, or None."""
+        if self.stage in (_END_SWEEPING, _END_REAPING):
+            # A group emptying is no event anyone can wait on (`_SWEEP_POLL_S`).
+            return min(self.deadline, now + _SWEEP_POLL_S)
+        return self.deadline
 
 
 def _signal_group(side: _Side, number: int) -> None:
@@ -1276,32 +1407,95 @@ def _join(
         if side.spec.kept
     }
     current = {side.name: side for side in sides if side.spec.kept}
+    #: Per kept side, the stop or sweep of its current incarnation under way.
+    endings: dict[str, _Ending] = {}
 
     def keep(name: str, actions: list[tuple[str, str]]) -> None:
-        for action, state in actions:
+        for action, payload in actions:
             if action == KEEP_REPORT:
-                feed.say(name, state)
+                attempts = keepers[name].failures if payload == SIDE_FAILED else None
+                feed.say(name, payload, attempts)
             elif action == KEEP_STOP:
                 print(
                     f"[pair] {name} reached its robot and did not announce within "
-                    f"{kept_ceiling_s:g} s; stopping this attempt",
+                    f"{kept_ceiling_s:g} s; stopping this attempt"
+                    if payload == STOP_CEILING
+                    else f"[pair] {name} announced readiness as another participant; "
+                    "its configuration is wrong, stopping it and not starting it again",
                     file=out,
                     flush=True,
                 )
-                _stop(current[name], out)
+                begin_stop(name)
             elif action == KEEP_SWEEP:
-                _sweep([current[name]], out)
+                begin_sweep(name)
             elif action == KEEP_RESTART:
-                old = current[name]
-                # The old group first, whole: a launch that died on a signal
-                # leaves what it started running, and a second vendor driver
-                # beside the first is the stale endpoint ADR-0076 guards.
-                _sweep([old], out)
                 if relaunch is None:
                     continue
+                old = current[name]
                 started = relaunch(old.spec)
                 participants[participants.index(old)] = started
                 current[name] = started
+
+    def begin_stop(name: str) -> None:
+        side = current[name]
+        if side.process.poll() is not None:
+            return  # its exit is on the queue, and is judged there
+        print(f"[pair] stopping {name}", file=out, flush=True)
+        if _interrupt(side):
+            endings[name] = _Ending(side, _END_INTERRUPTED, time.monotonic() + STOP_GRACE_S)
+
+    def begin_sweep(name: str) -> None:
+        # The old group first, whole: a launch that died on a signal leaves
+        # what it started running, and a second vendor driver beside the first
+        # is the stale endpoint ADR-0076 guards.
+        side = current[name]
+        _signal_group(side, signal.SIGTERM)
+        endings[name] = _Ending(side, _END_SWEEPING, time.monotonic() + STOP_KILL_S)
+        advance(name, time.monotonic())
+
+    def advance(name: str, now: float) -> None:
+        ending = endings.get(name)
+        if ending is None:
+            return
+        if ending.stage in (_END_SWEEPING, _END_REAPING) and _group_is_empty(ending.side):
+            del endings[name]
+            keep(name, keepers[name].swept())
+            return
+        if ending.deadline is None or now < ending.deadline:
+            return
+        if ending.stage == _END_INTERRUPTED:
+            print(
+                f"[pair] {name} did not stop within {STOP_GRACE_S:g} s of SIGINT; "
+                "signalling its process group",
+                file=out,
+                flush=True,
+            )
+            _signal_group(ending.side, signal.SIGTERM)
+            ending.stage, ending.deadline = _END_TERMINATED, now + STOP_KILL_S
+        elif ending.stage == _END_TERMINATED:
+            print(f"[pair] killing {name}", file=out, flush=True)
+            _signal_group(ending.side, signal.SIGKILL)
+            ending.stage, ending.deadline = _END_KILLED, None
+        elif ending.stage == _END_SWEEPING:
+            print(
+                f"[pair] {name} left processes running {STOP_KILL_S:g} s after its "
+                "group was asked to stop; killing them",
+                file=out,
+                flush=True,
+            )
+            _signal_group(ending.side, signal.SIGKILL)
+            ending.stage, ending.deadline = _END_REAPING, now + STOP_KILL_S
+        else:
+            print(
+                f"[pair] {name}'s process group was still not empty {STOP_KILL_S:g} s "
+                "after SIGKILL; it is not started again, because a second driver "
+                "beside processes of the first is never started (ADR-0076). Look for "
+                f"what is left of process group {ending.side.pgid}",
+                file=out,
+                flush=True,
+            )
+            del endings[name]
+            keep(name, keepers[name].unswept())
 
     def joined_over(group: Iterable[_Side]) -> bool:
         return all(member.ready for member in group if not member.spec.kept)
@@ -1309,19 +1503,24 @@ def _join(
     for name, keeper in keepers.items():
         keep(name, keeper.started())
     while True:
+        # What is due on a kept side first, on every pass and not only on a
+        # timeout, so a busy queue cannot starve an escalation.
+        now = time.monotonic()
+        for name, keeper in keepers.items():
+            keep(name, keeper.expired(now))
+        for name in list(endings):
+            advance(name, now)
         joined = joined_over(participants)
         waits = [] if joined else [deadline]
         waits += [k.deadline for k in keepers.values() if k.deadline is not None]
+        waits += [wake for e in endings.values() if (wake := e.wake(now)) is not None]
         timeout = None if not waits else max(0.0, min(waits) - time.monotonic())
         try:
             kind, side, payload = events.get(timeout=timeout)
         except queue.Empty:
-            now = time.monotonic()
-            if not joined and now >= deadline:
+            if not joined and time.monotonic() >= deadline:
                 _report_ceiling(participants, ceiling, out)
                 return False, participants
-            for name, keeper in keepers.items():
-                keep(name, keeper.expired(now))
             continue
         if side is not None and side.spec.kept and kind != "stop":
             if current.get(side.name) is not side:
@@ -1333,11 +1532,22 @@ def _join(
             if kind == "exit":
                 side.status = payload
                 print(f"[pair] {side.name} exited {payload}", file=out, flush=True)
-                keep(side.name, keeper.exited())
+                endings.pop(side.name, None)
+                keep(side.name, keeper.exited(time.monotonic()))
                 continue
-            if kind == "ready" and payload == side.announces:
-                side.ready = True
-                keep(side.name, keeper.ready())
+            if kind == "ready":
+                if payload == side.announces:
+                    actions = keeper.ready()
+                    side.ready = side.ready or bool(actions)
+                    keep(side.name, actions)
+                else:
+                    print(
+                        f"[pair] {side.name} announced readiness as {payload!r}, and "
+                        f"this supervisor started it as {side.announces!r}",
+                        file=out,
+                        flush=True,
+                    )
+                    keep(side.name, keeper.misnamed())
                 continue
         if kind == "reachable":
             continue
