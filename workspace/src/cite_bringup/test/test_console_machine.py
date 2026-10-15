@@ -1939,6 +1939,23 @@ def test_a_side_becoming_commandable_clears_nothing() -> None:
     assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
 
 
+def test_a_lapse_is_judged_on_its_own_message_not_on_a_later_one() -> None:
+    """S-02: message A (counterpart absent) is told after B (present) was stored.
+
+    Two overlapping deliveries: B's set is what ``commandable()`` reads by the
+    time A's call reaches the machine. A's own set is what is judged, so the
+    lapse it carries clears the started flag, and B is a recovery after it.
+    """
+    rig = Rig(physical=["counterpart"]).started(TWIN)
+    rig.commandable = list(SIDES)
+    rig.machine.commandable_changed(("plant",))
+    rig.machine.commandable_changed(SIDES)
+    snapshot = rig.machine.snapshot()
+    assert snapshot.started_targets == (SIM,)
+    refusal = rig.machine.motion_refusal(0.1, None, REAL)
+    assert refusal is not None and "is not started (counterpart)" in refusal
+
+
 def test_a_lapse_during_its_own_start_after_initializing_leaves_the_side_unstarted(
     monkeypatch,
 ) -> None:

@@ -101,7 +101,7 @@ from cite_interfaces.qos import LATCHED
 from cite_interfaces.srv import ConfirmOperator, StartRobot, StopCell
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.clock import Clock, ClockType
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.lifecycle import LifecycleNode, State, TransitionCallbackReturn
@@ -194,6 +194,9 @@ class CellConsole(LifecycleNode):
         self._work = ReentrantCallbackGroup()
         #: Everything that must answer at once.
         self._quick = ReentrantCallbackGroup()
+        #: The twin's commandable sides, one message at a time and in order
+        #: (S-02): two deliveries overlapping could hide a lapse from the machine.
+        self._sides_group = MutuallyExclusiveCallbackGroup()
         self._publish_lock = threading.Lock()
         #: Guards `_twin_mode` alone, so the machine may read it under its own lock.
         self._mode_lock = threading.Lock()
@@ -295,7 +298,7 @@ class CellConsole(LifecycleNode):
             ),
             self.create_subscription(
                 TwinSides, TwinSides.TOPIC, self._on_twin_sides, LATCHED,
-                callback_group=self._quick,
+                callback_group=self._sides_group,
             ),
             self.create_service(
                 StartRobot, names.start_robot, self._on_start_robot,
@@ -555,13 +558,14 @@ class CellConsole(LifecycleNode):
         The machine is told, so a physical side that ceased to be commandable
         is no longer started (ADR-0075 decision 2); it publishes the state.
         """
+        commandable = tuple(side for side in message.commandable if side in self._running)
         with self._sides_lock:
-            self._commandable = tuple(
-                side for side in message.commandable if side in self._running
-            )
+            self._commandable = commandable
         machine = self._machine
         if machine is not None:
-            machine.commandable_changed()
+            # This message's own set, outside `_sides_lock` (the machine reads
+            # that lock under its own): a later one cannot hide its lapse (S-02).
+            machine.commandable_changed(commandable)
 
     def _available(self) -> list[int]:
         """Return the targets this deployment offers: every side running (ADR-0075)."""

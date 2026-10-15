@@ -476,16 +476,20 @@ class ConsoleMachine:
             snapshot = self._snapshot()
         self._on_change(snapshot)
 
-    def commandable_changed(self) -> None:
+    def commandable_changed(self, now: Collection[str] | None = None) -> None:
         """Take the twin's new commandable sides, and publish the state again (R-19).
 
         ADR-0075 decision 2: a running physical side that was commandable and
         is no longer has its started flag cleared, so a side that recovers is
         started again before Home or Start program is accepted for it. An idle
         READY console with no side left started is NOT_STARTED.
+
+        ``now`` is the set the twin's message carried, compared with the one
+        before it (S-02): read back from ``commandable()`` instead, a later
+        message's set could hide a lapse an earlier one said. None reads it.
         """
         with self._lock:
-            now = set(self._commandable())
+            now = set(self._commandable() if now is None else now)
             lapsed = (self._was_commandable - now).intersection(self._physical)
             self._was_commandable = now
             self._started_sides.difference_update(lapsed)
