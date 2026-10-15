@@ -1,0 +1,59 @@
+# ADR-0078: One-click control center; a closed window is a clean end
+
+- **Status:** Proposed
+- **Date:** 2026-10-15
+- **Deciders:** Project owner (decision of 2026-10-15: "an executable script and a desktop icon
+  that start the app")
+- **Related:** [ADR-0071](0071-the-first-operator-surface-is-a-panel-in-the-gazebo-window.md),
+  [ADR-0074](0074-the-operator-console-frames-the-3d-view.md), open-work #107, CLAUDE.md §7
+
+## Context
+
+The operator console is started today with `./scripts/console` from a terminal, which leaves
+several gaps:
+
+- **X access:** nothing grants it, and nobody checks Docker access or whether the build is
+  current. `./scripts/sim` even exits 0 when `cite_bringup` is not built.
+- **Closing the window:** the run ends with exit code 3 (`PAIR_ENDED`), as if a part of the
+  cell had failed (open-work #107).
+
+The owner wants the control center started by double-clicking an icon.
+
+## Decision
+
+1. **`scripts/control-center` is the one-click entry point.** The repository root holds a thin
+   `./cite-control-center` that only runs it. In order, it:
+   - logs to `~/.local/state/cite-digital-twin/logs/` and keeps the last 20 logs;
+   - allows one instance at a time;
+   - checks Docker access and says what to do, without ever running `sudo`;
+   - grants X access to the same user only (`xhost +SI:localuser:$USER`), and revokes it on exit
+     if it added it;
+   - bootstraps the image if it is missing;
+   - builds only if the sources changed (`./scripts/build --if-stale`);
+   - runs `./scripts/console`;
+   - reports any exit other than a clean one in a dialog that names the log.
+2. **`scripts/install-launcher` installs the icon.** It installs a desktop entry and an icon
+   drawn for this project into the user's menu, and with `--desktop` onto the desktop.
+   `--uninstall` removes them.
+3. **Closing the window is a clean end.**
+   - When the plant's windowed `gz sim` exits 0, its launch announces `CITE_WINDOW_CLOSED`.
+   - The supervisor treats that announcement as a stop and returns 0.
+   - `PAIR_ENDED` stays the code for a participant that went away unexpectedly.
+4. **`./scripts/sim` refuses a missing `cite_bringup` build** instead of exiting 0.
+5. **CLAUDE.md §7 gains the new entry points** (`scripts/control-center`,
+   `scripts/install-launcher`, `build --if-stale`). This is an owner-approved factual addition.
+
+## Consequences
+
+### What this gets us
+- An operator starts the control center with one double-click.
+- A normal close is not reported as a failure.
+
+### What this costs us
+- More shell to maintain, and the desktop entry depends on the desktop environment (GNOME is
+  tested).
+- Granting X access, even scoped to the same user, is a change to the host. It is revoked on
+  exit.
+
+### What we will have to revisit
+- The Phase 4 web HMI, which would replace the desktop entry.
