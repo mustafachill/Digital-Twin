@@ -33,9 +33,12 @@ starts from:
    REAL accepted.
 4. A goal in flight to the counterpart when it is killed and reported down:
    the goal ENDS - a HARDWARE_FAULT, never a hang - the side leaves running and
-   commandable, and SIM is accepted again.
-5. Started again and up: held again, so REAL is refused again.
-6. The end of the supervisor's input: the side is down, failing closed.
+   commandable, and the MODE FALLS TO SIM by itself (S-01), published.
+5. Started again and up: held again, so REAL is refused again. Released, the
+   mode is still SIM: a goal reaches the plant alone, until SetMode(REAL)
+   measures this incarnation's readiness and is accepted.
+6. The end of the supervisor's input, in REAL: the side is down, failing
+   closed, and the mode falls to SIM again.
 
 Nothing here is a robot: the "physical" side is two Python processes.
 """
@@ -145,6 +148,7 @@ class _Counterpart:
 
     def start(self) -> None:
         DEADMAN.write_text("held")
+        self.lines = []
         env = dict(os.environ)
         env["ROS_DOMAIN_ID"] = str(COUNTERPART_DOMAIN)
         for cmd in (
@@ -192,6 +196,10 @@ class TestTheRealArmComesAndGoes(unittest.TestCase):
         cls.subscription = cls.node.create_subscription(
             TwinSides, TwinSides.TOPIC, cls.sides.append, LATCHED
         )
+        cls.modes: list[TwinMode] = []
+        cls.mode_subscription = cls.node.create_subscription(
+            TwinMode, TwinMode.TOPIC, cls.modes.append, LATCHED
+        )
         cls.counterpart = _Counterpart()
         # Opened for writing once the boundary's shell opened it for reading.
         cls.states = open(STATES, "w")  # noqa: SIM115 - closed in step 6
@@ -222,6 +230,12 @@ class TestTheRealArmComesAndGoes(unittest.TestCase):
     def _sides_until(self, predicate, what: str) -> TwinSides:
         return self._spin_until(
             lambda: self.sides[-1] if self.sides and predicate(self.sides[-1]) else None, what
+        )
+
+    def _mode_until(self, mode: int, what: str) -> TwinMode:
+        return self._spin_until(
+            lambda: self.modes[-1] if self.modes and self.modes[-1].mode == mode else None,
+            what,
         )
 
     def _request(self, mode: int):
@@ -284,7 +298,9 @@ class TestTheRealArmComesAndGoes(unittest.TestCase):
             lambda s: COUNTERPART_SIDE not in s.running, "the side leaving running"
         )
         self.assertNotIn(COUNTERPART_SIDE, gone.commandable)
-        self.assertTrue(self._request(TwinMode.MODE_SIM).accepted)
+        # S-01: nobody asked for SIM; the side leaving took the mode there.
+        fell = self._mode_until(TwinMode.MODE_SIM, "the mode falling to SIM")
+        self.assertIn("stopped being up", fell.reason)
 
         # 5. Started again: it comes up held, and REAL is refused again.
         self.counterpart.start()
@@ -297,10 +313,27 @@ class TestTheRealArmComesAndGoes(unittest.TestCase):
         refused = self._request(TwinMode.MODE_REAL)
         self.assertFalse(refused.accepted)
         self.assertIn("held until Start robot", refused.result.detail)
+        # Released, and still SIM: a goal reaches the plant alone.
+        DEADMAN.write_text("healthy")
+        self._sides_until(lambda s: COUNTERPART_SIDE in s.commandable, "commandable again")
+        self.assertEqual(self.modes[-1].mode, TwinMode.MODE_SIM)
+        sent = self.move_to.send_goal_async(MoveTo.Goal())
+        handle = self._spin_until(lambda: sent.result() if sent.done() else None, "accepted")
+        result = handle.get_result_async()
+        self._spin_until(result.done, "the SIM goal ending")
+        self.assertEqual(result.result().result.result.code, ResultCode.SUCCESS)
+        self.assertFalse(
+            any("accepted" in line for line in self.counterpart.lines),
+            "a goal reached the new incarnation with no SetMode measuring it",
+        )
+        # SetMode measures THIS incarnation, and only then is REAL back.
+        accepted = self._request(TwinMode.MODE_REAL)
+        self.assertTrue(accepted.accepted, accepted.result.detail)
 
-        # 6. The supervisor's input ends: down, failing closed.
+        # 6. The supervisor's input ends: down, failing closed, and out of REAL.
         self.states.close()
         self._sides_until(lambda s: COUNTERPART_SIDE not in s.running, "down at end of input")
+        self._mode_until(TwinMode.MODE_SIM, "the mode falling to SIM at end of input")
         proc_output.assertWaitFor(
             expected_output="up -> down", stream="stderr", timeout=SETTLE_S
         )

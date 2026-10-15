@@ -429,6 +429,22 @@ class ModeAuthority:
         """Why the current mode was entered, for the record."""
         return self._reason
 
+    def fall_back(self, side: str, reason: str) -> bool:
+        """Take SIM, unasked, if the mode in force commands ``side``; say whether it did.
+
+        For a side that stopped being there (ADR-0077): the mode that commanded
+        it was entered on a readiness measured against processes that are gone,
+        and may not outlive them. SIM commands the plant alone, so taking it is
+        never a placement of actuation under a new authority and needs no
+        check; entering a mode that commands the side again is a `SetMode`, and
+        so passes the readiness measurement against whatever runs now.
+        """
+        if side not in commanded_sides(self._mode) or self._mode == TwinMode.MODE_SIM:
+            return False
+        self._mode = TwinMode.MODE_SIM
+        self._reason = reason
+        return True
+
     def request(
         self, mode: int, asset_id: str, reason: str, force: bool, homing: bool = False
     ) -> Verdict:

@@ -38,7 +38,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from cite_bringup.readiness import (
-    KEPT_ATTEMPTS,
+    parsed_attempts,
     parsed_side_state,
     SIDE_CONNECTING,
     SIDE_DOWN,
@@ -47,16 +47,26 @@ from cite_bringup.readiness import (
     SIDE_WAITING,
 )
 
-#: What the operator reads for a kept side that is not up, by its state.
+#: What the operator reads for a kept side that is not up, by its state. A
+#: `failed` line that carries a count of failed attempts is said with it
+#: (`failed_detail`): the count is the supervisor's, read off its line, never
+#: a constant of the writer's imported here (ADR-0077).
 DETAILS = {
     SIDE_WAITING: "waiting for the robot on the network",
     SIDE_CONNECTING: "connecting",
     SIDE_DOWN: "disconnected, reconnecting",
     SIDE_FAILED: (
-        f"failed to connect {KEPT_ATTEMPTS} times, or refused its configuration; not "
-        "retried, see the log"
+        "refused its configuration, went down too often, or left processes it could "
+        "not stop; not retried, see the log"
     ),
 }
+
+
+def failed_detail(attempts: int | None) -> str:
+    """Say why a side is `failed`, from the attempts its line carried."""
+    if attempts:
+        return f"failed to connect {attempts} times in a row; not retried, see the log"
+    return DETAILS[SIDE_FAILED]
 
 
 class Connections:
@@ -64,6 +74,8 @@ class Connections:
 
     def __init__(self, kept: Iterable[str] = ()) -> None:
         self._state = {side: SIDE_WAITING for side in kept}
+        #: The attempts each side's last `failed` line carried.
+        self._attempts: dict[str, int | None] = {}
 
     @property
     def kept(self) -> tuple[str, ...]:
@@ -87,6 +99,8 @@ class Connections:
         if before is None or before == state:
             return None
         self._state[side] = state
+        if state == SIDE_FAILED:
+            self._attempts[side] = parsed_attempts(line)
         return side, before, state
 
     def end_of_input(self) -> list[tuple[str, str, str]]:
@@ -108,7 +122,8 @@ class Connections:
     def absent(self) -> list[str]:
         """Why each kept side that is not up does not run, as `<side>: <reason>`."""
         return [
-            f"{side}: {DETAILS[state]}"
+            f"{side}: "
+            + (failed_detail(self._attempts.get(side)) if state == SIDE_FAILED else DETAILS[state])
             for side, state in self._state.items()
             if state != SIDE_UP
         ]

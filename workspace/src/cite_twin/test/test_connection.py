@@ -38,11 +38,12 @@ from cite_bringup.readiness import (
     SIDE_WAITING,
 )
 from cite_interfaces.msg import DeadmanState, ResultCode, TwinMode
-from cite_twin.connection import Connections, DETAILS
+from cite_twin.connection import Connections, DETAILS, failed_detail
+from cite_twin.hold import ModeHold
 from cite_twin.mode import Deployment, ModeAuthority
 from cite_twin.twin_boundary import _GONE, _wait, TwinBoundary
 
-from test_physical_readiness import _boundary_with_carriages, _state
+from test_physical_readiness import _boundary_with_carriages, _state, AGE, JOINTS
 
 COUNTERPART = "counterpart"
 
@@ -77,6 +78,17 @@ def test_each_line_moves_the_state_and_a_repeat_or_a_half_line_moves_nothing() -
     assert connections.failed() == (COUNTERPART,)
 
 
+def test_a_failed_side_is_said_with_the_attempts_its_line_carried() -> None:
+    """A-02: the words come from the supervisor's line, not from its constant."""
+    connections = Connections([COUNTERPART])
+    connections.apply(side_state_line(COUNTERPART, SIDE_FAILED, 4))
+    assert connections.absent() == [f"{COUNTERPART}: {failed_detail(4)}"]
+    assert "4 times in a row" in failed_detail(4)
+    refused = Connections([COUNTERPART])
+    refused.apply(side_state_line(COUNTERPART, SIDE_FAILED, 0))
+    assert refused.absent() == [f"{COUNTERPART}: {DETAILS[SIDE_FAILED]}"]
+
+
 def test_the_end_of_input_is_down_for_every_kept_side_not_failed() -> None:
     connections = Connections([COUNTERPART])
     connections.apply(_line(SIDE_UP))
@@ -98,6 +110,7 @@ class _Log:
         self.lines.append(text)
 
     warning = info
+    error = info
 
 
 def _kept_boundary() -> TwinBoundary:
@@ -115,6 +128,12 @@ def _kept_boundary() -> TwinBoundary:
     published: list = []
     boundary._published = published
     boundary._publish_sides = lambda sets_only=False: published.append(boundary._sides_now())
+    boundary._authority = _authority(boundary)
+    boundary._hold = ModeHold()
+    modes: list[int] = []
+    boundary._modes = modes
+    boundary._publish_mode = lambda: modes.append(boundary._authority.mode)
+    boundary._belt_publishers = {}
     return boundary
 
 
@@ -179,6 +198,7 @@ def test_a_side_lost_after_up_forgets_what_it_said_and_ends_its_goals() -> None:
     assert taken.is_set(), "a goal that took this event ends"
     assert not boundary._gone[COUNTERPART].is_set(), "a later goal waits on a fresh one"
     assert boundary._physical_watches["picker"].deadman is None
+    assert boundary._track_history["picker_track_joint"] == [], "stillness is measured anew"
     assert (COUNTERPART, "picker_track_joint") not in boundary._track_positions
     assert ("plant", "picker_track_joint") in boundary._track_positions
     verdict = _authority(boundary).request(TwinMode.MODE_REAL, "", "x", False)
@@ -235,6 +255,7 @@ def test_a_wait_on_a_side_that_goes_away_ends_rather_than_hangs() -> None:
     assert waiter.is_alive(), "it waits while the side is there"
     gone.set()
     waiter.join(5.0)
+    assert not waiter.is_alive(), "the wait did not end within 5 s of its side going away"
     assert finished == [_GONE]
 
 
@@ -263,3 +284,163 @@ def test_a_goal_whose_far_side_went_away_is_a_hardware_fault_and_the_plant_finis
     assert outcomes[COUNTERPART].code.code == ResultCode.HARDWARE_FAULT
     assert "disconnected" in outcomes[COUNTERPART].code.detail
     assert outcomes["plant"].code.code == ResultCode.SUCCESS
+
+
+# --- S-01: a mode never outlives the incarnation it was measured on --------------
+
+
+def _released(boundary: TwinBoundary) -> None:
+    boundary._physical_watches["picker"].heard_deadman(
+        _state(DeadmanState.STATE_HEALTHY), time.monotonic()
+    )
+
+
+def _heard_again(boundary: TwinBoundary) -> None:
+    """Hear the new incarnation's controller, joints and carriage, fresh."""
+    now = time.monotonic()
+    watch = boundary._physical_watches["picker"]
+    watch.heard_controller(now)
+    watch.heard_joints(JOINTS, now)
+    boundary._track_positions[(COUNTERPART, "picker_track_joint")] = (0.0, now)
+    boundary._track_history["picker_track_joint"] = [(0.0, now - AGE), (0.0, now)]
+
+
+def test_a_side_lost_in_real_takes_the_mode_to_sim_and_real_is_measured_again() -> None:
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    _released(boundary)
+    machine = boundary._authority
+    assert machine.request(TwinMode.MODE_REAL, "", "run", False).accepted
+    boundary._hold.request(1, "run-1", "/console", TwinMode.MODE_REAL, machine.mode, 0.0)
+
+    boundary._read_side_states(io.StringIO(_line(SIDE_DOWN)))
+    assert machine.mode == TwinMode.MODE_SIM, "the mode fell with the side"
+    assert boundary._modes == [TwinMode.MODE_SIM], "and the fall was published"
+    assert "stopped being up" in machine.reason
+    assert boundary._hold.held.mode == TwinMode.MODE_SIM, "the hold went with the mode"
+    assert boundary._route(machine.mode).sides == ("plant",), "nothing reaches the side"
+
+    # Restarted, up, and still HELD (ADR-0076): REAL is not back by itself.
+    boundary._connections.apply(_line(SIDE_WAITING))
+    boundary._connections.apply(_line(SIDE_UP))
+    boundary._physical_watches["picker"].heard_deadman(
+        _state(DeadmanState.STATE_HELD), time.monotonic()
+    )
+    assert machine.mode == TwinMode.MODE_SIM
+    refused = machine.request(TwinMode.MODE_REAL, "", "again", False)
+    assert not refused.accepted and "held until Start robot" in refused.detail
+    # Released: a goal still goes to the plant alone until SetMode measures,
+    # and SetMode measures THIS incarnation - nothing of the old one is left.
+    _released(boundary)
+    assert machine.mode == TwinMode.MODE_SIM
+    assert boundary._route(machine.mode).sides == ("plant",)
+    unheard = machine.request(TwinMode.MODE_REAL, "", "again", False)
+    assert not unheard.accepted and "not running" in unheard.detail
+    _heard_again(boundary)
+    assert machine.request(TwinMode.MODE_REAL, "", "again", False).accepted
+
+
+def test_a_side_lost_in_sim_moves_no_mode() -> None:
+    boundary = _kept_boundary()
+    boundary._connections.apply(_line(SIDE_UP))
+    with boundary._lock:
+        fell = boundary._changed_connection(*boundary._connections.apply(_line(SIDE_DOWN)))
+    assert not fell and boundary._modes == []
+
+
+# --- S-03: the reader fails closed whatever ends it -----------------------------
+
+
+class _Breaking:
+    """A stream that yields its lines and then raises, as a reader's bug would."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def __iter__(self):
+        yield from self._lines
+        raise RuntimeError("injected")
+
+
+def test_a_reader_that_raises_still_fails_closed_and_says_why() -> None:
+    boundary = _kept_boundary()
+    boundary._read_side_states(_Breaking([_line(SIDE_UP)]))
+    assert boundary._connections.state(COUNTERPART) == SIDE_DOWN
+    assert boundary._published[-1][0] == ("plant",)
+    assert any("injected" in line for line in boundary._log.lines)
+
+
+# --- S-04: a goal on a side that went away is cancelled, best effort ------------
+
+
+class _Later:
+    """A future completed by the test, after the wait on it gave up."""
+
+    def __init__(self) -> None:
+        self._callbacks: list = []
+        self._value = None
+        self._done = False
+
+    def add_done_callback(self, callback) -> None:
+        if self._done:
+            callback(self)
+        else:
+            self._callbacks.append(callback)
+
+    def complete(self, value) -> None:
+        self._value = value
+        self._done = True
+        for callback in self._callbacks:
+            callback(self)
+
+    def result(self):
+        return self._value
+
+
+class _Handle:
+    def __init__(self, result_future) -> None:
+        self.accepted = True
+        self.cancels = 0
+        self._result = result_future
+
+    def get_result_async(self):
+        return self._result
+
+    def cancel_goal_async(self) -> None:
+        self.cancels += 1
+
+
+def _done(value):
+    later = _Later()
+    later.complete(value)
+    return later
+
+
+def test_a_goal_running_on_a_side_that_went_away_is_cancelled() -> None:
+    running = _Handle(_Future())
+    gone = threading.Event()
+    gone.set()
+    outcomes = TwinBoundary._await_far_side_goals(
+        SimpleNamespace(),
+        {COUNTERPART: _done(running)},
+        SimpleNamespace(is_cancel_requested=False),
+        {COUNTERPART: gone},
+    )
+    assert outcomes[COUNTERPART].code.code == ResultCode.HARDWARE_FAULT
+    assert running.cancels == 1
+
+
+def test_a_goal_accepted_after_its_side_went_away_is_cancelled() -> None:
+    acceptance = _Later()
+    gone = threading.Event()
+    gone.set()
+    outcomes = TwinBoundary._await_far_side_goals(
+        SimpleNamespace(),
+        {COUNTERPART: acceptance},
+        SimpleNamespace(is_cancel_requested=False),
+        {COUNTERPART: gone},
+    )
+    assert outcomes[COUNTERPART].code.code == ResultCode.HARDWARE_FAULT
+    late = _Handle(_Future())
+    acceptance.complete(late)
+    assert late.cancels == 1

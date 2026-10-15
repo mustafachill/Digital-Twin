@@ -877,37 +877,68 @@ class TwinBoundary:
         `down` for every kept side: a supervisor that is gone says nothing more,
         and a side nobody vouches for is not running.
         """
-        for line in stream:
-            with self._lock:
-                change = self._connections.apply(line)
+        try:
+            for line in stream:
+                with self._lock:
+                    change = self._connections.apply(line)
+                    fell = change is not None and self._changed_connection(*change)
                 if change is not None:
-                    self._changed_connection(*change)
-            if change is not None:
-                self._said_connection(*change)
-                self._publish_sides()
-        with self._lock:
-            changes = self._connections.end_of_input()
+                    self._said_connection(*change)
+                    self._after_connection(fell)
+        except Exception as error:  # noqa: BLE001 - any end of the reader fails closed
+            # Logged, and then the end of the input like any other: a reader
+            # that died must not leave a side `up` that nobody vouches for.
+            self._log.error(f"the kept sides' state reader ended on an error: {error!r}")
+        finally:
+            with self._lock:
+                changes = self._connections.end_of_input()
+                fell = False
+                for change in changes:
+                    fell = self._changed_connection(*change) or fell
             for change in changes:
-                self._changed_connection(*change)
-        for change in changes:
-            self._said_connection(*change)
+                self._said_connection(*change)
+            self._after_connection(fell)
+
+    def _after_connection(self, fell: bool) -> None:
+        """Off the lock: stop the belts SIM does not command if the mode fell back."""
+        if fell:
+            self._stop_belts_the_mode_does_not_command(TwinMode.MODE_SIM)
         self._publish_sides()
 
-    def _changed_connection(self, side: str, before: str, after: str) -> None:
-        """Apply one kept side's change of state; under the lock.
+    def _changed_connection(self, side: str, before: str, after: str) -> bool:
+        """Apply one kept side's change of state; under the lock. Return whether the mode fell.
 
         A side that WAS up and no longer is ends every goal in flight to it, and
         forgets what it last said: a side started again is judged on what its
         new processes say, never on a latched state of the old ones.
+
+        **And the mode that commanded it falls back to SIM** (S-01): REAL,
+        VALIDATED or any mode commanding the side was entered on a readiness
+        measured against the incarnation that is gone. Left in force, it would
+        command the next incarnation the moment an operator released it, with
+        nothing measured. Entering it again is a `SetMode`, which measures.
         """
         if before != SIDE_UP:
-            return
+            return False
         gone = self._gone.get(side)
         if gone is not None:
             gone.set()
             self._gone[side] = threading.Event()
+        fell = self._authority.fall_back(
+            side,
+            f"the {side} side stopped being up ({after}, ADR-0077); a mode commanding "
+            "it is entered again only through SetMode, which measures its readiness",
+        )
+        if fell:
+            # Into SIM, which no hold refuses: the hold stays with its holder.
+            self._hold.followed("", TwinMode.MODE_SIM)
+            for key in [key for key in self._operands if key[0] != PLANT_SIDE]:
+                del self._operands[key]
+            for key in [key for key in self._joints if key[0] != PLANT_SIDE]:
+                del self._joints[key]
+            self._publish_mode()
         if side != COUNTERPART_SIDE:
-            return
+            return fell
         for watch in self._physical_watches.values():
             watch.forget()
         for store in (
@@ -921,6 +952,7 @@ class TwinBoundary:
                 del store[key]
         for joint, _tolerance_m in self._physical_tracks:
             self._track_history[joint] = []
+        return fell
 
     def _said_connection(self, side: str, before: str, after: str) -> None:
         line = f"{side}: {before} -> {after} (the pair supervisor, ADR-0077)"
@@ -1539,6 +1571,9 @@ class TwinBoundary:
         for side_name, future in sent.items():
             handle = _wait(future, goal_handle, handles.values(), gone.get(side_name))
             if handle is _GONE:
+                # Best effort (S-04): should the acceptance still arrive, the
+                # goal it accepted is cancelled rather than left running.
+                future.add_done_callback(_cancel_if_accepted)
                 outcomes[side_name] = _lost(side_name, "before it accepted the goal")
                 continue
             if handle is None or not handle.accepted:
@@ -1555,11 +1590,14 @@ class TwinBoundary:
         for side_name, handle in handles.items():
             future = handle.get_result_async()
             answer = _wait(future, goal_handle, handles.values(), gone.get(side_name))
-            outcomes[side_name] = (
-                _lost(side_name, "while the goal ran")
-                if answer is _GONE
-                else _outcome_of(side_name, answer)
-            )
+            if answer is _GONE:
+                # Best effort (S-04): a side that went away may be the same
+                # server a moment later, and a goal left running there is a
+                # motion nobody owns. Sent, never awaited.
+                _cancel_quietly(handle)
+                outcomes[side_name] = _lost(side_name, "while the goal ran")
+                continue
+            outcomes[side_name] = _outcome_of(side_name, answer)
 
         return outcomes
 
@@ -2211,6 +2249,24 @@ def _wait(
             for handle in list(handles):
                 handle.cancel_goal_async()
     return future.result()
+
+
+def _cancel_quietly(handle) -> None:
+    """Send a cancel for ``handle`` and never wait for, or fail on, its answer."""
+    try:
+        handle.cancel_goal_async()
+    except Exception:  # noqa: BLE001,S110 - best effort to a side that went away
+        pass
+
+
+def _cancel_if_accepted(future) -> None:
+    """Cancel the goal a late acceptance carries, if it was accepted (S-04)."""
+    try:
+        handle = future.result()
+    except Exception:  # noqa: BLE001,S110 - nothing accepted, nothing to cancel
+        return
+    if handle is not None and getattr(handle, "accepted", False):
+        _cancel_quietly(handle)
 
 
 def _lost(side_name: str, when: str) -> _SideOutcome:
