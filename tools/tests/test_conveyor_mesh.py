@@ -95,6 +95,12 @@ def test_every_finish_is_a_pbr_material(committed: trimesh.Scene) -> None:
         assert material.metallicFactor is not None and material.roughnessFactor is not None, name
 
 
+def test_no_finish_is_metallic(committed: trimesh.Scene) -> None:
+    """With no environment map to reflect, a metal renders near black in Gazebo."""
+    for name, mesh in committed.geometry.items():
+        assert mesh.visual.material.metallicFactor == 0.0, f"{name} is metallic"
+
+
 def test_the_scene_draws_the_mesh_and_collides_against_the_box() -> None:
     scene = next(a for a in gen.generate(load(REAL_MODEL)) if a.path.endswith("_scene.urdf.xacro"))
     root = ElementTree.fromstring(scene.content)

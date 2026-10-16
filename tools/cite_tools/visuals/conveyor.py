@@ -89,12 +89,16 @@ class _Finish:
     roughness: float
 
 
-ALUMINIUM = _Finish("anodised_aluminium", (0.78, 0.80, 0.82, 1.0), 0.85, 0.35)
-RUBBER = _Finish("belt_rubber", (0.04, 0.04, 0.045, 1.0), 0.0, 0.90)
-MOTOR = _Finish("motor_grey", (0.18, 0.19, 0.20, 1.0), 0.40, 0.55)
+ALUMINIUM = _Finish("anodised_aluminium", (0.70, 0.72, 0.74, 1.0), 0.0, 0.50)
+RUBBER = _Finish("belt_rubber", (0.18, 0.18, 0.19, 1.0), 0.0, 0.90)
+MOTOR = _Finish("motor_grey", (0.40, 0.42, 0.45, 1.0), 0.0, 0.55)
 SAFETY_YELLOW = _Finish("safety_yellow", (0.95, 0.75, 0.05, 1.0), 0.0, 0.50)
 STOP_RED = _Finish("stop_red", (0.80, 0.05, 0.04, 1.0), 0.0, 0.40)
-FEET = _Finish("foot_black", (0.08, 0.08, 0.08, 1.0), 0.10, 0.70)
+FEET = _Finish("foot_black", (0.15, 0.15, 0.15, 1.0), 0.0, 0.70)
+
+# Every finish is dielectric (metallic 0). The cell's worlds give a PBR metal no
+# environment map to reflect, so a metallic finish renders near black in Gazebo;
+# the aluminium reads as aluminium through a light grey instead.
 
 #: Export order. Fixed, so the GLB's node and buffer order cannot drift.
 FINISHES = (ALUMINIUM, RUBBER, MOTOR, SAFETY_YELLOW, STOP_RED, FEET)
