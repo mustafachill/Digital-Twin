@@ -249,7 +249,7 @@ def test_the_scene_carries_the_declared_diffuse(real_model: Path) -> None:
     """URDF has one colour; the library's diffuse is the one that survives."""
     model = load(real_model)
     cell = resolve(model, model.zones[0].id)
-    table = cell.material("table_top")
+    frame = cell.material("conveyor_frame")
     root = next(
         parsed
         for path, parsed in scenes(real_model)
@@ -258,9 +258,9 @@ def test_the_scene_carries_the_declared_diffuse(real_model: Path) -> None:
     colour = next(
         material.find("color").get("rgba")
         for material in root.findall("./material")
-        if material.get("name") == "table_top"
+        if material.get("name") == "conveyor_frame"
     )
-    assert colour == " ".join(_short(component) for component in table.diffuse)
+    assert colour == " ".join(_short(component) for component in frame.diffuse)
 
 
 def _short(value: float) -> str:
@@ -334,18 +334,20 @@ def test_a_colour_a_standing_body_wears_may_not_exceed_the_bound(
 ) -> None:
     """The rule FIRING, on the entry a body in this cell actually wears.
 
-    `table_top` is worn by `work_table_600`, which the cell instantiates twice,
-    so brightening it is exactly the change the bound refuses.
+    `conveyor_frame` is worn by `ufactory_linear_motor`, which the cell
+    instantiates, so brightening it is exactly the change the bound refuses.
+    (`table_top` was the example until the table took a generated mesh,
+    ADR-0079, and stopped wearing it.)
     """
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "conveyor_frame").__setitem__(
             "diffuse", [0.92, 0.53, 0.56, 1.0]
         ),
     )
     findings = physical_findings(real_model, "scene-material-clips")
     assert len(findings) == 1
-    assert findings[0].where == "materials.table_top.diffuse[0]"
+    assert findings[0].where == "materials.conveyor_frame.diffuse[0]"
 
 
 def test_the_finding_says_why_the_bound_is_what_it_is(
@@ -359,7 +361,7 @@ def test_the_finding_says_why_the_bound_is_what_it_is(
     """
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "conveyor_frame").__setitem__(
             "ambient", [0.9, 0.16, 0.08, 1.0]
         ),
     )
@@ -367,7 +369,7 @@ def test_the_finding_says_why_the_bound_is_what_it_is(
     text = f"{finding.message} {finding.hint}"
     assert str(physical.URDF_TO_SDF_COLOUR_GAIN) in text
     assert str(physical.MAX_SCENE_COLOUR_COMPONENT) in text
-    assert "work_table_600" in finding.message, "the body that wears it must be named"
+    assert "ufactory_linear_motor" in finding.message, "the body that wears it must be named"
 
 
 def test_the_bound_is_derived_from_the_measured_gain() -> None:
@@ -380,7 +382,7 @@ def test_the_bound_is_inclusive(real_model: Path, edit_yaml: Callable) -> None:
     """Exactly at the bound the conversion reaches 1.0 and clips nothing."""
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "conveyor_frame").__setitem__(
             "diffuse", [physical.MAX_SCENE_COLOUR_COMPONENT, 0.53, 0.56, 1.0]
         ),
     )
@@ -395,7 +397,7 @@ def test_alpha_is_not_bounded(real_model: Path, edit_yaml: Callable) -> None:
     """
     edit_yaml(
         materials_file(real_model),
-        lambda d: next(m for m in d["materials"] if m["id"] == "table_top").__setitem__(
+        lambda d: next(m for m in d["materials"] if m["id"] == "conveyor_frame").__setitem__(
             "diffuse", [0.52, 0.53, 0.56, 1.0]
         ),
     )

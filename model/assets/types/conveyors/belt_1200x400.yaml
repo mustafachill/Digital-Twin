@@ -81,7 +81,7 @@ asset_type:
       #
       # The VISUAL is a parametric mesh — side frames, a rubber belt over two
       # drums, profile legs and braces, a geared motor and a control box — that
-      # `python -m cite_tools.visuals.conveyor --write` generates from the
+      # `python -m cite_tools.visuals --write` generates from the
       # collision box below and nothing else, so its envelope is stated once.
       # Its top face is the belt surface at 0.600 m, where `surface`, `infeed`
       # and `outfeed` above lie.

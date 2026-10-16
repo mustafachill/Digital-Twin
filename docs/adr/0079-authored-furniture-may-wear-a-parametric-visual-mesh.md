@@ -47,16 +47,18 @@ collision hulls use (ADR-0028).
 ## Decision
 
 An authored body may declare a **visual-only** mesh that a committed, deterministic generator
-under `tools/cite_tools/visuals/` derives from that body's own collision box. The first is
-`python -m cite_tools.visuals.conveyor`, which writes
-`assets/meshes/visual/conveyors/belt_1200x400.glb`. The collision, inertia, frames and plugins
+under `tools/cite_tools/visuals/` derives from that body's own collision box.
+`python -m cite_tools.visuals` checks every such mesh and `--write` regenerates them. The
+directory under `assets/meshes/visual/` that the URI names selects the drawer: `conveyors/` for
+`belt_1200x400` and `tables/` for `work_table_600`. The collision, inertia, frames and plugins
 stay the primitives the model declares.
 
 1. **Envelope.** The mesh lies inside the collision box, with its origin at the box centre,
    which is where the scene template places a body's visual. Its top face is the box top, so
-   the drawn belt surface is the one the type's `surface`, `infeed` and `outfeed` frames name.
-2. **Format.** The mesh is a GLB with PBR metallic and roughness finishes, which Gazebo Harmonic
-   renders through assimp. A body wearing it declares no `material`, because a URDF material
+   the drawn surface is the one the type's `surface` frame names, and nothing rises above it.
+2. **Format.** The mesh is a GLB with PBR finishes, which Gazebo Harmonic renders through
+   assimp. Every finish is non-metallic: with no environment map to reflect, a PBR metal renders
+   near black in Gazebo. A body wearing it declares no `material`, because a URDF material
    would override every finish in the mesh.
 3. **URI.** The URI is `file://$(find cite_description)/meshes/...`, the absolute `file://` form
    the xArm meshes already use under Gazebo. The scene is expanded by xacro at launch, so no
@@ -69,12 +71,13 @@ stay the primitives the model declares.
 ## Consequences
 
 ### What this gets us
-- The belt reads as a conveyor, with frames, belt, drums, legs, drive and control box.
+- The belt reads as a conveyor, with frames, belt, drums, legs, drive and control box, and the
+  work tables read as light-wood benches.
 - Its envelope is still stated once, in L0.
-- A stale or hand-edited mesh is caught by `tools/tests/test_conveyor_mesh.py`.
+- A stale or hand-edited mesh is caught by `tools/tests/test_visual_meshes.py`.
 
 ### What this costs us
-- A binary file in git (about 190 KB). Regenerating it is a second command, beside
+- Binary files in git (the conveyor's is about 190 KB). Regenerating it is a second command, beside
   `./scripts/validate-model --write`, that a contributor has to know about. The test catches a
   forgotten run.
 - The visual now shows air under the belt that the collision box still fills. The planner
@@ -85,5 +88,4 @@ stay the primitives the model declares.
 
 ### What we will have to revisit
 - When the Phase 3 scan produces surveyed geometry, it replaces this mesh.
-- If a second furniture category is generated this way (tables are next), check whether the
-  generators should share a CLI entry instead of one module each.
+- A drawer is chosen by directory name. If the furniture outgrows that, the choice belongs in L0.

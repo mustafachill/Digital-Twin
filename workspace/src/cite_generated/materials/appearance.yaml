@@ -50,5 +50,4 @@ appearance:
   bodies:
     break_beam: sensor_housing
     ufactory_linear_motor: conveyor_frame
-    work_table_600: table_top
     workpiece: workpiece_stock

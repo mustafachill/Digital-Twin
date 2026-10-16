@@ -70,8 +70,9 @@ file: `./scripts/hulls` reports the number of sets and meshes it compared.
 not from a dependency, so they carry no manifest entry: their source is the
 type's collision box, and the check is a byte comparison against a fresh
 generation ([ADR-0079](../docs/adr/0079-authored-furniture-may-wear-a-parametric-visual-mesh.md)).
-Regenerate the conveyor's with `python -m cite_tools.visuals.conveyor --write`;
-`tools/tests/test_conveyor_mesh.py` fails on a stale one.
+Regenerate every one with `python -m cite_tools.visuals --write` (without the flag
+it checks); `tools/tests/test_visual_meshes.py` fails on a stale one. The
+directory under `meshes/visual/` names the drawer, such as `conveyors/` or `tables/`.
 
 ## Why a manifest instead of Git LFS
 

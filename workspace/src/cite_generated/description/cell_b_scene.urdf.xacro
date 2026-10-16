@@ -63,9 +63,6 @@
   <material name="sensor_housing">
     <color rgba="0.78 0.62 0.1 1"/>
   </material>
-  <material name="table_top">
-    <color rgba="0.58 0.38 0.2 1"/>
-  </material>
 
   <!-- infeed_beam — break_beam -->
   <link name="infeed_beam_base_link">
@@ -117,8 +114,7 @@
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
-      <material name="table_top"/>
+      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tables/work_table_600.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
@@ -187,8 +183,7 @@
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
-      <material name="table_top"/>
+      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tables/work_table_600.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>

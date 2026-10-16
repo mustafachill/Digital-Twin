@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from cite_tools import generate as gen
@@ -65,20 +66,25 @@ def _arm_descriptions(path: Path) -> set[str]:
     }
 
 
-BELT_TYPE = "assets/types/conveyors/belt_1200x400.yaml"
+def _bodies_as_boxes(model: Path, edit_yaml: Callable) -> None:
+    """Give every body with a mesh visual a box visual, so no BODY mesh names a package.
 
-
-def _belt_as_a_box(document: dict) -> None:
-    """Give the belt back its box visual, so no BODY mesh names `cite_description`.
-
-    Since ADR-0079 the belt's visual is a mesh installed by `cite_description`,
-    so the generated package depends on that package whatever the arm selects.
-    The two tests that ask whether the COLLISION selection alone brings or drops
-    the dependency remove the other source first, or they would be asking about
-    the belt.
+    Since ADR-0079 the belt's and the tables' visuals are meshes installed by
+    `cite_description`, so the generated package depends on that package whatever
+    the arm selects. The two tests that ask whether the COLLISION selection alone
+    brings or drops the dependency remove the other source first, or they would
+    be asking about the furniture.
     """
-    body = document["asset_type"]["description"]["body"]
-    body["visual"] = {"kind": "box", "size_m": list(body["collision"]["size_m"])}
+
+    def to_box(document: dict) -> None:
+        body = document["asset_type"]["description"]["body"]
+        body["visual"] = {"kind": "box", "size_m": list(body["collision"]["size_m"])}
+
+    for path in sorted((model / "assets" / "types").rglob("*.yaml")):
+        document = yaml.safe_load(path.read_text()) or {}
+        body = ((document.get("asset_type") or {}).get("description") or {}).get("body") or {}
+        if (body.get("visual") or {}).get("kind") == "mesh":
+            edit_yaml(path, to_box)
 
 
 def _use_real_backend(document: dict) -> None:
@@ -197,7 +203,7 @@ class TestSelectingADerivedSet:
         dependencies for started naming a package it did not list. A dependency
         derivation that a test pins shut is not a derivation.
         """
-        edit_yaml(real_model / BELT_TYPE, _belt_as_a_box)
+        _bodies_as_boxes(real_model, edit_yaml)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         before = artifacts(real_model)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
@@ -233,7 +239,7 @@ class TestSelectingADerivedSet:
         it. This ran without a mutation until 2026-09-01, when the shipped
         selection moved and the unselected set became the vendor's.
         """
-        edit_yaml(real_model / BELT_TYPE, _belt_as_a_box)
+        _bodies_as_boxes(real_model, edit_yaml)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         generated = artifacts(real_model)
         assert "cite_description" not in generated["package.xml"]
