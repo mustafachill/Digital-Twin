@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+schema: cite/asset_type/v1
+
+# The long bench the picking arm's linear track stands on, at belt height.
+#
+# In the lab, the track and the whole robot stand ON the table the part is picked
+# from, and that table is much longer than a 0.6 m work table: it runs from its
+# corner farthest from the belt to a little past the end of the track. This type
+# is that table. Sizes are engineered, not surveyed, and PROVISIONAL like the
+# rest of the layout; see model/assets/instances/tracks.yaml for how the track
+# and the pick point sit on it.
+asset_type:
+  id: work_table_1450x800
+  category: fixture
+
+  frames:
+    # The pick point. OFF-CENTRE, and deliberately: it is where the real
+    # program's pick pose lands (model/assets/instances/tracks.yaml), which is
+    # where the 0.6 m table's centre stood before this table replaced it. It
+    # lies 0.300 m in from the -x and the -y edge, the margin the old table gave
+    # on those two outer sides, so every support and beam margin measured there
+    # holds; on the other two sides the table now runs on under the track.
+    - id: surface
+      xyz_m: [-0.425, -0.100, 0.600]
+
+  description:
+    provider: body
+    body:
+      # The VISUAL is the same lab bench as `work_table_600` — a chamfered wooden
+      # top and wooden apron on orange steel legs with levelling feet, plus a
+      # middle pair of legs because 1.45 m is too long for one span — that
+      # `python -m cite_tools.visuals --write` generates from the collision box
+      # below (ADR-0079). It carries its own finishes, so no `material`.
+      # The COLLISION is the solid box: conservative, and never the visual.
+      visual:
+        kind: mesh
+        uri: file://$(find cite_description)/meshes/visual/tables/work_table_1450x800.glb
+      collision:
+        kind: box
+        size_m: [1.450, 0.800, 0.600]
+      inertial:
+        # Plausible, not weighed: a solid wooden top and a steel frame. 80 kg
+        # over the 0.696 m^3 box is 115 kg/m^3, a mostly hollow body, as the
+        # 0.6 m table's 30 kg over 0.216 m^3 is.
+        mass_kg: 80.0
+        com_m: [0.0, 0.0, 0.0]
+        # Solid box 1.45 x 0.80 x 0.60 at 80 kg:
+        #   ixx = 80/12 * (0.64 + 0.36)   = 6.6667
+        #   iyy = 80/12 * (2.1025 + 0.36) = 16.4167
+        #   izz = 80/12 * (2.1025 + 0.64) = 18.2833
+        ixx: 6.6667
+        iyy: 16.4167
+        izz: 18.2833

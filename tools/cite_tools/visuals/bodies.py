@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cite_tools.model.loader import FacilityModel, load
-from cite_tools.visuals import VisualMeshError, asset_path, conveyor, parts, table
+from cite_tools.visuals import VisualMeshError, asset_path, conveyor, parts, table, track
 
 #: The directory a generated visual lives in, under the installed meshes.
 VISUAL_ROOT = Path("assets") / "meshes" / "visual"
@@ -30,6 +30,7 @@ VISUAL_ROOT = Path("assets") / "meshes" / "visual"
 DRAWERS: dict[str, Callable[[parts.Triple], parts.Parts]] = {
     "conveyors": conveyor.parts,
     "tables": table.parts,
+    "tracks": track.parts,
 }
 
 

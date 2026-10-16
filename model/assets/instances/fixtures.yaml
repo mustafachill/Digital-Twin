@@ -25,14 +25,18 @@ schema: cite/asset_instances/v1
 # resolves by flinging both bodies apart. `insufficient-clearance` warns below
 # geometric.MIN_CLEARANCE_M, and these poses are chosen to sit above it.
 assets:
-  # The cell's only pick surface, centred under the pads at the program's pick
-  # pose. Its +y face stands 21 mm clear of the track's rail.
+  # The cell's only pick surface, and the long bench the track and the arm stand
+  # on (see its type, and model/assets/instances/tracks.yaml). Footprint
+  # x -0.800..0.650, y 2.624..3.424: its `surface` frame, the pick point, lands
+  # at (-0.500, 2.924, 0.600), exactly where the 0.6 m table's centre did. Its
+  # +x face stands 60 mm clear of the belt. The track stands ON it, placed on
+  # its `surface` frame, which is how the model says the two are in contact.
   - id: infeed_table
     zone: cell_b
-    type: work_table_600
+    type: work_table_1450x800
     pose:
       frame: cite_world
-      xyz_m: [-0.500, 2.924, 0.000]
+      xyz_m: [-0.075, 3.024, 0.000]
     hardware: {backend: sim}
 
   # Where the belt delivers. `b_accumulation` is a sink with no actor, so nothing

@@ -37,7 +37,12 @@ REPO_ROOT = REAL_MODEL.parent
 TOLERANCE_M = 0.001
 #: The types that must wear a generated mesh. Asked of the model below, and
 #: named here only so that losing one is a failure rather than a smaller loop.
-EXPECTED = {"belt_1200x400": "conveyors", "work_table_600": "tables"}
+EXPECTED = {
+    "belt_1200x400": "conveyors",
+    "ufactory_linear_motor": "tracks",
+    "work_table_1450x800": "tables",
+    "work_table_600": "tables",
+}
 
 MODEL = load(REAL_MODEL)
 TARGETS = bodies.targets(MODEL, REPO_ROOT)
@@ -48,9 +53,9 @@ def _committed(target: bodies.Target) -> trimesh.Scene:
     return trimesh.load(io.BytesIO(target.path.read_bytes()), file_type="glb")
 
 
-def _surface_z(type_id: str) -> float:
+def _frame_z(type_id: str, frame_id: str) -> float | None:
     asset_type = next(t for t in MODEL.types if t.id == type_id)
-    return next(f for f in asset_type.frames if f.id == "surface").xyz_m[2]
+    return next((f.xyz_m[2] for f in asset_type.frames if f.id == frame_id), None)
 
 
 def test_the_expected_bodies_wear_a_generated_mesh() -> None:
@@ -82,12 +87,25 @@ def test_the_mesh_lies_inside_the_collision_box(target: bodies.Target) -> None:
 
 
 @pytest.mark.parametrize("target", TARGETS, ids=IDS)
-def test_the_top_is_the_surface_frame(target: bodies.Target) -> None:
+def test_the_top_is_the_box_top_and_the_surface_frame(target: bodies.Target) -> None:
     """+half a height from the centre is the foot-relative `surface` height."""
     half_height = target.size_m[2] / 2.0
     top = _committed(target).bounds[1][2]
     assert abs(top - half_height) <= TOLERANCE_M
-    assert abs((top + half_height) - _surface_z(target.type_id)) <= TOLERANCE_M
+    surface = _frame_z(target.type_id, "surface")
+    if target.drawer != "tracks":
+        assert surface is not None, f"{target.type_id} has no surface frame"
+    if surface is not None:
+        assert abs((top + half_height) - surface) <= TOLERANCE_M
+
+
+def test_the_carriage_rides_just_above_the_drawn_rail() -> None:
+    """The type's carriage frame is the plate's top, a few mm over the guide rails."""
+    target = next(t for t in TARGETS if t.drawer == "tracks")
+    rail_top = _committed(target).bounds[1][2] + target.size_m[2] / 2.0
+    carriage = _frame_z(target.type_id, "carriage")
+    assert carriage is not None
+    assert 0.0 < carriage - rail_top <= 0.010
 
 
 @pytest.mark.parametrize("target", TARGETS, ids=IDS)

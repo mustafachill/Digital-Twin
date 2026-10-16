@@ -729,8 +729,10 @@ class TestOneCoordinatePerFrame:
         }
         # Both representations must move together, so they still agree with each
         # other — and both must show the new height rather than the old one.
-        assert urdf["infeed_table_surface"].approx_equal(static["cell_b__infeed_table__surface"])
-        assert round(urdf["infeed_table_surface"].xyz_m[2], 6) == 0.3
+        # The outfeed table: `work_table_600` is its type; the infeed table is a
+        # long bench since the track moved onto it.
+        assert urdf["outfeed_table_surface"].approx_equal(static["cell_b__outfeed_table__surface"])
+        assert round(urdf["outfeed_table_surface"].xyz_m[2], 6) == 0.3
 
 
 class TestFramesOfVendorLinks:
@@ -803,7 +805,7 @@ class TestMassIsWhereTheGeometryIs:
         scene = artifacts(real_model)["description/cell_b_scene.urdf.xacro"]
         root = ElementTree.fromstring(scene)
         links = root.findall("link")
-        link = next(e for e in links if e.get("name") == "infeed_table_base_link")
+        link = next(e for e in links if e.get("name") == "outfeed_table_base_link")
         z = float(link.find("inertial").find("origin").get("xyz").split()[2])
         assert round(z, 9) == 0.05
 
@@ -892,11 +894,11 @@ class TestPlanningSceneIsGenerated:
         produced = artifacts(real_model)
         scene = yaml.safe_load(produced["moveit/cell_b_planning_scene.yaml"])
         table = next(
-            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "infeed_table"
+            o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "outfeed_table"
         )
         assert table["primitive"]["dimensions_m"] == [0.6, 0.6, 0.6]
         # MoveIt primitive poses are CENTRES; the L0 pose is the foot.
-        assert table["pose"]["xyz_m"] == [-0.5, 2.924, 0.3]
+        assert table["pose"]["xyz_m"] == [2.26, 3.06, 0.3]
 
     def test_it_tracks_the_model(self, real_model: Path, edit_yaml: Callable) -> None:
         edit_yaml(

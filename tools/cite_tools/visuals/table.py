@@ -2,7 +2,8 @@
 
 WHAT IT DRAWS. A lab bench like the lab's own: a solid wooden top with a small
 chamfer on its upper edge and a wooden apron rail under it on all four sides, on
-four orange powder-coated square steel tube legs with dark levelling feet. The
+orange powder-coated square steel tube legs with dark levelling feet: four at
+the corners, and more along a side too long for one span. The
 top's face and its sawn edges take two tones of the same wood, and the apron
 takes the darker one, which is the cheap, texture-free way to read as timber
 rather than a painted board.
@@ -23,6 +24,9 @@ Regenerate or check with ``python -m cite_tools.visuals`` (see ``bodies``).
 
 from __future__ import annotations
 
+import itertools
+import math
+
 from cite_tools.visuals.parts import Finish, Parts, box, cylinder, empty, frustum
 
 # --------------------------------------------------------------------------- #
@@ -32,6 +36,7 @@ TOP_THICKNESS_M = 0.030
 TOP_CHAMFER_M = 0.004  # the upper edge's chamfer, both legs of the bevel
 OVERHANG_M = 0.030  # from the top's edge to the legs' outer faces
 LEG_M = 0.040  # square steel tube
+MAX_LEG_BAY_M = 1.200  # longest unsupported run between leg centres
 APRON_DEPTH_M = 0.070
 APRON_THICKNESS_M = 0.020
 APRON_SETBACK_M = 0.005  # from the legs' outer faces
@@ -78,14 +83,16 @@ def parts(size_m: tuple[float, float, float]) -> Parts:
         )
     )
 
-    # Legs: from the top of the levelling foot to the underside of the top.
+    # Legs: from the top of the levelling foot to the underside of the top, at
+    # the corners and, along a side longer than `MAX_LEG_BAY_M`, evenly between.
     leg_x = hx - OVERHANG_M - LEG_M / 2.0
     leg_y = hy - OVERHANG_M - LEG_M / 2.0
+    xs = _stations(leg_x)
+    ys = _stations(leg_y)
     foot_top = -hz + FOOT_PAD_HEIGHT_M + FOOT_STEM_HEIGHT_M
     leg_length = top_bottom - foot_top
-    for sx in (-1.0, 1.0):
-        for sy in (-1.0, 1.0):
-            x, y = sx * leg_x, sy * leg_y
+    for x in xs:
+        for y in ys:
             drawn[STEEL].append(
                 box((LEG_M, LEG_M, leg_length), (x, y, foot_top + leg_length / 2.0))
             )
@@ -103,17 +110,34 @@ def parts(size_m: tuple[float, float, float]) -> Parts:
                 )
             )
 
-    # Apron: wooden rails under the top, between the legs, set back from their faces.
+    # Apron: wooden rails round the perimeter under the top, one between each
+    # pair of neighbouring legs, set back from their outer faces.
     apron_z = top_bottom - APRON_DEPTH_M / 2.0
-    span_x = 2.0 * leg_x - LEG_M
-    span_y = 2.0 * leg_y - LEG_M
     apron_x = leg_x + LEG_M / 2.0 - APRON_SETBACK_M - APRON_THICKNESS_M / 2.0
     apron_y = leg_y + LEG_M / 2.0 - APRON_SETBACK_M - APRON_THICKNESS_M / 2.0
     for side in (-1.0, 1.0):
-        drawn[WOOD_EDGE].append(
-            box((span_x, APRON_THICKNESS_M, APRON_DEPTH_M), (0.0, side * apron_y, apron_z))
-        )
-        drawn[WOOD_EDGE].append(
-            box((APRON_THICKNESS_M, span_y, APRON_DEPTH_M), (side * apron_x, 0.0, apron_z))
-        )
+        for x0, x1 in itertools.pairwise(xs):
+            drawn[WOOD_EDGE].append(
+                box(
+                    (x1 - x0 - LEG_M, APRON_THICKNESS_M, APRON_DEPTH_M),
+                    ((x0 + x1) / 2.0, side * apron_y, apron_z),
+                )
+            )
+        for y0, y1 in itertools.pairwise(ys):
+            drawn[WOOD_EDGE].append(
+                box(
+                    (APRON_THICKNESS_M, y1 - y0 - LEG_M, APRON_DEPTH_M),
+                    (side * apron_x, (y0 + y1) / 2.0, apron_z),
+                )
+            )
     return drawn
+
+
+def _stations(half_span: float) -> list[float]:
+    """Leg centres along one side, from ``-half_span`` to ``+half_span``.
+
+    As few bays as keep each one at or under `MAX_LEG_BAY_M`; a 0.6 m table has
+    one bay, so its legs are its four corners.
+    """
+    bays = max(1, math.ceil(2.0 * half_span / MAX_LEG_BAY_M - 1e-9))
+    return [-half_span + 2.0 * half_span * i / bays for i in range(bays + 1)]

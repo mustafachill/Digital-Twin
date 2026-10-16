@@ -89,3 +89,23 @@ stay the primitives the model declares.
 ### What we will have to revisit
 - When the Phase 3 scan produces surveyed geometry, it replaces this mesh.
 - A drawer is chosen by directory name. If the furniture outgrows that, the choice belongs in L0.
+
+## Addendum 2026-10-16: the track stands on a long pick table
+
+The owner reported a fact about the lab: the linear track and the whole robot stand on the table
+the part is picked from, and that table runs from its corner farthest from the belt to a little
+past the end of the track. The model had drawn the track as a 0.705 m box on the floor beside a
+0.6 m table. It now states the lab's arrangement:
+
+- `infeed_table` is a `work_table_1450x800`, footprint x -0.800..0.650 and y 2.624..3.424 in
+  `cite_world`, 60 mm clear of the belt. Its `surface` frame is off-centre, so the pick point
+  stays at (-0.500, 2.924, 0.600).
+- `picker_track`'s body is the rail alone, 1.000 × 0.110 × 0.105 m. It is placed on
+  `infeed_table/surface`, so its foot is at (0.050, 3.300, 0.600). Its carriage frame is 0.110 m
+  above that foot, so the carriage and the arm keep the world pose they had.
+- Both wear generated meshes. A third drawer, `tracks/`, draws the rail. The table drawer adds a
+  middle pair of legs when a side is longer than 1.2 m.
+
+No world pose the program uses moved. The arm descriptions, the static frames, the world and
+the bring-up plan regenerate byte-identical. Only the two bodies change, in the scene and in the
+planning scene. The layout stays `PROVISIONAL`.

@@ -57,9 +57,6 @@
        repository measures a colour. What the library does instead is keep every
        component a scene body wears at or under 0.8, where the multiply cannot
        clip; the reason is stated on the library itself. -->
-  <material name="conveyor_frame">
-    <color rgba="0.28 0.34 0.42 1"/>
-  </material>
   <material name="sensor_housing">
     <color rgba="0.78 0.62 0.1 1"/>
   </material>
@@ -99,7 +96,7 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <!-- infeed_table — work_table_600 -->
+  <!-- infeed_table — work_table_1450x800 -->
   <link name="infeed_table_base_link">
     <inertial>
       <!-- The body's pose names the point it stands on, so the mass sits half a
@@ -107,30 +104,30 @@
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <mass value="30"/>
-      <inertia ixx="1.8" ixy="0"
-               ixz="0" iyy="1.8"
-               iyz="0" izz="1.8"/>
+      <mass value="80"/>
+      <inertia ixx="6.6667" ixy="0"
+               ixz="0" iyy="16.4167"
+               iyz="0" izz="18.2833"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tables/work_table_600.glb" scale="1 1 1"/></geometry>
+      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tables/work_table_1450x800.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <geometry><box size="1.45 0.8 0.6"/></geometry>
     </collision>
   </link>
   <joint name="infeed_table_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="infeed_table_base_link"/>
-    <origin xyz="-0.5 2.924 0" rpy="0 0 0"/>
+    <origin xyz="-0.075 3.024 0" rpy="0 0 0"/>
   </joint>
   <link name="infeed_table_surface"/>
   <joint name="infeed_table_surface_fixed" type="fixed">
     <parent link="infeed_table_base_link"/>
     <child link="infeed_table_surface"/>
-    <origin xyz="0 0 0.6" rpy="0 0 0"/>
+    <origin xyz="-0.425 -0.1 0.6" rpy="0 0 0"/>
   </joint>
 
   <!-- outfeed_beam — break_beam -->
@@ -209,26 +206,25 @@
            height above the link origin. `com_m` is measured from the box centre
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
-      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
-      <mass value="25"/>
-      <inertia ixx="1.0607" ixy="0"
-               ixz="0" iyy="3.1188"
-               iyz="0" izz="2.1086"/>
+      <origin xyz="0 0 0.0525" rpy="0 0 0"/>
+      <mass value="12"/>
+      <inertia ixx="0.023125" ixy="0"
+               ixz="0" iyy="1.011025"
+               iyz="0" izz="1.0121"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
-      <geometry><box size="1 0.11 0.705"/></geometry>
-      <material name="conveyor_frame"/>
+      <origin xyz="0 0 0.0525" rpy="0 0 0"/>
+      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tracks/ufactory_linear_motor.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0.3525" rpy="0 0 0"/>
-      <geometry><box size="1 0.11 0.705"/></geometry>
+      <origin xyz="0 0 0.0525" rpy="0 0 0"/>
+      <geometry><box size="1 0.11 0.105"/></geometry>
     </collision>
   </link>
   <joint name="picker_track_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="picker_track_base_link"/>
-    <origin xyz="0.05 3.3 0" rpy="0 0 0"/>
+    <origin xyz="0.05 3.3 0.6" rpy="0 0 0"/>
   </joint>
 
   <!-- transfer_belt — belt_1200x400 -->

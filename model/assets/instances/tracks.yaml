@@ -26,19 +26,29 @@ schema: cite/asset_instances/v1
 #
 # With the carriage's stroke-zero frame at (-0.300, 3.300, 0.710):
 #
-#   pick   (-0.500, 2.924) at z 0.633   -> infeed_table centred there, surface 0.600
+#   pick   (-0.500, 2.924) at z 0.633   -> infeed_table's `surface` there, at 0.600
 #   place  ( 0.765, 3.060) at z 0.672   -> transfer_belt's infeed there, surface
 #                                          0.635, so the part is released 4 mm up
 #
-# The stand height, 0.710 m, is what puts the pick table's surface at the
+# The carriage height, 0.710 m, is what puts the pick table's surface at the
 # standard 0.600 m: the pads close on the part's centre 0.110 m below the base.
+#
+# THE TRACK STANDS ON THE PICK TABLE, as it does in the lab. `infeed_table` is a
+# long bench (work_table_1450x800) whose `surface` frame is the pick point
+# above, and the rail is bolted to its top: its pose below is stated against
+# that frame, so the 0.600 m under the rail is the table's and is not stated a
+# second time. The offset puts the rail's foot at (0.050, 3.300, 0.600), and
+# the type's carriage frame, 0.110 m above the rail's foot, at the stroke-zero
+# pose above. Until 2026-10-16 the rail stood on the floor as a 0.705 m box and
+# the pick table was a 0.6 m one beside it; every world pose the program uses
+# was kept through that change.
 assets:
   - id: picker_track
     zone: cell_b
     type: ufactory_linear_motor
     pose:
-      frame: cite_world
-      xyz_m: [0.050, 3.300, 0.000]
+      frame: infeed_table/surface
+      xyz_m: [0.550, 0.376, 0.000]
     # Simulated on the plant and physical on the counterpart, matching the arm
     # it carries: the track's joint is emitted into that arm's description, so
     # the two select one (plant, counterpart) pair of backends

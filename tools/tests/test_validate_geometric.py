@@ -354,9 +354,11 @@ class TestSupportMargin:
         assert "reach-margin" not in geometric_rules(real_model, Severity.WARNING)
 
     def test_a_point_at_the_centre_of_its_surface_is_not_reported(self, real_model: Path) -> None:
-        # `work_table_600.surface` sits at the centre of its top face — 0.300 m
-        # of margin — and never showed this failure. Same generator, opposite
-        # support margin, and the rule must not fire on the good case.
+        # The pick point stands at least 0.300 m from every edge of its table —
+        # the centre of the old 0.6 m table, and 0.300 m in from the long
+        # bench's two outer edges since it replaced that table — and never
+        # showed this failure. Same generator, opposite support margin, and the
+        # rule must not fire on the good case.
         model = load(real_model)
         cell = resolve(model, ZONE)
         station = next(s for s in cell.stations if s.id == "b_transfer_1")

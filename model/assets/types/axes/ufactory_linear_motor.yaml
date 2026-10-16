@@ -10,8 +10,9 @@ schema: cite/asset_type/v1
 #
 # TWO HALVES, AND THEY LIVE IN DIFFERENT DESCRIPTIONS.
 #
-#   * The RAIL is an authored body in the scene, like a pedestal: the rail and
-#     the stand it is bolted to, as one box. It never moves.
+#   * The RAIL is an authored body in the scene: the rail profile alone, as one
+#     box. It never moves. It is bolted to the top of the pick table, as in the
+#     lab, so the table — not this type — supplies the height below it.
 #   * The AXIS — one prismatic joint and the carriage it moves — is emitted into
 #     the description of the ARM on the carriage, under the arm's base, so that
 #     robot_state_publisher, MoveIt's robot state and its collision checks all
@@ -21,11 +22,11 @@ schema: cite/asset_type/v1
 #
 # WHAT IS THE VENDOR'S AND WHAT IS OURS. The stroke (700 mm) and the speed limit
 # (1000 mm/s) are the UFACTORY Linear Motor datasheet's. Everything else — the
-# rail's box, the stand height, the carriage's mass and plate, the force limit —
-# is engineered here and PROVISIONAL, like the rest of the layout: nothing on the
-# real track has been measured. The stand height in particular is a fact about
-# this installation, derived from the real program's pick pose (see
-# model/assets/instances/tracks.yaml).
+# rail's box, the carriage's mass and plate, the force limit — is engineered here
+# and PROVISIONAL, like the rest of the layout: nothing on the real track has been
+# measured. The height of the arm above the floor is a fact about this
+# installation, the table's 0.600 m plus this rail, derived from the real
+# program's pick pose (see model/assets/instances/tracks.yaml).
 #
 # THE HARDWARE PATH. The vendor serves the real track only as `xarm_api`
 # services of the arm's own driver (`set_linear_motor_pos`,
@@ -53,7 +54,7 @@ asset_type:
     # which rides the rail: without it the arm's base would slide in contact with
     # the rail, and the contact friction would fight the axis in simulation.
     - id: carriage
-      xyz_m: [-0.350, 0.000, 0.710]
+      xyz_m: [-0.350, 0.000, 0.110]
       link: carriage
 
   axis:
@@ -76,22 +77,32 @@ asset_type:
     provider: body
     body:
       # 1.000 m of rail: the 0.700 m stroke plus 0.150 m at each end, so the
-      # carriage never overhangs it. 0.110 m wide, narrower than the vendor's
-      # profile, so that the pick table the real program reaches keeps 20 mm of
-      # clearance from it; the width is not the vendor's and is PROVISIONAL.
+      # carriage never overhangs it. 0.110 m wide and 0.105 m tall; neither is
+      # the vendor's drawing, and both are PROVISIONAL. It stands on the pick
+      # table's top, so its foot is at 0.600 m and its top at 0.705 m.
+      #
+      # The VISUAL is a parametric rail — aluminium profile, two guide rails, a
+      # dust strip, end caps and a motor housing with a cable gland — that
+      # `python -m cite_tools.visuals --write` generates from the collision box
+      # below (ADR-0079). It carries its own finishes, so no `material`. The
+      # carriage plate is not in it: that moves, with the arm's description.
       visual:
-        kind: box
-        size_m: [1.000, 0.110, 0.705]
+        kind: mesh
+        uri: file://$(find cite_description)/meshes/visual/tracks/ufactory_linear_motor.glb
       collision:
         kind: box
-        size_m: [1.000, 0.110, 0.705]
+        size_m: [1.000, 0.110, 0.105]
       inertial:
-        mass_kg: 25.0
+        # An aluminium profile with a motor, 12 kg; plausible, not weighed.
+        mass_kg: 12.0
         com_m: [0.0, 0.0, 0.0]
-        ixx: 1.0607
-        iyy: 3.1188
-        izz: 2.1086
-      material: conveyor_frame
+        # Solid box 1.000 x 0.110 x 0.105 at 12 kg:
+        #   ixx = 12/12 * (0.0121 + 0.011025) = 0.023125
+        #   iyy = 12/12 * (1.0    + 0.011025) = 1.011025
+        #   izz = 12/12 * (1.0    + 0.0121)   = 1.0121
+        ixx: 0.023125
+        iyy: 1.011025
+        izz: 1.0121
 
   hardware_backends:
     sim:
