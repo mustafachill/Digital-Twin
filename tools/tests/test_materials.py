@@ -75,12 +75,18 @@ def test_every_authored_body_in_the_shipped_model_has_an_appearance(real_model: 
     `material` is optional on purpose: a body may legitimately say "nobody has
     decided". What must not happen quietly is this cell losing an appearance it
     had, which is how it came to render black in the first place.
+
+    A body whose visual is a mesh carries its appearance in the mesh's own
+    materials (ADR-0079), and naming a library material on it would paint over
+    them, so such a body declares none.
     """
     model = load(real_model)
     without = sorted(
         asset_type.id
         for asset_type in model.types
-        if asset_type.description.body is not None and asset_type.description.body.material is None
+        if (body := asset_type.description.body) is not None
+        and body.material is None
+        and body.visual.kind != "mesh"
     )
     assert without == [], f"authored bodies with no declared appearance: {without}"
 
@@ -203,6 +209,11 @@ def test_every_visual_in_every_generated_scene_carries_a_material(real_model: Pa
         assert visuals, f"{path}: no visual at all"
         for visual in visuals:
             material = visual.find("material")
+            if visual.find("geometry/mesh") is not None:
+                # A mesh brings its own materials (ADR-0079); a URDF material
+                # here would override every one of them with a flat colour.
+                assert material is None, f"{path}: a mesh visual is painted over"
+                continue
             assert material is not None and material.get(
                 "name"
             ), f"{path}: a visual carries no material and renders black"

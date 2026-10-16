@@ -11,6 +11,8 @@ being discovered as a missing package at build time on someone else's machine.
 
 from __future__ import annotations
 
+import re
+
 from cite_tools.generate import Artifact
 from cite_tools.model.loader import FacilityModel
 from cite_tools.render import environment
@@ -58,6 +60,27 @@ def _collision_packages(asset_type) -> set[str]:
     return {selected.package}
 
 
+#: The package a mesh URI names, in either spelling a description may use.
+_URI_PACKAGE = re.compile(r"^(?:file://\$\(find ([\w-]+)\)|package://([\w-]+))/")
+
+
+def _body_mesh_packages(asset_type) -> set[str]:
+    """The packages an authored body's mesh geometry is installed from (ADR-0079).
+
+    The same hole `_collision_packages` closed for arms: a body whose visual is a
+    mesh emits `$(find <package>)` into the scene, and a scene expanded without
+    that package installed dies in xacro rather than at build time.
+    """
+    body = asset_type.description.body
+    if body is None:
+        return set()
+    found = set()
+    for geometry in (body.visual, body.collision):
+        if geometry.kind == "mesh" and (match := _URI_PACKAGE.match(geometry.uri)):
+            found.add(match.group(1) or match.group(2))
+    return found
+
+
 def generate(model: FacilityModel) -> list[Artifact]:
     # Derived from the model, so a component library entry that starts
     # referencing a new vendor package brings the dependency with it instead of
@@ -69,6 +92,7 @@ def generate(model: FacilityModel) -> list[Artifact]:
         if asset_type.planning and asset_type.planning.srdf_package:
             packages.add(asset_type.planning.srdf_package)
         packages |= _collision_packages(asset_type)
+        packages |= _body_mesh_packages(asset_type)
     dependencies = sorted(packages)
 
     env = environment()

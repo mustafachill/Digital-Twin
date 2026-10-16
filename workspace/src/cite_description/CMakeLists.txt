@@ -62,6 +62,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_declared_collision_meshes_are_installable
     test/test_declared_collision_meshes_are_installable.py)
 
+  # The same question for an authored body's own mesh (ADR-0079): every
+  # body visual or collision mesh the model names under this package's meshes
+  # is present in the tree it installs.
+  ament_add_pytest_test(test_declared_body_meshes_are_installable
+    test/test_declared_body_meshes_are_installable.py)
+
   # The other half of the same question, and the one no host-side check can
   # answer: does the DESCRIPTION name only meshes the model declared?
   #

@@ -251,8 +251,7 @@
     </inertial>
     <visual>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="1.2 0.4 0.6"/></geometry>
-      <material name="conveyor_frame"/>
+      <geometry><mesh filename="file://$(find cite_description)/meshes/visual/conveyors/belt_1200x400.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
       <origin xyz="0 0 0.3" rpy="0 0 0"/>

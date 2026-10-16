@@ -76,21 +76,28 @@ asset_type:
   description:
     provider: body
     body:
-      # Visual and collision are separate fields with no default linking them.
-      # Here they happen to be the same primitive, which is fine — the point is
-      # that reusing a dense visual mesh as collision geometry has to be a
-      # visible choice, never an omission (L1).
+      # Visual and collision are separate fields with no default linking them,
+      # and here they now differ (ADR-0079).
       #
-      # A real belt conveyor is a stand carrying a belt, so most of this box is
-      # air. The cost is stated rather than hidden: as a VISUAL it reads as a
-      # solid block, and as COLLISION it is conservative — the planner will
-      # refuse a path under the belt that a real gripper could take. Both are
-      # deliberate. A single primitive is what `Body` can express, and an
-      # optimistic collision hull is the failure that puts a gripper through a
-      # conveyor frame at run time.
+      # The VISUAL is a parametric mesh — side frames, a rubber belt over two
+      # drums, profile legs and braces, a geared motor and a control box — that
+      # `python -m cite_tools.visuals.conveyor --write` generates from the
+      # collision box below and nothing else, so its envelope is stated once.
+      # Its top face is the belt surface at 0.600 m, where `surface`, `infeed`
+      # and `outfeed` above lie.
+      # It carries its own PBR finishes, which is why this body names no
+      # `material`: a URDF material would paint over every one of them. It is
+      # appearance, not survey: the lab's belt has no public CAD.
+      #
+      # The COLLISION stays one box. A real belt conveyor is a stand carrying a
+      # belt, so most of it is air, and as collision the box is conservative —
+      # the planner will refuse a path under the belt that a real gripper could
+      # take. That is deliberate: an optimistic collision shape is the failure
+      # that puts a gripper through a conveyor frame at run time, and the dense
+      # visual is never reused as collision (L1).
       visual:
-        kind: box
-        size_m: [1.200, 0.400, 0.600]
+        kind: mesh
+        uri: file://$(find cite_description)/meshes/visual/conveyors/belt_1200x400.glb
       collision:
         kind: box
         size_m: [1.200, 0.400, 0.600]
@@ -112,4 +119,3 @@ asset_type:
         ixx: 1.9500
         iyy: 6.7500
         izz: 6.0000
-      material: conveyor_frame

@@ -64,6 +64,15 @@ the region held twenty-six**, and ADR-0027's correction ends *"do not state the
 cardinality of a generated collection in prose"* for exactly this reason. Ask the
 file: `./scripts/hulls` reports the number of sets and meshes it compared.
 
+### Generated visual meshes
+
+`meshes/visual/` holds **visual-only** meshes generated from the L0 model itself,
+not from a dependency, so they carry no manifest entry: their source is the
+type's collision box, and the check is a byte comparison against a fresh
+generation ([ADR-0079](../docs/adr/0079-authored-furniture-may-wear-a-parametric-visual-mesh.md)).
+Regenerate the conveyor's with `python -m cite_tools.visuals.conveyor --write`;
+`tools/tests/test_conveyor_mesh.py` fails on a stale one.
+
 ## Why a manifest instead of Git LFS
 
 Raw scans are write-once and rarely re-fetched — the working set is the

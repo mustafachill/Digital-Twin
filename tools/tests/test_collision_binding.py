@@ -65,6 +65,22 @@ def _arm_descriptions(path: Path) -> set[str]:
     }
 
 
+BELT_TYPE = "assets/types/conveyors/belt_1200x400.yaml"
+
+
+def _belt_as_a_box(document: dict) -> None:
+    """Give the belt back its box visual, so no BODY mesh names `cite_description`.
+
+    Since ADR-0079 the belt's visual is a mesh installed by `cite_description`,
+    so the generated package depends on that package whatever the arm selects.
+    The two tests that ask whether the COLLISION selection alone brings or drops
+    the dependency remove the other source first, or they would be asking about
+    the belt.
+    """
+    body = document["asset_type"]["description"]["body"]
+    body["visual"] = {"kind": "box", "size_m": list(body["collision"]["size_m"])}
+
+
 def _use_real_backend(document: dict) -> None:
     """Every arm on the hardware backend, which is the case R-04 got wrong.
 
@@ -181,6 +197,7 @@ class TestSelectingADerivedSet:
         dependencies for started naming a package it did not list. A dependency
         derivation that a test pins shut is not a derivation.
         """
+        edit_yaml(real_model / BELT_TYPE, _belt_as_a_box)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         before = artifacts(real_model)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "convex_hull"))
@@ -216,6 +233,7 @@ class TestSelectingADerivedSet:
         it. This ran without a mutation until 2026-09-01, when the shipped
         selection moved and the unselected set became the vendor's.
         """
+        edit_yaml(real_model / BELT_TYPE, _belt_as_a_box)
         edit_yaml(real_model / ARM_TYPE, lambda d: _select(d, "vendor_meshes"))
         generated = artifacts(real_model)
         assert "cite_description" not in generated["package.xml"]

@@ -247,8 +247,9 @@ class TestFramesAndTheirGeometry:
         # leave its surface, infeed and outfeed frames at z = 0.600.
         def mutate(document: dict) -> None:
             body = document["asset_type"]["description"]["body"]
+            # The visual is a mesh drawn inside this box (ADR-0079); the rule
+            # reads the collision box, so that is the one shrunk.
             body["collision"]["size_m"] = [1.2, 0.4, 0.1]
-            body["visual"]["size_m"] = [1.2, 0.4, 0.1]
 
         edit_yaml(real_model / "assets/types/conveyors/belt_1200x400.yaml", mutate)
         assert "frame-outside-geometry" in geometric_rules(real_model)
