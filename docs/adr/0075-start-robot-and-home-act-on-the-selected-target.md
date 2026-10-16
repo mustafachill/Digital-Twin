@@ -1,6 +1,7 @@
 # ADR-0075: Start robot and Home act on the selected target
 
 - **Status:** Accepted 2026-10-15 (owner, on merge)
+- **Amended 2026-10-16 (owner), decision 2:** started is cleared only by FAULT, a new Start robot, or the side leaving running; momentary non-commandability no longer un-starts. `started_targets` no longer requires commandable; Home and Start program are still refused while a side is not commandable, which un-starts nothing.
 - **Amended 2026-10-15 by [ADR-0077](0077-the-operator-console-keeps-the-physical-counterpart.md) (Proposed), decision 4:** a target is offered while every side it commands is UP NOW (`TwinSides.running`), not merely started; a physical side that leaves loses its started flag, and a connected side held by its deadman accepts Start robot.
 - **Date:** 2026-10-15
 - **Deciders:** Project owner (decision of 2026-10-15: "when the target changes, Start robot

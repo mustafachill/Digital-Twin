@@ -28,7 +28,6 @@ import time
 
 from cite_bringup.program.console_machine import (
     ConsoleMachine,
-    home_prompt,
     PLACE_PROMPT,
     START_PROMPT,
     VALIDATED_PLACE_PROMPT,
@@ -329,12 +328,9 @@ class Rig:
         """Start the robot and home it: what Start program needs."""
         self.started()
         self.away = [None]
-        if self.machine.physical:
-            join = self.in_thread(lambda: self.machine.home(1.0, TWIN))
-            self.answer()
-            assert join().success
-        else:
-            assert self.machine.home(1.0, TWIN).success
+        # The go-ahead was given at Start robot: Home asks no one (ADR-0071
+        # decision 3 as amended 2026-10-16).
+        assert self.machine.home(1.0, TWIN).success
         assert _at_start(self.machine.snapshot())
         self.calls.clear()
         self.speeds.clear()
@@ -739,16 +735,27 @@ def test_a_physical_run_awaits_the_operator_after_reading_sim_then_returns_to_si
     assert after[-2:] == [("return_to_sim",), ("close",)]
 
 
-def test_a_physical_home_asks_the_operator_then_returns_to_sim() -> None:
+def test_a_physical_home_asks_no_one_again_holds_sim_then_returns_to_sim() -> None:
+    """ADR-0071 decision 3 as amended 2026-10-16: the go-ahead was Start robot's."""
     rig = Rig(physical=["counterpart"]).started()
+    asked = rig.asked()
     rig.away = [None]
-    join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
-    assert rig.machine.snapshot().prompt.endswith(home_prompt(TWIN))
-    assert rig.calls[-1] == ("carriage_refusal", True)
-    assert rig.machine.confirm_operator().success
-    assert join().success
+    assert rig.machine.home(0.1, TWIN).success
+    assert rig.asked() == asked
+    # SIM still held and the carriage still judged before anything moves.
+    assert rig.calls[:2] == [("hold_sim",), ("carriage_refusal", True)]
     assert rig.calls[-2:] == [("return_to_sim",), ("close",)]
+
+
+def test_one_go_ahead_at_start_robot_covers_home_and_asks_again_after_a_new_start() -> None:
+    """Asked at Start robot only; a new Start robot asks again (ADR-0071 decision 3)."""
+    rig = Rig(physical=["counterpart"]).started(REAL)
+    assert rig.asked() == 1
+    rig.away = [None]
+    assert rig.machine.home(0.1, REAL).success
+    assert rig.asked() == 1
+    rig.started(REAL)
+    assert rig.asked() == 2
 
 
 def test_a_physical_run_is_refused_when_the_twin_is_not_in_sim() -> None:
@@ -782,14 +789,14 @@ def test_a_home_whose_return_to_sim_fails_is_a_fault() -> None:
     rig.away = [None]
     rig.left = [False]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.answer()
     outcome = join()
     assert not outcome.success
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.FAULT
     assert "did not confirm SIM" in snapshot.last_error
     assert not _at_start(snapshot)
-    assert rig.asked() == asked + 1
+    # The go-ahead was Start robot's: the home asked no one.
+    assert rig.asked() == asked
 
 
 def test_a_run_whose_return_to_sim_fails_asks_no_one_in_for_the_next_cycle() -> None:
@@ -864,7 +871,8 @@ def test_a_request_whose_return_to_sim_fails_keeps_its_hold(request_kind) -> Non
         if request_kind == "run"
         else (lambda: rig.machine.home(0.1, TWIN))
     )
-    rig.answer()
+    if request_kind == "run":
+        rig.answer()
     assert not join().success
     assert rig.released[released:] == []
     snapshot = rig.machine.snapshot()
@@ -1019,7 +1027,6 @@ def test_stop_in_a_fault_with_the_twin_out_of_sim_asks_for_sim_again() -> None:
     rig.away = [None]
     rig.left = [False]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.answer()
     join()
     assert rig.machine.snapshot().state == ConsoleState.FAULT
     rig.heard = TwinMode.MODE_VALIDATED
@@ -1434,7 +1441,6 @@ def test_a_terminal_client_does_not_hold_back_the_return_to_sim() -> None:
     rig.away = [None]
     rig.left = [False]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.answer()
     join()
     assert rig.machine.snapshot().state == ConsoleState.FAULT
     rig.heard = TwinMode.MODE_VALIDATED
@@ -1852,16 +1858,10 @@ def test_home_and_start_program_need_their_target_started() -> None:
     assert rig.initialized == [] and rig.asked() == 0
 
 
-def test_a_home_on_the_real_arm_names_it_and_initializes_it_alone() -> None:
+def test_a_home_on_the_real_arm_initializes_it_alone() -> None:
     rig = Rig(physical=["counterpart"]).started(REAL)
     rig.away = [None]
-    join = rig.in_thread(lambda: rig.machine.home(0.1, REAL))
-    rig.wait_for_state(ConsoleState.AWAITING_OPERATOR)
-    prompt = rig.machine.snapshot().prompt
-    assert prompt.endswith(home_prompt(REAL))
-    assert "the real arm will move" in prompt and "both arms" not in prompt
-    assert rig.machine.confirm_operator().success
-    assert join().success
+    assert rig.machine.home(0.1, REAL).success
     assert rig.initialized == [("counterpart",)]
     assert rig.measured_sides == [("counterpart",)]
 
@@ -1881,9 +1881,9 @@ def test_a_target_offered_before_its_track_is_zeroed_accepts_start_robot_alone()
     assert rig.machine.snapshot().available_targets == (SIM, REAL, TWIN)
     rig.started(TWIN)
     rig.speeds.clear()
-    # Started is started AND commandable (decision 2): the deck still asks for
-    # Start robot on the real arm and the twin.
-    assert rig.machine.snapshot().started_targets == (SIM,)
+    # Started is started (decision 2 as amended 2026-10-16): not commandable
+    # refuses motion at that instant and un-starts nothing.
+    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
     for target in (REAL, TWIN):
         refusal = rig.machine.motion_refusal(0.1, None, target)
         assert refusal is not None and "not ready to be commanded" in refusal
@@ -1895,120 +1895,21 @@ def test_a_target_offered_before_its_track_is_zeroed_accepts_start_robot_alone()
     assert rig.machine.motion_refusal(0.1, None, SIM) is None
     # Once the twin calls the track commandable, Home is accepted.
     rig.commandable = list(SIDES)
-    rig.machine.commandable_changed()
     assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
     assert rig.machine.motion_refusal(0.1, None, TWIN) is None
 
 
-def test_a_physical_side_that_ceases_to_be_commandable_is_no_longer_started() -> None:
-    """ADR-0075 decision 2: a side that recovers must be started again."""
-    rig = Rig(physical=["counterpart"]).started(TWIN)
-    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
-    rig.commandable = ["plant"]
-    rig.machine.commandable_changed()
-    snapshot = rig.snapshots[-1]
-    assert snapshot.started_targets == (SIM,) and snapshot.robot_started
-    assert snapshot.state == ConsoleState.READY
-    # Recovered: commandable again, but not started until Start robot says so.
-    rig.commandable = list(SIDES)
-    rig.machine.commandable_changed()
-    assert rig.machine.snapshot().started_targets == (SIM,)
-    for target in (REAL, TWIN):
-        refusal = rig.machine.motion_refusal(0.1, None, target)
-        assert refusal is not None and "is not started (counterpart)" in refusal
-    assert rig.machine.motion_refusal(0.1, None, SIM) is None
-    rig.started(REAL)
-    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
-
-
-def test_a_lapse_of_the_only_started_side_leaves_the_console_not_started() -> None:
+def test_a_side_not_commandable_for_a_moment_stays_started() -> None:
+    """ADR-0075 decision 2 as amended 2026-10-16: readiness flicker refuses, never un-starts."""
     rig = Rig(physical=["counterpart"]).started(REAL)
     rig.commandable = ["plant"]
-    rig.machine.commandable_changed()
-    snapshot = rig.snapshots[-1]
-    assert snapshot.state == ConsoleState.NOT_STARTED and not snapshot.robot_started
-    assert snapshot.started_targets == ()
-
-
-def test_a_side_becoming_commandable_clears_nothing() -> None:
-    """Only a true-to-false change clears a started flag.
-
-    A start whose track the twin calls commandable late stays started once it is.
-    """
-    rig = Rig(physical=["counterpart"], commandable=("plant",)).started(TWIN)
-    rig.commandable = list(SIDES)
-    rig.machine.commandable_changed()
-    assert rig.machine.snapshot().started_targets == (SIM, REAL, TWIN)
-
-
-def test_a_lapse_is_judged_on_its_own_message_not_on_a_later_one() -> None:
-    """S-02: message A (counterpart absent) is told after B (present) was stored.
-
-    Two overlapping deliveries: B's set is what ``commandable()`` reads by the
-    time A's call reaches the machine. A's own set is what is judged, so the
-    lapse it carries clears the started flag, and B is a recovery after it.
-    """
-    rig = Rig(physical=["counterpart"]).started(TWIN)
-    rig.commandable = list(SIDES)
-    rig.machine.commandable_changed(("plant",))
-    rig.machine.commandable_changed(SIDES)
-    snapshot = rig.machine.snapshot()
-    assert snapshot.started_targets == (SIM,)
     refusal = rig.machine.motion_refusal(0.1, None, REAL)
-    assert refusal is not None and "is not started (counterpart)" in refusal
-
-
-def test_a_lapse_during_its_own_start_after_initializing_leaves_the_side_unstarted(
-    monkeypatch,
-) -> None:
-    """S-01, ADR-0075 decision 2: a Start robot in flight never re-adds a side that lapsed.
-
-    The track ceases to be commandable after its initialization ended and
-    before the custody read: the start succeeds as before, but the real arm is
-    not started by it, and the next Start robot starts it.
-    """
-    rig = Rig(physical=["counterpart"])
-    custody = FakeCell.refuse_if_holding
-
-    def lapse_then_read(cell, sides=("plant",)) -> None:
-        if rig.initialized:
-            rig.commandable = ["plant"]
-            rig.machine.commandable_changed()
-            rig.commandable = list(SIDES)
-            rig.machine.commandable_changed()
-        custody(cell, sides)
-
-    monkeypatch.setattr(FakeCell, "refuse_if_holding", lapse_then_read)
-    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
-    rig.answer()
-    assert join().success
+    assert refusal is not None and "not ready to be commanded" in refusal
     snapshot = rig.machine.snapshot()
-    assert REAL not in snapshot.started_targets and not snapshot.robot_started
-    assert snapshot.state == ConsoleState.NOT_STARTED
-    refusal = rig.machine.motion_refusal(0.1, None, REAL)
-    assert refusal is not None and "Start robot" in refusal
-    # The record ends with the request: a start after it starts the side.
-    monkeypatch.setattr(FakeCell, "refuse_if_holding", custody)
-    rig.started(REAL)
-    assert rig.machine.snapshot().started_targets == (REAL,)
-
-
-def test_a_lapse_its_initialization_outlasts_does_not_keep_the_side_unstarted() -> None:
-    """S-01: initializing the side is starting it again, so a lapse before it ends is undone."""
-    rig = Rig(physical=["counterpart"])
-
-    def initialize(sides, say, interrupted) -> None:
-        rig.initialized.append(tuple(sides))
-        rig.commandable = ["plant"]
-        rig.machine.commandable_changed()
-        rig.commandable = list(SIDES)
-        rig.machine.commandable_changed()
-
-    rig.machine._initialize_physical = initialize
-    join = rig.in_thread(lambda: rig.machine.start_robot(REAL))
-    rig.answer()
-    assert join().success
-    assert rig.machine.snapshot().started_targets == (REAL,)
+    assert snapshot.started_targets == (REAL,) and snapshot.state == ConsoleState.READY
+    # Commandable again: Home is accepted with no new Start robot.
+    rig.commandable = list(SIDES)
+    assert rig.machine.motion_refusal(0.1, None, REAL) is None
 
 
 def test_a_physical_side_that_leaves_the_running_sides_is_no_longer_started() -> None:
@@ -2086,7 +1987,6 @@ def test_a_fault_unstarts_every_side() -> None:
     rig.away = [None]
     rig.left = [False]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.answer()
     join()
     snapshot = rig.machine.snapshot()
     assert snapshot.state == ConsoleState.FAULT
@@ -2109,7 +2009,6 @@ def test_a_simulation_start_does_not_leave_fault_while_the_twin_is_out_of_sim() 
     rig.away = [None]
     rig.left = [False]
     join = rig.in_thread(lambda: rig.machine.home(0.1, TWIN))
-    rig.answer()
     join()
     assert rig.machine.snapshot().state == ConsoleState.FAULT
     rig.mode = rig.heard = TwinMode.MODE_VALIDATED

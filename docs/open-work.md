@@ -2122,6 +2122,10 @@ interface under load against the test's deadline.
 
 ### #110 — Two narrow ways a lapsed physical side can stay started (2026-10-15)
 
+**Closed 2026-10-16: superseded.** The owner removed the rule it concerned (ADR-0075 decision 2
+as amended 2026-10-16): a lapse of commandability no longer un-starts a side, so neither window
+exists. What follows is kept as the record.
+
 **What happens.** ADR-0075 decision 2 says a physical side that stops being commandable must be
 started again. Two windows remain, both found by the safety re-audit of that change:
 - A lapse heard between the initializer's last vendor check and its return is forgotten with

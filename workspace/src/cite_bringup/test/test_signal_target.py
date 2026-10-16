@@ -478,14 +478,14 @@ def test_a_simulation_run_places_parts_on_the_plant_alone_and_measures_it_alone(
 def test_a_real_run_places_no_part_and_asks_the_operator_in_sim() -> None:
     rig = Rig(physical=["counterpart"]).started()
     rig.away = [None]
-    join = rig.in_thread(lambda: rig.machine.home(0.5, REAL))
+    # The go-ahead was Start robot's: the home asks no one.
+    assert rig.machine.home(0.5, REAL).success
+    rig.calls.clear()
+    join = rig.in_thread(lambda: rig.machine.run_program(0.5, 1, REAL))
+    # The part-placement confirmation, the cycle's one question.
     rig.answer()
     assert join().success
     assert "Target: the real arm" in [s.prompt for s in rig.snapshots if s.prompt][-1]
-    rig.calls.clear()
-    join = rig.in_thread(lambda: rig.machine.run_program(0.5, 1, REAL))
-    rig.answer()
-    assert join().success
     assert rig.placed_on == []
     assert ("return_to_sim",) in rig.calls
 

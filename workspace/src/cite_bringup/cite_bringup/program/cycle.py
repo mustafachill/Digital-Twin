@@ -195,7 +195,7 @@ def home(
     say: Callable[[str], None],
     await_operator: Callable[[str], str],
     initialize_physical: Callable[[], None],
-    prompt: str,
+    prompt: str | None,
     console: str | None = None,
 ) -> Ended:
     """Bring the target's arms to the program's start; SIM again after, but in SIM.
@@ -203,7 +203,9 @@ def home(
     The gate (`_ask_the_operator`, with ``homing``: a carriage apart is what
     the home brings back), then `home.bring_to_start` on the target's sides.
     Says `done: ...`, `FAILED: ...` or `interrupted`, as `./scripts/home`
-    always has.
+    always has. ``prompt`` None asks no one: the console's Home, whose target's
+    go-ahead was given at its Start robot (ADR-0071 decision 3 as amended
+    2026-10-16); SIM is still held and the carriage still judged.
 
     ``console`` is the zone's console state topic, given by a TERMINAL caller:
     where a console serves the pair the home is refused before anything -
@@ -375,7 +377,7 @@ def _ask_the_operator(
     scale: float | None,
     say: Callable[[str], None],
     await_operator: Callable[[str], str],
-    prompt: str,
+    prompt: str | None,
     *,
     homing: bool,
 ) -> None:
@@ -394,8 +396,13 @@ def _ask_the_operator(
     the homing (`ENABLE_NOTICE`), as the console's Start robot does. Readiness
     is judged after the initialization, before the target's mode
     (`home.bring_to_start`).
+
+    ``prompt`` None: the go-ahead was given already (the console's Start
+    robot), so everything above is judged and no one is asked again.
     """
     if physical:
+        if prompt is not None and homing:
+            prompt = f"{ENABLE_NOTICE}{prompt}"
         confirm_operator(
             cell.hold_sim(),
             physical,
@@ -403,8 +410,6 @@ def _ask_the_operator(
             say,
             await_operator,
             lambda: cell.carriage_refusal(target, homing=homing),
-            prompt=targeted_prompt(
-                f"{ENABLE_NOTICE}{prompt}" if homing else prompt, target, physical
-            ),
+            prompt=None if prompt is None else targeted_prompt(prompt, target, physical),
             enabling=homing,
         )

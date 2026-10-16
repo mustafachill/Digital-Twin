@@ -201,8 +201,8 @@ class CellConsole(LifecycleNode):
         self._work = ReentrantCallbackGroup()
         #: Everything that must answer at once.
         self._quick = ReentrantCallbackGroup()
-        #: The twin's commandable sides, one message at a time and in order
-        #: (S-02): two deliveries overlapping could hide a lapse from the machine.
+        #: The twin's sides, one message at a time and in order (S-02): two
+        #: deliveries overlapping could hide a departure from the machine.
         self._sides_group = MutuallyExclusiveCallbackGroup()
         self._publish_lock = threading.Lock()
         #: Guards `_twin_mode` alone, so the machine may read it under its own lock.
@@ -563,9 +563,11 @@ class CellConsole(LifecycleNode):
     def _on_twin_sides(self, message: TwinSides) -> None:
         """Keep which sides are up and may be commanded now, and publish the state again.
 
-        R-19 and ADR-0077. The machine is told both, so a physical side that
-        ceased to be commandable, or left the sides running, is no longer
-        started (ADR-0075 decision 2); each publishes the state.
+        R-19 and ADR-0077. The commandable sides are kept for the motion
+        refusal alone: a side not commandable at this instant refuses Home and
+        Start program, and un-starts nothing (ADR-0075 decision 2 as amended
+        2026-10-16). The machine is told the running sides, so a physical side
+        that left them is no longer started; that publishes the state.
         """
         connected = tuple(side for side in message.running if side in self._running)
         commandable = tuple(side for side in message.commandable if side in self._running)
@@ -575,9 +577,8 @@ class CellConsole(LifecycleNode):
         machine = self._machine
         if machine is not None:
             # This message's own sets, outside `_sides_lock` (the machine reads
-            # that lock under its own): a later one cannot hide its lapse (S-02).
+            # that lock under its own): a later one cannot hide a departure (S-02).
             machine.running_changed(connected)
-            machine.commandable_changed(commandable)
 
     def _available(self) -> list[int]:
         """Return the targets offered now: every side of them up (ADR-0075, ADR-0077)."""

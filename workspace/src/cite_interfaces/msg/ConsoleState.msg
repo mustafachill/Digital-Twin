@@ -80,13 +80,14 @@ uint8[] startable_targets   # those of available_targets every side of which is 
                             # (`cite_bringup.program.targets`), so no panel restates
                             # which sides a target commands
 uint8[] started_targets     # those of available_targets every side of which Start
-                            # robot started and nothing has undone since, and the
-                            # twin calls commandable now (ADR-0075 decision 2): the
-                            # only targets Home and Start program may be accepted for.
-                            # A physical side that ceases to be commandable is no
-                            # longer started. Derived by the console from its one
-                            # target table, so no panel restates which sides a
-                            # target commands
+                            # robot started and nothing has undone since (ADR-0075
+                            # decision 2 as amended 2026-10-16): only a FAULT, a new
+                            # Start robot or the side leaving the running sides undoes
+                            # it. The only targets Home and Start program may be
+                            # accepted for; a side the twin does not call commandable
+                            # at that instant still refuses them, and stays started.
+                            # Derived by the console from its one target table, so no
+                            # panel restates which sides a target commands
 uint8[] floored_targets     # those of available_targets that command a physical side:
                             # the targets `minimum_speed_scale` applies to. A goal for
                             # any other target is accepted at any scale in (0, 1]

@@ -1,6 +1,7 @@
 # ADR-0071: The first operator surface is a panel in the Gazebo window
 
 - **Status:** Proposed
+- **Amended 2026-10-16 (owner), decision 3:** on a physical side the operator's go-ahead is asked once, at Start robot on the target (real arm or twin). Home, Start program and Validate then run on a started target do not ask it again; SIM is still held and the carriage still judged. A new Start robot, or the side un-started by a FAULT or by leaving the running sides, asks again. Kept per cycle on a physical side: the part-placement confirmation, the only signal that a part is on a table nothing spawns or senses. The terminal commands have no Start robot and keep their own single go-ahead.
 - **Amended 2026-10-15 by [ADR-0075](0075-start-robot-and-home-act-on-the-selected-target.md):** "nothing before Start robot" holds per target: Home and Start program need their target started.
 - **Amended 2026-10-09 by [ADR-0072](0072-the-operator-chooses-where-the-signal-goes.md):** Home and Start program carry an explicit target (simulation, real arm or twin); "at the start" is per side; the console takes a mode hold for each run and reads custody through L5 (`/cite/twin/holding`), so it no longer reads another domain for custody.
 - **Amended 2026-10-09:** the panel gains **Reset view**, which returns the 3D view's camera, zoom included, to the generated starting pose through gz-gui's `/gui/move_to/pose`. It moves no robot, so it does not depend on the console. It adds gz-transport, gz-msgs and gz-math (vendor packages) to the panel's dependencies.

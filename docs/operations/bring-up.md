@@ -275,8 +275,11 @@ The target is sent with every Start robot, Home and Start program
 only the selected target's sides**: Simulation starts the plant and never touches the real arm;
 Real arm and Twin ask the operator to confirm before the track may move, then initialize the real
 arm. Home and Start program are enabled only for a target the console lists as started: Start
-robot has started its every side and the twin calls each commandable (a real arm whose track has
-not found its zero, or that ceases to be commandable, must be started again); while the selected
+robot has started its every side, and only a FAULT, a new Start robot or the side leaving the
+running sides (a disconnect) undoes that. A moment in which the twin does not call a side
+commandable refuses a Home or Start program at that instant and un-starts nothing (ADR-0075
+decision 2 as amended 2026-10-16). The operator confirms once, at Start robot: Home, Start
+program and Validate then run on a started target do not ask again; while the selected
 target is not started the deck says "Start robot for this target". So after starting
 Simulation, selecting Twin enables Start robot again and disables Home until Twin is started.
 Real arm and Twin can be selected before the physical track has found its zero; Start robot is then
@@ -288,7 +291,7 @@ side.
 | Button | What it does | Enabled when |
 |---|---|---|
 | **Start robot** | Starts the selected target's sides only. When the target includes the real arm: holds the twin in SIM at the boundary, asks the operator to confirm the cell is clear (the track may home and move to its start; the prompt names the target's arms), then initializes the real arm as UFACTORY Studio does. On Simulation, or on an all-simulated pair, it only checks custody. It never leaves SIM. | No request is running and a target the console serves is selected, started or not (the server also refuses while a terminal program client is on the graph) |
-| **Home** | Measures the target's sides against the program's start. If one is away, it asks the operator to confirm (when the target includes the real arm; the prompt names the target's arms) and brings them there, then measures again. It initializes only the target's real arm. | The console lists the selected target as started (which needs the real arm's track, if the target includes it, to be commandable) and is READY |
+| **Home** | Measures the target's sides against the program's start. If one is away, it brings them there, then measures again; it asks nothing, since the operator confirmed at Start robot (it still holds the twin in SIM and checks the carriage first). It initializes only the target's real arm. | The console lists the selected target as started and is READY; the server also refuses it while the twin does not call the target's real arm commandable |
 | **Start program** | Measures the target's sides again, then runs N cycles of the real program on the target. When the target includes the real arm, each cycle first asks the operator to place the part by hand; a Simulation run places its part itself and asks nobody anything. | As Home, and every side of the target is at the start |
 | **Stop** | Cancels the request in flight, holds each carriage where it stands and asks the twin back to SIM. If the twin cannot return to SIM, the console shows FAULT, and Stop then asks for SIM again. | A request is running, or FAULT with the twin out of SIM on a physical pair |
 
@@ -299,7 +302,7 @@ request runs one cycle on the simulation alone at the chosen scale. If that cycl
 stopped, the request ends and nothing is sent to the real arm. If it passes, both sides are
 measured at the program's start: a side away is refused and nothing homes in between, so Home
 with the twin and press again. Then the twin runs the requested cycles with every gate a Twin
-Start program has, and each go-ahead prompt says that the simulation pass is not evidence that
+Start program has, and each cycle's part-placement prompt says that the simulation pass is not evidence that
 the physical cycle is safe. The pass never carries over to another request. It is accepted only
 when the Twin target is offered (`ConsoleState.validate_then_run_offered`), Start robot has
 started it (`ConsoleState.started_targets`, ADR-0075) and both sides are at the start; `ConsoleState.phase` shows which phase runs. What holds it today is the console

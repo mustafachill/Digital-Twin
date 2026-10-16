@@ -98,8 +98,11 @@ START_PROMPT = (
 )
 
 
-#: What the operator is asked before a run on a physical side: the terminal's
-#: `operator.PLACE_PROMPT`, answered in the panel instead.
+#: What the operator is asked before each cycle on a physical side: the
+#: terminal's `operator.PLACE_PROMPT`, answered in the panel instead. Not a
+#: second go-ahead (that is Start robot's alone, ADR-0071 decision 3 as amended
+#: 2026-10-16): nothing is spawned or sensed on a physical table, so this
+#: confirmation is the only way the operator says the part is placed.
 PLACE_PROMPT = "Place the part on the table by hand and clear the cell, then confirm in the panel."
 
 #: What the operator is asked before each of a validate-then-run request's twin
@@ -109,18 +112,6 @@ VALIDATED_PLACE_PROMPT = (
     "The program passed one cycle in simulation. That is not evidence that the real arm's "
     f"cycle is safe. {PLACE_PROMPT}"
 )
-
-
-def home_prompt(target: int) -> str:
-    """Return what the operator is asked before a home on ``target`` (ADR-0075).
-
-    `home.HOME_PROMPT`, answered in the panel instead, naming the arms of the
-    target rather than both arms whatever it is.
-    """
-    return (
-        "Clear the cell: the track may home and move to its start, and "
-        f"{targets.MOVERS[target]} will move. Then confirm in the panel."
-    )
 
 
 #: Each state's name, for the refusals and the log.
@@ -373,21 +364,22 @@ class ConsoleMachine:
         self._stop = threading.Event()
         self._state = ConsoleState.NOT_STARTED
         #: The sides Start robot started and nothing has undone since
-        #: (ADR-0075): a FAULT clears every one, a Start robot its target's,
-        #: and a physical side ceasing to be commandable its own.
+        #: (ADR-0075 decision 2 as amended 2026-10-16): a FAULT clears every
+        #: one, a Start robot its target's, and a physical side leaving the
+        #: running sides its own (`running_changed`). A momentary loss of
+        #: commandability clears nothing: it refuses a motion request at that
+        #: instant, no more. On a physical side, started is also the
+        #: operator's one go-ahead, asked at Start robot (ADR-0071 decision 3
+        #: as amended 2026-10-16): Home and Start program do not ask it again.
         self._started_sides: set[str] = set()
-        #: The sides the twin called commandable when last told
-        #: (`commandable_changed`), to see one cease to be.
-        self._was_commandable: set[str] = set(commandable())
         #: The sides the twin said were up when last told (`running_changed`,
         #: ADR-0077), to see one leave. Empty until told: a side never heard
         #: running was never started.
         self._was_running: set[str] = set()
-        #: The physical sides that ceased to be commandable while a request
-        #: ran, since it began (S-01): the Start robot in flight does not mark
-        #: one started at its end unless its initialization ended after the
-        #: lapse. Cleared as each request begins and ends.
-        self._lapsed_in_flight: set[str] = set()
+        #: The physical sides that left the running sides while a request ran
+        #: (S-01): the Start robot in flight does not mark one started at its
+        #: end. Cleared as each request begins and ends.
+        self._left_in_flight: set[str] = set()
         self._busy = False
         #: Per side, whether it is at the program's start (ADR-0072).
         self._at_start = {PLANT_SIDE: False, COUNTERPART_SIDE: False}
@@ -489,45 +481,20 @@ class ConsoleMachine:
             snapshot = self._snapshot()
         self._on_change(snapshot)
 
-    def commandable_changed(self, now: Collection[str] | None = None) -> None:
-        """Take the twin's new commandable sides, and publish the state again (R-19).
-
-        ADR-0075 decision 2: a running physical side that was commandable and
-        is no longer has its started flag cleared, so a side that recovers is
-        started again before Home or Start program is accepted for it. An idle
-        READY console with no side left started is NOT_STARTED.
-
-        ``now`` is the set the twin's message carried, compared with the one
-        before it (S-02): read back from ``commandable()`` instead, a later
-        message's set could hide a lapse an earlier one said. None reads it.
-        """
-        with self._lock:
-            now = set(self._commandable() if now is None else now)
-            lapsed = (self._was_commandable - now).intersection(self._physical)
-            self._was_commandable = now
-            self._started_sides.difference_update(lapsed)
-            if self._busy:
-                # A Start robot in flight would re-add it at its end (S-01).
-                self._lapsed_in_flight.update(lapsed)
-            if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
-                self._state = ConsoleState.NOT_STARTED
-            snapshot = self._snapshot()
-        self._on_change(snapshot)
-
     def running_changed(self, now: Collection[str]) -> None:
         """Take the sides the twin says are up now, and publish the state again (ADR-0077).
 
         A physical side that was up and is no longer - its robot disconnected,
         or its deadman tripped and its side is being started again - has its
-        started flag cleared, as a lapse of commandability clears it
-        (`commandable_changed`): restarting is not resuming, and the side comes
+        started flag cleared: restarting is not resuming, and the side comes
         back HELD, so Start robot is asked again before Home or Start program.
-        A lapse heard while a request runs keeps the side out of what that
+        A side that leaves while a request runs is kept out of what that
         request starts. An idle READY console with no side left started is
         NOT_STARTED.
 
         ``now`` is the set the twin's message carried, compared with the one
-        before it, for the reason `commandable_changed` gives (S-02).
+        before it (S-02): read back later instead, a later message's set could
+        hide a departure an earlier one said.
         """
         with self._lock:
             now = set(now)
@@ -535,7 +502,7 @@ class ConsoleMachine:
             self._was_running = now
             self._started_sides.difference_update(left)
             if self._busy:
-                self._lapsed_in_flight.update(left)
+                self._left_in_flight.update(left)
             if not self._busy and self._state == ConsoleState.READY and not self._started_sides:
                 self._state = ConsoleState.NOT_STARTED
             snapshot = self._snapshot()
@@ -585,7 +552,9 @@ class ConsoleMachine:
                     say=say,
                     await_operator=self._awaiter(observed),
                     # The target's physical sides alone (ADR-0075).
-                    initialize_physical=lambda: self._initialize(physical, say),
+                    initialize_physical=lambda: self._initialize_physical(
+                        physical, say, self.interrupted
+                    ),
                     prompt=START_PROMPT,
                     # Every running physical side: SIM is held for a
                     # Simulation start too, whatever ``_entered`` says
@@ -606,17 +575,6 @@ class ConsoleMachine:
         return Outcome(
             True, f"{targets.label(target)} is started; {home_next(physical)}"
         )
-
-    def _initialize(self, physical: Sequence[str], say: Callable[[str], None]) -> None:
-        """Initialize ``physical`` for Start robot; a lapse before it ended is undone by it.
-
-        Initializing a side is what starts it again (ADR-0075 decision 2), so a
-        lapse heard while it ran no longer keeps the side out of what this
-        request starts; one heard after it does (S-01).
-        """
-        self._initialize_physical(physical, say, self.interrupted)
-        with self._lock:
-            self._lapsed_in_flight.difference_update(physical)
 
     def home(
         self,
@@ -667,7 +625,9 @@ class ConsoleMachine:
                         if physical
                         else (lambda: None)
                     ),
-                    prompt=home_prompt(target),
+                    # Asked once, at Start robot on this target, which Home
+                    # needs (ADR-0071 decision 3 as amended 2026-10-16).
+                    prompt=None,
                 )
             finally:
                 cell.close()
@@ -1273,7 +1233,7 @@ class ConsoleMachine:
             if reason is not None:
                 return reason
             self._busy = True
-            self._lapsed_in_flight.clear()
+            self._left_in_flight.clear()
             self._phase = phase
             self._state = state
             self._owner = owner
@@ -1310,10 +1270,10 @@ class ConsoleMachine:
         with self._lock:
             for side in at_start:
                 self._at_start[side] = True
-            # A side that lapsed while this request ran, after anything that
-            # started it again, is not started by it (S-01).
-            self._started_sides.update(set(started) - self._lapsed_in_flight)
-            self._lapsed_in_flight.clear()
+            # A side that left the running sides while this request ran is
+            # not started by it (S-01).
+            self._started_sides.update(set(started) - self._left_in_flight)
+            self._left_in_flight.clear()
             if state == ConsoleState.FAULT:
                 self._started_sides.clear()
             elif state in (ConsoleState.READY, ConsoleState.NOT_STARTED):
@@ -1504,7 +1464,6 @@ class ConsoleMachine:
     def _snapshot(self) -> Snapshot:
         self._sequence += 1
         available = tuple(self._available())
-        commandable = self._commandable()
         return Snapshot(
             sequence=self._sequence,
             state=self._state,
@@ -1526,14 +1485,13 @@ class ConsoleMachine:
             speed_scale=self._speed,
             minimum_speed_scale=self._minimum_speed_scale,
             # Derived here, from the one target table, so no panel restates
-            # which sides a target commands: started AND commandable (ADR-0075
-            # decision 2), so a target whose track has not found its zero
-            # still asks for Start robot.
+            # which sides a target commands: every side started (ADR-0075
+            # decision 2 as amended 2026-10-16). Not commandable at this
+            # instant refuses Home and Start program; it does not un-start.
             started_targets=tuple(
                 target
                 for target in available
                 if all(side in self._started_sides for side in targets.SIDES[target])
-                and not targets.not_commandable(target, commandable)
             ),
             # Derived here, as the targets are, so no panel restates the rule.
             validate_then_run_offered=targets.TWIN in available,

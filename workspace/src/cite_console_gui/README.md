@@ -160,16 +160,20 @@ and Start program goal names its target explicitly, and the console refuses one 
 
 The deck follows the target (ADR-0075). Start robot starts only the selected target's sides,
 and the console publishes which targets are started (`started_targets`: Start robot started
-every side, and the twin calls each commandable now; a physical side that ceases to be
-commandable must be started again); the panel restates no side map. Home and Start program are
+every side, and no FAULT, new Start robot or side leaving the running sides has undone it; a
+moment in which the twin does not call a side commandable refuses Home and Start program at
+that instant and un-starts nothing); the panel restates no side map. Home and Start program are
 enabled only for a started target. While the selected
 target is served but not started (`start_hint_shown`), the deck says "Start robot for this
 target" in the same place and colour as "Select a target". After starting Simulation,
 selecting Twin enables Start robot again and disables Home until Twin is started; back on
 Simulation, Home is offered again. Start robot stays enabled on a started target, to start it
 again. Real arm and Twin may be selected before the physical track has found its zero: Start
-robot is then the only request the console accepts for them, and they are not listed as started
-until the twin calls the track commandable.
+robot is then the only request the console accepts for them; Home and Start program are refused
+until the twin calls the track commandable. On a physical side the operator confirms once, at
+Start robot: Home and Start program on that started target do not ask again, except that each
+cycle on a physical side still asks the operator to place the part by hand (ADR-0071 decision 3
+as amended 2026-10-16).
 
 When the panel drops an operator's Real arm or Twin pick, its event log says so: "Target
 selection dropped", with "Console changed: now Simulation" (or "now none")

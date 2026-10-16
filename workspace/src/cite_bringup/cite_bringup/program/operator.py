@@ -48,7 +48,7 @@ def confirm_operator(
     say: Callable[[str], None],
     read: Callable[[str], str],
     carriage_refusal: Callable[[], str | None],
-    prompt: str = PLACE_PROMPT,
+    prompt: str | None = PLACE_PROMPT,
     enabling: bool = False,
 ) -> None:
     """Ask the operator to place the part and clear the cell, once the twin is in SIM.
@@ -63,7 +63,10 @@ def confirm_operator(
     robot, whose initializer moves the track at its own speed), and then no
     scale is said. ``enabling`` is True where the confirmation is followed by
     the arm's initialization (Start robot, a homing request): the arm may be
-    held at STOP until then, and is said so (ADR-0076).
+    held at STOP until then, and is said so (ADR-0076). ``prompt`` None is a
+    request whose go-ahead was given already - the console's Start robot on
+    the target (ADR-0071 decision 3 as amended 2026-10-16): the mode and the
+    carriage are judged as for any other, and no one is asked again.
     """
     if mode is None:
         raise StepFailed(
@@ -79,6 +82,8 @@ def confirm_operator(
     refusal = carriage_refusal()
     if refusal is not None:
         raise StepFailed(refusal)
+    if prompt is None:
+        return
     for side in physical:
         if scale is not None:
             say(f"{side} is physical and runs at speed scale {scale:g}.")
