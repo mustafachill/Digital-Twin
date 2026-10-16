@@ -6,7 +6,7 @@ schema: cite/asset_type/v1
 # `surface` frame is where a source station presents work-pieces and where a
 # sink station accumulates them.
 #
-# 0.570 m TALL since 2026-10-16, at the owner's request: its one instance,
+# 0.550 m TALL since 2026-10-16, at the owner's request: its one instance,
 # `outfeed_table`, catches what runs off the belt's end, and stands a little
 # under the belt's surface so a part drops onto it rather than butting into it.
 # It was 0.600 m while it was also the pick table; the pick table is now
@@ -17,7 +17,7 @@ asset_type:
 
   frames:
     - id: surface
-      xyz_m: [0.000, 0.000, 0.570]
+      xyz_m: [0.000, 0.000, 0.550]
 
   description:
     provider: body
@@ -33,13 +33,13 @@ asset_type:
         uri: file://$(find cite_description)/meshes/visual/tables/work_table_600.glb
       collision:
         kind: box
-        size_m: [0.600, 0.600, 0.570]
+        size_m: [0.600, 0.600, 0.550]
       inertial:
         mass_kg: 30.0
         com_m: [0.0, 0.0, 0.0]
-        # Solid box 0.6 x 0.6 x 0.57 at 30 kg:
-        #   ixx = iyy = 30/12 * (0.36 + 0.3249) = 1.71225
+        # Solid box 0.6 x 0.6 x 0.55 at 30 kg:
+        #   ixx = iyy = 30/12 * (0.36 + 0.3025) = 1.65625
         #   izz       = 30/12 * (0.36 + 0.36)   = 1.8
-        ixx: 1.71225
-        iyy: 1.71225
+        ixx: 1.65625
+        iyy: 1.65625
         izz: 1.8

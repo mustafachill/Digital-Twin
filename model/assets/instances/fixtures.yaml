@@ -46,7 +46,7 @@ assets:
   # owner's request (2026-10-16). He asked for about 15 mm, which is under
   # geometric.MIN_CLEARANCE_M (20 mm); exactly 20 mm still warns, because the
   # difference of the two faces lands a hair under it in floating point. Its
-  # surface, 0.570 m, is 65 mm below the belt's 0.635 m, which stands on a riser
+  # surface, 0.550 m, is 85 mm below the belt's 0.635 m, which stands on a riser
   # (see model/assets/instances/conveyors.yaml).
   - id: outfeed_table
     zone: cell_b
