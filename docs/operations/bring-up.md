@@ -83,7 +83,7 @@ The simulation-fidelity aids cross into ROS through one `ros_gz_bridge` process:
 
 ```bash
 ros2 node list | grep gz_bridge                                 # exactly one
-ros2 topic echo /cite/cell_b/infeed_beam/detection_level        # a beam's raw level, std_msgs/Bool
+ros2 topic echo /cite/cell_b/transfer_belt/state               # the belt's speed, std_msgs/Float64
 ros2 topic pub --once /cite/cell_b/transfer_belt/command \
     std_msgs/msg/Float64 "{data: 0.15}"                         # the belt, by hand
 ```

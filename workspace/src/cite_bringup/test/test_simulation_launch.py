@@ -927,6 +927,29 @@ def _plan():
     return load(Path(resolve_uri(GENERATED_PLAN)))
 
 
+#: A beam plan entry, as the generator wrote one for `infeed_beam` until the
+#: shipped cell dropped its beams (2026-10-16, ADR-0079 addendum). The plan
+#: still carries sensors for a model that declares them, so the shape is still
+#: tested, against this entry rather than the live plan.
+_A_BEAM = {
+    'asset': 'infeed_beam',
+    'detection_topic': '/cite/cell_b/infeed_beam/detection',
+    'level_topic': '/cite/cell_b/infeed_beam/detection_level',
+    'frame_id': 'cell_b__infeed_beam__beam',
+    'beam_axis': 'y',
+    'beam_length_m': 0.5,
+}
+
+
+def _plan_with_a_beam(tmp_path: Path):
+    """Return the generated plan with one beam added: the shipped cell has none."""
+    document = copy.deepcopy(_document())
+    document['plan']['sensors'] = [dict(_A_BEAM)]
+    path = tmp_path / 'plan.yaml'
+    path.write_text(yaml.safe_dump(document))
+    return load(path)
+
+
 def _nodes(actions: list, executable: str, context: LaunchContext) -> list:
     """Every Node with this executable, including ones behind a process gate."""
     found = [a for a in actions if getattr(a, "node_executable", None) == executable]
@@ -954,7 +977,7 @@ def _namespace(node, context: LaunchContext) -> str:
     return node.expanded_node_namespace
 
 
-def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
+def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType, tmp_path: Path) -> None:
     """The blocker this work exists for.
 
     The belt and beam plugins were built, instantiated by the generated world and
@@ -967,7 +990,7 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
     The count below is arithmetic on the plan rather than a literal: a number
     written out is a number that stops being true when the cell gains a sensor.
     """
-    plan = _plan()
+    plan = _plan_with_a_beam(tmp_path)
     assert plan.conveyors and plan.sensors, "the plan bridges no aid, so this checks nothing"
     arguments, _ = module._bridge_topics(plan)
 
@@ -995,13 +1018,15 @@ def test_every_aid_topic_in_the_plan_is_bridged(module: ModuleType) -> None:
     )
 
 
-def test_the_bridge_directions_are_not_interchangeable(module: ModuleType) -> None:
+def test_the_bridge_directions_are_not_interchangeable(
+    module: ModuleType, tmp_path: Path
+) -> None:
     """A command bridged the wrong way fails at both ends with no error at either.
 
     `]` is ROS to Gazebo and `[` is Gazebo to ROS. Reversed, a belt command
     becomes a ROS publisher nothing reads and a Gazebo subscriber nothing writes.
     """
-    plan = _plan()
+    plan = _plan_with_a_beam(tmp_path)
     arguments, _ = module._bridge_topics(plan)
 
     commands = [a for a in arguments if "/command@" in a]
@@ -1013,13 +1038,16 @@ def test_the_bridge_directions_are_not_interchangeable(module: ModuleType) -> No
     assert all("[" in a and "]" not in a for a in inbound)
 
 
-def test_the_bridged_level_lands_on_the_plans_level_topic(module: ModuleType) -> None:
+def test_the_bridged_level_lands_on_the_plans_level_topic(
+    module: ModuleType, tmp_path: Path
+) -> None:
     """The level reaches ROS under the name the plan states for it.
 
     The Gazebo side keeps the plugin's own name, `detection_topic`, and the ROS
     end is moved to `level_topic` by a remapping.
     """
-    plan = _plan()
+    plan = _plan_with_a_beam(tmp_path)
+    assert plan.sensors
     arguments, remappings = module._bridge_topics(plan)
     remapped = dict(remappings)
 

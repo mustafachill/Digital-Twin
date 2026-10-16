@@ -175,14 +175,18 @@ def world_root(world: Path) -> ElementTree.Element:
 
 
 def carried_models(world: Path) -> frozenset[str]:
-    """Every Gazebo model name the belts carry and the beams watch.
+    """Every Gazebo model name the belts carry and, where the world has beams, they watch.
 
     Both plugins match this set EXACTLY — `carried_.count(name->Data())` in
     `conveyor.cpp`, `watched_.count(name->Data())` in `break_beam.cpp` — so a
     part spawned under any other name rides through the cell untouched and
-    unseen. The intersection is taken rather than either list alone: a name a
-    belt carries but no beam watches would move and never be reported, and a
-    scenario that fed one would be testing a piece the line is blind to.
+    unseen. Where the world has beams the intersection is taken rather than
+    either list alone: a name a belt carries but no beam watches would move and
+    never be reported, and a scenario that fed one would be testing a piece the
+    line is blind to. `cell_b` has had no beams since 2026-10-16 (ADR-0079
+    addendum), and then the belts' list is the answer: there is nothing else to
+    agree with. Taking the intersection with an empty list returned no part at
+    all, which is how `program_cycle` found this.
 
     Here rather than in a scenario because the name is a facility fact: a
     literal `"workpiece"` in a scenario would be a second statement of
@@ -192,4 +196,4 @@ def carried_models(world: Path) -> frozenset[str]:
     root = world_root(world)
     carried = {element.text.strip() for element in root.iter("carry") if element.text}
     watched = {element.text.strip() for element in root.iter("watch") if element.text}
-    return frozenset(carried & watched)
+    return frozenset(carried & watched) if watched else frozenset(carried)

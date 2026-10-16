@@ -34,7 +34,7 @@ hardware.
 /cite/cell_b/picker/joint_states
 /cite/cell_b/picker/picker_joint_trajectory_controller/follow_joint_trajectory
 /cite/cell_b/transfer_belt/state
-/cite/cell_b/infeed_beam/detection
+/cite/cell_b/transfer_belt/command
 ```
 
 These are read from `workspace/src/cite_generated/bringup/cell_b_plan.yaml`, the plan of the

@@ -43,14 +43,12 @@ stations:
     # Pick and Place cannot reach, and `unreachable-station` refuses it. The flow
     # edge still says where the part goes; `program_cycle` is what drives and
     # checks this cell.
-    trigger: {sensor: infeed_beam, state: blocked}
 
-  # The sink. It has a trigger and no actor: nothing here acts, and the trigger is
-  # what makes the arrival observed rather than counted when the arm let go —
-  # which is a statement about a gripper and not about the table.
+  # The sink. It has no actor: nothing here acts. It had a break-beam trigger
+  # until 2026-10-16, when both beams were removed because nothing in the main
+  # tree read them (ADR-0079 addendum); the lab cell has no such beams.
   - id: b_accumulation
     zone: cell_b
     type: sink_station
     assets: [outfeed_table]
     capacity: 12
-    trigger: {sensor: outfeed_beam, state: blocked}

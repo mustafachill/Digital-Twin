@@ -445,22 +445,6 @@ plan:
   #   level_topic     — where the bridge lands that RAW `std_msgs/Bool` level in
   #                     ROS. The reader refuses a plan that makes the two one.
   sensors:
-    - asset: infeed_beam
-      detection_topic: /cite/cell_b/infeed_beam/detection
-      level_topic: /cite/cell_b/infeed_beam/detection_level
-      # The frame the beam stands at, published by the generated static TF
-      # table.
-      frame_id: cell_b__infeed_beam__beam
-      beam_axis: y
-      beam_length_m: 0.5
-    - asset: outfeed_beam
-      detection_topic: /cite/cell_b/outfeed_beam/detection
-      level_topic: /cite/cell_b/outfeed_beam/detection_level
-      # The frame the beam stands at, published by the generated static TF
-      # table.
-      frame_id: cell_b__outfeed_beam__beam
-      beam_axis: y
-      beam_length_m: 0.5
 
   # What each arm's program does, step by step, read from the program file the
   # real robot's programming tool wrote (ADR-0067) and converted to SI units by

@@ -245,6 +245,7 @@ def test_a_scene_defines_only_the_materials_its_bodies_wear(real_model: Path) ->
         assert defined == worn
 
 
+@pytest.mark.usefixtures("beams")
 def test_the_scene_carries_the_declared_diffuse(real_model: Path) -> None:
     """URDF has one colour; the library's diffuse is the one that survives."""
     model = load(real_model)
@@ -329,6 +330,7 @@ def test_no_shipped_scene_material_clips(real_model: Path) -> None:
     assert physical_findings(real_model, "scene-material-clips") == []
 
 
+@pytest.mark.usefixtures("beams")
 def test_a_colour_a_standing_body_wears_may_not_exceed_the_bound(
     real_model: Path, edit_yaml: Callable
 ) -> None:
@@ -350,6 +352,7 @@ def test_a_colour_a_standing_body_wears_may_not_exceed_the_bound(
     assert findings[0].where == "materials.sensor_housing.diffuse[0]"
 
 
+@pytest.mark.usefixtures("beams")
 def test_the_finding_says_why_the_bound_is_what_it_is(
     real_model: Path, edit_yaml: Callable
 ) -> None:
@@ -378,6 +381,7 @@ def test_the_bound_is_derived_from_the_measured_gain() -> None:
     assert physical.MAX_SCENE_COLOUR_COMPONENT == 0.8
 
 
+@pytest.mark.usefixtures("beams")
 def test_the_bound_is_inclusive(real_model: Path, edit_yaml: Callable) -> None:
     """Exactly at the bound the conversion reaches 1.0 and clips nothing."""
     edit_yaml(
@@ -389,6 +393,7 @@ def test_the_bound_is_inclusive(real_model: Path, edit_yaml: Callable) -> None:
     assert physical_findings(real_model, "scene-material-clips") == []
 
 
+@pytest.mark.usefixtures("beams")
 def test_alpha_is_not_bounded(real_model: Path, edit_yaml: Callable) -> None:
     """Measured: the alpha passes through the conversion untouched.
 

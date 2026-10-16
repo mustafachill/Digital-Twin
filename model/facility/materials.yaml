@@ -66,13 +66,6 @@ materials:
     ambient: [0.12, 0.15, 0.19, 1.0]
     diffuse: [0.28, 0.34, 0.42, 1.0]
 
-  # A break-beam housing: safety yellow, which is what these are on a real line
-  # and also the one thing in the cell that has to be findable at a glance when
-  # somebody is asking why a station never triggered.
-  - id: sensor_housing
-    ambient: [0.36, 0.28, 0.04, 1.0]
-    diffuse: [0.78, 0.62, 0.10, 1.0]
-
   # The work-table top: a wood-coloured bench surface. Warm where everything else
   # in the cell is cool, so the surface a part is picked from is unmistakable.
   - id: table_top

@@ -69,6 +69,7 @@ class TestEveryAidIsInstantiated:
         assert belts, "the cell declares no conveyor, so this test asserted nothing"
         assert len(plugins(root, "cite_conveyor")) == len(belts)
 
+    @pytest.mark.usefixtures("beams")
     def test_one_beam_plugin_per_sensor(self, cell) -> None:
         # The property is the PAIRING, not the number. The trailing `== 3` that
         # used to be here was a second statement of how many beams the cell has,
@@ -111,6 +112,7 @@ class TestTheNamesAgreeWithThePlan:
         assert emitted == set(declared.values())
         assert emitted == {(f"/cite/{ZONE}/{BELT}/command", f"/cite/{ZONE}/{BELT}/state")}
 
+    @pytest.mark.usefixtures("beams")
     def test_beam_topics_match_the_bring_up_plan(self, cell) -> None:
         plan = yaml.safe_load(bringup.generate(cell)[0].content)["plan"]
         declared = {entry["detection_topic"] for entry in plan["sensors"]}
@@ -189,6 +191,7 @@ class TestGeometryComesFromTheModel:
         heights = {value(p, "carry_height_m") for p in plugins(world_xml(cell), "cite_conveyor")}
         assert len(heights) == 1
 
+    @pytest.mark.usefixtures("beams")
     def test_the_beam_crosses_the_belt_rather_than_being_centred_on_its_housing(self, cell) -> None:
         # The belt's beam stands 250 mm to the side of a 400 mm belt and declares
         # a 500 mm beam. Centred on the housing it would span 250 mm beside the

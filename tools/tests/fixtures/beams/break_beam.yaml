@@ -1,5 +1,5 @@
 ---
-# yaml-language-server: $schema=../../../schema/asset_type.schema.json
+# yaml-language-server: $schema=../../../../model/schema/asset_type.schema.json
 schema: cite/asset_type/v1
 
 # A through-beam presence sensor across a conveyor.

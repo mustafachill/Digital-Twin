@@ -747,7 +747,23 @@ def test_the_total_sibling_answers_the_plant_and_none_elsewhere(
 # --- The simulation-fidelity aids: two topics per beam, not two names for one --
 
 
-def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name() -> None:
+#: A beam plan entry, as the generator wrote one for `infeed_beam` until the
+#: shipped cell dropped its beams (2026-10-16, ADR-0079 addendum). The plan
+#: still carries sensors for a model that declares them, so the shape is still
+#: tested, against this entry rather than the live plan.
+_A_BEAM = {
+    'asset': 'infeed_beam',
+    'detection_topic': '/cite/cell_b/infeed_beam/detection',
+    'level_topic': '/cite/cell_b/infeed_beam/detection_level',
+    'frame_id': 'cell_b__infeed_beam__beam',
+    'beam_axis': 'y',
+    'beam_length_m': 0.5,
+}
+
+
+def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name(
+    tmp_path: Path, document: dict
+) -> None:
     """A beam's raw level lands in ROS under a name the plan states.
 
     `detection_topic` is the name the plugin advertises on the Gazebo side and
@@ -755,8 +771,9 @@ def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name() -> None:
     remapping onto its own name would be a plan that never said where the level
     goes.
     """
-    plan = load(_generated())
-    assert plan.sensors, "the generated plan declares no sensors at all"
+    document['plan']['sensors'] = [dict(_A_BEAM)]
+    plan = load(_written(tmp_path, document))
+    assert plan.sensors, 'the plan declares no sensors at all'
     for sensor in plan.sensors:
         assert sensor.detection_topic != sensor.level_topic, sensor.asset
         assert sensor.asset in sensor.detection_topic
@@ -769,8 +786,9 @@ def test_every_beam_carries_a_level_topic_apart_from_its_plugin_name() -> None:
 
 def test_a_beam_whose_two_topics_are_one_name_is_refused(tmp_path: Path, document: dict) -> None:
     """Refused when the plan says it, not discovered when nothing arrives."""
-    sensor = document["plan"]["sensors"][0]
-    sensor["level_topic"] = sensor["detection_topic"]
+    document['plan']['sensors'] = [dict(_A_BEAM)]
+    sensor = document['plan']['sensors'][0]
+    sensor['level_topic'] = sensor['detection_topic']
     with pytest.raises(PlanError, match="never said where the level goes"):
         load(_written(tmp_path, document))
 

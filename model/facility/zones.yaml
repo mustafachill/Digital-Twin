@@ -12,7 +12,7 @@ schema: cite/zones/v1
 # `projects/01` (ADR-0068, ADR-0069).
 #
 # WHAT A `bounds` BOX MEANS, because it has one meaning and not two. It encloses
-# the BODIES THIS FILE'S SIBLINGS AUTHOR — pedestals, tables, belts, beams, arm
+# the BODIES THIS FILE'S SIBLINGS AUTHOR — pedestals, tables, belts, tracks, arm
 # bases — and NOT the volume an arm's links sweep.
 #
 # THE BOX DOES NOT CONTAIN THE ARM'S REACH, AND IS NOT MEANT TO. Forward

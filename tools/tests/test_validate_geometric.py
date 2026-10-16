@@ -163,6 +163,7 @@ class TestLayout:
         )
         assert "overlapping-assets" in geometric_rules(real_model)
 
+    @pytest.mark.usefixtures("beams")
     def test_a_belt_and_its_sensor_move_together(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
@@ -395,6 +396,7 @@ class TestSupportMargin:
 class TestApproachCorridors:
     """The reach check asks whether the arm can get there. This asks what is in the way."""
 
+    @pytest.mark.usefixtures("beams")
     def test_an_obstruction_above_a_pick_point_is_caught(
         self, real_model: Path, edit_yaml: Callable
     ) -> None:
@@ -433,6 +435,7 @@ class TestClearance:
     def test_a_designed_gap_is_accepted(self, real_model: Path) -> None:
         assert "insufficient-clearance" not in geometric_rules(real_model, Severity.WARNING)
 
+    @pytest.mark.usefixtures("beams")
     def test_an_asset_placed_on_another_is_still_allowed_to_touch(self, real_model: Path) -> None:
         # A sensor mounted on its conveyor is meant to be in contact with it.
         # Warning about that would be warning about the anchoring the model wants.
@@ -1007,6 +1010,7 @@ class TestTheRemedyTheHintNamesIsAValidModel:
         assert "collision-reuses-visual-mesh" in physical_rules(real_model, Severity.ERROR)
 
 
+@pytest.mark.usefixtures("beams")
 class TestIndexingBeams:
     """A beam that stops a belt has to leave the part where a robot can reach it.
 

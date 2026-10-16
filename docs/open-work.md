@@ -357,7 +357,8 @@ exceeds 0.40 m/s, and this arm's 3.14 rad/s ceiling at 0.35 velocity scaling per
 2026-10-01 — that was `cell_a`'s scene; `cell_b`, the one zone L0 declares, has two beams,
 `infeed_beam` and `outfeed_beam` in `model/assets/instances/sensors.yaml`, and both are
 objects in `workspace/src/cite_generated/moveit/cell_b_planning_scene.yaml`. Their housing
-dimensions were not re-read for this edit.]**
+dimensions were not re-read for this edit.]** **[2026-10-16: both beams were removed from
+`cell_b` (ADR-0079 addendum); no beam housing is in the scene now.]**
 
 Both obvious levers are cell-wide behaviour changes on a blocking CI gate — lower
 `max_velocity_scaling`, or change the layout. A third worth weighing: **densify the trajectory
@@ -752,6 +753,8 @@ the transit, which is one instrument away from what
 already registers. Cross-references: **#81**, which is the same arc against a different object.
 
 ### #81 — ADR-0060's arc crosses the one object ADR-0027's sampling residual is about
+**[2026-10-16: `infeed_beam` was removed from `cell_b` (ADR-0079 addendum); the object this
+entry is about is no longer in the main tree.]**
 ADR-0027 records that `ValidateSolution` checks trajectory waypoints and **interpolates nothing
 between them**, at a sampling that works out to roughly 77 mm of tool travel per step on this
 cell — against a break-beam housing that is **40 mm** across. That residual is the record's own,

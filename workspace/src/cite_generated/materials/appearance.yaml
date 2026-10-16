@@ -38,9 +38,6 @@ appearance:
     conveyor_frame:
       ambient: [0.12, 0.15, 0.19, 1.0]
       diffuse: [0.28, 0.34, 0.42, 1.0]
-    sensor_housing:
-      ambient: [0.36, 0.28, 0.04, 1.0]
-      diffuse: [0.78, 0.62, 0.1, 1.0]
     table_top:
       ambient: [0.26, 0.16, 0.08, 1.0]
       diffuse: [0.58, 0.38, 0.2, 1.0]
@@ -48,5 +45,4 @@ appearance:
       ambient: [0.8, 0.3, 0.1, 1.0]
       diffuse: [0.9, 0.4, 0.1, 1.0]
   bodies:
-    break_beam: sensor_housing
     workpiece: workpiece_stock

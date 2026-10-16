@@ -49,6 +49,39 @@ def real_model(tmp_path: Path) -> Path:
     return destination
 
 
+#: Two break beams and their housing type, as cell_b declared them until
+#: 2026-10-16. The shipped model no longer has any — nothing in the main tree
+#: read them (ADR-0079 addendum) — but the schema, the validators and the world
+#: generator still support a declared beam, and the tests of that support need
+#: one to stand on. They are the cell's own former beams rather than invented
+#: ones, so every margin those tests were written against still holds.
+BEAMS = FIXTURES / "beams"
+#: The housing's appearance, which left the material library with the beams.
+SENSOR_HOUSING = {
+    "id": "sensor_housing",
+    "ambient": [0.36, 0.28, 0.04, 1.0],
+    "diffuse": [0.78, 0.62, 0.10, 1.0],
+}
+
+
+def add_beams(model: Path) -> None:
+    """Put the two former break beams back into a copied model."""
+    (model / "assets/types/sensors").mkdir(parents=True, exist_ok=True)
+    shutil.copy(BEAMS / "break_beam.yaml", model / "assets/types/sensors/break_beam.yaml")
+    shutil.copy(BEAMS / "sensors.yaml", model / "assets/instances/sensors.yaml")
+    library = model / "facility/materials.yaml"
+    document = yaml.safe_load(library.read_text())
+    document["materials"].append(dict(SENSOR_HOUSING))
+    library.write_text(yaml.safe_dump(document, sort_keys=False))
+
+
+@pytest.fixture
+def beams(real_model: Path) -> Path:
+    """The real model with its two former break beams restored (see `add_beams`)."""
+    add_beams(real_model)
+    return real_model
+
+
 @pytest.fixture
 def edit_yaml() -> Callable[[Path, Callable[[dict], None]], None]:
     """Mutate one YAML document in place, preserving nothing else."""

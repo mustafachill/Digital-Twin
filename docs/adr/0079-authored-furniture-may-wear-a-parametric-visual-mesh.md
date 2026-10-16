@@ -109,3 +109,30 @@ past the end of the track. The model had drawn the track as a 0.705 m box on the
 No world pose the program uses moved. The arm descriptions, the static frames, the world and
 the bring-up plan regenerate byte-identical. Only the two bodies change, in the scene and in the
 planning scene. The layout stays `PROVISIONAL`.
+
+## Addendum 2026-10-16: the break beams are removed
+
+The owner found the two yellow beam housings unsightly and asked for them to be improved or, if
+they had no function, removed. No code in the main tree acts on them:
+
+- the program, `cite_twin`, the console and both scenarios read neither the beams' topics nor
+  the plan's sensors;
+- the generated flow's station triggers had no reader;
+- the bridged level topics had no subscriber.
+
+The beam-triggered line that used them left with ADR-0069 and runs as `projects/01`. As far as
+is known, the lab cell has no such beams.
+
+What was removed:
+
+- `infeed_beam`, `outfeed_beam` and the `break_beam` type;
+- both stations' `trigger`s;
+- the `sensor_housing` material.
+
+The generated world, plan, scene, frames and planning scene drop them. What was kept:
+
+- the capability to declare a beam: the schema's `sensor` category, the beam validators, the
+  world and plan generators, the bridge and `cite_simulation`'s `cite_break_beam` plugin, which
+  is what a declared beam loads;
+- the tests of that capability, which now restore the cell's former beams from
+  `tools/tests/fixtures/beams/`.

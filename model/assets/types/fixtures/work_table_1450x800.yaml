@@ -19,7 +19,7 @@ asset_type:
     # program's pick pose lands (model/assets/instances/tracks.yaml), which is
     # where the 0.6 m table's centre stood before this table replaced it. It
     # lies 0.300 m in from the -x and the -y edge, the margin the old table gave
-    # on those two outer sides, so every support and beam margin measured there
+    # on those two outer sides, so every support margin measured there
     # holds; on the other two sides the table now runs on under the track.
     - id: surface
       xyz_m: [-0.425, -0.100, 0.600]

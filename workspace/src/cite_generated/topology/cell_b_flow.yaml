@@ -15,9 +15,6 @@ topology:
       type: sink_station
       actor: null
       capacity: 12
-      trigger:
-        topic: /cite/cell_b/outfeed_beam/detection
-        state: blocked
       upstream: [b_transfer_1]
       downstream: []
     - id: b_infeed
@@ -31,9 +28,6 @@ topology:
       actor: picker
       capacity: 1
       pick_frame: cell_b__infeed_table__surface
-      trigger:
-        topic: /cite/cell_b/infeed_beam/detection
-        state: blocked
       upstream: [b_infeed]
       downstream: [b_accumulation]
   edges:

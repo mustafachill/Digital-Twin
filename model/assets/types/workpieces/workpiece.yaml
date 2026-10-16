@@ -48,7 +48,7 @@ schema: cite/asset_type/v1
 # down. Nothing generated places one.
 #
 # THE ID IS ALSO THE SPAWNED MODEL NAME. `Facility.workpiece_models` reaches the
-# generated world as the belt's `<carry>` list and the break beam's `<watch>`
+# generated world as the belt's `<carry>` list and any break beam's `<watch>`
 # list, both of which match on the Gazebo model name. So this type's id and the
 # name a part is spawned under have to be the same string, and they are.
 asset_type:
