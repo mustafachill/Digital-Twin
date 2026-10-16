@@ -118,6 +118,9 @@ struct ConsoleCallbacks
   std::function<void(const RunProgress &)> on_run_progress;
   /// How a request ended, or why it could not be sent.
   std::function<void(const std::string &)> on_outcome;
+  /// How a Stop ended: true only when the console accepted it (StopCell
+  /// success); false when it refused it, or it could not be sent. Display only.
+  std::function<void(bool)> on_stop_answered;
 };
 
 class ConsoleClient
@@ -151,6 +154,7 @@ private:
   /// many publishers it is matched with now.
   void on_state_matched(std::size_t publishers);
   void outcome(const std::string & text) const;
+  void stop_answered(bool accepted) const;
   void progress(const std::string & text) const;
   /// A new request is sent: the last one's outcome is no longer the latest,
   /// and `sent` is what is in progress (T-05).

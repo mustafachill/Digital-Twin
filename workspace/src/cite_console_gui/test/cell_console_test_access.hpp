@@ -69,6 +69,16 @@ struct CellConsoleTestAccess
     emit plugin.viewChanged();
   }
 
+  /// The console's state publisher left the graph.
+  static void forget(CellConsole & plugin) {plugin.forget_state();}
+
+  /// The console's answer to a Stop, as the client would report it: accepted
+  /// (StopCell success) or refused.
+  static void answer_stop(CellConsole & plugin, bool accepted)
+  {
+    plugin.stop_answered(accepted);
+  }
+
   /// World statistics heard, and whether the last is older than allowed.
   static void hear_world_stats(CellConsole & plugin, bool stale)
   {

@@ -115,6 +115,9 @@ public:
     callbacks.on_outcome = [this](const std::string & text) {
         record([&]() {outcomes.push_back(text);});
       };
+    callbacks.on_stop_answered = [this](bool accepted) {
+        record([&]() {stop_answers.push_back(accepted);});
+      };
     callbacks.on_divergence = [this](const DivergenceMetrics & message) {
         record([&]() {divergence.push_back(message);});
       };
@@ -139,6 +142,8 @@ public:
   std::vector<std::vector<std::uint8_t>> publishers;
   std::vector<std::string> progress;
   std::vector<std::string> outcomes;
+  /// Each Stop's answer: accepted or not (`on_stop_answered`).
+  std::vector<bool> stop_answers;
   int lost{0};
   std::vector<TwinMode> modes;
   int modes_lost{0};
@@ -662,6 +667,12 @@ TEST(ConsoleClient, EachRequestReachesTheEndpointItsNameNames)
   EXPECT_EQ(
     sent_once_served(recorder, [&]() {client.stop();}, &Recorder::outcomes),
     "Stop: done. Fake stop");
+  // The panel shows "Stopped" on this, and only on an accepted Stop.
+  EXPECT_TRUE(recorder.wait_for([&]() {return !recorder.stop_answers.empty();}));
+  {
+    std::lock_guard<std::mutex> lock(recorder.mutex);
+    EXPECT_EQ(recorder.stop_answers, std::vector<bool>{true});
+  }
   EXPECT_EQ(
     sent_once_served(
       recorder, [&]() {client.home(0.5, ConsoleState::TARGET_REAL);}, &Recorder::progress),
@@ -773,6 +784,8 @@ TEST(ConsoleClient, AnUnservedRequestIsReportedAtOnceAndNotWaitedFor)
     EXPECT_TRUE(unserved(line)) << line;
   }
   EXPECT_NE(recorder.outcomes[2].find("E-stop"), std::string::npos);
+  // An unserved Stop is not one the console accepted.
+  EXPECT_EQ(recorder.stop_answers, std::vector<bool>{false});
   EXPECT_LT(took, std::chrono::seconds(1));
 }
 

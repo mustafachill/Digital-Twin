@@ -61,6 +61,12 @@ QtObject {
   readonly property color stopHover: "#4a5461"
   readonly property color stopPressed: "#58636f"
   readonly property color stopBorder: "#6b7684"
+  // Stop once the console accepted it ("Stopped"): amber, the cell held by
+  // the operator's software stop - still never red.
+  readonly property color stopped: "#3a2a0e"
+  readonly property color stoppedHover: "#4a3714"
+  readonly property color stoppedPressed: "#5a441b"
+  readonly property color stoppedBorder: "#f5b14a"
 
   // -------------------------------------------- the meanings kept from v0.1
   readonly property color background: window

@@ -15,7 +15,9 @@
 // Stop (ADR-0071 decision 4): a SOFTWARE stop over the command path, never an
 // E-stop, and labelled so - the label is part of the decision. Dark grey, not
 // red: red is the physical E-stop's, and colour is for the abnormal. Always on
-// screen at the deck's far right, the deck's full height.
+// screen at the deck's far right, the deck's full height. Once the console has
+// accepted a Stop, and until another command is pressed, it reads "Stopped"
+// in amber, keeps its subtitle, and still stops when pressed.
 
 import QtQuick 2.9
 import QtQuick.Controls 2.2
@@ -23,7 +25,9 @@ import QtQuick.Controls 2.2
 Button {
   id: control
   objectName: "stopButton"
-  text: "Stop — software stop, not an E-stop"
+  /// The console accepted the last Stop (`CellConsole.stoppedShown`).
+  property bool stoppedShown: false
+  text: (stoppedShown ? "Stopped" : "Stop") + " — software stop, not an E-stop"
   hoverEnabled: true
   // Mouse only, as every deck button (S-04).
   focusPolicy: Qt.NoFocus
@@ -36,11 +40,15 @@ Button {
 
   background: Rectangle {
     radius: Theme.radius
-    color: control.down ? Theme.stopPressed : control.hovered && control.enabled ?
-      Theme.stopHover : Theme.stop
+    color: control.stoppedShown ?
+      (control.down ? Theme.stoppedPressed : control.hovered && control.enabled ?
+      Theme.stoppedHover : Theme.stopped) :
+      (control.down ? Theme.stopPressed : control.hovered && control.enabled ?
+      Theme.stopHover : Theme.stop)
     opacity: control.enabled ? 1.0 : 0.55
-    border.width: control.visualFocus ? 3 : 1
-    border.color: control.visualFocus ? Theme.brand : Theme.stopBorder
+    border.width: control.visualFocus || control.stoppedShown ? 3 : 1
+    border.color: control.visualFocus ? Theme.brand :
+      control.stoppedShown ? Theme.stoppedBorder : Theme.stopBorder
     Behavior on color { ColorAnimation { duration: Theme.fast } }
   }
 
@@ -60,7 +68,7 @@ Button {
         width: 26
         height: 26
         kind: "stop"
-        color: Theme.textOnStrong
+        color: control.stoppedShown ? Theme.stoppedBorder : Theme.textOnStrong
       }
       Text {
         width: parent.width

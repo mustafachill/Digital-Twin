@@ -121,6 +121,9 @@ class CellConsole : public gz::gui::Plugin
   Q_PROPERTY(bool homeEnabled READ homeEnabled NOTIFY viewChanged)
   Q_PROPERTY(bool startProgramEnabled READ startProgramEnabled NOTIFY viewChanged)
   Q_PROPERTY(bool stopEnabled READ stopEnabled NOTIFY viewChanged)
+  /// The console accepted the operator's last Stop and no other command was
+  /// pressed since: Stop shows "Stopped". Display only; Stop stays as enabled.
+  Q_PROPERTY(bool stoppedShown READ stoppedShown NOTIFY stoppedShownChanged)
   Q_PROPERTY(bool confirmEnabled READ confirmEnabled NOTIFY viewChanged)
   Q_PROPERTY(bool validateThenRunEnabled READ validateThenRunEnabled NOTIFY viewChanged)
   Q_PROPERTY(QVariantList speedChoices READ speedChoices CONSTANT)
@@ -227,6 +230,7 @@ public:
   bool homeEnabled() const {return selection_.buttons().home;}
   bool startProgramEnabled() const {return selection_.buttons().start_program;}
   bool stopEnabled() const {return selection_.buttons().stop;}
+  bool stoppedShown() const {return stopped_shown_;}
   bool confirmEnabled() const {return selection_.buttons().confirm;}
   bool validateThenRunEnabled() const {return selection_.buttons().validate_then_run;}
   QVariantList speedChoices() const;
@@ -308,6 +312,7 @@ signals:
   void outcomeChanged();
   void worldStatsChanged();
   void runProgressChanged();
+  void stoppedShownChanged();
   void fidelityChanged();
   void eventLogChanged();
   /// gz-gui's main window that shows the panel is visible and framed: every
@@ -325,6 +330,11 @@ private:
   void forget_state();
   void set_progress(const QString & text);
   void set_outcome(const QString & text);
+  /// The console answered a Stop: shown as stopped only if it accepted it and
+  /// Stop is still the operator's last command press.
+  void stop_answered(bool accepted);
+  /// Another command was pressed, or the console left or came back.
+  void clear_stopped();
   /// Record what the console says now in the event log, at the wall clock.
   // Records the console's transition, then - when settling it dropped the
   // operator's pick of `before` - the panel's note saying so (R-03).
@@ -389,6 +399,9 @@ private:
   /// a test reads to know that a real press reached the plugin (S-01).
   std::size_t stops_pressed_{0};
   std::size_t confirms_pressed_{0};
+  /// Whether Stop is the last command button the operator pressed.
+  bool stop_pressed_last_{false};
+  bool stopped_shown_{false};
 };
 
 }  // namespace cite_console_gui

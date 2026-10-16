@@ -119,7 +119,7 @@ own. The counterpart's window is Harmonic's default, unchanged.
 | Start program | `RunProgram`, with the selected speed, target and a cycle count (at least 1); enabled only when the console lists the target in `started_targets` and in `startable_targets` |
 | Validate in simulation, then run twin | `ValidateThenRun` ([ADR-0073](../../../docs/adr/0073-validate-in-simulation-then-run-the-twin.md)), with the selected speed and cycle count and **no target** (see below) |
 | Confirm | `ConfirmOperator`, shown only in `AWAITING_OPERATOR`, with `prompt` verbatim; its cancel is Stop |
-| Stop | `StopCell` — a software stop, **not an E-stop**, and labelled so. Always on screen, at the deck's far right |
+| Stop | `StopCell` — a software stop, **not an E-stop**, and labelled so. Always on screen, at the deck's far right. Once the console accepts it, it reads "Stopped" (amber, subtitle kept, still pressable) until another command button is pressed or the console leaves or comes back; a refused Stop does not show it, and the view buttons do not clear it |
 | Progress, outcome | The goal's feedback and the last answer's detail |
 | Cycle progress | A ring with the running request's cycle of cycles and step of steps, from its feedback (`RunProgress`, `progress_fraction`); for validate-then-run, per phase (phase 1 is one cycle) |
 | Twin fidelity | `DivergenceMetrics` on `DivergenceMetrics::TOPIC` (STATE), per asset (`fidelity_view`): **"Not measured" and no number while a sample is not valid**; "not computed" for a field the twin marks NaN; a valid comparison of two simulations is said as an instrument test, never as a fidelity result |

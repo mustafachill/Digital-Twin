@@ -68,8 +68,10 @@
 #include <QVariant>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <utility>
 #include <memory>
 #include <string>
@@ -1705,6 +1707,96 @@ TEST(PanelQml, StopsLabelNeverBreaksInsideEStop)
       EXPECT_FALSE(line.endsWith("E-")) << line.toStdString();
     }
   }
+}
+
+// Stop shows "Stopped" once the console accepted it (owner request
+// 2026-10-16): the subtitle stays, Stop still stops, a view button leaves it,
+// any other command button clears it, and a refused Stop never shows it.
+TEST(PanelQml, AnAcceptedStopIsShownUntilAnotherCommandIsPressed)
+{
+  using cite_console_gui::CellConsoleTestAccess;
+  Framed framed(kSizes[0]);
+  ASSERT_NE(framed.panel, nullptr);
+  // A request running: Stop is enabled, as it is whenever it can stop.
+  CellConsoleTestAccess::hear(framed.plugin, running_a_request());
+  settle(framed);
+  auto * stop = framed.find("stopButton");
+  auto * subtitle = framed.find("stopSubtitle");
+  ASSERT_NE(stop, nullptr);
+  ASSERT_NE(subtitle, nullptr);
+  ASSERT_TRUE(stop->isEnabled());
+  const QString stopped_label = QString::fromUtf8("Stopped — software stop, not an E-stop");
+  auto subtitle_text = [subtitle]() {
+      return subtitle->property("text").toString().replace("\n", " ");
+    };
+
+  // Accepted: shown, the subtitle kept, Stop still pressable.
+  framed.plugin.stop();
+  CellConsoleTestAccess::answer_stop(framed.plugin, true);
+  settle(framed);
+  EXPECT_TRUE(framed.plugin.stoppedShown());
+  EXPECT_EQ(stop->property("text").toString(), stopped_label);
+  EXPECT_EQ(subtitle_text(), QString("software stop, not an E-stop"));
+  EXPECT_TRUE(stop->isEnabled()) << "Stop is not pressable while it shows Stopped";
+
+  // Pressed again, through the window, and accepted again: still shown.
+  const std::size_t pressed = CellConsoleTestAccess::stops_pressed(framed.plugin);
+  click(framed.window, stop);
+  EXPECT_EQ(CellConsoleTestAccess::stops_pressed(framed.plugin), pressed + 1)
+    << "a press on Stopped did not reach the plugin's stop()";
+  CellConsoleTestAccess::answer_stop(framed.plugin, true);
+  settle(framed);
+  EXPECT_EQ(stop->property("text").toString(), stopped_label);
+
+  // The view buttons move no robot and leave it.
+  framed.plugin.resetView();
+  framed.plugin.selectPreset(0);
+  framed.plugin.followRobot();
+  settle(framed);
+  EXPECT_TRUE(framed.plugin.stoppedShown()) << "a view button cleared Stopped";
+
+  // Each other command button clears it.
+  const std::vector<std::pair<const char *, std::function<void()>>> commands = {
+    {"Start robot", [&framed]() {framed.plugin.startRobot();}},
+    {"Home", [&framed]() {framed.plugin.home(0.5);}},
+    {"Start program", [&framed]() {framed.plugin.startProgram(0.5, 1);}},
+    {"Validate then run", [&framed]() {framed.plugin.validateThenRun(0.5, 1);}},
+    {"Confirm", [&framed]() {framed.plugin.confirm();}}};
+  for (const auto & command : commands) {
+    SCOPED_TRACE(command.first);
+    framed.plugin.stop();
+    CellConsoleTestAccess::answer_stop(framed.plugin, true);
+    settle(framed);
+    ASSERT_TRUE(framed.plugin.stoppedShown());
+    command.second();
+    settle(framed);
+    EXPECT_FALSE(framed.plugin.stoppedShown());
+    EXPECT_EQ(stop->property("text").toString(), QString::fromUtf8(kStopLabel));
+  }
+
+  // A Stop accepted after another command was pressed is not shown.
+  framed.plugin.stop();
+  framed.plugin.home(0.5);
+  CellConsoleTestAccess::answer_stop(framed.plugin, true);
+  settle(framed);
+  EXPECT_FALSE(framed.plugin.stoppedShown()) << "Stopped shown over a later command";
+
+  // Refused: not shown; the outcome text is the client's, untouched here.
+  framed.plugin.stop();
+  CellConsoleTestAccess::answer_stop(framed.plugin, false);
+  settle(framed);
+  EXPECT_FALSE(framed.plugin.stoppedShown()) << "a refused Stop is shown as Stopped";
+  EXPECT_EQ(stop->property("text").toString(), QString::fromUtf8(kStopLabel));
+
+  // The console leaving clears it.
+  framed.plugin.stop();
+  CellConsoleTestAccess::answer_stop(framed.plugin, true);
+  ASSERT_TRUE(framed.plugin.stoppedShown());
+  CellConsoleTestAccess::forget(framed.plugin);
+  settle(framed);
+  EXPECT_FALSE(framed.plugin.stoppedShown()) << "Stopped outlived the console";
+  EXPECT_EQ(stop->property("text").toString(), QString::fromUtf8(kStopLabel));
+  EXPECT_TRUE(framed.warnings.isEmpty()) << framed.warnings.join("\n").toStdString();
 }
 
 // A picture of the frame at every size, for a person to look at: visual

@@ -81,6 +81,7 @@ Rectangle {
     anchors.bottomMargin: 12
     width: deck.wide ? 224 : deck.compact ? 168 : 196
     enabled: CellConsole.stopEnabled
+    stoppedShown: CellConsole.stoppedShown
     onClicked: CellConsole.stop()
   }
 

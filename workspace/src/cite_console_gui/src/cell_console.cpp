@@ -338,6 +338,10 @@ void CellConsole::LoadConfig(const tinyxml2::XMLElement * plugin_element)
       const QString line = QString::fromStdString(text);
       QMetaObject::invokeMethod(this, [this, line]() {set_outcome(line);}, Qt::QueuedConnection);
     };
+  callbacks.on_stop_answered = [this](bool accepted) {
+      QMetaObject::invokeMethod(
+        this, [this, accepted]() {stop_answered(accepted);}, Qt::QueuedConnection);
+    };
 
   try {
     client_ = std::make_unique<ConsoleClient>(names, std::move(callbacks));
@@ -352,6 +356,11 @@ void CellConsole::apply_state(
   const cite_interfaces::msg::ConsoleState & state, const std::vector<std::uint8_t> & publisher)
 {
   const Target before = selection_.selected();
+  if (!selection_.view().heard || selection_.view().publisher != publisher) {
+    // A console heard for the first time, or one that came back: the Stop it
+    // accepted, if any, was another console's.
+    clear_stopped();
+  }
   selection_.apply(view_from(state, publisher));
   state_name_ = QString::fromUtf8(phase_name(selection_.view().phase));
   step_ = QString::fromStdString(state.step);
@@ -377,6 +386,7 @@ void CellConsole::forget_state()
   last_error_.clear();
   physical_sides_.clear();
   speed_scale_ = 0.0;
+  clear_stopped();
   emit viewChanged();
   // The twin's mode is the boundary's, not the console's: it stays until
   // TwinMode's own publisher leaves (R-02).
@@ -610,6 +620,24 @@ void CellConsole::set_outcome(const QString & text)
   emit outcomeChanged();
 }
 
+void CellConsole::stop_answered(bool accepted)
+{
+  const bool shown = accepted && stop_pressed_last_;
+  if (shown != stopped_shown_) {
+    stopped_shown_ = shown;
+    emit stoppedShownChanged();
+  }
+}
+
+void CellConsole::clear_stopped()
+{
+  stop_pressed_last_ = false;
+  if (stopped_shown_) {
+    stopped_shown_ = false;
+    emit stoppedShownChanged();
+  }
+}
+
 QVariantList CellConsole::speedChoices() const
 {
   QVariantList choices;
@@ -677,6 +705,7 @@ void CellConsole::selectTarget(int index)
 
 void CellConsole::startRobot()
 {
+  clear_stopped();
   if (client_ && selection_.buttons().start_robot) {
     client_->start_robot(target_value(selection_.selected()));
   }
@@ -684,6 +713,7 @@ void CellConsole::startRobot()
 
 void CellConsole::home(double speed_scale)
 {
+  clear_stopped();
   if (client_ && selection_.may_home(speed_scale)) {
     client_->home(speed_scale, target_value(selection_.selected()));
   }
@@ -691,6 +721,7 @@ void CellConsole::home(double speed_scale)
 
 void CellConsole::startProgram(double speed_scale, int cycles)
 {
+  clear_stopped();
   if (client_ && selection_.may_run(speed_scale, cycles)) {
     client_->run_program(
       speed_scale, target_value(selection_.selected()), static_cast<std::uint32_t>(cycles));
@@ -699,6 +730,7 @@ void CellConsole::startProgram(double speed_scale, int cycles)
 
 void CellConsole::validateThenRun(double speed_scale, int cycles)
 {
+  clear_stopped();
   if (client_ && selection_.may_validate_then_run(speed_scale, cycles)) {
     client_->validate_then_run(speed_scale, static_cast<std::uint32_t>(cycles));
   }
@@ -707,6 +739,7 @@ void CellConsole::validateThenRun(double speed_scale, int cycles)
 void CellConsole::stop()
 {
   ++stops_pressed_;
+  stop_pressed_last_ = true;
   // Sent whenever there is a client, enabled or not: Stop is also the cancel
   // of the operator's confirmation, and a refused Stop costs a refusal.
   if (client_) {
@@ -717,6 +750,7 @@ void CellConsole::stop()
 void CellConsole::confirm()
 {
   ++confirms_pressed_;
+  clear_stopped();
   if (client_ && selection_.buttons().confirm) {
     client_->confirm_operator();
   }

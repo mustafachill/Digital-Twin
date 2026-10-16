@@ -229,6 +229,13 @@ void ConsoleClient::outcome(const std::string & text) const
   }
 }
 
+void ConsoleClient::stop_answered(bool accepted) const
+{
+  if (callbacks_.on_stop_answered) {
+    callbacks_.on_stop_answered(accepted);
+  }
+}
+
 void ConsoleClient::progress(const std::string & text) const
 {
   if (callbacks_.on_progress) {
@@ -291,6 +298,7 @@ void ConsoleClient::stop()
 {
   if (!stop_->service_is_ready()) {
     outcome("Stop: the console does not serve it right now. Use the E-stop if anything moves.");
+    stop_answered(false);
     return;
   }
   stop_->async_send_request(
@@ -301,6 +309,7 @@ void ConsoleClient::stop()
         ++stops_accepted_;
       }
       outcome(answered("Stop", response->success, response->detail));
+      stop_answered(response->success);
     });
 }
 
