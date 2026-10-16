@@ -72,7 +72,7 @@ stay the primitives the model declares.
 
 ### What this gets us
 - The belt reads as a conveyor, with frames, belt, drums, legs, drive and control box, and the
-  work tables read as light-wood benches.
+  work tables read as wooden benches on orange steel legs.
 - Its envelope is still stated once, in L0.
 - A stale or hand-edited mesh is caught by `tools/tests/test_visual_meshes.py`.
 

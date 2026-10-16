@@ -110,9 +110,19 @@ def test_the_belt_is_what_the_conveyor_top_is() -> None:
 def test_the_table_top_is_the_top_finish() -> None:
     target = next(t for t in TARGETS if t.drawer == "tables")
     committed = _committed(target)
-    top = committed.geometry[table.TOP.name].bounds[1][2]
+    top = committed.geometry[table.WOOD_FACE.name].bounds[1][2]
     assert abs(top - target.size_m[2] / 2.0) <= TOLERANCE_M
-    assert committed.geometry[table.FRAME.name].bounds[1][2] < top
+    for finish in (table.WOOD_EDGE, table.STEEL, table.FEET):
+        assert committed.geometry[finish.name].bounds[1][2] < top, finish.name
+
+
+def test_the_table_frame_stands_on_its_feet() -> None:
+    """The feet reach the floor, and the steel starts where they stop."""
+    target = next(t for t in TARGETS if t.drawer == "tables")
+    committed = _committed(target)
+    floor = -target.size_m[2] / 2.0
+    assert abs(committed.geometry[table.FEET.name].bounds[0][2] - floor) <= TOLERANCE_M
+    assert committed.geometry[table.STEEL.name].bounds[0][2] > floor
 
 
 def _instances_wearing_a_mesh() -> list[str]:

@@ -15,8 +15,8 @@ asset_type:
   description:
     provider: body
     body:
-      # The VISUAL is a light-wood bench — a chamfered top over four legs, an
-      # apron, and stretchers carrying a lower shelf — that
+      # The VISUAL is a lab bench — a chamfered wooden top and wooden apron on
+      # four orange steel legs with levelling feet — that
       # `python -m cite_tools.visuals --write` generates from the collision box
       # below (ADR-0079). Its top face is the box top, where `surface` lies. It
       # carries its own finishes, which is why this body names no `material`.
