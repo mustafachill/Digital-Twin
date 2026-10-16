@@ -1,6 +1,6 @@
 # ADR-0078: One-click control center; a closed window is a clean end
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-16 (owner, after the physical run)
 - **Date:** 2026-10-15
 - **Deciders:** Project owner (decision of 2026-10-15: "an executable script and a desktop icon
   that start the app")

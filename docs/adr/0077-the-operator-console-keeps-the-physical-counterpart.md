@@ -1,6 +1,6 @@
 # ADR-0077: The operator console keeps the physical counterpart: connect when reachable, survive its loss
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-16 (owner, after the physical run)
 - **Date:** 2026-10-15
 - **Deciders:** Project owner (decision of 2026-10-15: "the app opens with the robot off; the
   robot connects when it comes up, Real arm and Twin become selectable, and a disconnect does

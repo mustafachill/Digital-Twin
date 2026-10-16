@@ -1,6 +1,6 @@
 # ADR-0076: A physical arm is held until the operator starts it
 
-- **Status:** Proposed
+- **Status:** Accepted 2026-10-16 (owner, after the physical run)
 - **Date:** 2026-10-15
 - **Deciders:** Project owner (decision of 2026-10-15: "a connected arm stays held; its motors
   are enabled only when the operator presses Start robot with Real arm or Twin and confirms")
