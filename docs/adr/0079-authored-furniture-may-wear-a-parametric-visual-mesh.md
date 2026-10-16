@@ -103,8 +103,8 @@ past the end of the track. The model had drawn the track as a 0.705 m box on the
 - `picker_track`'s body is the rail alone, 1.000 × 0.110 × 0.105 m. It is placed on
   `infeed_table/surface`, so its foot is at (0.050, 3.300, 0.600). Its carriage frame is 0.110 m
   above that foot, so the carriage and the arm keep the world pose they had.
-- Both wear generated meshes. A third drawer, `tracks/`, draws the rail. The table drawer adds a
-  middle pair of legs when a side is longer than 1.2 m.
+- Both wear generated meshes. A third drawer, `tracks/`, draws the rail. The long table has four
+  corner legs, like the 0.6 m one, with the apron running the full length of each side.
 
 No world pose the program uses moved. The arm descriptions, the static frames, the world and
 the bring-up plan regenerate byte-identical. Only the two bodies change, in the scene and in the

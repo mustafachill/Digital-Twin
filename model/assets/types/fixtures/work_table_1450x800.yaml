@@ -28,8 +28,8 @@ asset_type:
     provider: body
     body:
       # The VISUAL is the same lab bench as `work_table_600` — a chamfered wooden
-      # top and wooden apron on orange steel legs with levelling feet, plus a
-      # middle pair of legs because 1.45 m is too long for one span — that
+      # top and wooden apron on four orange steel corner legs with levelling
+      # feet, the apron running the full length of each side — that
       # `python -m cite_tools.visuals --write` generates from the collision box
       # below (ADR-0079). It carries its own finishes, so no `material`.
       # The COLLISION is the solid box: conservative, and never the visual.

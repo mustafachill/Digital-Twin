@@ -203,3 +203,15 @@ def test_the_mesh_package_is_a_dependency_of_the_generated_package() -> None:
 def test_a_body_mesh_names_its_package(uri: str, expected: str | None) -> None:
     match = package._URI_PACKAGE.match(uri)
     assert (match and (match.group(1) or match.group(2))) == expected
+
+
+@pytest.mark.parametrize(
+    "target", [t for t in TARGETS if t.drawer == "tables"], ids=lambda t: t.type_id
+)
+def test_every_table_stands_on_four_corner_legs(target: bodies.Target) -> None:
+    """The owner's call for the long bench too: no middle legs, however long."""
+    legs = table.parts(target.size_m)[table.STEEL]
+    assert len(legs) == 4
+    half = np.array(target.size_m[:2]) / 2.0 - table.OVERHANG_M - table.LEG_M / 2.0
+    for leg in legs:
+        assert np.allclose(np.abs(leg.bounds.mean(axis=0)[:2]), half)
