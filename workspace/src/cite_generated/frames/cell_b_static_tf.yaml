@@ -40,9 +40,9 @@ static_transforms:
 - parent: cite_world
   child: cell_b__outfeed_table__surface
   xyz_m:
-  - 2.26
+  - 2.235
   - 3.06
-  - 0.6
+  - 0.57
   rpy_rad:
   - 0.0
   - -0.0

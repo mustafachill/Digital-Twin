@@ -172,31 +172,31 @@
            height above the link origin. `com_m` is measured from the box centre
            and the tensor beside it is centroidal; declaring both at the foot
            states a centroidal tensor about a point up to 0.3 m from the mass. -->
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <origin xyz="0 0 0.285" rpy="0 0 0"/>
       <mass value="30"/>
-      <inertia ixx="1.8" ixy="0"
-               ixz="0" iyy="1.8"
+      <inertia ixx="1.71225" ixy="0"
+               ixz="0" iyy="1.71225"
                iyz="0" izz="1.8"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <origin xyz="0 0 0.285" rpy="0 0 0"/>
       <geometry><mesh filename="file://$(find cite_description)/meshes/visual/tables/work_table_600.glb" scale="1 1 1"/></geometry>
     </visual>
     <collision>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
-      <geometry><box size="0.6 0.6 0.6"/></geometry>
+      <origin xyz="0 0 0.285" rpy="0 0 0"/>
+      <geometry><box size="0.6 0.6 0.57"/></geometry>
     </collision>
   </link>
   <joint name="outfeed_table_anchor" type="fixed">
     <parent link="cite_world"/>
     <child link="outfeed_table_base_link"/>
-    <origin xyz="2.26 3.06 0" rpy="0 0 0"/>
+    <origin xyz="2.235 3.06 0" rpy="0 0 0"/>
   </joint>
   <link name="outfeed_table_surface"/>
   <joint name="outfeed_table_surface_fixed" type="fixed">
     <parent link="outfeed_table_base_link"/>
     <child link="outfeed_table_surface"/>
-    <origin xyz="0 0 0.6" rpy="0 0 0"/>
+    <origin xyz="0 0 0.57" rpy="0 0 0"/>
   </joint>
 
   <!-- picker_track — ufactory_linear_motor -->

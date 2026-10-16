@@ -41,13 +41,17 @@ assets:
 
   # Where the belt delivers. `b_accumulation` is a sink with no actor, so nothing
   # picks from this table and its surface is never a station point — it exists to
-  # catch what runs off `transfer_belt`. Its near face stands at x = 1.960 against
-  # the belt's end at 1.910: 50 mm of designed air. Its surface is 35 mm below the belt's,
-  # which stands on a riser (see model/assets/instances/conveyors.yaml).
+  # catch what runs off `transfer_belt`. Its near face stands at x = 1.935 against
+  # the belt's end at 1.910: 25 mm of designed air, moved in from 50 mm at the
+  # owner's request (2026-10-16). He asked for about 15 mm, which is under
+  # geometric.MIN_CLEARANCE_M (20 mm); exactly 20 mm still warns, because the
+  # difference of the two faces lands a hair under it in floating point. Its
+  # surface, 0.570 m, is 65 mm below the belt's 0.635 m, which stands on a riser
+  # (see model/assets/instances/conveyors.yaml).
   - id: outfeed_table
     zone: cell_b
     type: work_table_600
     pose:
       frame: cite_world
-      xyz_m: [2.260, 3.060, 0.000]
+      xyz_m: [2.235, 3.060, 0.000]
     hardware: {backend: sim}

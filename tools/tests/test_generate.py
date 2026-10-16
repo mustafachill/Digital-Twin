@@ -795,7 +795,8 @@ class TestMassIsWhereTheGeometryIs:
     ) -> None:
         # `com_m` is measured from the collision box centre, which is the same
         # reference validate.physical uses. A table whose mass sits 0.25 m low
-        # must land at z = 0.05 in the link frame, not at z = -0.25 below it.
+        # must land 0.25 m under its box centre in the link frame (0.285 - 0.25
+        # on the 0.570 m outfeed table), not at z = -0.25 below its foot.
         edit_yaml(
             real_model / "assets/types/fixtures/work_table_600.yaml",
             lambda d: d["asset_type"]["description"]["body"]["inertial"].__setitem__(
@@ -807,7 +808,7 @@ class TestMassIsWhereTheGeometryIs:
         links = root.findall("link")
         link = next(e for e in links if e.get("name") == "outfeed_table_base_link")
         z = float(link.find("inertial").find("origin").get("xyz").split()[2])
-        assert round(z, 9) == 0.05
+        assert round(z, 9) == 0.035
 
 
 class TestEverythingIsAnchored:
@@ -896,9 +897,9 @@ class TestPlanningSceneIsGenerated:
         table = next(
             o for o in scene["planning_scene"]["collision_objects"] if o["id"] == "outfeed_table"
         )
-        assert table["primitive"]["dimensions_m"] == [0.6, 0.6, 0.6]
+        assert table["primitive"]["dimensions_m"] == [0.6, 0.6, 0.57]
         # MoveIt primitive poses are CENTRES; the L0 pose is the foot.
-        assert table["pose"]["xyz_m"] == [2.26, 3.06, 0.3]
+        assert table["pose"]["xyz_m"] == [2.235, 3.06, 0.285]
 
     def test_it_tracks_the_model(self, real_model: Path, edit_yaml: Callable) -> None:
         edit_yaml(
